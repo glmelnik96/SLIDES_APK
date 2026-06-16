@@ -1,0 +1,10 @@
+{#- Пустой контентный слайд (figma D 3393:11236 / L 3393:10983): только стандартная
+    шапка (H3 + подзаголовок), тело — свободная зона под произвольный контент.
+    Контентный макет — малый логотип (.slide--chrome-sm). -#}
+<section class="slide slide--chrome-sm" data-template="blank">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+</section>

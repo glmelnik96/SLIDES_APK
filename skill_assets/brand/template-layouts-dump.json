@@ -1,0 +1,4994 @@
+{
+  "slide_size": {
+    "width_emu": 12192000,
+    "height_emu": 6858000,
+    "width_px_at96": 1280,
+    "height_px_at96": 720
+  },
+  "layouts_count": 84,
+  "layouts": [
+    {
+      "index": 0,
+      "name": "Титул / Белый 1",
+      "category": "title",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 462,
+          "width_px": 715,
+          "height_px": 131
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 29,
+          "top_px": 173,
+          "width_px": 1216,
+          "height_px": 224
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "name": "Титул / Белый 2",
+      "category": "title",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 30,
+          "top_px": 177,
+          "width_px": 647,
+          "height_px": 224
+        },
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 462,
+          "width_px": 642,
+          "height_px": 131
+        },
+        {
+          "idx": 12,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Slide Number Placeholder 11",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 2,
+      "name": "1_Титул / Белый 3",
+      "category": "title",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 78,
+          "top_px": 464,
+          "width_px": 672,
+          "height_px": 131
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 71,
+          "top_px": 173,
+          "width_px": 1167,
+          "height_px": 224
+        }
+      ]
+    },
+    {
+      "index": 3,
+      "name": "Титул / Белый лого ",
+      "category": "title",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Slide Number Placeholder 7",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 4,
+      "name": "Титул / Зеленый лого",
+      "category": "title",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Slide Number Placeholder 4",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 5,
+      "name": "Титул / Зеленый 2",
+      "category": "title",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 84,
+          "top_px": 577,
+          "width_px": 593,
+          "height_px": 74
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 84,
+          "top_px": 173,
+          "width_px": 1061,
+          "height_px": 271
+        },
+        {
+          "idx": 12,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Slide Number Placeholder 7",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 6,
+      "name": "Титул / Белый 4",
+      "category": "title",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 414,
+          "width_px": 605,
+          "height_px": 119
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 36,
+          "top_px": 184,
+          "width_px": 1209,
+          "height_px": 190
+        }
+      ]
+    },
+    {
+      "index": 7,
+      "name": "Титул / Черный 1",
+      "category": "title",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 414,
+          "width_px": 605,
+          "height_px": 119
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 36,
+          "top_px": 184,
+          "width_px": 1209,
+          "height_px": 190
+        }
+      ]
+    },
+    {
+      "index": 8,
+      "name": "Раздел / Зеленый 1",
+      "category": "divider",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 36,
+          "top_px": 330,
+          "width_px": 1209,
+          "height_px": 352
+        }
+      ]
+    },
+    {
+      "index": 9,
+      "name": "Раздел / белый / QR ",
+      "category": "divider",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 9",
+          "left_px": 79,
+          "top_px": 288,
+          "width_px": 352,
+          "height_px": 352
+        }
+      ]
+    },
+    {
+      "index": 10,
+      "name": "Контент / Белый 1",
+      "category": "other",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 11,
+      "name": "Контент / серый 1",
+      "category": "other",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 12,
+      "name": "Фон для скриншотов 1",
+      "category": "image",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 4",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 13,
+      "name": "Фон для скриншотов 2",
+      "category": "image",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 5",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 14,
+      "name": "Фон для скриншотов 3",
+      "category": "image",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 4",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 15,
+      "name": "Белый / Важная информация",
+      "category": "callout",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 21",
+          "left_px": 89,
+          "top_px": 182,
+          "width_px": 1101,
+          "height_px": 346
+        }
+      ]
+    },
+    {
+      "index": 16,
+      "name": "Контент / Белый / Текст",
+      "category": "text",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 1210,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 17,
+      "name": "Контент / Белый / колонки 1",
+      "category": "multicolumn",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 18,
+      "name": "Контент / серо-белый",
+      "category": "other",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 576,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 19,
+      "name": "Контент / Белый / текст 2",
+      "category": "text",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 20,
+      "name": "Контент / белый / 4 текстовых блока",
+      "category": "multicolumn",
+      "placeholders_count": 6,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 443,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 443,
+          "width_px": 576,
+          "height_px": 200
+        }
+      ]
+    },
+    {
+      "index": 21,
+      "name": "Контент / белый / 4 подзаголовка",
+      "category": "multicolumn",
+      "placeholders_count": 10,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 223,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 223,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 480,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 480,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 183,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 669,
+          "top_px": 183,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 441,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 669,
+          "top_px": 441,
+          "width_px": 576,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 22,
+      "name": "Контент / белый / 6 текстовых блока",
+      "category": "multicolumn",
+      "placeholders_count": 14,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 121
+        },
+        {
+          "idx": 17,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 121
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 23,
+      "name": "Контент / белый / 3 колонки",
+      "category": "multicolumn",
+      "placeholders_count": 8,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 272,
+          "width_px": 362,
+          "height_px": 364
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 272,
+          "width_px": 362,
+          "height_px": 364
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 273,
+          "width_px": 362,
+          "height_px": 371
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 24,
+      "name": "Контент / белый / 8 блоков",
+      "category": "multicolumn",
+      "placeholders_count": 18,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 254,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 340,
+          "top_px": 254,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 340,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 645,
+          "top_px": 254,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 17,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 645,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 18,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 949,
+          "top_px": 254,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 19,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 949,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 185,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 340,
+          "top_px": 185,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 645,
+          "top_px": 185,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 949,
+          "top_px": 185,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 340,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 645,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 949,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 25,
+      "name": "Контент / белый / Текст + Рисунок",
+      "category": "text",
+      "placeholders_count": 5,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 250,
+          "width_px": 605,
+          "height_px": 393
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 499
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 144,
+          "width_px": 605,
+          "height_px": 92
+        }
+      ]
+    },
+    {
+      "index": 26,
+      "name": "Контент / белый / Текст + Рисунок 2",
+      "category": "text",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 499
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 499
+        }
+      ]
+    },
+    {
+      "index": 27,
+      "name": "Контент / белый / Большая таблица",
+      "category": "table",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 182,
+          "height_px": 208
+        }
+      ]
+    },
+    {
+      "index": 28,
+      "name": "Контент / белый / рисунок",
+      "category": "other",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 880,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 184,
+          "width_px": 880,
+          "height_px": 474
+        }
+      ]
+    },
+    {
+      "index": 29,
+      "name": "Контент / белый / Текст + 3 рисунка",
+      "category": "image",
+      "placeholders_count": 6,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 499
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        }
+      ]
+    },
+    {
+      "index": 30,
+      "name": "Контент / белый / Таймлайн 10 пунктов",
+      "category": "timeline",
+      "placeholders_count": 22,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 43,
+          "top_px": 225,
+          "width_px": 222,
+          "height_px": 105
+        },
+        {
+          "idx": 13,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 43,
+          "top_px": 152,
+          "width_px": 222,
+          "height_px": 73
+        },
+        {
+          "idx": 14,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 290,
+          "top_px": 225,
+          "width_px": 222,
+          "height_px": 105
+        },
+        {
+          "idx": 15,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 290,
+          "top_px": 152,
+          "width_px": 222,
+          "height_px": 73
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 537,
+          "top_px": 225,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 537,
+          "top_px": 152,
+          "width_px": 225,
+          "height_px": 73
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 786,
+          "top_px": 225,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 786,
+          "top_px": 152,
+          "width_px": 225,
+          "height_px": 73
+        },
+        {
+          "idx": 28,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 1036,
+          "top_px": 225,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 29,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 1036,
+          "top_px": 152,
+          "width_px": 225,
+          "height_px": 73
+        },
+        {
+          "idx": 30,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 529,
+          "width_px": 222,
+          "height_px": 105
+        },
+        {
+          "idx": 31,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 456,
+          "width_px": 222,
+          "height_px": 73
+        },
+        {
+          "idx": 32,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 282,
+          "top_px": 529,
+          "width_px": 222,
+          "height_px": 105
+        },
+        {
+          "idx": 33,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 282,
+          "top_px": 456,
+          "width_px": 222,
+          "height_px": 73
+        },
+        {
+          "idx": 34,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 529,
+          "top_px": 529,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 35,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 529,
+          "top_px": 456,
+          "width_px": 225,
+          "height_px": 73
+        },
+        {
+          "idx": 36,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 779,
+          "top_px": 529,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 37,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 779,
+          "top_px": 456,
+          "width_px": 225,
+          "height_px": 73
+        },
+        {
+          "idx": 38,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 1028,
+          "top_px": 529,
+          "width_px": 225,
+          "height_px": 105
+        },
+        {
+          "idx": 39,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 1028,
+          "top_px": 456,
+          "width_px": 225,
+          "height_px": 73
+        }
+      ]
+    },
+    {
+      "index": 31,
+      "name": "Контент / белый / Таймлайн до 8 пунктов",
+      "category": "timeline",
+      "placeholders_count": 18,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 44,
+          "top_px": 225,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 13,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 44,
+          "top_px": 151,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 14,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 971,
+          "top_px": 225,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 15,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 971,
+          "top_px": 151,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 353,
+          "top_px": 225,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 353,
+          "top_px": 151,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 662,
+          "top_px": 225,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 662,
+          "top_px": 151,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 353,
+          "top_px": 532,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 353,
+          "top_px": 457,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 43,
+          "top_px": 532,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 43,
+          "top_px": 457,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 663,
+          "top_px": 532,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 663,
+          "top_px": 457,
+          "width_px": 265,
+          "height_px": 73
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 973,
+          "top_px": 532,
+          "width_px": 265,
+          "height_px": 94
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 973,
+          "top_px": 457,
+          "width_px": 265,
+          "height_px": 73
+        }
+      ]
+    },
+    {
+      "index": 32,
+      "name": "Контент / белый / Текст + 4 рисунка",
+      "category": "image",
+      "placeholders_count": 7,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 272
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 435,
+          "width_px": 605,
+          "height_px": 209
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        }
+      ]
+    },
+    {
+      "index": 33,
+      "name": "Контент / белый / рисунки",
+      "category": "image",
+      "placeholders_count": 7,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 435,
+          "width_px": 605,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 272
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 34,
+      "name": "Контент / белый / рисунки_2",
+      "category": "image",
+      "placeholders_count": 6,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 499
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 35,
+      "name": "Контент / серый / Рисунки",
+      "category": "image",
+      "placeholders_count": 5,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 92,
+          "width_px": 588,
+          "height_px": 325
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 92,
+          "width_px": 605,
+          "height_px": 552
+        }
+      ]
+    },
+    {
+      "index": 36,
+      "name": "Контент / белый / Текст + Рисунок на пол слайда",
+      "category": "text",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 1210,
+          "height_px": 272
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 0,
+          "top_px": 435,
+          "width_px": 1280,
+          "height_px": 285
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 37,
+      "name": "Контент / белый / Текст + Иллюстрация на пол слайда",
+      "category": "image",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 413,
+          "width_px": 1210,
+          "height_px": 246
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 1210,
+          "height_px": 246
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 38,
+      "name": "Контент / белый / Текст + Рисунок на весь слайд",
+      "category": "text",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 37,
+          "top_px": 182,
+          "width_px": 1177,
+          "height_px": 499
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 39,
+      "name": "Контент / белый / Текст + рисунок на пол слайда 2",
+      "category": "text",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 37,
+          "top_px": 216,
+          "width_px": 576,
+          "height_px": 466
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 639,
+          "top_px": 216,
+          "width_px": 576,
+          "height_px": 466
+        }
+      ]
+    },
+    {
+      "index": 40,
+      "name": "Контент / белый / Команда 10",
+      "category": "team",
+      "placeholders_count": 22,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 72,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 319,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 566,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 813,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1060,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 72,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 319,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 18,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 566,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 19,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 813,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 20,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1060,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 28,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 29,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 30,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        }
+      ]
+    },
+    {
+      "index": 41,
+      "name": "Контент / белый / Команда 5",
+      "category": "team",
+      "placeholders_count": 12,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 50,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 297,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 544,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 791,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1038,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        }
+      ]
+    },
+    {
+      "index": 42,
+      "name": "Контент / белый / Команда 4",
+      "category": "team",
+      "placeholders_count": 10,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 35,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 346,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 657,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 35,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 346,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 657,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 23,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 968,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 968,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Title 2",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 43,
+      "name": "Контент / белый / Команда 3",
+      "category": "team",
+      "placeholders_count": 8,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 154,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 502,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 853,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 154,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 502,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 853,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        }
+      ]
+    },
+    {
+      "index": 44,
+      "name": "Титул / три строки_2",
+      "category": "title",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 30,
+          "top_px": 177,
+          "width_px": 651,
+          "height_px": 224
+        },
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 462,
+          "width_px": 597,
+          "height_px": 131
+        },
+        {
+          "idx": 10,
+          "type": "DATE (16)",
+          "name": "Дата 3",
+          "left_px": 26,
+          "top_px": 619,
+          "width_px": 288,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 45,
+      "name": "1_Титул  / Темный",
+      "category": "title",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 1,
+          "type": "SUBTITLE (4)",
+          "name": "Подзаголовок 2",
+          "left_px": 35,
+          "top_px": 462,
+          "width_px": 715,
+          "height_px": 131
+        },
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 29,
+          "top_px": 173,
+          "width_px": 1216,
+          "height_px": 224
+        },
+        {
+          "idx": 10,
+          "type": "DATE (16)",
+          "name": "Дата 3",
+          "left_px": 26,
+          "top_px": 619,
+          "width_px": 288,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 46,
+      "name": "Раздел / темный",
+      "category": "divider",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 36,
+          "top_px": 330,
+          "width_px": 1196,
+          "height_px": 352
+        }
+      ]
+    },
+    {
+      "index": 47,
+      "name": "Раздел / Черный / Иллюстрация",
+      "category": "divider",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 10,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 46,
+          "top_px": 184,
+          "width_px": 792,
+          "height_px": 490
+        }
+      ]
+    },
+    {
+      "index": 48,
+      "name": "Раздел / темный / QR",
+      "category": "divider",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 9",
+          "left_px": 79,
+          "top_px": 288,
+          "width_px": 352,
+          "height_px": 352
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 49,
+      "name": "Контент / темный 1",
+      "category": "other",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 50,
+      "name": "Контент / темный / Текст",
+      "category": "text",
+      "placeholders_count": 3,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 1210,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 51,
+      "name": "1_Контент / темный / Текст",
+      "category": "UNKNOWN",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 21",
+          "left_px": 89,
+          "top_px": 182,
+          "width_px": 1101,
+          "height_px": 346
+        }
+      ]
+    },
+    {
+      "index": 52,
+      "name": "1_Заголовок / Две колонки",
+      "category": "multicolumn",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 461
+        }
+      ]
+    },
+    {
+      "index": 53,
+      "name": "1_Заголовок / 4 текстовых блока",
+      "category": "multicolumn",
+      "placeholders_count": 6,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 182,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 443,
+          "width_px": 576,
+          "height_px": 200
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 443,
+          "width_px": 576,
+          "height_px": 200
+        }
+      ]
+    },
+    {
+      "index": 54,
+      "name": "1_Заголовок / 4 подзаголовка",
+      "category": "multicolumn",
+      "placeholders_count": 10,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 223,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 223,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 480,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 669,
+          "top_px": 480,
+          "width_px": 576,
+          "height_px": 163
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 183,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 669,
+          "top_px": 183,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 441,
+          "width_px": 576,
+          "height_px": 38
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 669,
+          "top_px": 441,
+          "width_px": 576,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 55,
+      "name": "1_Заголовок / 6 текстовых блока",
+      "category": "multicolumn",
+      "placeholders_count": 14,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 118
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 253,
+          "width_px": 362,
+          "height_px": 121
+        },
+        {
+          "idx": 17,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 525,
+          "width_px": 362,
+          "height_px": 121
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 182,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 451,
+          "width_px": 362,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 56,
+      "name": "1_Заголовок / 3 колонки",
+      "category": "multicolumn",
+      "placeholders_count": 8,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 272,
+          "width_px": 362,
+          "height_px": 364
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 437,
+          "top_px": 272,
+          "width_px": 362,
+          "height_px": 364
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 839,
+          "top_px": 273,
+          "width_px": 362,
+          "height_px": 371
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 437,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 839,
+          "top_px": 183,
+          "width_px": 362,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 57,
+      "name": "1_Заголовок / 8 блоков",
+      "category": "multicolumn",
+      "placeholders_count": 18,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 235,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 13,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 340,
+          "top_px": 235,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 14,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 15,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 340,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 16,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 645,
+          "top_px": 235,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 17,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 645,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 18,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 949,
+          "top_px": 235,
+          "width_px": 263,
+          "height_px": 147
+        },
+        {
+          "idx": 19,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 949,
+          "top_px": 516,
+          "width_px": 263,
+          "height_px": 133
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 166,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 340,
+          "top_px": 166,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 645,
+          "top_px": 166,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 949,
+          "top_px": 166,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 340,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 645,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 949,
+          "top_px": 448,
+          "width_px": 263,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 58,
+      "name": "1_Подзаголовок / Текст + Рисунок",
+      "category": "multicolumn",
+      "placeholders_count": 5,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 288,
+          "width_px": 605,
+          "height_px": 355
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 499
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 8",
+          "left_px": 35,
+          "top_px": 183,
+          "width_px": 605,
+          "height_px": 92
+        }
+      ]
+    },
+    {
+      "index": 59,
+      "name": "1_Текст + Рисунок",
+      "category": "text",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 182,
+          "width_px": 605,
+          "height_px": 461
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 499
+        }
+      ]
+    },
+    {
+      "index": 60,
+      "name": "1_Timeline",
+      "category": "timeline",
+      "placeholders_count": 18,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 13,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 14,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 355,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 15,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 355,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 675,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 675,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 994,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 994,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 36,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 36,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 356,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 356,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 676,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 676,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 995,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 995,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        }
+      ]
+    },
+    {
+      "index": 61,
+      "name": "1_Timeline_2",
+      "category": "timeline",
+      "placeholders_count": 16,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 13,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 35,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 14,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 355,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 15,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 355,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 16,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 675,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 17,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 675,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 18,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 994,
+          "top_px": 225,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 19,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 994,
+          "top_px": 152,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 192,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 192,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 512,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 512,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 831,
+          "top_px": 532,
+          "width_px": 250,
+          "height_px": 105
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 9",
+          "left_px": 831,
+          "top_px": 459,
+          "width_px": 250,
+          "height_px": 73
+        }
+      ]
+    },
+    {
+      "index": 62,
+      "name": "1_Текст + 4 рисунка",
+      "category": "image",
+      "placeholders_count": 7,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 272
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 435,
+          "width_px": 605,
+          "height_px": 209
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        }
+      ]
+    },
+    {
+      "index": 63,
+      "name": "1_Заголовок / рисунки",
+      "category": "image",
+      "placeholders_count": 7,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 435,
+          "width_px": 605,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 272
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 64,
+      "name": "1_Заголовок / рисунки_2",
+      "category": "image",
+      "placeholders_count": 6,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 499
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 65,
+      "name": "1_Рисунки",
+      "category": "image",
+      "placeholders_count": 5,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 92,
+          "width_px": 588,
+          "height_px": 325
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 35,
+          "top_px": 92,
+          "width_px": 605,
+          "height_px": 552
+        }
+      ]
+    },
+    {
+      "index": 66,
+      "name": "1_Команда 10",
+      "category": "team",
+      "placeholders_count": 22,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 72,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 319,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 566,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 813,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1060,
+          "top_px": 152,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 72,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 17,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 319,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 18,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 566,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 19,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 813,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 20,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1060,
+          "top_px": 401,
+          "width_px": 148,
+          "height_px": 148
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 305,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 26,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 27,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 28,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 29,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        },
+        {
+          "idx": 30,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 557,
+          "width_px": 220,
+          "height_px": 75
+        }
+      ]
+    },
+    {
+      "index": 67,
+      "name": "1_Команда 5",
+      "category": "team",
+      "placeholders_count": 12,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 50,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 297,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 544,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 791,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 1038,
+          "top_px": 211,
+          "width_px": 192,
+          "height_px": 192
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 36,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 283,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 23,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 530,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 777,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        },
+        {
+          "idx": 25,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 1024,
+          "top_px": 421,
+          "width_px": 220,
+          "height_px": 66
+        }
+      ]
+    },
+    {
+      "index": 68,
+      "name": "1_Команда 4",
+      "category": "team",
+      "placeholders_count": 10,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 35,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 346,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 657,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 35,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 346,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 657,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 23,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 968,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 24,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 968,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        }
+      ]
+    },
+    {
+      "index": 69,
+      "name": "1_Команда 3",
+      "category": "team",
+      "placeholders_count": 8,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 10,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 154,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 12,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 502,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 853,
+          "top_px": 160,
+          "width_px": 277,
+          "height_px": 369
+        },
+        {
+          "idx": 20,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 154,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 21,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 502,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        },
+        {
+          "idx": 22,
+          "type": "BODY (2)",
+          "name": "Текст 24",
+          "left_px": 853,
+          "top_px": 560,
+          "width_px": 277,
+          "height_px": 84
+        }
+      ]
+    },
+    {
+      "index": 70,
+      "name": "Темный / текст + 4 рисунка",
+      "category": "image",
+      "placeholders_count": 7,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 605,
+          "height_px": 272
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 35,
+          "top_px": 435,
+          "width_px": 605,
+          "height_px": 209
+        },
+        {
+          "idx": 13,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 4",
+          "left_px": 656,
+          "top_px": 145,
+          "width_px": 588,
+          "height_px": 272
+        },
+        {
+          "idx": 14,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 6",
+          "left_px": 656,
+          "top_px": 435,
+          "width_px": 296,
+          "height_px": 209
+        },
+        {
+          "idx": 15,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 8",
+          "left_px": 971,
+          "top_px": 435,
+          "width_px": 274,
+          "height_px": 209
+        }
+      ]
+    },
+    {
+      "index": 71,
+      "name": " Темный / Текст + Рисунок на пол слайда",
+      "category": "text",
+      "placeholders_count": 4,
+      "placeholders": [
+        {
+          "idx": 12,
+          "type": "OBJECT (7)",
+          "name": "Объект 5",
+          "left_px": 35,
+          "top_px": 145,
+          "width_px": 1210,
+          "height_px": 272
+        },
+        {
+          "idx": 16,
+          "type": "PICTURE (18)",
+          "name": "Рисунок 7",
+          "left_px": 0,
+          "top_px": 435,
+          "width_px": 1280,
+          "height_px": 285
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        },
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 72,
+      "name": "Темный / Фото фон 3",
+      "category": "image",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 73,
+      "name": "Заголовок / темный / фотофон",
+      "category": "image",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 74,
+      "name": "Заголовок / темный / Фото фон 2",
+      "category": "image",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 75,
+      "name": "Темный / Логотип",
+      "category": "logo",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 76,
+      "name": "Светлый / Фотофон 2",
+      "category": "image",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 77,
+      "name": "Зеленый / Логотип",
+      "category": "logo",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 78,
+      "name": "1_Технический слайд",
+      "category": "tech",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 125,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 38
+        },
+        {
+          "idx": 12,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Slide Number Placeholder 10",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 79,
+      "name": "2_Технический слайд",
+      "category": "tech",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 125,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 38
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    },
+    {
+      "index": 80,
+      "name": "12_Титул / Паттерн_2",
+      "category": "title",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 81,
+      "name": "Титул / Черный / New",
+      "category": "title",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "CENTER_TITLE (3)",
+          "name": "Заголовок 1",
+          "left_px": 36,
+          "top_px": 184,
+          "width_px": 1209,
+          "height_px": 190
+        }
+      ]
+    },
+    {
+      "index": 82,
+      "name": "2_Inner empty LEFT logo",
+      "category": "other",
+      "placeholders_count": 1,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 2",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        }
+      ]
+    },
+    {
+      "index": 83,
+      "name": "Заголовок / Белый",
+      "category": "UNKNOWN",
+      "placeholders_count": 2,
+      "placeholders": [
+        {
+          "idx": 0,
+          "type": "TITLE (1)",
+          "name": "Заголовок 1",
+          "left_px": 35,
+          "top_px": 38,
+          "width_px": 963,
+          "height_px": 54
+        },
+        {
+          "idx": 11,
+          "type": "SLIDE_NUMBER (13)",
+          "name": "Номер слайда 3",
+          "left_px": 1170,
+          "top_px": 682,
+          "width_px": 110,
+          "height_px": 38
+        }
+      ]
+    }
+  ]
+}

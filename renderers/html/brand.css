@@ -1,0 +1,367 @@
+/* Cloud.ru 2.0 brand stylesheet — spike Check 0
+   Single source of brand truth for the HTML-render pipeline.
+   Font paths are resolved at render time against docker/fonts/ (file:// base). */
+
+@font-face {
+  font-family: "SB Sans Display";
+  font-weight: 400;
+  src: url("SBSansDisplay-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "SB Sans Display";
+  font-weight: 500;
+  src: url("SBSansDisplay-Medium.otf") format("opentype");
+}
+@font-face {
+  font-family: "SB Sans Display";
+  font-weight: 600;
+  src: url("SBSansDisplay-SemiBold.otf") format("opentype");
+}
+@font-face {
+  font-family: "SB Sans Display";
+  font-weight: 700;
+  src: url("SBSansDisplay-Bold.otf") format("opentype");
+}
+@font-face {
+  font-family: "SB Sans Text";
+  font-weight: 400;
+  src: url("SBSansText-Regular.otf") format("opentype");
+}
+@font-face {
+  font-family: "SB Sans Text";
+  font-weight: 600;
+  src: url("SBSansText-Semibold.otf") format("opentype");
+}
+
+:root {
+  /* palette.json */
+  --green: #26D07C;
+  --graphite: #222222;
+  --white: #FFFFFF;
+  --gray: #F2F2F2;     /* grey1 */
+  --grey2: #D9D9D9;
+  --grey3: #434343;
+  --text-gray: #5C5C5C;
+  --stroke: #C8C8C8;
+  --copyright: #BFBFBF;
+  --blue: #4DA6FF;        /* table accent column (data-viz only) */
+  --blue-tint: #D8EAFF;   /* accent-column zebra cell */
+  --blue-tint2: #E9F3FF;  /* accent-column zebra cell (alt) */
+
+  /* type scale (pt→px at 96dpi: px = pt * 96/72 = pt * 1.333) */
+  --title-px: 27px;     /* header role 20pt CAPS */
+  --display-px: 117px;  /* display 88pt */
+  --body-px: 21px;      /* body 16pt */
+  --caption-px: 16px;   /* caption 12pt */
+
+  --margin: 35px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { width: 1280px; height: 720px; }
+
+.slide {
+  position: relative;
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+  background: var(--white);
+  font-family: "SB Sans Display", "SB Sans Text", Verdana, sans-serif;
+  color: var(--graphite);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* ---- chrome ---- */
+.slide__header {
+  position: absolute;
+  left: var(--margin);
+  top: 38px;
+  font-size: var(--title-px);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--graphite);
+  max-width: 980px;
+  line-height: 1.0;
+}
+.brand-logo {
+  position: absolute;
+  right: var(--margin);
+  top: 38px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--graphite);
+}
+.brand-logo--dark { color: var(--white); }
+.brand-logo--tl { left: var(--margin); right: auto; }  /* top-left (covers/dividers) */
+.brand-logo__cube {
+  width: 32px; height: 32px;
+  display: inline-block;
+  /* True brand mark: isometric green hexagonal cube (3 shaded faces),
+     embedded as an inline SVG so it renders identically on every slide
+     regardless of who authored the markup. */
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><polygon points='16,2.5 28.5,9.75 16,16 3.5,9.75' fill='%2334E08D'/><polygon points='28.5,9.75 28.5,22.25 16,29.5 16,16' fill='%2326D07C'/><polygon points='3.5,9.75 16,16 16,29.5 3.5,22.25' fill='%231FA866'/></svg>");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.copyright {
+  position: absolute;
+  left: var(--margin);
+  bottom: 10px;
+  font-size: 8px;
+  color: var(--copyright);
+  font-family: "SB Sans Text", sans-serif;
+}
+
+/* ---- motifs ---- */
+.dot-grid {
+  position: absolute;
+  background-image: radial-gradient(var(--graphite) 1.3px, transparent 1.3px);
+  background-size: 12px 12px;
+  opacity: 0.9;
+}
+.brackets {
+  position: absolute;
+  display: flex;
+  gap: 36px;
+}
+.bracket {
+  width: 92px; height: 92px;
+  border-top: 1.5px solid var(--graphite);
+  border-right: 1.5px solid var(--graphite);
+  position: relative;
+}
+.bracket::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 130px; height: 1.5px;
+  background: var(--graphite);
+  transform: rotate(-45deg);
+  transform-origin: left bottom;
+}
+
+/* ---- cover_green ---- */
+.cover-green { background: var(--green); }
+.cover-green .logo-plate {
+  position: absolute; left: 0; top: 0;
+  background: var(--white);
+  padding: 30px 56px 30px var(--margin);
+}
+.cover-green .logo-plate .brand-logo {
+  position: static;
+  font-size: 34px;
+}
+.cover-green .display-title {
+  position: absolute;
+  left: var(--margin);
+  top: 250px;
+  font-size: 110px;
+  font-weight: 600;
+  line-height: 0.96;
+  text-transform: uppercase;
+  color: var(--graphite);
+  max-width: 1180px;
+}
+
+/* ---- cover_dark ---- */
+.cover-dark { background: var(--graphite); color: var(--white); }
+.cover-dark .display-title {
+  position: absolute;
+  left: var(--margin);
+  top: 200px;
+  right: var(--margin);
+  border: 1.5px solid var(--green);
+  padding: 30px 36px;
+  font-size: 92px;
+  font-weight: 400;
+  line-height: 0.98;
+  color: var(--green);
+}
+.cover-dark .subtitle-plate {
+  position: absolute;
+  left: var(--margin);
+  top: 470px;
+  width: 690px;
+  height: 90px;
+  background: var(--grey3);
+  display: flex; align-items: center;
+  padding: 0 30px;
+  font-size: 26px;
+  color: var(--green);
+}
+
+/* ---- points (image + N points) ---- */
+.points { background: var(--gray); }
+.points .media {
+  position: absolute;
+  left: var(--margin);
+  top: 155px;
+  width: 675px;
+  bottom: 70px;
+  background: var(--white);
+}
+.points .col {
+  position: absolute;
+  left: 730px;
+  right: var(--margin);
+  top: 150px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+.points .point { padding-top: 14px; }
+.points .point + .point { margin-top: 30px; }
+.points .point .rule {
+  height: 2px; background: var(--green); width: 100%;
+  margin-bottom: 14px;
+}
+.points .point h3 {
+  font-size: 24px; font-weight: 700; color: var(--graphite);
+  margin-bottom: 6px;
+}
+.points .point p {
+  font-size: var(--body-px); font-weight: 400; color: var(--graphite);
+  line-height: 1.2;
+}
+
+/* ---- bullet_list ---- */
+.bullets { background: var(--white); }
+.bullets .body {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  top: 150px;
+  bottom: 60px;
+}
+.bullets ul { list-style: none; }
+.bullets li {
+  position: relative;
+  padding-left: 34px;
+  font-size: var(--body-px);
+  line-height: 1.25;
+  margin-bottom: 22px;
+  color: var(--graphite);
+}
+.bullets li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px;
+  width: 12px; height: 12px;
+  background: var(--green);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   v2 brand-fidelity components (grey canvas + cards, rule-points, table,
+   cover/divider motifs). Content slides sit on the grey canvas with content
+   in white cards / green-rule points — the look of the reference template.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Grey canvas modifier — apply to .slide for every CONTENT slide
+   (title-body, points, grids, tables, timelines). Covers stay green/dark. */
+.slide--canvas { background: var(--gray); }
+
+/* White content card on the grey canvas (media slots, table wrappers,
+   any boxed content). Flat: no shadow, no rounding. */
+.card { background: var(--white); }
+
+/* Standard content body region inside the safe zone. justify-content
+   distributes blocks down the full height so nothing top-clumps. */
+.content-body {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  top: 150px;
+  bottom: 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* A multi-column grid of rule-points (the "N directions" / comparison look).
+   The composer sets --cols (2/3) inline; rows distribute via row-gap. */
+.grid {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  top: 150px;
+  bottom: 64px;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), 1fr);
+  column-gap: 56px;
+  row-gap: 40px;
+  align-content: start;
+}
+
+/* One green-hairline-above-heading point. Reusable inside .grid, .content-body,
+   or the right column of an image+points slide. THIS is the template's
+   signature content block. */
+.rule-point { padding-top: 16px; border-top: 2px solid var(--green); }
+.rule-point h3 {
+  font-size: 23px; font-weight: 700; color: var(--graphite);
+  line-height: 1.1; margin-bottom: 10px;
+}
+.rule-point p {
+  font-size: var(--body-px); font-weight: 400; color: var(--graphite);
+  line-height: 1.25;
+}
+
+/* Bottom takeaway rule — a single green hairline above a bold one-liner. */
+.takeaway {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  bottom: 56px;
+  padding-top: 16px;
+  border-top: 2px solid var(--green);
+  font-size: 22px; font-weight: 700; color: var(--graphite);
+}
+
+/* ---- brand table: green header row, one optional blue accent column,
+        zebra body. Data-viz is the ONE place multiple colours are allowed. */
+.brand-table {
+  position: absolute;
+  left: var(--margin);
+  right: var(--margin);
+  top: 150px;
+  border-collapse: collapse;
+  width: calc(1280px - 2 * var(--margin));
+  font-size: var(--body-px);
+  table-layout: fixed;
+}
+.brand-table th {
+  background: var(--green);
+  color: var(--white);
+  font-weight: 600;
+  text-align: left;
+  padding: 18px 22px;
+  line-height: 1.1;
+}
+.brand-table th.accent { background: var(--blue); }
+.brand-table td {
+  background: var(--white);
+  color: var(--graphite);
+  padding: 16px 22px;
+  line-height: 1.2;
+  vertical-align: top;
+}
+.brand-table tbody tr:nth-child(even) td { background: var(--gray); }
+.brand-table td.accent { background: var(--blue-tint); }
+.brand-table tbody tr:nth-child(even) td.accent { background: var(--blue-tint2); }
+
+/* ---- date stamp (cover_dark / section_divider, bottom-right) ---- */
+.date-stamp {
+  position: absolute;
+  right: var(--margin);
+  bottom: 40px;
+  font-size: 26px;
+  color: var(--text-gray);
+  letter-spacing: 0.02em;
+}

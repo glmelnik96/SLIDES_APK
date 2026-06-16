@@ -1,0 +1,81 @@
+{#- donut-chart: НЕ из Figma — бренд-производная кольцевая диаграмма долей.
+    Второй график библиотеки: 2–5 сегментов как ЧАСТИ ЦЕЛОГО (структура нагрузок,
+    распределение бюджета/трафика, доли продуктов). Self-contained: только
+    инлайн-SVG, без внешних JS/чарт-библиотек, токены темы, обе темы.
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
+
+    Один бренд-акцент, без радуги: все сегменты залиты var(--accent), но
+    различаются ступенями прозрачности (stroke-opacity ladder) — крупнейшая доля
+    получает полную непрозрачность. Ladder: 1.0 / 0.78 / 0.56 / 0.38 / 0.24
+    (по порядку сегментов; первым ставь самый крупный). Трек/дырка var(--bg-card).
+
+    Геометрия (контейнер .donut-svg @ left60/top328/width1800; viewBox 0 0 1800 620):
+      Кольцо — стек <circle> с stroke-dasharray на окружности центральной линии
+      r=225, толщина кольца stroke-width=70 (внешний 260, внутренний 190 — ДЫРКА).
+      Центр cx=310, cy=310. Окружность C = 2*PI*225 = 1413.7165 (PI=3.14159265).
+      Доли нормируются по сумме value (фильтр num): share = value/total. Длина
+      дуги seg_len = share*C; для каждого сегмента dasharray="seg_len (C-seg_len)",
+      dashoffset="-offset", где offset аккумулируется (offset += seg_len). Группа
+      повёрнута rotate(-90 cx cy) → старт с 12 часов, дуги идут по часовой.
+      Трек var(--bg-card) — полная окружность под дугами. fill="none".
+
+      Легенда справа (x 700..1790): на каждый сегмент строка — квадратный свотч
+      24px (var(--accent) с тем же stroke-opacity сегмента → fill-opacity),
+      подпись label (30px var(--fg-body)) слева, доля display|% справа (30px
+      Medium var(--fg-body)). Строки вертикально центрированы по высоте 620.
+      Без gradient/shadow/inline style — только SVG-атрибуты и токены. -#}
+{% set segs = content.segments %}
+{% set n = segs | length %}
+{% set PI = 3.14159265 %}
+{% set R = 225 %}
+{% set C = 2 * PI * R %}
+{% set total = (segs | map(attribute='value') | map('num') | sum) or 1 %}
+{% set cx = 310 %}
+{% set cy = 310 %}
+{% set ladder = [1.0, 0.78, 0.56, 0.38, 0.24] %}
+{% set leg_x = 700 %}
+{% set leg_pitch = 84 %}
+{% set leg_h = n * leg_pitch %}
+{% set leg_top = cy - leg_h / 2 %}
+<section class="slide slide--chrome-sm" data-template="donut-chart">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <svg class="donut-svg m-enter" viewBox="0 0 1800 620" fill="none"
+       xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="{{ content.title }}">
+    <circle cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
+            stroke="var(--bg-card)" stroke-width="70"/>
+    <g transform="rotate(-90 {{ cx }} {{ cy }})">
+      {% set ns = namespace(offset=0.0) %}
+      {% for s in segs %}
+      {% set share = (s.value | num) / total %}
+      {% set seg_len = share * C %}
+      {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.24 %}
+      {#- E2: дуга прорисовывается по кругу. Финальный offset = -ns.offset; старт
+          спрятан, сдвинут ещё на seg_len назад (по ходу группы), так дуга «въезжает»
+          в своё место. CSS-переменные читает keyframe m-draw-arc; покой = финал. -#}
+      <circle class="arc-draw" cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
+              stroke="var(--accent)" stroke-opacity="{{ op }}" stroke-width="70"
+              stroke-dasharray="{{ seg_len }} {{ C - seg_len }}"
+              stroke-dashoffset="{{ -ns.offset }}"
+              style="--draw-from:{{ -ns.offset - seg_len }};--draw-to:{{ -ns.offset }}"/>
+      {% set ns.offset = ns.offset + seg_len %}
+      {% endfor %}
+    </g>
+    {% for s in segs %}
+    {% set share = (s.value | num) / total %}
+    {% set pct = (share * 100) | round | int %}
+    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.24 %}
+    {% set ry = leg_top + loop.index0 * leg_pitch + leg_pitch / 2 %}
+    <rect x="{{ leg_x }}" y="{{ ry - 12 }}" width="24" height="24" rx="4"
+          fill="var(--accent)" fill-opacity="{{ op }}"/>
+    <text x="{{ leg_x + 44 }}" y="{{ ry }}" dominant-baseline="middle"
+          font-size="30" font-weight="400" fill="var(--fg-body)">{{ s.label }}</text>
+    <text x="1790" y="{{ ry }}" text-anchor="end" dominant-baseline="middle"
+          font-size="30" font-weight="500" fill="var(--fg-body)">{{ s.display or (pct ~ "%") }}</text>
+    {% endfor %}
+  </svg>
+</section>

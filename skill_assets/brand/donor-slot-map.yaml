@@ -1,0 +1,639 @@
+# donor-slot-map.yaml v0.7 — slots + canonical enforcement + composition hints + PNG-stripping.
+#
+# Формат slot:
+#   slot_name:
+#     shape_idx: <int>           # позиция shape в slide.shapes
+#     size_pt: <float>           # размер в эталоне (build применяет если override не указан)
+#     color: "#HEX"              # цвет в эталоне (справочно)
+#     bold: true|false           # справочно
+#     max_chars: <int>           # ФИЗИЧЕСКАЯ граница (по тех. capacity frame'а)
+#     safe_max_chars: <int>      # БЕЗОПАСНАЯ граница (~70% max_chars) — без визуального прижатия
+#     canonical_color: "#HEX"    # !!! ОБЯЗАТЕЛЬНЫЙ override от build (даже если в эталоне другой)
+#     canonical_bold: true|false # !!! ОБЯЗАТЕЛЬНЫЙ override от build
+#     optional: true             # slot можно не заполнять — placeholder остаётся
+#
+# Формат donor-уровня (опциональные поля):
+#   N:
+#     category: ...
+#     remove_before_fill: [<idx>, ...]          # ВСЕГДА удалять эти shapes перед заполнением слотов
+#                                                # (fixed PNG-заглушки которые ломают композицию при произвольном контенте)
+#     remove_if_not_used: [<idx>, ...]          # удалять только если соответствующий slot пустой
+#     remove_if_user_provides_table: [<idx>]    # удалять если build получает таблицу с своим контентом
+#     donor_type: pure_layout | decorative_shell | fixed_png_content | image_holder
+#                 # pure_layout — только text-frames, безопасно заполнять
+#                 # decorative_shell — есть decor shapes (паттерны/группы) — НЕ удалять, это бренд
+#                 # fixed_png_content — PNG с готовым контентом, НЕ для произвольных данных
+#                 # image_holder — большая image-zone, контент = картинка
+#
+# Layout Designer выбирает донора:
+#   if len(content) <= safe_max_chars:  это идеальный fit
+#   elif len(content) <= max_chars:     overflow risk — apply overflow strategy
+#   else:                                выбрать другой donor
+#
+# Plan validator АВТОМАТИЧЕСКИ добавляет slot_styles_override если slot имеет canonical_color/canonical_bold
+# (даже если автор плана забыл их указать).
+#
+# === Композиционные правила (для Brand Guardian extension v0.9) ===
+# 1. Title-донор: top_px заголовка ≤ 100px (5% высоты) — иначе "прижат"
+# 2. Multicolumn subtitle: ВСЕГДА чёрные #222222 Bold (даже если эталон зелёный)
+# 3. KPI 3 числа: либо все одинаковые (equal_size), либо иерархия (emphasis 44+199+199)
+# 4. Logo finale: подпись ≤ 60 chars, не "Спасибо!" (это шаблон-заглушка)
+
+donors:
+
+  # ============================
+  # === TITLES (открывающие) ===
+  # ============================
+
+  4:
+    category: title_white_compact
+    description: "Белый компактный титул с местом для подзаголовка/спикера. ВНИМАНИЕ: layout содержит 4 декоративных овала справа (T=4.34\" L=6.98/8.56/10.15/11.73\") — они видны если не заполняются KPI/иконки."
+    slots:
+      title:    { shape_idx: 1, size_pt: 60, max_chars: 80, safe_max_chars: 55, canonical_color: "#222222" }
+      subtitle: { shape_idx: 0, size_pt: 20, max_chars: 100, safe_max_chars: 70, canonical_color: "#222222" }
+    use_when: "30-55 chars ТОЛЬКО если есть 4 KPI/иконки — иначе layout-овалы пустые, бери 6"
+    avoid_when: "Plain title без KPI/icons — 4 пустых овала справа выглядят как 'незаполненные KPI слоты' (live verifier complaint 2026-06-05 score=22 на slide 1). Для plain title бери donor 6 (тёмный) или вместо титула донор 28 (col1+col2) с заголовком в title-зоне."
+    composition: "title.top_px ≈ 60 (комфортный padding). Декоративные овалы — layout-inherited, build_v9 не может их удалить per-slide."
+    notes: "v0.15 (2026-06-05): задокументирована проблема с 4 декоративными овалами в layout — они видны на пустой правой половине слайда. Layout designer должен учитывать avoid_when."
+
+  5:
+    category: title_white_with_3d
+    description: "Белый с 3D-иллюстрацией справа (полслайда!) — заголовок 88pt в левой части. Только короткие заголовки"
+    slots:
+      title:    { shape_idx: 2, size_pt: 88, max_chars: 30 }   # реально только 25-30 символов!
+      subtitle: { shape_idx: 3, size_pt: 28, max_chars: 60 }
+    use_when: "Короткий 2-3 слова заголовок (типа 'Q3 Results', 'Cloud.ru Evolution')"
+    avoid_when: "длинный заголовок — он перекроется иллюстрацией"
+
+  6:
+    category: title_dark_alt
+    description: "Альтернативный ТЁМНЫЙ титул (donor #6 = 'Титул / Чёрный 1'), белый текст на тёмном"
+    remove_before_fill: [2]   # strip baked-in stale date TextBox "18.03.2025" — no date slot is ever provided, so it always leaks a wrong, wrapping date
+    slots:
+      title:    { shape_idx: 1, size_pt: 60, max_chars: 80, safe_max_chars: 55, canonical_color: "#FFFFFF" }
+      subtitle: { shape_idx: 0, size_pt: 20, max_chars: 100, safe_max_chars: 70, canonical_color: "#FFFFFF" }
+    use_when: "Заголовок 30-55 chars на чёрном фоне"
+    notes: "ИСПРАВЛЕНО v0.14: было title_white_alt → правильно title_dark_alt (визуально это чёрный)"
+
+  7:
+    category: title_dark
+    description: "Тёмный титул на чёрном фоне (donor #7 = 'Титул / Чёрный / New'), белый заголовок"
+    slots:
+      title:    { shape_idx: 3, size_pt: 60, color: "#FFFFFF", max_chars: 80, safe_max_chars: 55, canonical_color: "#FFFFFF" }
+      subtitle: { shape_idx: 4, size_pt: 20, color: "#FFFFFF", max_chars: 100, safe_max_chars: 70, canonical_color: "#FFFFFF" }
+    use_when: "Тёмный premium tone"
+    notes: "ИСПРАВЛЕНО v0.14: было shape_idx 1/0 → правильно 3/4 (Title 3 + Заголовок 1)"
+
+  8:
+    category: title_dark_3d
+    description: "Тёмный с 3D-иллюстрацией справа"
+    slots:
+      title:    { shape_idx: 7, size_pt: 44, color: "#FFFFFF", max_chars: 80 }
+      subtitle: { shape_idx: 6, size_pt: 20, color: "#FFFFFF", max_chars: 100 }
+
+  # =====================
+  # === DIVIDERS ===
+  # =====================
+
+  10:
+    category: divider_green_alt
+    description: "Раздел/Зеленый 1 — другой instance того же layout что и donor 12. Используем для второго+ Green divider в той же презентации (избежать дубля clone_from_slide)"
+    slots:
+      title: { shape_idx: 0, size_pt: 54, color: "#222222", max_chars: 60 }
+      number: { shape_idx: 1, size_pt: 66, color: "#222222", max_chars: 4, optional: true }
+    use_when: "Второй Green divider в презентации, когда donor 12 уже использован"
+
+  12:
+    category: divider_green
+    description: "Зелёный divider с большим '01' внизу + паттерн ЛЛЛЛ + бракет-рамка"
+    donor_type: decorative_shell
+    # SHGROUP "Группа 98" + Полилиния 97 — это бренд-декор (паттерн ЛЛЛЛ + бракет). НЕ УДАЛЯТЬ.
+    slots:
+      title:  { shape_idx: 1, size_pt: 54, color: "#222222", max_chars: 40 }
+      number: { shape_idx: 0, size_pt: 66, color: "#222222", max_chars: 4 }
+    use_when: "Главный divider раздела, когда нужна эмфаза"
+
+  13:
+    category: divider_dark
+    description: "Тёмный divider — заголовок БЕЛЫЙ 96pt, цифра 01 ЗЕЛЁНАЯ 44pt"
+    donor_type: decorative_shell
+    # SHGROUP "Группа 37" + "Группа 49" — бренд-декор тёмного divider. НЕ УДАЛЯТЬ.
+    slots:
+      title:  { shape_idx: 2, size_pt: 96, color: "#FFFFFF", max_chars: 30 }
+      number: { shape_idx: 1, size_pt: 44, color: "#26D07C", max_chars: 4 }
+    use_when: "Premium / эмоциональный divider, переход к серьёзной теме"
+    notes: "В v3/v4 я перепутал цвета! Исправлено."
+
+  # =====================
+  # === CONTENT TEXT ===
+  # =====================
+
+  21:
+    category: content_text_white
+    description: "Простой текст слайд: малый заголовок 20pt + body 32pt"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, color: "#222222", bold: true, max_chars: 80 }
+      body:  { shape_idx: 1, size_pt: 32, color: "#222222", max_chars: 200 }
+    use_when: "Один абзац-вывод"
+
+  22:
+    category: content_text_dark
+    description: "Тёмный простой текст слайд"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, color: "#FFFFFF", bold: true, max_chars: 80 }
+      body:  { shape_idx: 1, size_pt: 32, color: "#FFFFFF", max_chars: 200 }
+    use_when: "Тёмный акцентный текстовый слайд"
+
+  # =======================
+  # === MULTICOLUMN ===
+  # =======================
+
+  28:
+    category: content_2col
+    description: "Две колонки текста 20pt с заголовком"
+    slots:
+      title:     { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50 }
+      col1_body: { shape_idx: 1, size_pt: 20, max_chars: 250 }
+      col2_body: { shape_idx: 2, size_pt: 20, max_chars: 250 }
+
+  29:
+    category: content_4subtitles
+    description: "4 блока 2x2 с подзаголовками 20pt Bold + body 14pt"
+    canonical_rule: "Подзаголовки колонок ВСЕГДА чёрные Bold, не зелёные (canonical user 2026-05-02)"
+    slots:
+      title:        { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      sub1_top_l:   { shape_idx: 5, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub2_top_r:   { shape_idx: 6, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub3_bot_l:   { shape_idx: 7, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub4_bot_r:   { shape_idx: 8, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      body1_top_l:  { shape_idx: 1, size_pt: 14, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+      body2_top_r:  { shape_idx: 2, size_pt: 14, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+      body3_bot_l:  { shape_idx: 3, size_pt: 14, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+      body4_bot_r:  { shape_idx: 4, size_pt: 14, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+
+  34:
+    category: content_3col_subtitle
+    description: "3 колонки с подзаголовками 20pt + body 14pt. Bracket-сепараторы"
+    canonical_rule: "Подзаголовки чёрные Bold, не зелёные"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      sub1:  { shape_idx: 4, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub2:  { shape_idx: 5, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub3:  { shape_idx: 6, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      body1: { shape_idx: 1, size_pt: 14, max_chars: 250, safe_max_chars: 175, canonical_color: "#222222" }
+      body2: { shape_idx: 2, size_pt: 14, max_chars: 250, safe_max_chars: 175, canonical_color: "#222222" }
+      body3: { shape_idx: 3, size_pt: 14, max_chars: 250, safe_max_chars: 175, canonical_color: "#222222" }
+
+  33:
+    category: content_6subtitles
+    description: "6 блоков (2x3) с подзаголовками 20pt Bold + body 14pt"
+    canonical_rule: "Подзаголовки блоков ВСЕГДА чёрные Bold, не зелёные (canonical user 2026-05-02)"
+    slots:
+      title:    { shape_idx: 0,  size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      sub1:     { shape_idx: 7,  size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub2:     { shape_idx: 8,  size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub3:     { shape_idx: 9,  size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub4:     { shape_idx: 10, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub5:     { shape_idx: 11, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub6:     { shape_idx: 12, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      body1:    { shape_idx: 1,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+      body2:    { shape_idx: 2,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+      body3:    { shape_idx: 5,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+      body4:    { shape_idx: 3,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+      body5:    { shape_idx: 4,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+      body6:    { shape_idx: 6,  size_pt: 14, max_chars: 160, safe_max_chars: 120, canonical_color: "#222222" }
+
+  35:
+    category: content_8subtitles
+    description: "8 блоков (2x4) — самый плотный multicolumn"
+    canonical_rule: "Подзаголовки блоков ВСЕГДА чёрные Bold, не зелёные (canonical user 2026-05-02)"
+    slots:
+      title:    { shape_idx: 0,  size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      sub1:     { shape_idx: 9,  size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub2:     { shape_idx: 10, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub3:     { shape_idx: 11, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub4:     { shape_idx: 12, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub5:     { shape_idx: 13, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub6:     { shape_idx: 14, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub7:     { shape_idx: 15, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      sub8:     { shape_idx: 16, size_pt: 20, bold: true, max_chars: 30, safe_max_chars: 22, canonical_color: "#222222", canonical_bold: true }
+      body1:    { shape_idx: 1,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body2:    { shape_idx: 2,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body3:    { shape_idx: 5,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body4:    { shape_idx: 7,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body5:    { shape_idx: 3,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body6:    { shape_idx: 4,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body7:    { shape_idx: 6,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      body8:    { shape_idx: 8,  size_pt: 14, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+
+  # =====================
+  # === CALLOUTS ===
+  # =====================
+
+  41:
+    category: callout_dark
+    description: "Тёмный callout — цитата 44pt по центру, минимальный декор"
+    slots:
+      quote: { shape_idx: 0, size_pt: 44, color: "#26D07C", max_chars: 120 }
+    use_when: "Эмоциональная цитата на тёмном фоне"
+
+  42:
+    category: callout_white
+    description: "Белый callout — облака+ромбики+волна. Цитата 44pt чёрная"
+    slots:
+      quote: { shape_idx: 0, size_pt: 44, color: "#222222", max_chars: 120 }
+    use_when: "Ключевая мысль в светлой презентации (рекомендуется!)"
+
+  # ===================
+  # === KPI / NUMBERS ===
+  # ===================
+
+  43:
+    category: kpi_3numbers
+    variant: equal_size
+    description: "3 KPI равного веса (160pt каждая чтобы не обрезалось vertically). Bottom — ЗЕЛЁНАЯ акцентная"
+    canonical_rule: "Цифры 160pt — frame высотой ~250px не вмещает 199pt × 1.2 lineheight. ИСПРАВЛЕНО v0.14"
+    donor_type: pure_layout
+    # % символы (5,6,7) — это слоты pct_*, optional. Если не заполнены — авто-удаление чтобы не остались '%' без числа.
+    # remove_if_not_used: pct_top_l→[5], pct_top_r→[6], pct_bottom→[7]
+    slots:
+      title:        { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      num_top_l:    { shape_idx: 4, size_pt: 160, color: "#222222", max_chars: 6, canonical_size_pt: 160, canonical_color: "#222222" }
+      num_top_r:    { shape_idx: 3, size_pt: 160, color: "#222222", max_chars: 6, canonical_size_pt: 160, canonical_color: "#222222" }
+      num_bottom:   { shape_idx: 1, size_pt: 160, color: "#26D07C", max_chars: 6, canonical_size_pt: 160, canonical_color: "#26D07C" }
+      pct_top_l:    { shape_idx: 5, size_pt: 88, color: "#222222", optional: true }
+      pct_top_r:    { shape_idx: 6, size_pt: 88, color: "#222222", optional: true }
+      pct_bottom:   { shape_idx: 7, size_pt: 88, color: "#26D07C", optional: true }
+      desc_top_l:   { shape_idx: 2, size_pt: 12, max_chars: 150, safe_max_chars: 100 }
+      desc_top_r:   { shape_idx: 8, size_pt: 12, max_chars: 150, safe_max_chars: 100 }
+      desc_bottom:  { shape_idx: 9, size_pt: 12, max_chars: 150, safe_max_chars: 100 }
+    use_when: "3 равнозначные цифры с одной акцентной (зелёной снизу)"
+    rule: "ТОЛЬКО num_bottom зелёная. ВСЕ 3 num должны быть 199pt"
+
+  44:
+    category: kpi_3numbers_dark
+    variant: equal_size
+    description: "Тёмная версия KPI слайда — 3 цифры на чёрном фоне (160pt чтобы не обрезалось)"
+    canonical_rule: "Цифры 160pt — frame не вмещает 199pt × 1.2. ИСПРАВЛЕНО v0.14 (было 199 → vertical overflow)"
+    donor_type: pure_layout
+    # % символы (4,5,6) — слоты pct_*, optional. Авто-удаление если pct_* не заполнен.
+    # remove_if_not_used: pct_top_l→[4], pct_top_r→[5], pct_bottom→[6]
+    slots:
+      title:        { shape_idx: 0, size_pt: 20, color: "#FFFFFF", bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#FFFFFF", canonical_bold: true }
+      num_top_l:    { shape_idx: 3, size_pt: 160, color: "#FFFFFF", max_chars: 4, canonical_size_pt: 160, canonical_color: "#FFFFFF" }
+      num_top_r:    { shape_idx: 2, size_pt: 160, color: "#FFFFFF", max_chars: 4, canonical_size_pt: 160, canonical_color: "#FFFFFF" }
+      num_bottom:   { shape_idx: 1, size_pt: 160, color: "#26D07C", max_chars: 6, canonical_size_pt: 160, canonical_color: "#26D07C" }
+      pct_top_l:    { shape_idx: 4, size_pt: 88,  color: "#FFFFFF", optional: true }
+      pct_top_r:    { shape_idx: 5, size_pt: 88,  color: "#FFFFFF", optional: true }
+      pct_bottom:   { shape_idx: 6, size_pt: 88,  color: "#FFFFFF", optional: true }
+      desc_top_l:   { shape_idx: 7, size_pt: 12,  color: "#FFFFFF", max_chars: 150, safe_max_chars: 100 }
+      desc_top_r:   { shape_idx: 8, size_pt: 12,  color: "#FFFFFF", max_chars: 150, safe_max_chars: 100 }
+      desc_bottom:  { shape_idx: 9, size_pt: 12,  color: "#FFFFFF", max_chars: 150, safe_max_chars: 100 }
+    use_when: "3 равнозначные цифры на тёмном с одной зелёной акцентной"
+    rule: "ВСЕ 3 num=199pt. ТОЛЬКО num_bottom зелёная. Title и desc — белые"
+
+  # =====================
+  # === LOGO FINAL ===
+  # =====================
+
+  25:
+    category: logo_green_caption
+    description: "Зелёный фон с заголовком 44pt + подпись 21pt"
+    slots:
+      title_caption:    { shape_idx: 0, size_pt: 44, color: "#222222", max_chars: 80 }
+      subtitle_caption: { shape_idx: 1, size_pt: 21, color: "#222222", max_chars: 100 }
+    use_when: "Финальный logo-слайд (вместо 'Спасибо за внимание')"
+
+  78:
+    category: logo_with_3d
+    description: "Зелёный фон + лого + 3D-картинка + 3 описания (для финальной выкладки)"
+    slots:
+      title_main: { shape_idx: 2, size_pt: 28, max_chars: 60 }
+      desc1:      { shape_idx: 1, size_pt: 14, max_chars: 200 }
+      desc2:      { shape_idx: 3, size_pt: 14, max_chars: 200 }
+      desc3:      { shape_idx: 4, size_pt: 14, max_chars: 200 }
+    use_when: "Финал с продуктовой выкладкой, не для 'спасибо'"
+
+  # =====================
+  # === DIAGRAM / SCHEME ===
+  # =====================
+
+  47:
+    category: diagram_dark_central_number
+    description: "Тёмная диаграмма с большой цифрой 80pt по центру + 5 меток (рассеянный плот)"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, color: "#FFFFFF", bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#FFFFFF" }
+      central: { shape_idx: 7, size_pt: 80, color: "#26D07C", max_chars: 8, safe_max_chars: 6, canonical_color: "#26D07C" }
+      label1: { shape_idx: 2, size_pt: 14, color: "#FFFFFF", max_chars: 20, canonical_color: "#FFFFFF" }
+      label2: { shape_idx: 3, size_pt: 14, color: "#FFFFFF", max_chars: 20, canonical_color: "#FFFFFF" }
+      label3: { shape_idx: 4, size_pt: 14, color: "#FFFFFF", max_chars: 20, canonical_color: "#FFFFFF" }
+      label4: { shape_idx: 5, size_pt: 14, color: "#FFFFFF", max_chars: 20, canonical_color: "#FFFFFF" }
+      label5: { shape_idx: 6, size_pt: 14, color: "#FFFFFF", max_chars: 20, canonical_color: "#FFFFFF" }
+    use_when: "Центральная метрика с разнесёнными контекстами"
+
+  48:
+    category: scheme_venn_dark
+    description: "Венна-диаграмма (пересечение понятий) на тёмном — title + caption + 2-3 концепта на самой диаграмме (PNG)"
+    note: "Donor 48 имеет PNG-диаграмму пересечения концептов как картинку. text-frames здесь только для title и подписи. Концепты НЕ редактируемы (растровые)."
+    slots:
+      title: { shape_idx: 1, size_pt: 21, color: "#FFFFFF", bold: true, max_chars: 50, canonical_color: "#FFFFFF", canonical_bold: true }
+      subtitle: { shape_idx: 3, size_pt: 16, color: "#FFFFFF", max_chars: 100, canonical_color: "#FFFFFF" }
+    use_when: "Слайд с готовой Венна-картинкой — НЕ для произвольных концептов"
+    avoid_when: "Произвольный контент с 3-5 точками. Лучше donor 47 или 29"
+
+  62:
+    category: divider_green_with_caption
+    description: "Зелёный divider с описанием снизу — альтернатива donor 12"
+    # Эталонный слайд 62 = инструктивный «Гайд по оформлению схем»: справа
+    # baked-in группа со списком «Слайд 65…» (shape 2) + подчёркивающая линия
+    # (shape 3). Это шаблонный мусор — всегда удаляем, иначе он протекает в
+    # вывод (dl2 slide-19 leak). Остаются только title + caption.
+    remove_before_fill: [2, 3]
+    # caption-карточка (shape 1) = белый прямоугольник. Если Distributor не дал
+    # текст caption — убираем пустую белую карточку, а не оставляем заглушку.
+    remove_if_slot_empty: { caption: 1 }
+    slots:
+      title: { shape_idx: 0, size_pt: 54, color: "#222222", max_chars: 40, safe_max_chars: 30, canonical_color: "#222222" }
+      caption: { shape_idx: 1, size_pt: 20, color: "#222222", max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+    use_when: "Divider с подробным описанием раздела"
+
+  # =====================
+  # === TABLES ===
+  # =====================
+
+  53:
+    category: table_gray_simple
+    description: "Серый слайд под таблицу + заголовок + краткий caption. ВНИМАНИЕ: содержит PNG-таблицу-заглушку."
+    donor_type: fixed_png_content
+    # PNG-заглушка "Таблица 11" всегда удаляется — она лишь визуальный мокап.
+    # Если plan_slide.table_data задан, build_v9 добавит реальную таблицу;
+    # иначе слайд остаётся title+caption (приемлемая деградация, без заглушки).
+    remove_before_fill: [0]
+    slots:
+      title: { shape_idx: 1, size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      caption: { shape_idx: 2, size_pt: 16, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+    use_when: "Простая сравнительная таблица 3-5 строк (build добавит свою таблицу, заглушка удалится)"
+
+  54:
+    category: table_white_large
+    description: "Большая таблица с большим количеством строк/колонок"
+    slots:
+      title: { shape_idx: 1, size_pt: 20, bold: true, max_chars: 60, safe_max_chars: 50, canonical_color: "#222222" }
+    use_when: "Большая таблица 6+ строк"
+
+  # =====================
+  # === IMAGE GRID ===
+  # =====================
+
+  39:
+    category: image_grid_2x3_with_caption
+    description: "2x3 сетка карточек с иконкой + текст 14pt — главная страница продуктов"
+    slots:
+      title: { shape_idx: 2, size_pt: 20, bold: true, max_chars: 60, safe_max_chars: 50, canonical_color: "#222222" }
+      card1: { shape_idx: 9, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+      card2: { shape_idx: 8, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+      card3: { shape_idx: 7, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+      card4: { shape_idx: 6, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+      card5: { shape_idx: 5, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+      card6: { shape_idx: 4, size_pt: 14, max_chars: 150, safe_max_chars: 100, canonical_color: "#222222" }
+    use_when: "Каталог из 6 продуктов/фич с описаниями"
+
+  40:
+    category: title_pattern_aspirational
+    description: "Большой заголовок 44pt на паттерне с PNG-иллюстрацией"
+    slots:
+      title: { shape_idx: 6, size_pt: 44, max_chars: 70, safe_max_chars: 55, canonical_color: "#222222" }
+    use_when: "Аспирационный заголовок (миссия, vision)"
+
+  # =====================
+  # === SCREENSHOT / DEMO ===
+  # =====================
+
+  73:
+    category: screenshot_dark_with_annotation
+    type: image_holder
+    description: "Скриншот ⅔ слайда + аннотация справа. Image — главный контент"
+    slots:
+      title: { shape_idx: 2, size_pt: 20, bold: true, max_chars: 50, canonical_color: "#222222" }
+      annotation: { shape_idx: 3, size_pt: 16, max_chars: 200, safe_max_chars: 140, canonical_color: "#222222" }
+    image_zone:
+      left_px: 35
+      top_px: 130
+      width_px: 853
+      height_px: 540
+    use_when: "Главный контент — image (график, скриншот, фото). Аннотация справа поясняет"
+
+  # =====================
+  # === ILLUSTRATIONS ===
+  # =====================
+
+  79:
+    category: image_5points_with_3d
+    description: "5 пунктов + центральная 3D-иллюстрация. ВНИМАНИЕ: PNG-fixed контент."
+    donor_type: fixed_png_content
+    remove_before_fill: [0, 1]   # SHGROUP "Группа 53" + PIC "Рисунок 5" — fixed 5-точечный PNG, при произвольном контенте удалять
+    slots:
+      title: { shape_idx: 2, size_pt: 20, bold: true, max_chars: 60, safe_max_chars: 50, canonical_color: "#222222" }
+    use_when: "ТОЛЬКО для 5 фич/преимуществ С центральной 3D-картинкой подходящего смысла"
+    avoid_when: "Произвольный контент 3-4 идеи. Лучше donor 28/34. Если PNG-заглушки удалить — стает чистым donor для title-only"
+
+  81:
+    category: image_left_text_right
+    description: "Картинка слева + текст справа (визуальный + объяснение)"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, bold: true, max_chars: 40, canonical_color: "#222222" }
+      body: { shape_idx: 1, size_pt: 20, max_chars: 400, safe_max_chars: 280, canonical_color: "#222222", bold: true }
+    use_when: "Иллюстрация + развёрнутый текст"
+
+  # =====================
+  # === IMAGE / PHOTO ===
+  # =====================
+
+  72:
+    category: screenshot_with_annotation
+    description: "Скриншот ⅔ слайда + аннотация справа"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50 }
+      annotation: { shape_idx: 2, size_pt: 14, max_chars: 200 }
+    use_when: "Демонстрация UI, продукта"
+
+  86:
+    category: photo_full_dark
+    description: "Полнофоновое фото на тёмном с 3 caption-карточками + заголовок (use_when finale = эмоциональный)"
+    donor_type: image_holder
+    slots:
+      caption1: { shape_idx: 0, size_pt: 28, color: "#FFFFFF", max_chars: 40, optional: true }
+      caption2: { shape_idx: 1, size_pt: 28, color: "#FFFFFF", max_chars: 40, optional: true }
+      caption3: { shape_idx: 2, size_pt: 28, color: "#FFFFFF", max_chars: 40, optional: true }
+      title:    { shape_idx: 3, size_pt: 44, color: "#FFFFFF", max_chars: 80 }
+    use_when: "Эмоциональный финал с фотофоном — title + опциональные 3 caption-карточки"
+
+  # =====================
+  # === TIMELINE ===
+  # =====================
+
+  60:
+    category: timeline_10steps
+    description: "Roadmap 10 этапов 2x5 — каждый с датой + body. Идеально для квартальных планов / детальной дорожной карты"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50, safe_max_chars: 40, canonical_color: "#222222" }
+      step1_date: { shape_idx: 2, size_pt: 14, max_chars: 40, canonical_color: "#222222" }
+      step1_body: { shape_idx: 1, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      step2_date: { shape_idx: 4, size_pt: 14, max_chars: 40, canonical_color: "#222222" }
+      step2_body: { shape_idx: 3, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      step3_date: { shape_idx: 6, size_pt: 14, max_chars: 40, canonical_color: "#222222" }
+      step3_body: { shape_idx: 5, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      step4_date: { shape_idx: 8, size_pt: 14, max_chars: 40, canonical_color: "#222222" }
+      step4_body: { shape_idx: 7, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      step5_date: { shape_idx: 10, size_pt: 14, max_chars: 40, canonical_color: "#222222" }
+      step5_body: { shape_idx: 9, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222" }
+      step6_date: { shape_idx: 12, size_pt: 14, max_chars: 40, canonical_color: "#222222", optional: true }
+      step6_body: { shape_idx: 11, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222", optional: true }
+      step7_date: { shape_idx: 14, size_pt: 14, max_chars: 40, canonical_color: "#222222", optional: true }
+      step7_body: { shape_idx: 13, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222", optional: true }
+      step8_date: { shape_idx: 16, size_pt: 14, max_chars: 40, canonical_color: "#222222", optional: true }
+      step8_body: { shape_idx: 15, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222", optional: true }
+      step9_date: { shape_idx: 18, size_pt: 14, max_chars: 40, canonical_color: "#222222", optional: true }
+      step9_body: { shape_idx: 17, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222", optional: true }
+      step10_date: { shape_idx: 20, size_pt: 14, max_chars: 40, canonical_color: "#222222", optional: true }
+      step10_body: { shape_idx: 19, size_pt: 12, max_chars: 120, safe_max_chars: 90, canonical_color: "#222222", optional: true }
+    use_when: "Roadmap / дорожная карта 5-10 этапов с датами"
+
+  61:
+    category: timeline_chart
+    description: "Roadmap-график (line chart с годами по горизонтали + событиями) — сложный layout, использовать только для финансов/метрик"
+    notes: "49 shapes — много меток. Использовать только когда есть готовый chart данных"
+
+  # =====================
+  # === TEAM ===
+  # =====================
+
+  71:
+    category: team_5
+    description: "Команда из 5 человек — фото + имя/роль"
+    slots:
+      title: { shape_idx: 0, size_pt: 20, bold: true, max_chars: 50 }
+      # 5 пар (photo + name) — TODO inspect
+
+  # ============
+  # === Legend ===
+  # ============
+  # Поля slot:
+  #   shape_idx — позиция в slide.shapes (build получает по индексу)
+  #   size_pt   — размер шрифта в эталоне (build_v5 не меняет, если override не указан)
+  #   color     — HEX (build_v5 применяет если override)
+  #   bold      — bool (build_v5 не меняет, если override не указан)
+  #   max_chars — справочно для Layout Designer'а (если текст длиннее — выбрать другого донора)
+  #   optional  — slot можно не заполнять (заглушка остаётся)
+
+# =================================================================
+# === Generation method per donor (XML-инспекция от 2026-05-02) ===
+# =================================================================
+# Какой метод используется в build_v6 для каждого донора.
+#
+# clone        — копировать целиком слайд из шаблона (со всеми shapes), потом подменить text
+# add_layout   — add_slide(layout_idx); декор наследуется автоматически из slideLayout*.xml
+#
+# Правило выбора:
+#   - shapes_count в эталоне ≤ 4 → проверить, не лежат ли декоры в layout
+#     если да → add_layout (быстрее, легче файл)
+#   - shapes_count ≥ 8 или есть PNG-картинки на slide → clone (тащить всё)
+#
+# Замеры из template-slides-catalog.json + XML-инспекции:
+#   slide  5 (title 5):              clone  (8 prstGeom + 3D PNG)
+#   slide  6 (title 6 dark!):        clone  (нужен фон + footer)
+#   slide  8 (title 8 dark+3D):      clone
+#   slide 12 (divider green ЛЛЛЛ):   clone  (100 prstGeom! паттерн на slide)
+#   slide 13 (divider dark):         clone  (паттерн на slide)
+#   slide 25 (logo green):           clone  (3D-картинка на slide)
+#   slide 28 (2col):                 add_layout (декор минимальный, в layout)
+#   slide 29 (4 subtitles):          add_layout
+#   slide 34 (3col):                 add_layout (бракеты-сепараторы наследуются из layout31)
+#   slide 41 (callout dark):         add_layout (декор полностью в layout23 для callout dark)
+#   slide 42 (callout white):        add_layout (декор полностью в slideLayout24.xml — облака+ромбики)
+#   slide 43 (KPI 3 numbers):        clone  (18 prstGeom на slide)
+#   slide 44 (KPI dark):             clone
+#   slide 78 (logo + 3D):            clone  (3D на slide)
+#
+# Ключевой инсайт: callout 42 при clone весит 25MB; при add_layout — 1MB.
+# Для divider 12 разница меньше (паттерн ЛЛЛЛ всё равно надо тащить).
+
+donor_generation_method:
+  4:  clone
+  5:  clone
+  6:  clone
+  7:  clone
+  8:  clone
+  10: add_layout
+  12: clone
+  13: clone
+  21: add_layout
+  22: add_layout
+  25: clone
+  28: add_layout
+  29: add_layout
+  33: add_layout
+  34: add_layout
+  35: add_layout
+  39: clone        # 7 PNG cards в slide
+  40: clone        # PNG illustration
+  41: add_layout
+  42: add_layout
+  43: clone
+  44: clone
+  47: clone        # сложная диаграмма
+  48: clone        # Венн диаграмма с PNG
+  53: add_layout   # таблица минималистичная
+  54: add_layout   # большая таблица
+  60: clone
+  61: clone
+  62: clone        # с большим текстом
+  71: clone
+  72: clone
+  73: clone
+  79: clone        # 3D PNG
+  81: clone        # PNG illustration
+  78: clone
+  86: clone
+
+# =================================================================
+# === Tone-pairs для anti-monotony rule в Layout Designer'е ===
+# =================================================================
+# При длинной презентации (>5 слайдов): чередовать light/dark/green divider'ы
+# Никогда не использовать один тип donor'а более 2 раз подряд.
+
+tone_groups:
+  light_content: [21, 28, 29, 31, 34, 42, 53, 73, 81]
+  dark_content:  [22, 41, 47, 48, 57, 67]
+  green_accent:  [8, 12, 25, 62, 95]
+  divider:       [10, 12, 13, 62]
+  kpi:           [43, 44]
+  title:         [4, 5, 6, 7, 8, 40]
+  table:         [53, 54]
+  diagram:       [47]
+  image:         [39, 40, 73, 79, 81, 86]
+  callout:       [41, 42]
+
+# === Category groups (для anti-monotony в Layout Designer) ===
+# Каждая группа = эквивалентные доноры одной семантики.
+# Layout Designer не должен использовать donor одной группы > 2 раз подряд.
+category_equivalence:
+  title_open:    [4, 5, 40]            # открывающий БЕЛЫЙ титул
+  title_dark:    [6, 7, 8]              # ТЁМНЫЙ титул (#6 исправлен из title_white_alt)
+  divider:       [12, 13, 62]          # переход между разделами
+  content_2col:  [28]
+  content_3col:  [34]
+  content_4block: [29]
+  content_6subtitles: [33]
+  content_8subtitles: [35]
+  content_text:  [21, 22]
+  callout:       [41, 42]
+  kpi:           [43, 44]
+  diagram:       [47]              # 48 убран из generic — у него PNG-картинка, использовать только при наличии image_path
+  table:         [53, 54]
+  image_grid:    [39, 81]                # 79 убран — fixed PNG content, нет editable text для 5 точек
+  image_main:    [73, 86]                # IMAGE = ГЛАВНЫЙ КОНТЕНТ слайда (график, фото, скриншот)
+  screenshot:    [73, 72]
+  team:          []                     # 49/50/51/71 не подходят — фотографии в PNG, не редактируется
+  timeline:      [60]                    # 60 размечен. 61 — line chart, для финансов специальный кейс
+  logo_finale:   [25, 78, 86]

@@ -1,0 +1,8 @@
+{#- Титульный слайд (figma D 3393:11136 / L 3393:10873): огромный H1 + подзаголовок. -#}
+<section class="slide" data-template="cover">
+  {% include "_chrome.html" %}
+  <div class="cover-block">
+    <h1 class="cover-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
+    {% if content.subtitle %}<p class="cover-subtitle t-sub-36 m-enter">{{ content.subtitle }}</p>{% endif %}
+  </div>
+</section>

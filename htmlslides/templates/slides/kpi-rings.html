@@ -1,0 +1,75 @@
+{#- kpi-rings: НЕ из Figma — бренд-производные КОЛЬЦА ПРОГРЕССА (2–4 датчика %).
+    Пятый график библиотеки: каждое кольцо — ОДНО значение в процентах (покрытие,
+    аптайм, готовность, выполнение). В отличие от donut (доли целого), тут каждое
+    кольцо — самостоятельный gauge: дуга = value%, остаток = трек. Self-contained:
+    только инлайн-SVG, без внешних JS/чарт-библиотек, токены темы, обе темы.
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
+
+    Один бренд-акцент: дуга var(--accent) (зелёный на обеих темах), трек
+    var(--bg-card). Текст в центре var(--fg-body), подпись под кольцом var(--fg-muted).
+
+    Геометрия (.kr-svg @ left60/top328/width1800; viewBox 0 0 1800 620):
+      N=rings|length (2..4) равных колонок по ширине 1800: col_w = 1800/N,
+      центр кольца cx = (i+0.5)*col_w. cy=250 (место под подпись внизу).
+      Радиус R адаптивен: 4 кольца — меньше, 2 — крупнее (чтобы влезали с зазором):
+        R = 170 при N<=2, 150 при N==3, 130 при N>=4. stroke-width=28.
+      Окружность C = 2*PI*R (PI=3.14159265). КЛАМП value в 0..100:
+        v = min(max(value|num, 0), 100). Дуга arc = v/100 * C;
+        прогресс-circle stroke-dasharray="arc (C-arc)", повёрнут rotate(-90 cx cy)
+        (старт с 12 часов, по часовой), stroke-linecap="round".
+        Проверка: 85% → 0.85*360 = 306° дуги.
+      Центр: display (или value+"%") ~56px var(--fg-body), text-anchor middle,
+        dominant-baseline middle. Подпись label под кольцом (y = cy+R+58), ~28px
+        var(--fg-muted), text-anchor middle; до 2 строк — вторая строка через
+        перенос по ~22 символам (room до y=620 есть).
+      Без gradient/shadow/CSS-rounding, без inline style — только SVG-атрибуты. -#}
+{% set rings = content.rings %}
+{% set n = rings | length %}
+{% set PI = 3.14159265 %}
+{% set R = 170 if n <= 2 else (150 if n == 3 else 130) %}
+{% set C = 2 * PI * R %}
+{% set sw = 28 %}
+{% set col_w = 1800.0 / n %}
+{% set cy = 250 %}
+<section class="slide slide--chrome-sm" data-template="kpi-rings">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <svg class="kr-svg m-enter" viewBox="0 0 1800 620" fill="none"
+       xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="{{ content.title }}">
+    {% for r in rings %}
+    {% set cx = (loop.index0 + 0.5) * col_w %}
+    {% set v = [[r.value | num, 0] | max, 100] | min %}
+    {% set arc = v / 100 * C %}
+    <circle cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
+            stroke="var(--bg-card)" stroke-width="{{ sw }}"/>
+    {#- E2: дуга-датчик выезжает от 0 до value%. Старт спрятан (offset = arc, дуга
+        выдвинута за свой dash), финал = 0. m-draw-arc читает CSS-переменные. -#}
+    <circle class="arc-draw" cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
+            stroke="var(--accent)" stroke-width="{{ sw }}"
+            stroke-dasharray="{{ arc }} {{ C - arc }}"
+            stroke-dashoffset="0"
+            style="--draw-from:{{ arc }};--draw-to:0"
+            stroke-linecap="round" transform="rotate(-90 {{ cx }} {{ cy }})"/>
+    <text class="js-count" x="{{ cx }}" y="{{ cy }}" text-anchor="middle" dominant-baseline="middle"
+          font-size="56" font-weight="500" fill="var(--fg-body)">{% if r.display and (r.display | num) %}{{ r.display }}{% else %}{{ r.value | replace("%", "") | replace(".", ",") }}%{% endif %}</text>
+    {#- Подпись под кольцом. SVG <text> не переносится сам и не клипуется по колонке
+        (col_w = 1800/N; для 4 колец ~450px), поэтому длинный label сталкивался с соседним.
+        Переносим вручную на ДВЕ строки по границе слова возле середины, шрифт 24px.
+        Бюджет 2×~30 симв. перекрывает max_chars=30. Балансируем строки: набираем
+        слова в line1, пока не пройдена половина длины, остаток — в line2. -#}
+    {% set words = (r.label | string | trim).split(" ") %}
+    {% set half = (r.label | string | trim | length) / 2 %}
+    {% set ns = namespace(l1="", l2="", acc=0) %}
+    {% for w in words %}
+      {% if ns.acc < half or not ns.l1 %}{% set ns.l1 = (ns.l1 ~ " " ~ w) | trim %}{% set ns.acc = ns.acc + (w | length) + 1 %}
+      {% else %}{% set ns.l2 = (ns.l2 ~ " " ~ w) | trim %}{% endif %}
+    {% endfor %}
+    <text x="{{ cx }}" y="{{ cy + R + 50 }}" text-anchor="middle"
+          font-size="24" font-weight="400" fill="var(--fg-muted)">{{ ns.l1 }}{% if ns.l2 %}<tspan x="{{ cx }}" dy="30">{{ ns.l2 }}</tspan>{% endif %}</text>
+    {% endfor %}
+  </svg>
+</section>

@@ -1,0 +1,18 @@
+{#- Разделитель секции с контурной рамкой (figma D 3393:11216 / L 3393:10963):
+    зелёная рамка-Union с вырезами под логотип (сверху-слева) и номер (снизу-слева),
+    слово Section по центру, номер слева внизу, 3 стрелки справа сверху.
+    Секционный макет — большой логотип (без .slide--chrome-sm). -#}
+<section class="slide" data-template="section-frame">
+  {% include "_chrome.html" %}
+  {#- Рамка = объединение двух прямоугольников R21(60,180 600.67×720) и
+      R22(300.87,240 1559.13×720); путь в локальных координатах viewBox 1800×780. -#}
+  <svg class="sf-frame" viewBox="0 0 1800 780" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M0.5 0.5H600.67V60H1799.5V779.5H240.87V720H0.5V0.5Z" stroke="currentColor"/>
+  </svg>
+  <h1 class="sf-title m-enter m-enter--hero">{{ content.label }}</h1>
+  {#- Номер секции: голое целое дополняем ведущим нулём до NN (1→01, 2→02); «02» оставляем; нечисловое — как есть; пусто — ничего. -#}
+  {% if content.number %}{% set num = content.number | string | trim %}<p class="sf-number t-sub-36 m-enter">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</p>{% endif %}
+  <div class="sf-arrows m-loop-draw" aria-hidden="true">
+    {% for _ in range(3) %}{% include "_arrow.html" %}{% endfor %}
+  </div>
+</section>

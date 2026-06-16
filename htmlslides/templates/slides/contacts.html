@@ -1,0 +1,25 @@
+{#- Финальный контактный слайд (figma D 3393:11169 / L 3393:10907).
+    Light: зелёное полотно с точками, белые плашки под логотип/заголовок/контакт.
+    Dark: зелёный контур с вырезом под логотип, зелёный H1, белый контакт.
+    Переключение варианта — правилами html[data-theme=...] в deck.css. -#}
+<section class="slide" data-template="contacts">
+  <div class="contacts-canvas" aria-hidden="true">
+    <div class="contacts-dots pattern-dots m-loop-drift"></div>
+  </div>
+  <svg class="contacts-frame" viewBox="0 0 1803 960" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M421 119.5H0.5V959.5H1802.5V0.5H421V119.5Z" stroke="currentColor"/>
+  </svg>
+  <div class="contacts-logo-plate" aria-hidden="true"></div>
+  {% include "_chrome.html" %}
+  <div class="contacts-title-wrap m-enter m-enter--hero">
+    <h1 class="contacts-title t-hero-156">{{ content.title }}</h1>
+  </div>
+  {% if content.subtitle %}
+  <div class="contacts-subtitle-wrap m-enter">
+    <p class="contacts-subtitle t-sub-36">{{ content.subtitle }}</p>
+  </div>
+  {% endif %}
+  <div class="contacts-arrows m-loop-pulse" aria-hidden="true">
+    {% for _ in range(4) %}{% include "_arrow.html" %}{% endfor %}
+  </div>
+</section>

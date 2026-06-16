@@ -1,0 +1,47 @@
+{#- Таймлайн (figma D 3393:11332 / L 3393:11079): слева 5 строк текста с
+    горизонтальными разделителями, справа большая иллюстрация на голубой подложке.
+    Контентный макет — малый логотип (.slide--chrome-sm). -#}
+<section class="slide slide--chrome-sm" data-template="timeline">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="tl-list m-stagger">
+    {% for item in content['items'] %}
+    <div class="tl-row">
+      <p class="tl-text t-body-30">{{ item.text }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="tl-art m-enter-right" aria-hidden="true">
+    {% if content.image %}
+    {#- есть иллюстрация — ступенчатые голубые подложки + картинка (как в Figma) -#}
+    <div class="tl-art-panel tl-art-panel--a"></div>
+    <div class="tl-art-panel tl-art-panel--b"></div>
+    <img class="tl-art-img" src="{{ content.image }}" alt="">
+    {% else %}
+    {#- без картинки — бренд-лайнарт на голубой подложке (как в Figma 3393:11332):
+        контурные облака тонким штрихом + диагональные стрелки-коннекторы. -#}
+    <div class="tl-art-panel tl-art-panel--a"></div>
+    <div class="tl-art-panel tl-art-panel--b"></div>
+    <svg class="tl-art-svg" viewBox="0 0 900 660" fill="none"
+         preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      {#- облака: контур, без заливки, var(--fg-muted) тонким штрихом -#}
+      <g class="tl-art-clouds m-loop-float">
+        <path d="M150 250 a55 55 0 0 1 55 -55 a70 70 0 0 1 130 10 a45 45 0 0 1 15 88 H175 a45 45 0 0 1 -25 -43 z"/>
+        <path d="M470 180 a48 48 0 0 1 48 -48 a62 62 0 0 1 115 9 a40 40 0 0 1 12 78 H492 a40 40 0 0 1 -22 -39 z"/>
+        <path d="M520 470 a60 60 0 0 1 60 -60 a76 76 0 0 1 142 11 a50 50 0 0 1 16 96 H548 a50 50 0 0 1 -28 -47 z"/>
+      </g>
+      {#- диагональные стрелки-коннекторы, var(--accent) -#}
+      <g class="tl-art-arrows">
+        <path d="M210 560 L470 300 H700"/>
+        <path d="M660 320 L700 300 L680 340"/>
+        <path d="M300 600 L520 380"/>
+        <path d="M150 470 L360 470 H560"/>
+        <path d="M520 450 L560 470 L520 490"/>
+      </g>
+    </svg>
+    {% endif %}
+  </div>
+</section>

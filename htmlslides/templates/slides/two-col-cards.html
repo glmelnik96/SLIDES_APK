@@ -1,0 +1,20 @@
+{#- 2 колонки-карточки «папки» (figma D 3393:11245 / L 3393:10992): у каждой
+    вкладка-заголовок + тело с текстом. Фон карточки var(--bg-card), заголовок
+    var(--card-label) (зелёный D / чёрный L). Контентный макет — малый логотип. -#}
+<section class="slide slide--chrome-sm" data-template="two-col-cards">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="tcc-grid m-stagger">
+    {% for card in content.cards %}
+    <div class="tcc-card">
+      <div class="tcc-tab"><h2 class="tcc-heading">{{ card.heading }}</h2></div>
+      <div class="tcc-body">
+        {% if card.body %}<p class="tcc-text t-body-30">{{ card.body }}</p>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>

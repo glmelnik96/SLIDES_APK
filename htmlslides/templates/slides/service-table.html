@@ -1,0 +1,28 @@
+{#- Карточка сервиса (figma D 3393:11365 / L 3393:11112): изображение слева с вылетом
+    за край + поле точек, панель справа с названием сервиса и таблицей 01/02/03 преимуществ.
+    Контентный макет — малый логотип (.slide--chrome-sm). -#}
+<section class="slide slide--chrome-sm" data-template="service-table">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="svc-dots pattern-dots" aria-hidden="true"></div>
+  {% if content.image %}
+  <div class="svc-image" aria-hidden="true">
+    <img src="{{ content.image }}" alt="">
+  </div>
+  {% endif %}
+  <div class="svc-panel m-enter-right">
+    <h2 class="svc-name t-head-54">{{ content.service_name }}</h2>
+    {% if content.service_desc %}<p class="svc-desc t-body-30">{{ content.service_desc }}</p>{% endif %}
+    <div class="svc-rows m-stagger">
+      {% for row in content.rows %}
+      <div class="svc-row">
+        <div class="svc-num t-head-36">{{ row.num }}</div>
+        <div class="svc-benefit t-body-30">{{ row.benefit }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,10 @@
+{#- Разделитель секции с полем точек (figma D 3393:11207 / L 3393:10954):
+    поле точек сверху, огромное SECTION-слово слева внизу + номер справа.
+    Секционный макет — большой логотип (без .slide--chrome-sm). -#}
+<section class="slide" data-template="section-dots">
+  {% include "_chrome.html" %}
+  <div class="sd-dots pattern-dots m-loop-drift" aria-hidden="true"></div>
+  <h1 class="sd-label t-hero-156 m-enter m-enter--hero">{{ content.label }}</h1>
+  {#- Номер секции: голое целое дополняем ведущим нулём до NN (1→01, 2→02); «02» оставляем; нечисловое — как есть; пусто — ничего. -#}
+  {% if content.number %}{% set num = content.number | string | trim %}<div class="sd-number t-hero-156 m-enter">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</div>{% endif %}
+</section>

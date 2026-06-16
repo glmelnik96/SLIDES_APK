@@ -1,0 +1,439 @@
+/* Cloud.ru 2.0 — deck.css. Theme tokens: Figma aZQYa8ye6EQj5WzjXAdQvC (docs/figma/figma-map.md). Базовая палитра --cl-*: pptx-skill design-tokens v2.4 — питает токены темы (--accent/--line) и компоненты. */
+:root{
+  --cl-green:#26D07C;
+  --cl-graphite:#222222;
+  --cl-white:#FFFFFF;
+  --cl-grey1:#F2F2F2;
+  --cl-grey2:#D9D9D9;
+  --cl-grey3:#434343;
+  --cl-text-gray:#5C5C5C;
+  --cl-copyright:#BFBFBF;
+  --font:"SB Sans Display",Verdana,sans-serif;
+  --font-display:"SB Sans Display",Verdana,sans-serif;
+  --font-text:"SB Sans Text",Verdana,sans-serif;
+  --radius:0;                       /* прямые углы — инвариант бренда */
+  --slide-w:1920px;
+  --slide-h:1080px;
+}
+html[data-theme="dark"]{
+  --bg:#222222; --fg:#FFFFFF; --fg-body:#F2F2F2; --fg-muted:#D3D3D3;
+  --fg-slide-num:#D3D3D3; --bg-card:#383838; --accent:var(--cl-green);
+  --line:var(--cl-green); --line-frame:#D3D3D3; --card-label:var(--cl-green);
+  --image-bg:#C0E0FC;
+}
+html[data-theme="light"]{
+  --bg:#FFFFFF; --fg:#222222; --fg-body:#000000; --fg-muted:#595959;
+  --fg-slide-num:#000000; --bg-card:#F2F2F2; --accent:var(--cl-green);
+  --line:var(--cl-green); --line-frame:#222222; --card-label:#000000;
+  --image-bg:#C0E0FC;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:var(--radius);}
+html,body{height:100%;}
+body{background:var(--bg);font-family:var(--font-display);color:var(--fg);overflow:hidden;}
+b,strong{font-weight:600;}
+em,i{font-style:normal;}          /* курсив запрещён брендом */
+u,a{text-decoration:none;}        /* подчёркивание запрещено брендом */
+a{color:inherit;}
+
+/* ---- стейдж и автоскейл (масштаб ставит deck.js через --deck-scale) ---- */
+.deck-stage{position:absolute;top:50%;left:50%;width:var(--slide-w);height:var(--slide-h);
+  transform:translate(-50%,-50%) scale(var(--deck-scale,1));}
+.slide{position:absolute;inset:0;width:var(--slide-w);height:var(--slide-h);
+  background:var(--bg);color:var(--fg);visibility:hidden;overflow:hidden;}
+.slide.is-active{visibility:visible;}
+.slide--dark{background:var(--cl-graphite);color:var(--cl-white);}
+
+/* ---- хром слайда (placement из design-tokens) ---- */
+.slide-header{position:absolute;left:52px;top:57px;max-width:1500px;}
+.logo{position:absolute;top:57px;right:52px;height:44px;display:flex;align-items:center;}
+.logo svg{height:44px;width:auto;display:block;}
+.logo-text{font-size:30px;font-weight:600;}
+.copyright{position:absolute;left:52px;top:1044px;width:849px;font-size:9px;line-height:1.2;
+  color:var(--cl-copyright);}
+
+/* ---- роли типографики ---- */
+.t-display{font-size:132px;font-weight:600;line-height:1.0;}
+.t-title-dark{font-size:66px;font-weight:600;line-height:1.0;}
+.t-kpi-hero{font-size:298px;font-weight:600;line-height:1.0;letter-spacing:-8px;}
+.t-kpi-pct{font-size:132px;font-weight:600;line-height:1.0;letter-spacing:-6px;}
+.t-heading-lg{font-size:48px;font-weight:600;line-height:1.0;}
+.t-header{font-size:30px;font-weight:600;line-height:1.0;text-transform:uppercase;}
+.t-body{font-size:24px;font-weight:400;line-height:1.2;}
+.t-body-dense{font-size:21px;font-weight:400;line-height:1.2;}
+.t-caption{font-size:18px;font-weight:400;line-height:1.2;color:var(--cl-text-gray);}
+.t-number{font-size:84px;font-weight:400;line-height:1.0;color:var(--cl-green);}
+/* hero-заголовок (cover/statement/contacts/section-dots) и подзаголовок 36px (cover/statement/contacts/cover-image) — общие роли, чтобы не дублировать блоки по per-id классам.
+   Размер 120px (а не 156): при 156px одно длинное капс-слово (напр. «МИГРАЦИЮ» в «НАЧНИТЕ МИГРАЦИЮ», 16 симв.) вылезало за x=1860 и за зелёную рамку contacts.
+   Бюджет строки: самая узкая safe-зона — contacts dark (рамка, title-wrap left=116, внутр. правый край рамки ~x=1861) ≈ 1730px.
+   Фактор глифа капс-болд кириллицы ≈ 0.62 → ширина символа ≈ 120*0.62 = 74.4px → 1730/74.4 ≈ 23 симв. в строку.
+   Поэтому max_chars hero-слотов = 22 (с запасом); white-space:nowrap сохранён — крупный однострочный бренд-вид. */
+.t-hero-156{font-size:120px;font-weight:600;line-height:1.2;letter-spacing:-2.4px;
+  text-transform:uppercase;color:var(--fg);}
+.t-sub-36{font-size:36px;font-weight:400;line-height:1.2;letter-spacing:-.36px;}
+/* роли контентных макетов (figma-map §Типографика). Каждая переиспользуется ≥3 раза
+   по партиям B/C/D, поэтому вынесены в общие .t-* (а не per-id). */
+.t-head-42{font-size:42px;font-weight:600;line-height:1.1;letter-spacing:-.84px;
+  text-transform:uppercase;color:var(--fg);}            /* Header 3 — шапка контентных слайдов */
+.t-head-54{font-size:54px;font-weight:600;line-height:1.0;letter-spacing:-1.08px;
+  text-transform:uppercase;}                              /* Header 1 — заголовок service-table */
+.t-head-36{font-size:36px;font-weight:600;line-height:1.0;letter-spacing:-.72px;}  /* Header 4 — единицы KPI, номера строк */
+.t-body-30{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;color:var(--fg-body);}  /* Body 2 — основной текст контента */
+.t-number-320{font-size:320px;font-weight:500;line-height:1.32;letter-spacing:-16px;}  /* KPI-цифра 320px Medium */
+
+/* ---- компоненты ---- */
+/* .card/.accent-block — flex-column с центрированием контента по вертикали и
+   зазором между заголовком и текстом; заполняют колонку по высоте (равные карточки
+   в ряду — см. .row/.col). */
+.card{background:var(--bg-card);color:var(--fg-body);padding:36px;
+  display:flex;flex-direction:column;justify-content:center;gap:12px;}
+/* На зелёной accent-плашке весь текст графитовый (#222) и читаемый: .t-* роли
+   несут жёсткий var(--fg)/var(--fg-body) (белый в dark) — перекрываем на графит,
+   иначе белый на зелёном не считывается. Паддинг как у .card — текст не вплотную. */
+.accent-block,.accent-block *{color:var(--cl-graphite);}
+.chip{width:60px;height:60px;background:var(--cl-green);color:var(--cl-graphite);
+  font-size:18px;font-weight:400;display:flex;align-items:center;justify-content:center;}
+.accent-block{background:var(--accent);color:var(--cl-graphite);padding:36px;
+  display:flex;flex-direction:column;justify-content:center;gap:12px;}
+.panel{background:var(--cl-grey1);}
+.divider{height:3px;background:var(--cl-grey1);}
+
+/* ---- layout-утилиты freeform-вёрстки (safe-зона — figma-map §Safe-зона) ---- */
+.content{position:absolute;left:52px;right:52px;top:210px;bottom:90px;}
+.content--center{display:flex;flex-direction:column;justify-content:center;}
+/* Ряд колонок: равная высота карточек (align-items:stretch по самой высокой). */
+.row{display:flex;gap:27px;align-items:stretch;}
+.col{flex:1;min-width:0;display:flex;}   /* колонка-флекс: карточка внутри тянется на высоту ряда */
+.col>*{width:100%;}                        /* карточка во всю ширину колонки (высоту даёт stretch) */
+/* Обёртка freeform-контента: ассемблер кладёт фрагмент LLM ВНУТРЬ этой зоны
+   (safe-зона 60,300-1860,1020), чтобы контент не уезжал за границы при свободной
+   вёрстке. LLM верстает потоком внутри, без абсолютных координат всего слайда. */
+.freeform-zone{position:absolute;left:60px;top:300px;width:1800px;height:720px;
+  display:flex;flex-direction:column;justify-content:flex-start;gap:24px;overflow:hidden;}  /* контент от верха зоны (не уезжает вниз/не обрезается) */
+
+/* ---- прогресс-бар ---- */
+.deck-progress{position:fixed;left:0;bottom:0;height:6px;width:0;background:var(--cl-green);}
+
+/* ---- хром v2 (figma-map §Chrome): логотип, колонтитул, номер слайда ---- */
+.deck-stage{counter-reset:slide;}
+.slide{counter-increment:slide;}
+.chrome-logo{position:absolute;left:60px;top:62px;width:300px;height:55.5px;}
+.chrome-logo svg{display:block;width:100%;height:100%;}
+.slide--chrome-sm .chrome-logo{left:1680px;top:60.6px;width:180px;height:33.3px;}
+.chrome-note{position:absolute;left:59px;top:1042px;width:1801px;font-size:12px;font-weight:400;
+  line-height:normal;letter-spacing:0;opacity:.5;color:var(--fg-muted);}
+.chrome-num{position:absolute;top:1041px;right:58px;width:61px;font-size:14px;font-weight:400;
+  line-height:1.2;letter-spacing:0;text-align:right;color:var(--fg-slide-num);}
+.chrome-num::after{content:counter(slide);}
+
+/* ---- cover (figma 3393:11136/3393:10873) ---- */
+.cover-block{position:absolute;left:60px;top:291px;width:1800px;
+  display:flex;flex-direction:column;gap:30px;align-items:flex-start;}
+/* .cover-title — только роль .t-hero-156 (без уникальных свойств) */
+.cover-subtitle{color:var(--fg);}  /* типографика — роль .t-sub-36 */
+
+/* ---- statement (figma 3393:11145/3393:10882) ---- */
+.statement-box{position:absolute;left:60px;top:300px;width:1800px;height:300px;
+  border:1px solid var(--line-frame);padding:0 20px 20px;
+  display:flex;flex-direction:column;justify-content:center;align-items:flex-start;}
+.statement-title{white-space:nowrap;}   /* типографика — роль .t-hero-156 */
+.statement-subtitle{color:var(--fg);}   /* типографика — роль .t-sub-36 */
+.statement-plate{position:absolute;left:61px;top:630px;width:959px;height:180px;
+  background:var(--accent);padding:24px 0 0 24px;}
+.statement-plate-text{color:var(--cl-graphite);}   /* типографика — роль .t-sub-36 */
+.statement-tiles{position:absolute;left:1050px;top:630px;display:flex;gap:30px;color:var(--line);}
+.statement-tile{width:180px;height:180px;overflow:visible;}
+.statement-dots{position:absolute;left:60px;top:840px;width:1800px;height:183px;color:var(--line);
+  --dot-step:30px;}   /* statement плотнее: точки шагом 30 px (figma) */
+
+/* Брендовый «зелёный слайд» (инверт-вариант, гайдбук): сплошной зелёный фон +
+   графитовый текст. Перекрашиваем локальные токены, чтобы хром и все зелёные
+   суб-элементы (рамка, плашка, плитки, точки) стали графитом на зелёном.
+   Включается slot accent (statement.html → .statement--accent). */
+.statement--accent{
+  --bg:var(--cl-green);            /* зелёный фон слайда */
+  --fg:var(--cl-graphite);         /* заголовок/подзаголовок — графит */
+  --accent:var(--cl-graphite);     /* логотип-иконка и пр. акценты — графит */
+  --line:var(--cl-graphite);       /* плитки и точки — графит */
+  --line-frame:var(--cl-graphite); /* рамка H1 — графит */
+  --fg-muted:var(--cl-graphite);   /* колонтитул — графит */
+  --fg-slide-num:var(--cl-graphite);
+  background:var(--cl-green);color:var(--cl-graphite);
+}
+/* плашка-вывод: на зелёном фоне зелёная плашка не видна → делаем графитовой,
+   текст внутри — зелёный (инверсия исходной зелёной плашки с графитовым текстом) */
+.statement--accent .statement-plate{background:var(--cl-graphite);}
+.statement--accent .statement-plate-text{color:var(--cl-green);}
+.statement--accent .chrome-note{opacity:.65;}   /* графит на зелёном держит контраст */
+
+/* ---- contacts (figma 3393:11169/3393:10907): light — зелёное полотно с белыми
+   плашками; dark — зелёный контур с вырезом под логотип и зелёным заголовком ---- */
+.contacts-canvas{position:absolute;left:60px;top:60px;width:1802px;height:960px;background:var(--accent);}
+.contacts-dots{position:absolute;inset:0;color:var(--bg);opacity:.55;}
+html[data-theme="dark"] .contacts-canvas{display:none;}
+.contacts-frame{position:absolute;left:60px;top:61px;width:1802px;height:959px;
+  display:none;overflow:visible;color:var(--line);}
+html[data-theme="dark"] .contacts-frame{display:block;}
+.contacts-logo-plate{position:absolute;left:60px;top:60px;width:420px;height:120px;background:var(--bg);}
+html[data-theme="dark"] .contacts-logo-plate{display:none;}
+.contacts-title-wrap{position:absolute;left:60px;top:300px;max-width:1800px;
+  display:flex;align-items:center;background:var(--bg);}
+html[data-theme="dark"] .contacts-title-wrap{left:116px;background:transparent;}
+.contacts-title{white-space:nowrap;}   /* типографика — роль .t-hero-156 */
+html[data-theme="dark"] .contacts-title{color:var(--accent);}
+.contacts-subtitle-wrap{position:absolute;left:60px;top:487px;min-width:720px;height:63px;
+  display:flex;align-items:center;justify-content:center;background:var(--bg);padding:0 24px;}
+html[data-theme="dark"] .contacts-subtitle-wrap{left:116px;top:517px;min-width:0;height:auto;
+  justify-content:flex-start;background:transparent;padding:0;}
+.contacts-subtitle{color:var(--fg);white-space:nowrap;}   /* типографика — роль .t-sub-36 */
+.contacts-arrows{position:absolute;left:1233px;top:840px;display:flex;gap:29.22px;color:var(--fg);}
+html[data-theme="dark"] .contacts-arrows{color:var(--accent);}
+.brand-arrow{width:119.78px;height:119.78px;overflow:visible;}   /* общий глиф-уголок: contacts + section-frame */
+
+/* ---- cover-image (figma 3393:11191/3393:10932) ---- */
+.cover-image-art{position:absolute;left:900px;top:0;width:1020px;height:1080px;overflow:visible;}
+.cover-image-title{position:absolute;left:60px;top:289px;width:960px;
+  font-size:80px;font-weight:600;line-height:1.125;letter-spacing:-1.6px;color:var(--fg);}
+.cover-image-lead{position:absolute;left:60px;top:860px;width:442px;color:var(--fg);}   /* типографика — роль .t-sub-36 */
+
+/* ---- шапка контентных слайдов (общая: kpi/service-table/timeline и далее партии C/D) ----
+   figma-map §Chrome: блок left=60, центр по y=122, width 780, column-gap 10. */
+.content-head{position:absolute;left:60px;top:72px;width:780px;
+  display:flex;flex-direction:column;gap:10px;}
+.content-head-title{color:var(--fg);}   /* типографика — роль .t-head-42 */
+.content-head-sub{color:var(--fg);}      /* типографика — роль .t-sub-36 */
+
+/* ---- kpi (figma 3393:11314/3393:11061) ---- */
+.kpi-grid{position:absolute;left:53px;top:328px;width:1807px;display:flex;}
+.kpi-cell{display:flex;align-items:flex-start;}
+.kpi-cell:nth-child(1){width:766px;}     /* первая цифра width 766 @ x=53 */
+.kpi-cell:nth-child(2){width:490px;margin-left:311px;}  /* вторая @ x=1130 (53+766+311) width 490 */
+.kpi-value{color:var(--accent);white-space:nowrap;}
+html[data-theme="light"] .kpi-value{color:var(--fg-body);}
+.kpi-side{padding-top:98px;padding-left:24px;width:280px;flex:none;}  /* unit/desc верх y≈426 (330+96) */
+.kpi-unit{color:var(--fg);}               /* типографика — роль .t-head-36 */
+.kpi-desc{margin-top:41px;color:var(--fg);}  /* desc @ y=503; white(D)/black(L) */
+
+/* ---- stats-row (не из Figma; бренд-производный «в цифрах») ----
+   контент-зона x 60..1860=1800px; 4 ячейки flex:1 + gap 40 (3×40=120) → ~420px/ячейка.
+   Число 88px Medium, фактор глифа ~0.55 (с letter-spacing -2) → ~48px/глиф →
+   "99,982%" (7 глифов: цифры/«,»/«%» уже среднего) ≈ 340px < 420px, без overflow в nowrap. */
+.sr-row{position:absolute;left:60px;top:328px;width:1800px;
+  display:flex;gap:40px;align-items:flex-start;}
+.sr-cell{flex:1;min-width:0;display:flex;flex-direction:column;
+  border-top:1px solid var(--line);padding-top:28px;}
+.sr-value{font-size:88px;font-weight:500;line-height:1.0;letter-spacing:-2px;
+  white-space:nowrap;color:var(--accent);}
+html[data-theme="light"] .sr-value{color:var(--fg-body);}
+.sr-label{margin-top:30px;}   /* типографика — роль .t-body-30 (var(--fg-body)) */
+.sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.2;
+  letter-spacing:-.22px;color:var(--fg-muted);}
+.kpi-dots{position:absolute;left:60px;top:600px;width:1800px;height:414px;color:var(--line);}
+
+/* ---- bar-chart (не из Figma; бренд-производная SVG-гистограмма) ----
+   контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
+   (viewBox 0 0 1800 620): геттер 520, бары от x=560, trackWidth 1100, значения
+   справа. Бар var(--accent) на обеих темах, трек var(--bg-card), подписи
+   var(--fg-body) — перекрашиваются темой, без per-theme переопределений. */
+.bar-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----
+   контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
+   (viewBox 0 0 1800 620): кольцо cx=310 cy=310 r=225 толщина 70 (дырка → донат),
+   сегменты var(--accent) с разной stroke-opacity (один акцент, без радуги),
+   трек var(--bg-card); легенда-текст var(--fg-body) — перекрашивается темой,
+   без per-theme переопределений. */
+.donut-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- line-chart (не из Figma; бренд-производный SVG-график динамики) ----
+   контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
+   (viewBox 0 0 1800 600): origin x=80, plotW 1640, baselineY 530, plotH 470.
+   Ломаная-тренд var(--accent), area-заливка тем же акцентом с малой fill-opacity
+   (зелёный wash, не градиент), маркеры var(--accent)+кольцо var(--bg), базовая
+   линия/подписи нейтральные (var(--bg-card)/var(--fg-muted)/var(--fg-body)) —
+   перекрашиваются темой, без per-theme переопределений. */
+.line-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- stacked-bar (не из Figma; бренд-производные SVG составные бары) ----
+   контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
+   (viewBox 0 0 1800 620): легенда сверху (свотчи opacity-ladder), бары ниже —
+   геттер подписей 360, бар от x=400, трек на остаток ширины. Сегменты var(--accent) с
+   разной fill-opacity (один акцент, без радуги; каждый бар = 100% состава),
+   трек var(--bg-card); подписи var(--fg-body), %-метки в сегменте var(--bg) —
+   перекрашиваются темой, без per-theme переопределений. */
+.sb-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- kpi-rings (не из Figma; бренд-производные SVG кольца прогресса) ----
+   контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
+   (viewBox 0 0 1800 620): 2..4 равных колонки, cy=250, R адаптивен (170/150/130),
+   stroke-width 28. Дуга = value%/100*C (rotate(-90), linecap round), трек
+   var(--bg-card), дуга var(--accent); центр-% var(--fg-body), подпись var(--fg-muted)
+   — перекрашиваются темой, без per-theme переопределений. */
+.kr-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- before-after (не из Figma; бренд-производное «было → стало») ----
+   HTML+CSS-раскладка (id-префикс .ba-*) в контент-зоне; стрелка-коннектор —
+   инлайн-SVG var(--accent). Две панели var(--bg-card) side-by-side, текст
+   вертикально центрирован (flex column center → нет пустых боксов на коротком
+   тексте), between — стрелка вправо и опц. дельта-чип (зелёный). before-ярлык
+   var(--fg-muted), after-ярлык var(--accent) (зелёный D / чёрный L). Токены только. */
+/* Сцена сайзится ПО КОНТЕНТУ (min/max), а не фикс. 700px: короткий текст
+   больше не висит в огромной пустоте (урок two-col-cards F7). align-items:stretch
+   уравнивает высоту панелей по более высокой. */
+.ba-stage{position:absolute;left:60px;top:320px;width:1800px;min-height:300px;max-height:700px;
+  display:flex;align-items:stretch;gap:0;}
+.ba-panel{flex:1;min-width:0;min-height:300px;background:var(--bg-card);
+  display:flex;flex-direction:column;justify-content:center;
+  padding:60px;box-sizing:border-box;}
+.ba-label{margin:0 0 28px;}                         /* роль .t-head-36 */
+.ba-label--before{color:var(--fg-muted);}
+.ba-label--after{color:var(--accent);}
+html[data-theme="light"] .ba-label--after{color:var(--fg-body);}
+.ba-text{margin:0;}                                 /* роль .t-body-30 (var(--fg-body)) */
+/* Средняя колонка шире (260px) под дельту-чип: длинная дельта
+   («+65% к доходу в среднем») укладывается в ≤2 строки, а не в 3-4 тесные. */
+.ba-mid{flex:0 0 260px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:28px;}
+.ba-arrow{width:96px;height:64px;display:block;}
+.ba-delta{margin:0;max-width:248px;font-size:20px;font-weight:500;line-height:1.25;
+  letter-spacing:-.3px;text-align:center;color:var(--accent);overflow-wrap:break-word;
+  border:1px solid var(--accent);padding:10px 16px;}  /* 20px: длинное слово (Масштабирование ~15 букв) влезает целиком в чип; break-word — перенос по словам, без разрыва внутри слова */
+html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-body);}
+
+/* ---- service-table (figma 3393:11365/3393:11112) ---- */
+.svc-dots{position:absolute;left:60px;top:240px;width:560px;height:720px;color:var(--line);}
+.svc-image{position:absolute;left:-92px;top:240px;width:906px;height:720px;overflow:hidden;}
+.svc-image img{width:100%;height:100%;object-fit:cover;display:block;}
+.svc-panel{position:absolute;left:600px;top:239px;width:1262px;height:725px;
+  background:var(--bg-card);padding:23px 0 0 21px;}     /* контент @ (621,262) внутри панели */
+.svc-name{width:601px;color:var(--accent);}             /* зелёный(D)/чёрный(L) */
+html[data-theme="light"] .svc-name{color:var(--fg-body);}
+.svc-desc{position:absolute;left:631px;top:23px;color:var(--fg-body);}  /* «Описание» @ (1231,262) */
+.svc-rows{position:absolute;left:21px;top:182px;width:1211px;}  /* блок строк @ (621,421) */
+.svc-row{position:relative;height:179px;border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;padding-top:23px;}  /* линии y=421/600/780 шаг 179 */
+.svc-row:last-child::after{content:"";position:absolute;left:0;bottom:0;width:100%;
+  height:1px;background:var(--line);}                    /* нижняя линия блока y≈780 */
+.svc-num{width:611px;color:var(--fg-body);}              /* номер @ x=620 */
+.svc-benefit{width:601px;color:var(--fg-body);}          /* преимущество @ x=1231 */
+
+/* ---- timeline (figma 3393:11332/3393:11079) ---- */
+.tl-list{position:absolute;left:61px;top:300px;width:839px;}
+.tl-row{position:relative;height:132px;border-top:1px solid var(--line);
+  display:flex;align-items:flex-start;padding-top:19px;}  /* строки шаг 132, текст +19 от линии */
+.tl-list .tl-row:last-child::after{content:"";position:absolute;left:0;bottom:0;
+  width:100%;height:1px;background:var(--line);}          /* нижняя 6-я линия y=960 */
+.tl-text{width:839px;color:var(--accent);}               /* текст зелёный(D)/чёрный(L) */
+html[data-theme="light"] .tl-text{color:var(--fg-body);}
+.tl-art{position:absolute;left:960px;top:300px;width:900px;height:660px;}
+.tl-art-panel{position:absolute;background:var(--image-bg);}
+.tl-art-panel--a{left:0;top:0;width:840px;height:495px;}        /* @ (960,300) */
+.tl-art-panel--b{left:60px;top:166px;width:840px;height:494px;} /* @ (1020,466) */
+/* Картинка вписана ВНУТРЬ кластера панелей (а не поверх всего бокса 900x660),
+   чтобы ступенчатые голубые края панелей --a (сверху-слева) и --b (снизу-справа)
+   оставались видны вокруг непрозрачного рендера. Инсет 90px со всех сторон. */
+.tl-art-img{position:absolute;left:90px;top:90px;width:720px;height:480px;object-fit:cover;}
+/* Фолбэк без картинки: бренд-лайнарт (контурные облака + диагонали) на голубой
+   подложке панелей --a/--b. Облака тонким приглушённым штрихом, стрелки — акцент. */
+.tl-art-svg{position:absolute;left:0;top:0;width:840px;height:660px;overflow:visible;}
+.tl-art-clouds path{fill:none;stroke:var(--cl-white);stroke-width:2.5;opacity:.85;}
+.tl-art-arrows path{fill:none;stroke:var(--cl-graphite);stroke-width:2.5;
+  stroke-linecap:square;stroke-linejoin:miter;opacity:.85;}
+
+/* ---- two-col-cards (figma 3393:11245/3393:10992): 2 карточки-«папки» ----
+   Вкладка 299×60 @ (61,300)/(992,300) + тело 869×660 @ (61,360). Колонки шаг 931 (992−61). */
+.tcc-grid{position:absolute;left:61px;top:300px;width:1799px;display:flex;gap:62px;
+  align-items:stretch;}                                   /* обе карточки одинаковой высоты */
+.tcc-card{width:869px;display:flex;flex-direction:column;}
+.tcc-tab{width:fit-content;min-width:299px;max-width:869px;box-sizing:border-box;
+  height:60px;background:var(--bg-card);padding:7px 28px 0 24px;}  /* правый паддинг 28px — текст не вплотную к краю плашки (SELF-MANAGED) */
+.tcc-heading{font-size:48px;font-weight:600;line-height:1.0;letter-spacing:-.96px;
+  white-space:nowrap;color:var(--card-label);}            /* nowrap: не переносится и не вылезает за вкладку; Header 2 — зелёный(D)/чёрный(L) */
+.tcc-body{flex:1;min-height:300px;max-height:660px;background:var(--bg-card);padding:36px 24px;
+  display:flex;flex-direction:column;justify-content:center;}  /* высота по контенту (равная у обеих), текст по центру — без огромной пустоты */
+.tcc-text{width:814px;}                                    /* типографика — роль .t-body-30 */
+
+/* ---- three-col (figma 3393:11262/3393:11009): 3 текстовые колонки ----
+   Колонки x=61/691/1321 width 540 top 300; зелёные 1px сепараторы @ x=660/1290 h=658. */
+.tcl-grid{position:absolute;left:61px;top:300px;width:1799px;height:660px;display:flex;}
+.tcl-col{width:540px;}
+.tcl-col + .tcl-col{margin-left:90px;position:relative;}  /* зазор 90 (691−61−540 и 1321−691−540) */
+.tcl-col + .tcl-col::before{content:"";position:absolute;left:-45px;top:2px;
+  width:1px;height:658px;background:var(--line);}         /* сепаратор по центру зазора @ x=660/1290 */
+.tcl-text{width:540px;}                                    /* типографика — роль .t-body-30 */
+.tcl-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
+  color:var(--accent);margin-bottom:10px;}                /* имя колонки — зелёный акцент */
+
+/* ---- grid-2x2 (figma 3393:11276/3393:11023): 4 ячейки с зелёной обводкой ----
+   900×330 @ (60,301)/(960,301)/(60,631)/(960,631), общие границы (стык по центру). */
+.g22-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
+  display:flex;flex-wrap:wrap;}
+.g22-cell{width:900px;height:330px;border:1px solid var(--line);
+  margin:0 -1px -1px 0;padding:30px;                       /* −1px стыкуют общие границы */
+  display:flex;flex-direction:column;justify-content:center;}  /* короткий текст по центру ячейки, не прижат к верху */
+.g22-text{width:810px;}                                    /* типографика — роль .t-body-30 */
+.g22-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
+  color:var(--accent);margin-bottom:10px;}                /* имя ячейки — зелёный акцент */
+
+/* ---- cards-6 (figma 3393:11293/3393:11040): 6 плиток 3×2 ----
+   600×330 @ x=60/660/1260, y=301/631; фон var(--bg-card), разделение 4px цветом фона слайда. */
+.c6-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
+  display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:1fr;gap:4px;
+  background:var(--bg);}                                   /* grid-auto-rows:1fr — ряды заполняют зону, нет мёртвых полос */
+.c6-grid[data-n="2"]{grid-template-columns:repeat(2,1fr);}
+.c6-grid[data-n="3"]{grid-template-columns:repeat(3,1fr);}  /* 3 плитки — 1 высокий ряд, заполняет зону */
+.c6-grid[data-n="4"]{grid-template-columns:repeat(2,1fr);}  /* 4 плитки — 2×2 без пустых хвостов */
+.c6-cell{background:var(--bg-card);padding:30px;min-width:0;
+  display:flex;flex-direction:column;justify-content:center;gap:8px;}  /* размер задаёт грид */
+.c6-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
+  color:var(--accent);}                                   /* имя — зелёный акцент (ширина = ячейка) */
+.c6-text{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;
+  color:var(--fg-body);}                                  /* описание — основной текст */
+
+/* ---- section-dots (figma 3393:11207/3393:10954): поле точек + SECTION + номер ---- */
+.sd-dots{position:absolute;left:60px;top:178px;width:1800px;height:602px;color:var(--line);}
+.sd-label{position:absolute;left:49px;top:864px;width:1500px;white-space:nowrap;}  /* SECTION 120px @ (49,864); width до зоны номера (x≈1620), не вылезает за число */
+html[data-theme="dark"] .sd-label{color:var(--accent);}   /* зелёный(D)/#222(L) — typo роль .t-hero-156 */
+.sd-number{position:absolute;right:60px;top:864px;width:240px;text-align:right;}  /* «01» 120px, правая кромка x=1860, базлайн как у sd-label */
+html[data-theme="dark"] .sd-number{color:var(--accent);}
+
+/* ---- section-frame (figma 3393:11216/3393:10963): контурная рамка с вырезами ---- */
+.sf-frame{position:absolute;left:60px;top:180px;width:1800px;height:780px;color:var(--line);overflow:visible;}
+.sf-title{position:absolute;left:368px;top:486px;width:1184px;text-align:center;
+  font-size:114px;font-weight:600;line-height:1.0;letter-spacing:-2.28px;color:var(--fg);}  /* Section 114px @ центр (960,486) */
+.sf-number{position:absolute;left:60px;top:926px;color:var(--fg);}   /* «01» @ (60,926) — typo роль .t-sub-36 */
+.sf-arrows{position:absolute;left:1440px;top:62px;display:flex;gap:29.22px;color:var(--line);}  /* 3 стрелки y=62, x=1440/1589/1738; глиф — .brand-arrow */
+
+/* ---- patterns (линейные/Waterfall по гайдбуку, без растров) ---- */
+/* Линейный паттерн: вертикальные линии 1 px, шаг ~10 px (xs-density, 3401:906).
+   Плотности через --step (кратно микромодулю): xs ~10 px, m ~13 px, xl ~40 px.
+   Только токены темы, никаких hex. z-index:-1 — паттерн всегда под контентом
+   (freeform-LLM не может задать z-index инлайном, линтер запрещает style=). */
+.pattern-lines{position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:repeating-linear-gradient(90deg,
+    var(--line) 0, var(--line) 1px, transparent 1px, transparent var(--step,10px));}
+.pattern-lines--m{--step:13px;}   /* средняя плотность ~13 px */
+.pattern-lines--xl{--step:40px;}  /* редкая плотность ~40 px */
+/* Waterfall-паттерн: 5 ячеек flex 6:5:4:3:2 (30%/25%/20%/15%/10%), 3401:906.
+   Контурные ячейки без заливки — только обводка цветом темы.
+   Размерности ячеек менять запрещено гайдбуком; блок масштабировать целиком. */
+.pattern-waterfall{position:absolute;inset:0;z-index:-1;pointer-events:none;display:flex;}
+.pattern-waterfall > *:nth-child(1){flex:6;}  /* 30% */
+.pattern-waterfall > *:nth-child(2){flex:5;}  /* 25% */
+.pattern-waterfall > *:nth-child(3){flex:4;}  /* 20% */
+.pattern-waterfall > *:nth-child(4){flex:3;}  /* 15% */
+.pattern-waterfall > *:nth-child(5){flex:2;}  /* 10% */
+.pattern-waterfall > *{border:1px solid var(--line);background:transparent;}
+/* Точечный паттерн (statement, contacts-light): сетка точек шагом --dot-step.
+   Цвет — через currentColor: контейнер задаёт color токеном темы.
+   Шаг параметризуется (как --step у .pattern-lines): дефолт 20 px, statement — 30 px. */
+.pattern-dots{background-image:radial-gradient(circle,currentColor 1.5px,transparent 1.6px);
+  background-size:var(--dot-step,20px) var(--dot-step,20px);
+  background-position:5px 5px;pointer-events:none;}
+
+/* ---- печать в PDF: слайд на страницу ---- */
+@media print{
+  body{overflow:visible;background:var(--cl-white);}
+  .deck-stage{position:static;transform:none;width:auto;height:auto;}
+  .slide{position:relative;inset:auto;visibility:visible;page-break-after:always;margin:0 auto;}
+  .deck-progress{display:none;}
+}

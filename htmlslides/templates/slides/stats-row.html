@@ -1,0 +1,25 @@
+{#- stats-row: НЕ из Figma — бренд-производный макет «в цифрах».
+    Закрывает пробел между kpi (2 гигантские цифры) и текстовым grid-2x2:
+    3–4 средние метрики крупными числами в ряд (доступность, объёмы, охват).
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок сверху слева.
+    Геометрия ячейки: safe-зона x 60..1860 = 1800px; 4 ячейки flex:1 + gap 40px
+      (3 промежутка = 120) → ~420px на ячейку. Число 110px Medium, фактор глифа ~0.6
+      → ~66px/глиф → ~6–7 глифов в ряд при nowrap; max_chars value = 8 (с запасом
+      под "99,982%" = 7 глифов, цифры/«,»/«%» уже среднего 0.6). Над каждой ячейкой —
+      тонкая верхняя линия var(--line) (как разделители timeline/kpi). -#}
+<section class="slide slide--chrome-sm" data-template="stats-row">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="sr-row m-stagger">
+    {% for s in content.stats %}
+    <div class="sr-cell">
+      <div class="sr-value js-count">{{ s.value }}</div>
+      <div class="sr-label t-body-30">{{ s.label }}</div>
+      {% if s.caption %}<div class="sr-caption">{{ s.caption }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

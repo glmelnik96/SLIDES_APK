@@ -1,0 +1,15 @@
+{#- Титул с изображением (figma D 3393:11191 / L 3393:10932): H1 80px слева,
+    лид внизу, справа зелёная фигура Union 1020×1080 с маскированным рендером. -#}
+<section class="slide" data-template="cover-image">
+  {% include "_chrome.html" %}
+  <svg class="cover-image-art" viewBox="0 0 1020 1080" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M1020 722H960V1080H0V360H60V0H1020V722Z" fill="var(--accent)"/>
+    {% if content.image %}
+    <clipPath id="cover-image-clip"><path d="M1020 722H960V1080H0V360H60V0H1020V722Z"/></clipPath>
+    <image href="{{ content.image }}" x="-324" y="-30" width="1668" height="1145"
+           preserveAspectRatio="xMidYMid slice" clip-path="url(#cover-image-clip)"/>
+    {% endif %}
+  </svg>
+  <h1 class="cover-image-title m-enter m-enter--hero">{{ content.title }}</h1>
+  {% if content.lead %}<p class="cover-image-lead t-sub-36 m-enter">{{ content.lead }}</p>{% endif %}
+</section>

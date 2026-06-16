@@ -1,0 +1,23 @@
+{#- Акцентное заявление (figma D 3393:11145 / L 3393:10882): H1 в контурной рамке,
+    зелёная плашка с тезисом, 4 контурные плитки со стрелками, поле точек понизу. -#}
+<section class="slide{% if content.accent %} statement--accent{% endif %}" data-template="statement">
+  {% include "_chrome.html" %}
+  <div class="statement-box">
+    <h1 class="statement-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
+    {% if content.subtitle %}<p class="statement-subtitle t-sub-36 m-enter">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  {% if content.highlight %}
+  <div class="statement-plate m-enter">
+    <p class="statement-plate-text t-sub-36">{{ content.highlight }}</p>
+  </div>
+  {% endif %}
+  <div class="statement-tiles" aria-hidden="true">
+    {% for _ in range(4) %}
+    <svg class="statement-tile" viewBox="0 0 180.854 180.854" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0.353553 180.5L162.793 18.0609" stroke="currentColor"/>
+      <path d="M0.353553 0.5H180.354V180.5" stroke="currentColor"/>
+    </svg>
+    {% endfor %}
+  </div>
+  <div class="statement-dots pattern-dots m-loop-drift" aria-hidden="true"></div>
+</section>

@@ -1,0 +1,325 @@
+{
+  "version": 2,
+  "templates": [
+    {
+      "id": "cover",
+      "type": "title",
+      "file": "cover.html",
+      "intent": "Титульный слайд деки: огромный заголовок капсом и короткий подзаголовок, всегда первый слайд.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 20},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 90}
+      }
+    },
+    {
+      "id": "cover-image",
+      "type": "title",
+      "file": "cover-image.html",
+      "intent": "Титул с 3D-иллюстрацией справа: подходит для продуктовых анонсов, когда есть картинка героя.",
+      "slots": {
+        "title": {"kind": "text", "required": true,  "max_chars": 40},
+        "lead":  {"kind": "text", "required": false, "max_chars": 88},
+        "image": {"kind": "text", "required": false}
+      }
+    },
+    {
+      "id": "statement",
+      "type": "content",
+      "file": "statement.html",
+      "intent": "Акцентное заявление: один сильный тезис в рамке и вывод на зелёной плашке, для ключевой мысли секции. Опциональный slot accent (любой непустой текст) делает слайд «зелёным» — зелёный фон + графитовый текст (брендовый инверт-вариант для разнообразия).",
+      "slots": {
+        "title":     {"kind": "text", "required": true,  "max_chars": 20},
+        "subtitle":  {"kind": "text", "required": false, "max_chars": 88},
+        "highlight": {"kind": "text", "required": false, "max_chars": 90},
+        "accent":    {"kind": "text", "required": false, "max_chars": 8}
+      }
+    },
+    {
+      "id": "contacts",
+      "type": "finale",
+      "file": "contacts.html",
+      "intent": "Финальный контактный слайд: призыв к действию и контакты на фирменном зелёном фоне.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 20},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 60}
+      }
+    },
+    {
+      "id": "back-cover",
+      "type": "finale",
+      "file": "back-cover.html",
+      "intent": "Задник деки: только логотип и копирайт, закрывающий слайд без контента.",
+      "slots": {}
+    },
+    {
+      "id": "kpi",
+      "type": "content",
+      "file": "kpi.html",
+      "intent": "Две гигантские метрики: подходит для слайда с ключевыми цифрами (выручка, рост, объём), у каждой единица измерения и короткое описание.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "kpis":     {"kind": "list", "required": true, "max_items": 2,
+                     "item_max_chars": 60,
+                     "item_slots": {
+                       "value": {"kind": "text", "required": true,  "max_chars": 4},
+                       "unit":  {"kind": "text", "required": false, "max_chars": 12},
+                       "desc":  {"kind": "text", "required": false, "max_chars": 36}
+                     }}
+      }
+    },
+    {
+      "id": "stats-row",
+      "type": "content",
+      "file": "stats-row.html",
+      "intent": "Слайд «в цифрах»: 3–4 ключевые метрики крупными числами в ряд (доступность, объёмы, охват). Бери, когда нужно показать несколько показателей с акцентом на цифру.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "stats":    {"kind": "list", "required": true, "max_items": 4,
+                     "item_max_chars": 110,
+                     "item_slots": {
+                       "value":   {"kind": "text", "required": true,  "max_chars": 8},
+                       "label":   {"kind": "text", "required": true,  "max_chars": 40},
+                       "caption": {"kind": "text", "required": false, "max_chars": 60}
+                     }}
+      }
+    },
+    {
+      "id": "bar-chart",
+      "type": "content",
+      "file": "bar-chart.html",
+      "intent": "Гистограмма-сравнение: 3–6 величин горизонтальными барами разной длины (доли, рост по годам, сравнение тарифов/сервисов). Бери, когда числа нужно ВИЗУАЛЬНО сравнить столбиками, а не просто перечислить.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "bars":     {"kind": "list", "required": true, "max_items": 6,
+                     "item_max_chars": 60,
+                     "item_slots": {
+                       "label":   {"kind": "text", "required": true,  "max_chars": 40},
+                       "value":   {"kind": "text", "required": true,  "max_chars": 8},
+                       "display": {"kind": "text", "required": false, "max_chars": 10}
+                     }}
+      }
+    },
+    {
+      "id": "donut-chart",
+      "type": "content",
+      "file": "donut-chart.html",
+      "intent": "Кольцевая диаграмма долей: 2–5 сегментов как части целого (структура нагрузок, распределение бюджета/трафика, доли продуктов). Бери, когда показываешь СОСТАВ или доли от 100%.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "segments": {"kind": "list", "required": true, "max_items": 5,
+                     "item_max_chars": 48,
+                     "item_slots": {
+                       "label":   {"kind": "text", "required": true,  "max_chars": 32},
+                       "value":   {"kind": "text", "required": true,  "max_chars": 8},
+                       "display": {"kind": "text", "required": false, "max_chars": 8}
+                     }}
+      }
+    },
+    {
+      "id": "line-chart",
+      "type": "content",
+      "file": "line-chart.html",
+      "intent": "Линейный график динамики: одна метрика во времени (выручка/пользователи/нагрузка по годам или кварталам), 2–8 точек. Бери, когда показываешь ТРЕНД или рост/падение во времени.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "points":   {"kind": "list", "required": true, "max_items": 8,
+                     "item_max_chars": 32,
+                     "item_slots": {
+                       "label":   {"kind": "text", "required": true,  "max_chars": 12},
+                       "value":   {"kind": "text", "required": true,  "max_chars": 10},
+                       "display": {"kind": "text", "required": false, "max_chars": 10}
+                     }}
+      }
+    },
+    {
+      "id": "stacked-bar",
+      "type": "content",
+      "file": "stacked-bar.html",
+      "intent": "Гориз. составные бары: состав (2–4 части) по нескольким категориям, каждый бар = 100%. Бери для структуры по группам (распределение бюджета/нагрузки по командам и т.п.).",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "legend":   {"kind": "list", "required": true, "max_items": 4,
+                     "item_max_chars": 24,
+                     "item_slots": {
+                       "label": {"kind": "text", "required": true, "max_chars": 24}
+                     }},
+        "bars":     {"kind": "list", "required": true, "max_items": 5,
+                     "item_max_chars": 60,
+                     "item_slots": {
+                       "label": {"kind": "text", "required": true,  "max_chars": 28},
+                       "v1":    {"kind": "text", "required": true,  "max_chars": 8},
+                       "v2":    {"kind": "text", "required": true,  "max_chars": 8},
+                       "v3":    {"kind": "text", "required": false, "max_chars": 8},
+                       "v4":    {"kind": "text", "required": false, "max_chars": 8}
+                     }}
+      }
+    },
+    {
+      "id": "kpi-rings",
+      "type": "content",
+      "file": "kpi-rings.html",
+      "intent": "Кольца прогресса: 2–4 показателя в процентах (покрытие, аптайм, готовность, выполнение). Бери, когда метрики — это доли выполнения/достижения цели.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "rings":    {"kind": "list", "required": true, "max_items": 4,
+                     "item_max_chars": 48,
+                     "item_slots": {
+                       "value":   {"kind": "text", "required": true,  "max_chars": 6},
+                       "display": {"kind": "text", "required": false, "max_chars": 8},
+                       "label":   {"kind": "text", "required": true,  "max_chars": 30}
+                     }}
+      }
+    },
+    {
+      "id": "before-after",
+      "type": "content",
+      "file": "before-after.html",
+      "intent": "Сравнение «было → стало»: два состояния одной трансформации со стрелкой и опциональной дельтой. Бери для эффекта «до/после» внедрения. delta — КОРОТКАЯ метрика-итог в чипе у стрелки (напр. «−80% времени», «×3 скорость»), НЕ фраза.",
+      "slots": {
+        "title":        {"kind": "text", "required": true,  "max_chars": 54},
+        "subtitle":     {"kind": "text", "required": false, "max_chars": 70},
+        "before_label": {"kind": "text", "required": true,  "max_chars": 24},
+        "before_text":  {"kind": "text", "required": true,  "max_chars": 200},
+        "after_label":  {"kind": "text", "required": true,  "max_chars": 24},
+        "after_text":   {"kind": "text", "required": true,  "max_chars": 200},
+        "delta":        {"kind": "text", "required": false, "max_chars": 22}
+      }
+    },
+    {
+      "id": "service-table",
+      "type": "content",
+      "file": "service-table.html",
+      "intent": "Карточка одного сервиса: иллюстрация продукта слева и таблица из 3 нумерованных преимуществ справа.",
+      "slots": {
+        "title":        {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle":     {"kind": "text", "required": false, "max_chars": 70},
+        "service_name": {"kind": "text", "required": true,  "max_chars": 40},
+        "service_desc": {"kind": "text", "required": false, "max_chars": 30},
+        "image":        {"kind": "text", "required": false},
+        "rows":         {"kind": "list", "required": true, "max_items": 3,
+                         "item_max_chars": 76,
+                         "item_slots": {
+                           "num":     {"kind": "text", "required": true, "max_chars": 4},
+                           "benefit": {"kind": "text", "required": true, "max_chars": 72}
+                         }}
+      }
+    },
+    {
+      "id": "timeline",
+      "type": "content",
+      "file": "timeline.html",
+      "intent": "Таймлайн/этапы: до 5 строк-вех слева и крупная иллюстрация справа, для дорожной карты или последовательности шагов.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "items":    {"kind": "list", "required": true, "max_items": 5,
+                     "item_max_chars": 60,
+                     "item_slots": {
+                       "text": {"kind": "text", "required": true, "max_chars": 50}
+                     }},
+        "image":    {"kind": "text", "required": false}
+      }
+    },
+    {
+      "id": "two-col-cards",
+      "type": "content",
+      "file": "two-col-cards.html",
+      "intent": "Две карточки-папки рядом: когда нужно сопоставить или раскрыть две темы заголовком и абзацем текста.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "cards":    {"kind": "list", "required": true, "max_items": 2,
+                     "item_max_chars": 540,
+                     "item_slots": {
+                       "heading": {"kind": "text", "required": true,  "max_chars": 14},
+                       "body":    {"kind": "text", "required": false, "max_chars": 520}
+                     }}
+      }
+    },
+    {
+      "id": "three-col",
+      "type": "content",
+      "file": "three-col.html",
+      "intent": "Три текстовые колонки с разделителями: для трёх параллельных идей или аспектов сплошным текстом без карточек. Для тарифов/планов/именованных опций бери cards-6.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "columns":  {"kind": "list", "required": true, "max_items": 3,
+                     "item_max_chars": 440,
+                     "item_slots": {
+                       "heading": {"kind": "text", "required": false, "max_chars": 24},
+                       "text": {"kind": "text", "required": true, "max_chars": 400}
+                     }}
+      }
+    },
+    {
+      "id": "grid-2x2",
+      "type": "content",
+      "file": "grid-2x2.html",
+      "intent": "Сетка 2×2 ячеек с зелёной обводкой: для матрицы из четырёх равнозначных тезисов или квадрантов.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "cells":    {"kind": "list", "required": true, "max_items": 4,
+                     "item_max_chars": 280,
+                     "item_slots": {
+                       "heading": {"kind": "text", "required": false, "max_chars": 24},
+                       "text": {"kind": "text", "required": true, "max_chars": 240}
+                     }}
+      }
+    },
+    {
+      "id": "cards-6",
+      "type": "content",
+      "file": "cards-6.html",
+      "intent": "Сетка 3×2 карточек-плиток (3–6 штук): для коротких пунктов, фич, сервисов, а также тарифов / планов / пакетов / вариантов выбора. Предпочитай этот шаблон вместо three-col, когда нужен карточный вид.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
+        "cards":    {"kind": "list", "required": true, "max_items": 6,
+                     "item_max_chars": 180,
+                     "item_slots": {
+                       "heading": {"kind": "text", "required": false, "max_chars": 24},
+                       "text": {"kind": "text", "required": true, "max_chars": 156}
+                     }}
+      }
+    },
+    {
+      "id": "section-dots",
+      "type": "section",
+      "file": "section-dots.html",
+      "intent": "Разделитель секции: одно огромное слово-маркер на поле точек и номер главы. Используй для ЯВНЫХ разделителей разделов («Раздел N», «Часть N», «Глава N», «Этап N»), открывающих новую часть деки.",
+      "slots": {
+        "label":  {"kind": "text", "required": true,  "max_chars": 16},
+        "number": {"kind": "text", "required": false, "max_chars": 4}
+      }
+    },
+    {
+      "id": "section-frame",
+      "type": "section",
+      "file": "section-frame.html",
+      "intent": "Разделитель секции в контурной рамке: название раздела по центру и номер главы внизу слева. Альтернатива section-dots для ЯВНЫХ разделителей разделов («Раздел N», «Часть N», «Глава N»).",
+      "slots": {
+        "label":  {"kind": "text", "required": true,  "max_chars": 14},
+        "number": {"kind": "text", "required": false, "max_chars": 8}
+      }
+    },
+    {
+      "id": "blank",
+      "type": "content",
+      "file": "blank.html",
+      "intent": "Пустой контентный слайд: только шапка (заголовок и подзаголовок) и свободная зона под произвольный контент.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70}
+      }
+    }
+  ]
+}

@@ -1,0 +1,249 @@
+"""Роль 2 — Slide Filler: слоты по контракту / freeform-HTML; параллельно; autofix.
+
+Шаблонный слайд: JSON строго по слот-контракту, нарушение ловит
+library.validate_content -> 1 ретрай -> FillError.
+Freeform: HTML-фрагмент только на классах deck.css (allowlist из линтера).
+"""
+from __future__ import annotations
+
+import json
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+from pydantic import BaseModel, Field
+
+from ..brand import brand_rules
+from ..library import TemplateLibrary
+from ..models import DeckPlan, SlidePlan
+from .client import KimiClient, LLMFormatError
+from .linter import ALLOWED_CLASSES
+from .planner import slot_brief
+
+
+class FillError(RuntimeError):
+    """Слайд не удалось заполнить валидно после ретрая."""
+
+
+class SlideContent(BaseModel):
+    content: dict = Field(default_factory=dict)
+
+
+# Единый источник правды бренд-правил — brand_rules(); читаем один раз при импорте.
+# ВНИМАНИЕ: блок встраивается в FREEFORM_SYSTEM, который позже идёт через
+# .format(classes=...). В rules.md НЕ должно быть фигурных скобок {} —
+# иначе .format() упадёт (регрессия закрыта test_brand.py).
+_BRAND_BLOCK = f"\n\nБРЕНД-ПРАВИЛА:\n{brand_rules()}"
+
+FILLER_SYSTEM = """\
+Ты заполняешь слоты HTML-шаблона слайда Cloud.ru.
+Дано: контракт слотов (JSON) и бриф контента слайда.
+Верни ТОЛЬКО JSON вида {"content":{...}} — ключи строго по контракту.
+Жёстко соблюдай max_chars / max_items; required-слоты обязательны;
+лишних ключей не добавляй. Пиши по-русски, кратко и фактично, без выдумок.
+Для карточных шаблонов (cards-6, three-col, grid-2x2): если пункт — это «Имя —
+описание» (сервис/опция/тариф + пояснение), КЛАДИ короткое имя в "heading"
+(≤24 симв., без тире), а пояснение в "text". НЕ склеивай имя и описание в одну
+строку через тире.
+Слот title/label слайда — это заголовок ЭТОГО слайда из начала его брифа (название
+его раздела), а НЕ заголовок всей деки. «Заголовок деки» дан только для контекста —
+НЕ копируй его в title/label и НЕ повторяй один заголовок на разных слайдах.
+В числовых слотах-героях (value у stats-row / kpi / bar-chart) сохраняй значащие
+суффиксы и единицы (ФЗ, %, +, млрд, ГБ, ×): «152-ФЗ», а НЕ «152». Если у пункта
+нет единого числа-героя (напр. «Соответствие 152-ФЗ и 187-ФЗ»), поставь короткий
+осмысленный токен С суффиксом (напр. «152-ФЗ»), а полную формулировку — в
+label/caption. НЕ превращай такой пункт в голый числовой ряд вроде «152, 187».""" + _BRAND_BLOCK
+
+FREEFORM_SYSTEM = """\
+Ты верстаешь ОДИН слайд презентации Cloud.ru как HTML-фрагмент контент-зоны.
+Логотип, колонтитул и номер слайда добавит система — НЕ рисуй их (никаких chrome-*).
+Верни ТОЛЬКО код в блоке ```html ... ```.
+
+Требования:
+- Корень: <section class="slide" data-template="freeform"> ...контент... </section>.
+- ПЕРВЫМ элементом — шапка-заголовок слайда (система поставит её сверху, как в
+  остальных слайдах): <div class="content-head"><h3 class="content-head-title
+  t-head-42">ЗАГОЛОВОК СЛАЙДА</h3></div> (опционально подзаголовок
+  <p class="content-head-sub t-sub-36">…</p> внутри того же блока).
+- После шапки — основной контент. Система поместит его в рабочую зону (1800×720).
+  НЕ задавай абсолютных координат/позиций, НЕ используй класс .content и НЕ делай
+  ещё один крупный заголовок в теле; верстай ОБЫЧНЫМ ПОТОКОМ сверху вниз (блоки/
+  колонки). Контент должен умещаться в зону — не перегружай, лучше меньше и крупнее.
+- Используй ТОЛЬКО классы: {classes}.
+- Запрещено: атрибут style, теги <i>/<em>/<u>/<script>, тени, градиенты,
+  скругления, курсив, неизвестные классы. Не более одного accent-block.
+- Бренд: колоночная вёрстка (БЕЗ строк во всю ширину), иерархия текстов,
+  точечные акценты, много воздуха; паттерны (.pattern-lines/.pattern-dots/
+  .pattern-waterfall) — только как фон-акцент, не под плотным текстом.
+
+Типографика: .t-hero-156 (огромный тезис), .t-head-42 (шапка-заголовок),
+.t-head-36 (подзаголовки/единицы), .t-body-30 (наборный текст), .t-sub-36
+(подзаголовок к hero), .t-number-320 (число-герой). Поверхности: .card
+(карточка на фоне), .accent-block (зелёная плашка, максимум одна).
+
+Брендовые СКЕЛЕТЫ раскладки (выбери подходящий или скомбинируй):
+1) Крупный тезис слева (.t-head-42 + .t-body-30) + .pattern-lines/.pattern-dots
+   справа как акцент.
+2) Три колонки (.row > .col×3) с короткими блоками; в одной — .accent-block.
+3) Число-герой (.t-number-320) + поясняющий .t-body-30 рядом.
+Появление: оборачивай списки/группы в .m-stagger для каскада.""" + _BRAND_BLOCK
+
+# Бюджет токенов на слайд. Запас на reasoning Kimi-K2.6: при 4096 тяжёлое
+# рассуждение модели съедало лимит до выдачи JSON (пустой ответ → деградация
+# на blank). Сам контент слайда маленький, потолок не растит цену коротких ответов.
+_FILL_MAX_TOKENS = 8192
+
+_FORBIDDEN_FRAGMENT = re.compile(
+    r"\bstyle\s*=|<\s*(?:i|em|u|script)\b|box-shadow|text-shadow|gradient|border-radius",
+    re.IGNORECASE)
+_HTML_FENCE = re.compile(r"```(?:html)?\s*(.*?)```", re.DOTALL)
+_SECTION = re.compile(r"<section\b.*</section>", re.DOTALL)
+
+
+def fill_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *,
+               deck_title: str = "", extra: str = "") -> SlidePlan:
+    """Заполнить один слайд. extra — доп. указания (исходный контент + замечания QA)."""
+    try:
+        if slide.freeform:
+            return _fill_freeform(client, slide, deck_title=deck_title, extra=extra)
+        return _fill_template(client, library, slide,
+                              deck_title=deck_title, extra=extra)
+    except LLMFormatError as exc:
+        raise FillError(f"slide {slide.index}: {exc}") from exc
+
+
+def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
+              workers: int = 4, progress=lambda message: None) -> DeckPlan:
+    """Параллельное заполнение всех слайдов (RPS держит гейт клиента).
+
+    Мягкая деградация: FillError одного слайда НЕ валит всю деку — слайд
+    откатывается на blank с темой в заголовке (warn в progress). Прочие сбои
+    (сеть/авторизация) гасят бюджет — отменяют ещё не начатые слайды и пробрасываются."""
+    aborted = threading.Event()
+
+    def one(slide: SlidePlan) -> SlidePlan:
+        if aborted.is_set():  # барьер: после жёсткого сбоя соседа LLM не зовём
+            return slide
+        try:
+            return fill_slide(client, library, slide, deck_title=plan.title)
+        except FillError as exc:
+            progress(f"warn: слайд {slide.index} не заполнен ({exc}); фолбэк на blank")
+            return _fallback_slide(library, slide)
+        except Exception:
+            aborted.set()
+            raise
+
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
+        futures = [pool.submit(one, slide) for slide in plan.slides]
+        slides = [f.result() for f in futures]
+    except Exception:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    pool.shutdown()
+    return plan.model_copy(update={"slides": slides})
+
+
+def _fallback_slide(library: TemplateLibrary, slide: SlidePlan) -> SlidePlan:
+    """Деградация проблемного слайда -> чистый blank с темой в заголовке.
+
+    Лучше отдать одну простую брендовую заглушку, чем уронить всю деку из-за
+    одной осечки модели. Заголовок blank требует ≤60 символов."""
+    spec = library.get("blank")
+    return slide.model_copy(update={
+        "template_id": "blank", "type": spec.type, "freeform": False,
+        "content": {"title": _fallback_title(_brief(slide))}})
+
+
+def _fallback_title(brief: str, limit: int = 60) -> str:
+    """Заголовок для blank-заглушки: первое предложение брифа, без обрезки
+    посреди слова (иначе получалось уродливое «…за нескол»)."""
+    text = " ".join(brief.split()).strip()              # схлопываем пробелы/переводы
+    if not text:
+        return "Слайд"
+    first = re.split(r"(?<=[.!?…])\s", text, maxsplit=1)[0].strip(" .")
+    if len(first) <= limit:
+        return first
+    cut = first[:limit]
+    if " " in cut:                                       # режем по границе слова
+        cut = cut[:cut.rfind(" ")]
+    return cut.rstrip(" ,.;:—-") + "…"
+
+
+def autofix_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan,
+                  notes: list[str], *, deck_title: str = "") -> SlidePlan:
+    """Один круг исправлений по замечаниям линтера/vision-QA (анти-зацикливание:
+    оркестратор вызывает это не больше одного раза на слайд)."""
+    listed = "\n".join(f"- {note}" for note in notes)
+    extra = (f"Текущий контент слайда:\n"
+             f"{json.dumps(slide.content, ensure_ascii=False)}\n\n"
+             f"Замечания QA — исправь все:\n{listed}")
+    return fill_slide(client, library, slide, deck_title=deck_title, extra=extra)
+
+
+def _brief(slide: SlidePlan) -> str:
+    return str(slide.content.get("brief", "")) or json.dumps(
+        slide.content, ensure_ascii=False)
+
+
+def _fill_template(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *,
+                   deck_title: str, extra: str) -> SlidePlan:
+    template = library.get(slide.template_id)
+    slots = json.dumps({n: slot_brief(s) for n, s in template.slots.items()},
+                       ensure_ascii=False)
+    user = (f"Контракт слотов шаблона «{template.id}»:\n{slots}\n\n"
+            f"Заголовок деки: {deck_title}\n\nБриф слайда:\n{_brief(slide)}")
+    if extra:
+        user += "\n\n" + extra
+    messages = [{"role": "system", "content": FILLER_SYSTEM},
+                {"role": "user", "content": user}]
+    filled = client.chat_json(messages, SlideContent, max_tokens=_FILL_MAX_TOKENS)
+    errors = library.validate_content(slide.template_id, filled.content)
+    if errors:
+        details = "; ".join(f"{e.code}:{e.slot} {e.detail}".strip() for e in errors)
+        retry = messages + [
+            {"role": "assistant",
+             "content": json.dumps({"content": filled.content}, ensure_ascii=False)},
+            {"role": "user",
+             "content": f"Контракт нарушен: {details}. Сократи/исправь и верни "
+                        "ТОЛЬКО валидный JSON."}]
+        filled = client.chat_json(retry, SlideContent, max_tokens=_FILL_MAX_TOKENS)
+        errors = library.validate_content(slide.template_id, filled.content)
+        if errors:
+            details = "; ".join(f"{e.code}:{e.slot}" for e in errors)
+            raise FillError(f"slide {slide.index}: контракт не выполнен после "
+                            f"ретрая: {details}")
+    return slide.model_copy(update={"content": filled.content})
+
+
+def _fill_freeform(client: KimiClient, slide: SlidePlan, *,
+                   deck_title: str, extra: str) -> SlidePlan:
+    system = FREEFORM_SYSTEM.format(classes=", ".join(sorted(ALLOWED_CLASSES)))
+    user = f"Заголовок деки: {deck_title}\n\nБриф слайда:\n{_brief(slide)}"
+    if extra:
+        user += "\n\n" + extra
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": user}]
+    reply = client.chat(messages, max_tokens=_FILL_MAX_TOKENS)
+    html = _extract_html(reply)
+    if _FORBIDDEN_FRAGMENT.search(html):
+        retry = messages + [
+            {"role": "assistant", "content": reply},
+            {"role": "user",
+             "content": "Во фрагменте запрещённые приёмы (style= / i / em / u / "
+                        "script / тени / градиенты / скругления). Перепиши без них, "
+                        "верни ТОЛЬКО ```html-блок."}]
+        reply = client.chat(retry, max_tokens=_FILL_MAX_TOKENS)
+        html = _extract_html(reply)
+        if _FORBIDDEN_FRAGMENT.search(html):
+            raise FillError(f"slide {slide.index}: freeform содержит запрещённые "
+                            "приёмы после ретрая")
+    return slide.model_copy(update={"content": {"html": html}})
+
+
+def _extract_html(reply: str) -> str:
+    match = _HTML_FENCE.search(reply)
+    if match:
+        return match.group(1).strip()
+    section = _SECTION.search(reply)
+    return (section.group(0) if section else reply).strip()

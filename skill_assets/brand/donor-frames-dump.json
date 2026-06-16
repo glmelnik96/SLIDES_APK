@@ -1,0 +1,974 @@
+{
+  "5": {
+    "layout_name": "Титул / Белый 1",
+    "n_text_frames": 3,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Freeform 22",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 40,
+        "top_px": 33,
+        "width_px": 1199,
+        "height_px": 650,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Прямоугольник 4",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 56,
+        "top_px": 384,
+        "width_px": 604,
+        "height_px": 190,
+        "text_preview": "Заголовок\u000b2-3 строки",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 88.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "TextBox 27",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 63,
+        "top_px": 593,
+        "width_px": 338,
+        "height_px": 54,
+        "text_preview": "Описание/спикер",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 28.0,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "8": {
+    "layout_name": "Титул / три строки_2",
+    "n_text_frames": 6,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Прямоугольник 5",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 640,
+        "top_px": 0,
+        "width_px": 641,
+        "height_px": 720,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Прямоугольник 25",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 1244,
+        "top_px": 481,
+        "width_px": 36,
+        "height_px": 238,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "Прямоугольник 26",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 640,
+        "top_px": 0,
+        "width_px": 44,
+        "height_px": 238,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      },
+      {
+        "shape_idx": 4,
+        "shape_name": "TextBox 30",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 474,
+        "top_px": 454,
+        "width_px": null,
+        "height_px": null,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      },
+      {
+        "shape_idx": 6,
+        "shape_name": "Заголовок 1",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 33,
+        "top_px": 557,
+        "width_px": 345,
+        "height_px": 162,
+        "text_preview": "Масштабируйте возможности бизнеса в нашем облаке",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 20.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 7,
+        "shape_name": "Заголовок 39",
+        "is_placeholder": true,
+        "ph_type": "CENTER_TITLE (3)",
+        "ph_idx": 0,
+        "left_px": 30,
+        "top_px": 147,
+        "width_px": 650,
+        "height_px": 148,
+        "text_preview": "Облачные сервисы\u000bи AI-технологии",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 44.0,
+          "bold": false,
+          "color": "FFFFFF"
+        }
+      }
+    ]
+  },
+  "12": {
+    "layout_name": "Раздел / Зеленый 1",
+    "n_text_frames": 3,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Заголовок 2",
+        "is_placeholder": true,
+        "ph_type": "CENTER_TITLE (3)",
+        "ph_idx": 0,
+        "left_px": 61,
+        "top_px": 573,
+        "width_px": 579,
+        "height_px": 98,
+        "text_preview": "01",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 66.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "TextBox 78",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 54,
+        "top_px": 187,
+        "width_px": 669,
+        "height_px": 168,
+        "text_preview": "Название\u000bраздела",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 54.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "Полилиния 97",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 35,
+        "top_px": 110,
+        "width_px": 1209,
+        "height_px": 570,
+        "text_preview": "",
+        "is_empty": true,
+        "style": {}
+      }
+    ]
+  },
+  "13": {
+    "layout_name": "Раздел / темный",
+    "n_text_frames": 2,
+    "frames": [
+      {
+        "shape_idx": 1,
+        "shape_name": "Заголовок 2",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 27,
+        "top_px": 595,
+        "width_px": 430,
+        "height_px": 26,
+        "text_preview": "01",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 44.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "TextBox 45",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 20,
+        "top_px": 185,
+        "width_px": 1024,
+        "height_px": 265,
+        "text_preview": "Название раздела",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 96.0,
+          "bold": null,
+          "color": "FFFFFF"
+        }
+      }
+    ]
+  },
+  "25": {
+    "layout_name": "Зеленый / Логотип",
+    "n_text_frames": 2,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "The most phygital…",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 35,
+        "top_px": 42,
+        "width_px": 912,
+        "height_px": 193,
+        "text_preview": "Пример заголовка. SB Sans Regular 44 pt. Максимум \nв 3 строчки",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 44.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "Заголовок Verdana Bold не более 2-х строк 48 pt",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 35,
+        "top_px": 575,
+        "width_px": 545,
+        "height_px": 67,
+        "text_preview": "Пример использования малого заголовка. Шрифт SB Sans Regular 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 21.0,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "28": {
+    "layout_name": "Контент / Белый / колонки 1",
+    "n_text_frames": 3,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Заголовок 1",
+        "is_placeholder": true,
+        "ph_type": "TITLE (1)",
+        "ph_idx": 0,
+        "left_px": 35,
+        "top_px": 38,
+        "width_px": 962,
+        "height_px": 53,
+        "text_preview": "ОБРАЗЕЦ СЛАЙДА\u000bДВЕ КОЛОНКИ",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "Объект 2",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 12,
+        "left_px": 35,
+        "top_px": 182,
+        "width_px": 575,
+        "height_px": 461,
+        "text_preview": "Основной текст – 20 PT\n\nВ центре нашего бизнеса – клиент\u000bи его потребности. Наши",
+        "is_empty": false,
+        "style": {
+          "font": "+mn-lt",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Объект 3",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 13,
+        "left_px": 669,
+        "top_px": 182,
+        "width_px": 575,
+        "height_px": 461,
+        "text_preview": "Текст\n\nВ центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак техн",
+        "is_empty": false,
+        "style": {
+          "font": "+mn-lt",
+          "size_pt": null,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "29": {
+    "layout_name": "Контент / белый / 4 подзаголовка",
+    "n_text_frames": 9,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Заголовок 1",
+        "is_placeholder": true,
+        "ph_type": "TITLE (1)",
+        "ph_idx": 0,
+        "left_px": 35,
+        "top_px": 38,
+        "width_px": 962,
+        "height_px": 53,
+        "text_preview": "ОБРАЗЕЦ СЛАЙДА ЧЕТЫРЕ КОЛОНКИ\u000bС ПОДЗАГОЛОВКАМИ",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "Объект 2",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 12,
+        "left_px": 35,
+        "top_px": 223,
+        "width_px": 575,
+        "height_px": 163,
+        "text_preview": "Основной текст – 20 PT.\nВ центре нашего бизнеса – клиент\u000bи его потребности. Наши",
+        "is_empty": false,
+        "style": {
+          "font": "+mn-lt",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Объект 3",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 13,
+        "left_px": 669,
+        "top_px": 223,
+        "width_px": 575,
+        "height_px": 163,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "Объект 5",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 14,
+        "left_px": 35,
+        "top_px": 480,
+        "width_px": 575,
+        "height_px": 163,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 4,
+        "shape_name": "Объект 6",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 15,
+        "left_px": 669,
+        "top_px": 480,
+        "width_px": 575,
+        "height_px": 163,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 5,
+        "shape_name": "Текст 7",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 16,
+        "left_px": 35,
+        "top_px": 182,
+        "width_px": 575,
+        "height_px": 37,
+        "text_preview": "Подзаголовок в одну строку 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 6,
+        "shape_name": "Текст 8",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 17,
+        "left_px": 669,
+        "top_px": 182,
+        "width_px": 575,
+        "height_px": 37,
+        "text_preview": "Подзаголовок в одну строку 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 7,
+        "shape_name": "Текст 9",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 18,
+        "left_px": 35,
+        "top_px": 440,
+        "width_px": 575,
+        "height_px": 37,
+        "text_preview": "Подзаголовок в одну строку 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 8,
+        "shape_name": "Текст 10",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 19,
+        "left_px": 669,
+        "top_px": 440,
+        "width_px": 575,
+        "height_px": 37,
+        "text_preview": "Подзаголовок в одну строку 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": false
+        }
+      }
+    ]
+  },
+  "34": {
+    "layout_name": "Контент / белый / 3 колонки",
+    "n_text_frames": 7,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Заголовок 13",
+        "is_placeholder": true,
+        "ph_type": "TITLE (1)",
+        "ph_idx": 0,
+        "left_px": 35,
+        "top_px": 38,
+        "width_px": 962,
+        "height_px": 53,
+        "text_preview": "ОБРАЗЕЦ СЛАЙДА ТРИ КОЛОНКИ\u000bС ПОДЗАГОЛОВКАМИ",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "Объект 2",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 12,
+        "left_px": 35,
+        "top_px": 272,
+        "width_px": 362,
+        "height_px": 363,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 14.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Объект 3",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 13,
+        "left_px": 436,
+        "top_px": 272,
+        "width_px": 362,
+        "height_px": 363,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 14.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "Объект 5",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 16,
+        "left_px": 838,
+        "top_px": 272,
+        "width_px": 362,
+        "height_px": 370,
+        "text_preview": "В центре нашего бизнеса – клиент\u000bи его потребности. Наши амбиции\u000bкак технологиче",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 14.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 4,
+        "shape_name": "Текст 7",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 18,
+        "left_px": 35,
+        "top_px": 183,
+        "width_px": 348,
+        "height_px": 53,
+        "text_preview": "Подзаголовок максимум в 2 строки 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 20.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 5,
+        "shape_name": "Текст 8",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 19,
+        "left_px": 436,
+        "top_px": 183,
+        "width_px": 348,
+        "height_px": 53,
+        "text_preview": "Подзаголовок максимум в 2 строки 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 20.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 6,
+        "shape_name": "Текст 9",
+        "is_placeholder": true,
+        "ph_type": "BODY (2)",
+        "ph_idx": 20,
+        "left_px": 838,
+        "top_px": 183,
+        "width_px": 348,
+        "height_px": 53,
+        "text_preview": "Подзаголовок максимум в 2 строки 20pt",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": 20.0,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "41": {
+    "layout_name": "Черный / Важная информация",
+    "n_text_frames": 1,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Объект 7",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 12,
+        "left_px": 91,
+        "top_px": 198,
+        "width_px": 1135,
+        "height_px": 367,
+        "text_preview": "Важная мысль или вывод из предыдущих слайдов\u000bмаксимум в три строки",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "42": {
+    "layout_name": "Белый / Важная информация",
+    "n_text_frames": 1,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Объект 7",
+        "is_placeholder": true,
+        "ph_type": "OBJECT (7)",
+        "ph_idx": 12,
+        "left_px": 91,
+        "top_px": 198,
+        "width_px": 1135,
+        "height_px": 367,
+        "text_preview": "Важная мысль или вывод из предыдущих слайдов\u000bмаксимум в три строки",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "43": {
+    "layout_name": "Контент / Белый 1",
+    "n_text_frames": 10,
+    "frames": [
+      {
+        "shape_idx": 0,
+        "shape_name": "Заголовок 1",
+        "is_placeholder": true,
+        "ph_type": "TITLE (1)",
+        "ph_idx": 0,
+        "left_px": 35,
+        "top_px": 38,
+        "width_px": 962,
+        "height_px": 53,
+        "text_preview": "ПРИМЕР СЛАЙДА\u000bС ЧИСЛАМИ",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display Semibold",
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 1,
+        "shape_name": "TextBox 2",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 12,
+        "top_px": 397,
+        "width_px": 716,
+        "height_px": 331,
+        "text_preview": "56-78",
+        "is_empty": false,
+        "style": {
+          "font": "+mj-lt",
+          "size_pt": 199.0,
+          "bold": false,
+          "color": "26D07C"
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "TextBox 3",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 270,
+        "top_px": 294,
+        "width_px": 272,
+        "height_px": 67,
+        "text_preview": "мелкий текст с описанием\n12 pt/ SB Sans Display Regular \nне более 3-х. строк",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 12.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "object 18",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 585,
+        "top_px": 126,
+        "width_px": 335,
+        "height_px": 323,
+        "text_preview": "34",
+        "is_empty": false,
+        "style": {
+          "font": "+mj-lt",
+          "size_pt": 199.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 4,
+        "shape_name": "TextBox 5",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": -2,
+        "top_px": 122,
+        "width_px": 313,
+        "height_px": 331,
+        "text_preview": "12",
+        "is_empty": false,
+        "style": {
+          "font": "+mj-lt",
+          "size_pt": 44.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 5,
+        "shape_name": "object 18",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 270,
+        "top_px": 187,
+        "width_px": 75,
+        "height_px": 97,
+        "text_preview": "%",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display Semibold",
+          "size_pt": 88.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 6,
+        "shape_name": "object 18",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 888,
+        "top_px": 187,
+        "width_px": 75,
+        "height_px": 97,
+        "text_preview": "%",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display Semibold",
+          "size_pt": 88.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 7,
+        "shape_name": "object 18",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 690,
+        "top_px": 459,
+        "width_px": 75,
+        "height_px": 97,
+        "text_preview": "%",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display Semibold",
+          "size_pt": 88.0,
+          "bold": false
+        }
+      },
+      {
+        "shape_idx": 8,
+        "shape_name": "TextBox 9",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 888,
+        "top_px": 293,
+        "width_px": 295,
+        "height_px": 67,
+        "text_preview": "мелкий текст с описанием \n12 pt/ SB Sans Display Regular \nне более 3-х. строк",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 12.0,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 9,
+        "shape_name": "TextBox 10",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 690,
+        "top_px": 564,
+        "width_px": 295,
+        "height_px": 87,
+        "text_preview": "мелкий текст с описанием \n12 pt/ SB Sans Display Regular \nне более 3-х. строк",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": 12.0,
+          "bold": null
+        }
+      }
+    ]
+  },
+  "78": {
+    "layout_name": "Зеленый / Логотип",
+    "n_text_frames": 4,
+    "frames": [
+      {
+        "shape_idx": 1,
+        "shape_name": "Прямоугольник 31",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 35,
+        "top_px": 321,
+        "width_px": 395,
+        "height_px": 402,
+        "text_preview": "Интеграция с сервисами\nОбъектное хранилище S3 —безопасное и надежное хранение ва",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null,
+          "color": "000000"
+        }
+      },
+      {
+        "shape_idx": 2,
+        "shape_name": "Заголовок 14",
+        "is_placeholder": true,
+        "ph_type": "CENTER_TITLE (3)",
+        "ph_idx": 4294967295,
+        "left_px": 35,
+        "top_px": 45,
+        "width_px": 394,
+        "height_px": 214,
+        "text_preview": "Слайд с универсальным изображением",
+        "is_empty": false,
+        "style": {
+          "font": null,
+          "size_pt": null,
+          "bold": null
+        }
+      },
+      {
+        "shape_idx": 3,
+        "shape_name": "Прямоугольник 7",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 442,
+        "top_px": 321,
+        "width_px": 395,
+        "height_px": 402,
+        "text_preview": "Интеграция с сервисами\nОбъектное хранилище S3 —безопасное и надежное хранение ва",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null,
+          "color": "000000"
+        }
+      },
+      {
+        "shape_idx": 4,
+        "shape_name": "Прямоугольник 8",
+        "is_placeholder": false,
+        "ph_type": null,
+        "ph_idx": null,
+        "left_px": 849,
+        "top_px": 321,
+        "width_px": 395,
+        "height_px": 402,
+        "text_preview": "Интеграция с сервисами\nОбъектное хранилище S3 —безопасное и надежное хранение ва",
+        "is_empty": false,
+        "style": {
+          "font": "SB Sans Display",
+          "size_pt": null,
+          "bold": null,
+          "color": "000000"
+        }
+      }
+    ]
+  }
+}

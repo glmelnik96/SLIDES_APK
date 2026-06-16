@@ -1,0 +1,70 @@
+{
+  "_doc": "Единый источник истины для цветов Cloud.ru 2.0. Загружается brand_guardian.py, visual_validator_v2.py, chart_native_pptx.py. При обновлении бренда править только здесь.",
+
+  "base": {
+    "Green":            "#26D07C",
+    "Yellow":           "#CFF500",
+    "Purple":           "#A068FF",
+    "Blue":             "#C0E0FC",
+    "Black":            "#222222",
+    "White":            "#FFFFFF",
+    "Gray":             "#F2F2F2"
+  },
+
+  "greys": {
+    "_doc": "Официальная шкала нейтралей (брендбук, скрин «массы» 2026-06-02). Grey1=base.Gray.",
+    "Grey1":            "#F2F2F2",
+    "Grey2":            "#D9D9D9",
+    "Grey3":            "#434343"
+  },
+
+  "base_alts": {
+    "Black-pure-alt":   "#000000",
+    "Green-alt":        "#00D97B",
+    "Black-soft-alt-1": "#181818",
+    "Black-soft-alt-2": "#2B2B2B",
+    "Green-dark-alt":   "#1AB066"
+  },
+
+  "extended": {
+    "Aquamarine":       "#18F4CF",
+    "Aquamarine2":      "#C9F2EA",
+    "Ultramarine":      "#0063FF",
+    "Ultramarine5":     "#C9D9F2",
+    "Magenta":          "#FF00FF",
+    "Magenta3":         "#C067C0",
+    "Carrot":           "#FF4517",
+    "Carrot3":          "#DD7D64",
+    "Coral":            "#FF0642",
+    "Coral3":           "#E25B7C"
+  },
+
+  "chart_extension": {
+    "_doc":             "Pastel-палитра, разрешённая ТОЛЬКО для chart-серий (canonical §2 «второй ряд»).",
+    "pastel_yellow":    "#E8F5C7",
+    "pastel_mint":      "#C9F2EA",
+    "pastel_green_tint":"#A8E5C9",
+    "mid_gray":         "#BDBDBD",
+    "dark_gray":        "#666666"
+  },
+
+  "text_neutral": [
+    "#222222", "#000000", "#181818", "#2B2B2B",
+    "#F2F2F2", "#C8C8C8", "#888888", "#BDBDBD", "#666666"
+  ],
+
+  "_doc_text_dark_extra": "Цвета текста, дополнительно разрешённые на ТЁМНЫХ слайдах. Canonical 2026-05-29 (Problem #2): только белый. Зелёный как ЦВЕТ ТЕКСТА запрещён везде (вкл. тёмные слайды и крупные KPI/divider-цифры) — зелёный только как цветной ЭЛЕМЕНТ (плашка/divider/заливка). green_for_arrows и chart-заливки — отдельные ключи, их это не касается.",
+  "text_dark_extra": [
+    "#FFFFFF"
+  ],
+
+  "green_for_arrows": [
+    "#26D07C", "#00D97B", "#1AB066", "#1ABF6F"
+  ],
+
+  "unfilled_flags": {
+    "blue_placeholder":    "#6B9EE6",
+    "yellow_placeholder":  "#FFFF00",
+    "magenta_placeholder": "#FF00FF"
+  }
+}

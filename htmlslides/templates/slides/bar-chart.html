@@ -1,0 +1,49 @@
+{#- bar-chart: НЕ из Figma — бренд-производная горизонтальная гистограмма.
+    Первый график библиотеки: 3–6 величин сравниваются барами разной длины
+    (доли, рост по годам, сравнение тарифов/сервисов). Self-contained: только
+    инлайн-SVG, без внешних JS/чарт-библиотек, токены темы, обе темы.
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
+
+    Геометрия (контейнер .bar-svg @ left60/top328/width1800; viewBox 0 0 1800 620):
+      gutter (левый столбец подписей) = 520px, текст x=0..520, font 30px;
+      бары стартуют от общего x = 560 (40px зазор после геттера);
+      trackWidth = 1100px → конец бара max @ x=1660; справа 140px (1660..1800)
+      под подпись значения (display|value), font 30px Medium.
+      Длина бара = value|num / maxv * 1100 (maxv защищён от нуля → ||1).
+      Шаг строки pitch = 620 / N (N=bars|length, 3..6) → робастно к 3 барам;
+      бар высотой 56px вертикально центрируется в полосе (cy = i*pitch + pitch/2).
+      Бар — var(--accent) (зелёный на обеих темах); тонкая дорожка-трек
+      var(--bg-card) на всю trackWidth; подписи/значения var(--fg-body).
+      Без gradient/shadow/rounding, без inline style — только SVG-атрибуты. -#}
+{% set bars = content.bars %}
+{% set n = bars | length %}
+{% set maxv = (bars | map(attribute='value') | map('num') | max) or 1 %}
+{% set pitch = 620.0 / n %}
+{% set bar_h = 56 %}
+{% set gutter = 520 %}
+{% set bar_x = 560 %}
+{% set track_w = 1100 %}
+<section class="slide slide--chrome-sm" data-template="bar-chart">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <svg class="bar-svg m-enter" viewBox="0 0 1800 620" fill="none"
+       xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="{{ content.title }}">
+    {% for b in bars %}
+    {% set cy = loop.index0 * pitch + pitch / 2 %}
+    {% set bw = (b.value | num) / maxv * track_w %}
+    {% set y = cy - bar_h / 2 %}
+    <text x="0" y="{{ cy }}" dominant-baseline="middle"
+          font-size="30" font-weight="400" fill="var(--fg-body)">{{ b.label }}</text>
+    <rect x="{{ bar_x }}" y="{{ y }}" width="{{ track_w }}" height="{{ bar_h }}"
+          fill="var(--bg-card)"/>
+    <rect class="bar-fill" x="{{ bar_x }}" y="{{ y }}" width="{{ bw if bw > 1 else 1 }}" height="{{ bar_h }}"
+          fill="var(--accent)"/>
+    <text x="{{ bar_x + bw + 24 }}" y="{{ cy }}" dominant-baseline="middle"
+          font-size="30" font-weight="500" fill="var(--fg-body)">{{ b.display or b.value }}</text>
+    {% endfor %}
+  </svg>
+</section>

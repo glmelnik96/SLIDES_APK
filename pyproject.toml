@@ -1,13 +1,38 @@
 [project]
 name = "slides-app"
 version = "0.1.0"
-description = "Browser app for Cloud.ru slide generation (no Telegram)"
+description = "Self-contained browser app for Cloud.ru slide generation (no Telegram)"
 requires-python = ">=3.10"
 dependencies = [
+    # Web app
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "python-multipart>=0.0.9",
     "python-dotenv>=1.0",
+    # Orchestration (LangGraph pipeline for verstai/design)
+    "langgraph>=0.2.50,<0.3",
+    "langgraph-checkpoint-redis>=0.0.6",
+    "celery[redis]>=5.5,<5.6",
+    "redis>=5.0,<6.0",
+    # LLM client
+    "openai>=2.0,<3.0",
+    # Validation / config
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.4,<3.0",
+    # Rendering / file handling
+    "python-pptx>=1.0,<2.0",
+    "pillow>=10.4,<12.0",
+    "pymupdf>=1.24,<2.0",
+    "playwright>=1.45,<2.0",
+    "lxml>=5.2,<6.0",
+    "pyyaml>=6.0,<7.0",
+    "matplotlib>=3.8,<4.0",
+    "python-docx>=1.1,<2.0",
+    "markdown-it-py>=3.0",
+    "jinja2>=3.1",
+    # Observability / utils
+    "structlog>=24.4,<25.0",
+    "tenacity>=9.0,<10.0",
 ]
 
 [project.optional-dependencies]
@@ -22,5 +47,9 @@ markers = ["slow: hits live Cloud.ru", "playwright: needs Chromium"]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["webapp"]
+[tool.setuptools.packages.find]
+include = ["webapp*", "graph*", "llm*", "worker*", "schemas*", "storage*",
+           "renderers*", "bot*", "htmlslides*", "skill_assets*", "scripts*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.css", "*.js", "*.md", "*.woff2", "*.json", "*.pptx", "*.yaml", "*.yml"]

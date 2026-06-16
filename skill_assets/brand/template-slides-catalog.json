@@ -1,0 +1,794 @@
+[
+  {
+    "slide_num": 1,
+    "layout_idx": 2,
+    "layout_name": "1_Титул / Белый 3",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Шаблон\u000bпрезентации"
+  },
+  {
+    "slide_num": 2,
+    "layout_idx": 97,
+    "layout_name": "2_Технический слайд",
+    "n_shapes": 7,
+    "n_pictures": 0,
+    "n_text": 7,
+    "preview": "Привет! | Чтобы слайды отображались корректно, ска | СКАЧАТЬ ШРИФТ SB SANS"
+  },
+  {
+    "slide_num": 3,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 10,
+    "preview": "Содержание | 1. Титульные слайды (4-14) | 2. Слайды-разделители (15-17)"
+  },
+  {
+    "slide_num": 4,
+    "layout_idx": 6,
+    "layout_name": "Титул / Белый 4",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "Описание или спикеры | Название презентации\u000bв три строки"
+  },
+  {
+    "slide_num": 5,
+    "layout_idx": 0,
+    "layout_name": "Титул / Белый 1",
+    "n_shapes": 4,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Заголовок\u000b2-3 строки | Описание/спикер"
+  },
+  {
+    "slide_num": 6,
+    "layout_idx": 7,
+    "layout_name": "Титул / Черный 1",
+    "n_shapes": 3,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "Спикер/дата/подзаголовок | Cloud.ru\u000bEvolution Stack | 18.03.2025"
+  },
+  {
+    "slide_num": 7,
+    "layout_idx": 99,
+    "layout_name": "Титул / Черный / New",
+    "n_shapes": 6,
+    "n_pictures": 2,
+    "n_text": 2,
+    "preview": "Заголовок\u000b2-3 строки | Масштабируйте возможности бизнеса в наше"
+  },
+  {
+    "slide_num": 8,
+    "layout_idx": 52,
+    "layout_name": "Титул / три строки_2",
+    "n_shapes": 8,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Масштабируйте возможности бизнеса в наше | Облачные сервисы\u000bи AI-технологии"
+  },
+  {
+    "slide_num": 9,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Слайды-Разделители | Это слайды, которые отделяют главы между"
+  },
+  {
+    "slide_num": 10,
+    "layout_idx": 8,
+    "layout_name": "Раздел / Зеленый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "НАЗВАНИЕ РАЗДЕЛА МАКСИМУМ В ТРИ СТРОКИ | 01"
+  },
+  {
+    "slide_num": 11,
+    "layout_idx": 93,
+    "layout_name": "Темный / Логотип",
+    "n_shapes": 3,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "01/ НАЗВАНИЕ РАЗДЕЛА"
+  },
+  {
+    "slide_num": 12,
+    "layout_idx": 8,
+    "layout_name": "Раздел / Зеленый 1",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "01 | Название\u000bраздела"
+  },
+  {
+    "slide_num": 13,
+    "layout_idx": 54,
+    "layout_name": "Раздел / темный",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "01 | Название раздела"
+  },
+  {
+    "slide_num": 14,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 6,
+    "n_pictures": 3,
+    "n_text": 2,
+    "preview": "01 | Название\u000bраздела"
+  },
+  {
+    "slide_num": 15,
+    "layout_idx": 56,
+    "layout_name": "Раздел / темный / QR",
+    "n_shapes": 7,
+    "n_pictures": 2,
+    "n_text": 2,
+    "preview": "Слайд\u000bс QR-кодом | Текст, краткое описание ссылки"
+  },
+  {
+    "slide_num": 16,
+    "layout_idx": 9,
+    "layout_name": "Раздел / белый / QR ",
+    "n_shapes": 7,
+    "n_pictures": 2,
+    "n_text": 2,
+    "preview": "Слайд\u000bс QR-кодом | Текст, краткое описание ссылки"
+  },
+  {
+    "slide_num": 17,
+    "layout_idx": 13,
+    "layout_name": "Контент / белый / паттерн стрелки 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "СОДЕРЖАНИЕ"
+  },
+  {
+    "slide_num": 18,
+    "layout_idx": 15,
+    "layout_name": "Контент / белый / паттерн стрелки 3",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "СОДЕРЖАНИЕ"
+  },
+  {
+    "slide_num": 19,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 5,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "СОДЕРЖАНИЕ"
+  },
+  {
+    "slide_num": 20,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 9,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "СОДЕРЖАНИЕ"
+  },
+  {
+    "slide_num": 21,
+    "layout_idx": 24,
+    "layout_name": "Контент / Белый / Текст",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "ПРИМЕР СЛАЙДА С ТЕКСТОМ\u000bВ НЕСКОЛЬКО ПРЕД | Размер шрифта основного текста – 32 PT, "
+  },
+  {
+    "slide_num": 22,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "ПРИМЕР ТЕМНОГО СЛАЙДА С ТЕКСТОМ\u000bВ НЕСКОЛ | Темные слайды стоит использовать как акц"
+  },
+  {
+    "slide_num": 23,
+    "layout_idx": 13,
+    "layout_name": "Контент / белый / паттерн стрелки 1",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Пример заголовка.SB Sans Regular 44 pt.  | Пример использования рендера на слайде"
+  },
+  {
+    "slide_num": 24,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Пример использования малого заголовка. Ш | Пример заголовка. SB Sans Regular 44 pt."
+  },
+  {
+    "slide_num": 25,
+    "layout_idx": 95,
+    "layout_name": "Зеленый / Логотип",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Пример заголовка. SB Sans Regular 44 pt. | Пример использования малого заголовка. Ш"
+  },
+  {
+    "slide_num": 26,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 7,
+    "preview": "РАСПРЕДЕЛЕНИЕ\u000bПО ШАГАМ | текст с описанием 20 pt/ SB Sans Display | 01"
+  },
+  {
+    "slide_num": 27,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 10,
+    "preview": "РАСПРЕДЕЛЕНИЕ\u000bПО ШАГАМ | 01 | 02"
+  },
+  {
+    "slide_num": 28,
+    "layout_idx": 25,
+    "layout_name": "Контент / Белый / колонки 1",
+    "n_shapes": 3,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "ОБРАЗЕЦ СЛАЙДА\u000bДВЕ КОЛОНКИ | Основной текст – 20 PT\n\nВ центре нашего  | Текст\n\nВ центре нашего бизнеса – клиент\u000b"
+  },
+  {
+    "slide_num": 29,
+    "layout_idx": 29,
+    "layout_name": "Контент / белый / 4 подзаголовка",
+    "n_shapes": 9,
+    "n_pictures": 0,
+    "n_text": 9,
+    "preview": "ОБРАЗЕЦ СЛАЙДА ЧЕТЫРЕ КОЛОНКИ\u000bС ПОДЗАГОЛ | Основной текст – 20 PT.\nВ центре нашего  | В центре нашего бизнеса – клиент\u000bи его п"
+  },
+  {
+    "slide_num": 30,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Пример слайда с блоками"
+  },
+  {
+    "slide_num": 31,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 6,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "РАЗДЕЛЕНИЕ НА БЛоки"
+  },
+  {
+    "slide_num": 32,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "РАЗДЕЛЕНИЕ НА БЛОКИ"
+  },
+  {
+    "slide_num": 33,
+    "layout_idx": 30,
+    "layout_name": "Контент / белый / 6 текстовых блока",
+    "n_shapes": 13,
+    "n_pictures": 0,
+    "n_text": 13,
+    "preview": "ОБРАЗЕЦ СЛАЙДА ШЕСТЬ КОЛОНОК\u000bС ПОДЗАГОЛО | Наши амбиции как технологического лидера | Наши амбиции как технологического лидера"
+  },
+  {
+    "slide_num": 34,
+    "layout_idx": 31,
+    "layout_name": "Контент / белый / 3 колонки",
+    "n_shapes": 7,
+    "n_pictures": 0,
+    "n_text": 7,
+    "preview": "ОБРАЗЕЦ СЛАЙДА ТРИ КОЛОНКИ\u000bС ПОДЗАГОЛОВК | В центре нашего бизнеса – клиент\u000bи его п | В центре нашего бизнеса – клиент\u000bи его п"
+  },
+  {
+    "slide_num": 35,
+    "layout_idx": 32,
+    "layout_name": "Контент / белый / 8 блоков",
+    "n_shapes": 17,
+    "n_pictures": 0,
+    "n_text": 17,
+    "preview": "ОБРАЗЕЦ СЛАЙДА ВОСЕМЬ КОЛОНОК\u000bС ПОДЗАГОЛ | В центре нашего бизнеса – клиент\u000bи его п | Наши амбиции как технологического лидера"
+  },
+  {
+    "slide_num": 36,
+    "layout_idx": 36,
+    "layout_name": "Контент / белый / рисунок",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Пример слайда с изображением и тремя пун"
+  },
+  {
+    "slide_num": 37,
+    "layout_idx": 36,
+    "layout_name": "Контент / белый / рисунок",
+    "n_shapes": 5,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Пример слайда с изображением и четырьмя "
+  },
+  {
+    "slide_num": 38,
+    "layout_idx": 36,
+    "layout_name": "Контент / белый / рисунок",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Пример слайда с шестью пунктами"
+  },
+  {
+    "slide_num": 39,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 16,
+    "n_pictures": 7,
+    "n_text": 7,
+    "preview": "Начните работу с Cloud.ru уже сегодня | Инструменты для управления затратами в р | Полный контроль ресурсов через графическ"
+  },
+  {
+    "slide_num": 40,
+    "layout_idx": 98,
+    "layout_name": "12_Титул / Паттерн_2",
+    "n_shapes": 7,
+    "n_pictures": 2,
+    "n_text": 1,
+    "preview": "Делаем доступ к облакам и AI простым и у"
+  },
+  {
+    "slide_num": 41,
+    "layout_idx": 67,
+    "layout_name": "Черный / Важная информация",
+    "n_shapes": 1,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Важная мысль или вывод из предыдущих сла"
+  },
+  {
+    "slide_num": 42,
+    "layout_idx": 23,
+    "layout_name": "Белый / Важная информация",
+    "n_shapes": 1,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Важная мысль или вывод из предыдущих сла"
+  },
+  {
+    "slide_num": 43,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 10,
+    "preview": "ПРИМЕР СЛАЙДА\u000bС ЧИСЛАМИ | 56-78 | мелкий текст с описанием\n12 pt/ SB Sans "
+  },
+  {
+    "slide_num": 44,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 10,
+    "preview": "ПРИМЕР СЛАЙДА\u000bС ЧИСЛАМИ | 56-78 | 34"
+  },
+  {
+    "slide_num": 45,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "ДИАГРАММА\u000bС ДОПОЛНИТЕЛНЫМИ ЦВЕТАМИ"
+  },
+  {
+    "slide_num": 46,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Название диаграммы"
+  },
+  {
+    "slide_num": 47,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 8,
+    "n_pictures": 0,
+    "n_text": 7,
+    "preview": "Диаграмма с текстом\u000bи цифрами 44pt | ТЕКСТ 1 | ТЕКСТ 2"
+  },
+  {
+    "slide_num": 48,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 4,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Схема с пересечением понятий | Текст слайда"
+  },
+  {
+    "slide_num": 49,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 12,
+    "n_pictures": 1,
+    "n_text": 3,
+    "preview": "ЭВОЛЮЦИЯ ОБЛАЧНОГО ПОТРЕБЛЕНИЯ | По мере развития технологической компете | *ИКС-Медиа, 2022"
+  },
+  {
+    "slide_num": 50,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "ДИАГРАММА С ДОПОЛНИТЕЛНЫМИ ЦВЕТАМИ"
+  },
+  {
+    "slide_num": 51,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 23,
+    "n_pictures": 0,
+    "n_text": 17,
+    "preview": "ДИАГРАММА ВОРОНКА | Описание | Описание"
+  },
+  {
+    "slide_num": 52,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "ПРИМЕР СЛАЙДА\u000bС ТАБЛИЦЕЙ"
+  },
+  {
+    "slide_num": 53,
+    "layout_idx": 11,
+    "layout_name": "Контент / серый 1",
+    "n_shapes": 3,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "Пример оформления таблицы | Текст слайда"
+  },
+  {
+    "slide_num": 54,
+    "layout_idx": 35,
+    "layout_name": "Контент / белый / Большая таблица",
+    "n_shapes": 5,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Вариант оформления таблицы с большим кол"
+  },
+  {
+    "slide_num": 55,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 7,
+    "n_pictures": 0,
+    "n_text": 4,
+    "preview": "Пример оформления СЛАЙДА С Цифрами | Текст слайда | Руководство пользователя"
+  },
+  {
+    "slide_num": 56,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Вариант таблицы"
+  },
+  {
+    "slide_num": 57,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 8,
+    "n_pictures": 0,
+    "n_text": 4,
+    "preview": "Матрица ответственности | Заголовок/\u000bлоготип | Заголовок/\u000bлоготип"
+  },
+  {
+    "slide_num": 58,
+    "layout_idx": 101,
+    "layout_name": "2_Inner empty LEFT logo",
+    "n_shapes": 8,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "НОВЫЕ ПРОДУКТЫ И РАЗВИТИЕ AI FACTORY | 2026 | ОБРАЗЕЦ\u000bROADMAP"
+  },
+  {
+    "slide_num": 59,
+    "layout_idx": 101,
+    "layout_name": "2_Inner empty LEFT logo",
+    "n_shapes": 2,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "ОБРАЗЕЦ\u000bROADMAP"
+  },
+  {
+    "slide_num": 60,
+    "layout_idx": 38,
+    "layout_name": "Контент / белый / Таймлайн 10 пунктов",
+    "n_shapes": 31,
+    "n_pictures": 0,
+    "n_text": 21,
+    "preview": "ОБРАЗЕЦ\u000bROADMAP | Sed do eiusmod tempor incididunt ut labo | 1 января\nПодзаголовок"
+  },
+  {
+    "slide_num": 61,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 49,
+    "n_pictures": 0,
+    "n_text": 35,
+    "preview": "ROADMAP | Nov | Jan"
+  },
+  {
+    "slide_num": 62,
+    "layout_idx": 8,
+    "layout_name": "Раздел / Зеленый 1",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "Гайд по оформлению схем | Привет!\nМы создали гайд, который поможет"
+  },
+  {
+    "slide_num": 63,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 14,
+    "n_pictures": 1,
+    "n_text": 8,
+    "preview": "Масштаб | Параметры представлены для широкоформатн | Максимальный размер пиктограмм"
+  },
+  {
+    "slide_num": 64,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 11,
+    "n_pictures": 2,
+    "n_text": 6,
+    "preview": "Цвета | Основные цвета | Для высоконагруженных схем не используем"
+  },
+  {
+    "slide_num": 65,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 23,
+    "n_pictures": 5,
+    "n_text": 12,
+    "preview": "! Не\u000bискажайте\u000bпропорции\u000bиконок | Блоки | Оставляйте больше пространства внутри бл"
+  },
+  {
+    "slide_num": 66,
+    "layout_idx": 96,
+    "layout_name": "1_Технический слайд",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 7,
+    "preview": "Стрелки | Основной цвет стрелок — нейтральный серы | Дополнительные"
+  },
+  {
+    "slide_num": 67,
+    "layout_idx": 11,
+    "layout_name": "Контент / серый 1",
+    "n_shapes": 10,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "Несколько сущностей образуют одну | Одна сущность состоит из нескольких или "
+  },
+  {
+    "slide_num": 68,
+    "layout_idx": 11,
+    "layout_name": "Контент / серый 1",
+    "n_shapes": 33,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Выделение вложенных сущностей разными цв"
+  },
+  {
+    "slide_num": 69,
+    "layout_idx": 11,
+    "layout_name": "Контент / серый 1",
+    "n_shapes": 9,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Несколько сущностей образуют одну"
+  },
+  {
+    "slide_num": 70,
+    "layout_idx": 11,
+    "layout_name": "Контент / серый 1",
+    "n_shapes": 7,
+    "n_pictures": 0,
+    "n_text": 1,
+    "preview": "Несколько сущностей образуют одну"
+  },
+  {
+    "slide_num": 71,
+    "layout_idx": 49,
+    "layout_name": "Контент / белый / Команда 5",
+    "n_shapes": 12,
+    "n_pictures": 0,
+    "n_text": 2,
+    "preview": "КОМАНДА | Для большего или меньшего количества чел"
+  },
+  {
+    "slide_num": 72,
+    "layout_idx": 21,
+    "layout_name": "Фон для скриншотов 2",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "ПРИМЕР СЛАЙДА С ОФОРМЛЕНИЕМ СКРИНШОТА | Скопируйте данный фрейм для оформления с | Скриншот / видео / изображение"
+  },
+  {
+    "slide_num": 73,
+    "layout_idx": 22,
+    "layout_name": "Фон для скриншотов 3",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "Скриншот / видео / изображение | ПРИМЕР СЛАЙДА С ОФОРМЛЕНИЕМ СКРИНШОТА | Скопируйте данный фрейм для оформления с"
+  },
+  {
+    "slide_num": 74,
+    "layout_idx": 27,
+    "layout_name": "Контент / Белый / текст 2",
+    "n_shapes": 8,
+    "n_pictures": 7,
+    "n_text": 1,
+    "preview": "Линейные Иллюстрации"
+  },
+  {
+    "slide_num": 75,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 2,
+    "n_text": 1,
+    "preview": "иллюстрации"
+  },
+  {
+    "slide_num": 76,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 1,
+    "preview": "Еще иллюстрации"
+  },
+  {
+    "slide_num": 77,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 2,
+    "n_text": 1,
+    "preview": "Еще иллюстрации"
+  },
+  {
+    "slide_num": 78,
+    "layout_idx": 95,
+    "layout_name": "Зеленый / Логотип",
+    "n_shapes": 8,
+    "n_pictures": 1,
+    "n_text": 4,
+    "preview": "Интеграция с сервисами\nОбъектное хранили | Слайд с универсальным изображением | Интеграция с сервисами\nОбъектное хранили"
+  },
+  {
+    "slide_num": 79,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 1,
+    "preview": "Пример слайда с пятью пунктами\u000bи универс"
+  },
+  {
+    "slide_num": 80,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 5,
+    "n_pictures": 3,
+    "n_text": 1,
+    "preview": "Еще 3D-вижуалы"
+  },
+  {
+    "slide_num": 81,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 1,
+    "n_text": 2,
+    "preview": "Цвета | Важно соблюдать визуальное \nсоотношение "
+  },
+  {
+    "slide_num": 82,
+    "layout_idx": 57,
+    "layout_name": "Контент / темный 1",
+    "n_shapes": 4,
+    "n_pictures": 1,
+    "n_text": 3,
+    "preview": "ДОПОЛНИТЕЛЬНЫЙ \u000bЦВЕТ | Дополнительные цвета всегда применяются  | #современно #актуально #масштабно #техно"
+  },
+  {
+    "slide_num": 83,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 61,
+    "n_pictures": 58,
+    "n_text": 3,
+    "preview": "Иконки s | Ссылка на полный набор иконок | https://wiki.sbercloud.tech/pages/releas"
+  },
+  {
+    "slide_num": 84,
+    "layout_idx": 94,
+    "layout_name": "Светлый / Фотофон 2",
+    "n_shapes": 0,
+    "n_pictures": 0,
+    "n_text": 0,
+    "preview": ""
+  },
+  {
+    "slide_num": 85,
+    "layout_idx": 91,
+    "layout_name": "Заголовок / темный / фотофон",
+    "n_shapes": 1,
+    "n_pictures": 0,
+    "n_text": 0,
+    "preview": ""
+  },
+  {
+    "slide_num": 86,
+    "layout_idx": 90,
+    "layout_name": "Темный / Фото фон 3",
+    "n_shapes": 4,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "Публичное облако | Частное облако | Гибридное облако"
+  },
+  {
+    "slide_num": 87,
+    "layout_idx": 10,
+    "layout_name": "Контент / Белый 1",
+    "n_shapes": 3,
+    "n_pictures": 0,
+    "n_text": 3,
+    "preview": "10 ПРИЕМОВ ДЛЯ ХОРОШЕЙ ПРЕЗЕНТАЦИИ | Пользуйтесь сеткой и выравниванием\nОдин  | Подбирайте фото и изображения аккуратно,"
+  },
+  {
+    "slide_num": 88,
+    "layout_idx": 26,
+    "layout_name": "Контент / серо-белый",
+    "n_shapes": 8,
+    "n_pictures": 0,
+    "n_text": 8,
+    "preview": "ТИПОГРАФИКА | Основной шрифт | SB Sans"
+  }
+]

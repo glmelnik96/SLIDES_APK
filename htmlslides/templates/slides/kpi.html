@@ -1,0 +1,22 @@
+{#- KPI: 2 гигантские цифры 320px с единицами и описанием (figma D 3393:11314 / L 3393:11061).
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок сверху слева.
+    Поле точек понизу под цифрами. -#}
+<section class="slide slide--chrome-sm" data-template="kpi">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="kpi-grid m-stagger">
+    {% for k in content.kpis %}
+    <div class="kpi-cell">
+      <div class="kpi-value t-number-320 js-count">{{ k.value }}</div>
+      <div class="kpi-side">
+        {% if k.unit %}<div class="kpi-unit t-head-36">{{ k.unit }}</div>{% endif %}
+        {% if k.desc %}<div class="kpi-desc t-body-30">{{ k.desc }}</div>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="kpi-dots pattern-dots" aria-hidden="true"></div>
+</section>

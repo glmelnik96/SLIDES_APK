@@ -1,0 +1,92 @@
+{#- stacked-bar: НЕ из Figma — бренд-производные горизонтальные СОСТАВНЫЕ бары.
+    Четвёртый график библиотеки: 2–5 категорий, каждый бар разбит на 2–4 сегмента
+    (состав/структура внутри группы: распределение бюджета/нагрузки по командам).
+    Self-contained: только инлайн-SVG, без внешних JS/чарт-библиотек, токены темы,
+    обе темы. Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
+
+    Один бренд-акцент, без радуги: сегменты залиты var(--accent), различаются
+    ступенями прозрачности (opacity ladder, как в donut): 1.0 / 0.78 / 0.56 / 0.38
+    (по порядку сегментов v1..v4). Легенда сверху сопоставляет свотч → label.
+    Трек var(--bg-card) под баром. Подписи var(--fg-body)/var(--fg-muted).
+
+    НОРМИРОВКА: каждый бар = 100% СОСТАВА своей категории. Ширина сегмента i =
+    vi / (сумма v1..v4 этого бара) * track_w. Поэтому ВСЕ бары полной длины
+    track_w, а сегменты показывают ДОЛЮ внутри категории (а не абсолют). Сумма
+    защищена от нуля (||1). Значения в сегментах НЕ подписываем (мелко/тесно) —
+    маппинг даёт легенда; вместо этого % показываем только если сегмент широкий.
+
+    Геометрия (.sb-svg @ left60/top328/width1800; viewBox 0 0 1800 620):
+      Легенда сверху: ряд из (legend|length) ячеек, свотч 26px + label 28px,
+      базлайн y=26, ячейки идут слева направо с шагом по тексту (фикс. колонки 420px).
+      Бары ниже: зона y 80..620 (h=540). gutter подписей 360px (текст x=0..340, 30px).
+      Бар стартует от bar_x=400; track_w=1280 → конец @ x=1680; справа 120px зазор.
+      pitch = 540 / N (N=bars|length, 2..5); бар высотой 56px центрирован в полосе
+      (cy = 80 + i*pitch + pitch/2). Сегменты рисуются слева направо как <rect>,
+      ширина wi пропорциональна vi/sum; offset аккумулируется вдоль бара.
+      Сегмент i — var(--accent) с fill-opacity ladder[i]. Под баром — трек var(--bg-card).
+      Без gradient/shadow/rounding, без inline style — только SVG-атрибуты/токены. -#}
+{% set bars = content.bars %}
+{% set legend = content.legend %}
+{% set n = bars | length %}
+{% set ladder = [1.0, 0.78, 0.56, 0.38] %}
+{% set bars_top = 80 %}
+{% set bars_h = 540 %}
+{% set pitch = bars_h / n %}
+{% set bar_h = 56 %}
+{% set gutter = 360 %}
+{% set bar_x = 400 %}
+{% set track_w = 1280 %}
+{% set leg_pitch = 420 %}
+<section class="slide slide--chrome-sm" data-template="stacked-bar">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <svg class="sb-svg m-enter" viewBox="0 0 1800 620" fill="none"
+       xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="{{ content.title }}">
+    {# легенда сверху: свотч opacity-ladder → label сегмента #}
+    {% for lg in legend %}
+    {% set lx = loop.index0 * leg_pitch %}
+    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
+    <rect x="{{ lx }}" y="14" width="26" height="26" rx="0"
+          fill="var(--accent)" fill-opacity="{{ op }}"/>
+    <text x="{{ lx + 40 }}" y="27" dominant-baseline="middle"
+          font-size="28" font-weight="400" fill="var(--fg-body)">{{ lg.label }}</text>
+    {% endfor %}
+    {# составные бары #}
+    {% for b in bars %}
+    {% set cy = bars_top + loop.index0 * pitch + pitch / 2 %}
+    {% set y = cy - bar_h / 2 %}
+    {% set vals = [b.v1, b.v2, b.v3, b.v4] %}
+    {% set sm = namespace(total=0.0) %}
+    {% for v in vals %}{% if v %}{% set sm.total = sm.total + (v | num) %}{% endif %}{% endfor %}
+    {% set total = sm.total or 1 %}
+    <text x="0" y="{{ cy }}" dominant-baseline="middle"
+          font-size="30" font-weight="400" fill="var(--fg-body)">{{ b.label }}</text>
+    <rect x="{{ bar_x }}" y="{{ y }}" width="{{ track_w }}" height="{{ bar_h }}"
+          fill="var(--bg-card)"/>
+    {% set seg = namespace(offset=0.0) %}
+    {% for v in vals %}
+    {% if v %}
+    {% set sw = (v | num) / total * track_w %}
+    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
+    {% set pct = ((v | num) / total * 100) | round | int %}
+    <rect class="sb-seg" x="{{ bar_x + seg.offset }}" y="{{ y }}" width="{{ sw }}" height="{{ bar_h }}"
+          fill="var(--accent)" fill-opacity="{{ op }}"/>
+    {#- %-метка внутри сегмента. Раньше порог sw>90 прятал узкий 3-й сегмент (~7% от
+        1280px ≈ 90px) — выглядело как пропущенные данные. Снижаем порог до 60px и
+        для узких сегментов (60..90px) берём шрифт поменьше (20px вместо 26px);
+        уже 60px (<~5%) — метку молча опускаем (физически не влезает). -#}
+    {% if sw >= 60 %}
+    <text x="{{ bar_x + seg.offset + sw / 2 }}" y="{{ cy }}" text-anchor="middle"
+          dominant-baseline="middle" font-size="{{ 26 if sw >= 90 else 20 }}" font-weight="500"
+          fill="var(--bg)">{{ pct }}%</text>
+    {% endif %}
+    {% set seg.offset = seg.offset + sw %}
+    {% endif %}
+    {% endfor %}
+    {% endfor %}
+  </svg>
+</section>

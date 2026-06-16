@@ -1,0 +1,79 @@
+{#- line-chart: НЕ из Figma — бренд-производный линейный график динамики.
+    Третий график библиотеки (после сравнения-баров и долей-доната): ОДНА метрика
+    во времени — 2–8 точек по упорядоченной оси (годы/кварталы/месяцы), показывает
+    ТРЕНД (рост/падение). Self-contained: только инлайн-SVG, без внешних JS/чарт-
+    библиотек, токены темы, обе темы. Контентный макет — малый логотип
+    (.slide--chrome-sm). Шапка H3+подзаголовок.
+
+    Один бренд-акцент: ломаная-тренд stroke=var(--accent) (зелёный на обеих темах,
+    толщина 4, скруглённые стыки через SVG-атрибут stroke-linejoin — это НЕ CSS-
+    border-radius), под ней лёгкая area-заливка тем же var(--accent) с малой
+    fill-opacity (~0.14) как зелёный wash, НЕ градиент. Маркеры точек — circle
+    var(--accent) с внутренним кольцом var(--bg). Базовая линия и подписи осей
+    нейтральные (трек var(--bg-card), подписи var(--fg-muted)/var(--fg-body)).
+
+    Геометрия (контейнер .line-svg @ left60/top328/width1800; viewBox 0 0 1800 600):
+      поля внутри: левый/правый зазор 80, верх 60 (место под подписи значений),
+      низ 70 (место под подписи оси X). Плот-прямоугольник:
+        originX=80, plotW=1640 (правый край 1720), baselineY=530, plotH=470.
+      Масштаб переиспользует фильтр num (parsing "9,4" / "1 200" / "72"):
+        vals = points.value|num; vmax = max(vals)||1;
+        vmin = min(min(vals), 0) — НИЖНИЙ ПОЛ всегда 0 при положительных данных,
+        чтобы тренд стоял на честном нуле и подъём 9,4→72 читался как реальный
+        климб (а не сжатый отрезок у верха). span = (vmax - vmin)||1 (защита /0).
+      Точка i из N: x = originX + i/(N-1)*plotW (N==1 → центр плота),
+        y = baselineY - (val - vmin)/span * plotH.
+      Ломаная polyline fill=none stroke=var(--accent) width=4; area-polygon идёт
+      по тем же точкам, падает на baselineY и замыкается (fill var(--accent),
+      fill-opacity 0.14, stroke none). Подписи значений (display|value) над
+      точками: показываем ВСЕ при N<=5, иначе только первую и последнюю (защита от
+      коллизий на плотной линии). Подписи оси X (label) под каждой точкой.
+      Без gradient/shadow/CSS-rounding, без inline style — только SVG-атрибуты. -#}
+{% set points = content.points %}
+{% set n = points | length %}
+{% set vals = points | map(attribute='value') | map('num') | list %}
+{% set vmax = (vals | max) or 1 %}
+{% set vmin = [vals | min, 0] | min %}
+{% set span = (vmax - vmin) or 1 %}
+{% set origin_x = 80 %}
+{% set plot_w = 1640 %}
+{% set baseline_y = 530 %}
+{% set plot_h = 470 %}
+{%- set ns = namespace(line='', area=origin_x ~ ',' ~ baseline_y ~ ' ') -%}
+{%- for p in points -%}
+  {%- set vx = origin_x + (loop.index0 / (n - 1) * plot_w if n > 1 else plot_w / 2) -%}
+  {%- set vy = baseline_y - (vals[loop.index0] - vmin) / span * plot_h -%}
+  {%- set ns.line = ns.line ~ vx ~ ',' ~ vy ~ ' ' -%}
+  {%- set ns.area = ns.area ~ vx ~ ',' ~ vy ~ ' ' -%}
+  {%- if loop.last -%}{%- set ns.area = ns.area ~ vx ~ ',' ~ baseline_y -%}{%- endif -%}
+{%- endfor -%}
+<section class="slide slide--chrome-sm" data-template="line-chart">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <svg class="line-svg m-enter" viewBox="0 0 1800 600" fill="none"
+       xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="{{ content.title }}">
+    <line x1="{{ origin_x }}" y1="{{ baseline_y }}" x2="{{ origin_x + plot_w }}" y2="{{ baseline_y }}"
+          stroke="var(--bg-card)" stroke-width="2"/>
+    {#- E2: линия рисуется слева-направо (pathLength=1 → dasharray 1 1, offset 1→0),
+        заливка-area проявляется ближе к концу прорисовки. Покой = видно/нарисовано. -#}
+    <polygon class="line-fade" points="{{ ns.area }}" fill="var(--accent)" fill-opacity="0.14" stroke="none"/>
+    <polyline class="line-draw" pathLength="1" points="{{ ns.line }}" fill="none" stroke="var(--accent)"
+              stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    {% for p in points %}
+    {% set vx = origin_x + (loop.index0 / (n - 1) * plot_w if n > 1 else plot_w / 2) %}
+    {% set vy = baseline_y - (vals[loop.index0] - vmin) / span * plot_h %}
+    <circle class="line-fade" cx="{{ vx }}" cy="{{ vy }}" r="9" fill="var(--accent)"/>
+    <circle class="line-fade" cx="{{ vx }}" cy="{{ vy }}" r="4" fill="var(--bg)"/>
+    {% if n <= 5 or loop.first or loop.last %}
+    <text x="{{ vx }}" y="{{ vy - 26 }}" text-anchor="middle"
+          font-size="28" font-weight="500" fill="var(--fg-body)">{{ p.display or p.value }}</text>
+    {% endif %}
+    <text x="{{ vx }}" y="{{ baseline_y + 40 }}" text-anchor="middle"
+          font-size="26" font-weight="400" fill="var(--fg-muted)">{{ p.label }}</text>
+    {% endfor %}
+  </svg>
+</section>

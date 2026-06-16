@@ -1,0 +1,193 @@
+# Cloud.ru 2.0 — Design Tokens (machine-readable brand contract)
+# ----------------------------------------------------------------------------
+# Назначение: ЕДИНЫЙ источник истины для НЕ-цветовых констант (типографика,
+# сетка, отступы, геометрия, размещение лого/заголовка, компоненты).
+# Цвета остаются в palette.json (он уже wired в brand_guardian / visual_validator
+# / chart_native_pptx / flow_renderer). Loader scripts/design_tokens.py сливает
+# palette.json + этот файл в один API.
+#
+# ВАЖНО (v2.4, Point 1): значения здесь — ТОЧНЫЙ снимок уже существующих констант
+# из renderers и brand-rules.md. Ничего не изменено → нулевая регрессия. Идея
+# контракта — собрать разбросанные числа в одно место, чтобы все рендеры и агенты
+# читали отсюда, а не хардкодили. Улучшения значений (tnum, CAPS-трекинг,
+# enforce scale-ratio) приходят отдельными пунктами 6+ и правят ИМЕННО этот файл.
+#
+# Источники в комментариях: BR=brand-rules.md, DP=design-principles-from-decks.md,
+# CR=template-canonical-rules.md, code=<renderer>.py
+# ----------------------------------------------------------------------------
+
+meta:
+  version: "2.4-point1"
+  canvas: { w: 1280, h: 720 }          # BR §7 — физический PowerPoint 16:9
+  emu_per_px: 9525                      # code: EMU = px × 9525
+
+# ---- Семантические цвета, которых НЕТ в palette.json base -------------------
+# (palette.json остаётся источником для base/extended. Здесь — только то, что
+#  рендеры используют, но в палитре не названо.)
+semantic_colors:
+  text_gray:  "#5C5C5C"                 # DP §A.6 — тело 3-го уровня (flow_renderer TEXT_GRAY)
+  arrow:      "#434343"                 # DP §A.3 / code flow_renderer ARROW_COLOR
+  dash_gray:  "#888888"                 # code flow_renderer DASH_GRAY (рамки фаз)
+  separator:  "#CCCCCC"                 # code flow_renderer SEPARATOR_GRAY
+  copyright:  "#BFBFBF"                 # копирайт-футер: bg1(белый)×lumMod75% (замер из мастера шаблона)
+  # Официальная шкала нейтралей (брендбук, скрин «массы» 2026-06-02):
+  grey1:      "#F2F2F2"                 # = base.Gray
+  grey2:      "#D9D9D9"
+  grey3:      "#434343"
+
+# ---- Иерархия масс цвета (брендбук + user 2026-06-02) -----------------------
+# Сколько КАКОГО цвета по площади. White — больше всего. Дополнительные
+# (Yellow/Purple/Blue) — каждый ≤ Green. Graphite — текст/тёмные секции.
+color_mass:
+  order: [White, grey1, grey2, Green, graphite_text, Yellow, Purple, Blue]
+  rules:
+    - "White (#FFFFFF) — доминирующая масса (фон). Больше всего."
+    - "Greys (#F2F2F2/#D9D9D9) — поверхности/боксы, второй по массе слой."
+    - "Green (#26D07C) — ГЛАВНЫЙ акцент; больше любого дополнительного цвета."
+    - "Yellow/Purple/Blue — ДОПОЛНИТЕЛЬНЫЕ; каждый по массе ≤ Green; применять редко."
+    - "Graphite (#222222) — текст и тёмные секции (не «масса-акцент»)."
+  invariant_additional_le_green: true   # Σ(доп.цвет) ≤ green по площади (enforce в normalizer)
+
+# ---- Типографика -----------------------------------------------------------
+typography:
+  family: "SB Sans Display"             # BR §6 — одно семейство для всего
+  semibold_face: "SB Sans Display Semibold"  # эмфаза = face, НЕ bold-флаг (BR §6, Problem #3)
+  fallback: ["Verdana"]                 # лат fallback
+  fallback_cjk: ["Pingfang", "SimSun"]  # иероглифы
+  # Роли — точные размеры из эталонных слайдов (BR §6) и renderers.
+  # tracking/tnum/caps здесь = ТЕКУЩЕЕ состояние (Point 1). Улучшения — Point 6.
+  roles:
+    display:      { size: 88,  weight: semibold, tracking: 0,  caps: false }  # title 5
+    title_dark:   { size: 44,  weight: semibold, tracking: 0,  caps: false }  # title 8 / CR
+    kpi_hero:     { size: 199, weight: semibold, tracking: 0,  caps: false, tnum: false }  # CR §4
+    kpi_pct:      { size: 88,  weight: semibold, tracking: 0,  caps: false }
+    heading_lg:   { size: 32,  weight: semibold, tracking: 0,  caps: false }  # DP §A.6 крупный заголовок блока
+    header:       { size: 20,  weight: semibold, tracking: 0,  caps: true  }  # DP §A.4 заголовок контент-слайда (CAPS)
+    body:         { size: 16,  weight: regular,  tracking: 0,  caps: false, color: graphite }   # BR §6 стандарт
+    body_dense:   { size: 14,  weight: regular,  tracking: 0,  caps: false }  # CR 3-col
+    caption:      { size: 12,  weight: regular,  tracking: 0,  caps: false, color: text_gray }  # подпись/аннотация
+    number_marker: { size: 56, weight: regular, tracking: 0, caps: false, color: green }  # DP §5A крупный номер
+  line_height:
+    heading: 1.0                        # BR §6 — заголовок 100%
+    body: 1.2                           # BR §6 — body 120%
+  big_number_tracking: [-4, -7]         # BR §6 — крупные цифры отрицательный трекинг
+  min_size_pt: 12                       # BR §6 комфортный минимум (10 — абсолютный)
+
+# ---- Сетка и отступы -------------------------------------------------------
+grid:
+  micro: 2                              # BR §7 — всё кратно 2
+  edge_multiple: 10                     # BR §7 — отступы от края кратны 10
+  margin: 35                            # DP §A.3 — левая граница safe-зоны
+  preset_gap: 4                         # DP §B / code PRESET_GAP — между строками пресетов (≤10)
+  block_gap: 20                         # BR §6 — между блоками ≈ высота заглавной заголовка
+  card_gap: 18                          # DP §B Архетип 2 — между парными панелями
+safe:
+  left: 35                              # DP §A.3 / flow_renderer SAFE_LEFT
+  right: 1245                           # DP §A.3 / flow_renderer SAFE_RIGHT
+  top: 140                              # flow_renderer SAFE_TOP
+  bottom: 660                           # DP §A.3 / flow_renderer SAFE_BOTTOM (выше копирайта)
+
+# ---- Геометрия (инварианты бренда) -----------------------------------------
+geometry:
+  rounded: { none: 0 }                  # BR §2 — ЕДИНСТВЕННОЕ значение радиуса. Прямые углы.
+  line_caps: square                     # BR §2 — квадратное окончание штриха
+  illustration_stroke: [2, 4, 6]        # BR §10 — толщина линий иллюстраций (кратно микромодулю)
+
+# ---- СТОП-ЛИСТ (запрещено; enforce_canonical + slop-linter ловят это) -------
+forbidden:
+  # ЭФФЕКТЫ — запрещены ВООБЩЕ (user 2026-06-02). Бренд плоский: ни теней, ни glow,
+  # ни reflection/softEdge. Снимаются НАДЁЖНО (и явные, и тематический effectRef)
+  # через scripts/effects_util.strip_effects — во всех рендерах и в enforce_canonical.
+  effects:
+    - "a:effectLst"
+    - "a:effectDag"
+    - "a:outerShdw"
+    - "a:innerShdw"
+    - "a:prstShdw"
+    - "a:glow"
+    - "a:reflection"
+    - "a:softEdge"
+  fills:
+    - "a:gradFill"                      # только сплошные заливки (BR §2)
+  text:
+    - underline                         # font-underline запрещён (BR §2)
+    - italic                            # italic запрещён (BR §2)
+  decor:
+    header_rule: true                   # ДЕКОРАТИВНАЯ линия (под/над) у заголовка слайда —
+                                        # запрещена на всех слайдах (DP §A.5 + user 2026-06-02).
+  # Зелёные «недолинии» (user 2026-06-02): запрещены ТОЛЬКО тонкие зелёные
+  # декор-черты, которые НЕ привязаны к сетке/объекту, НЕ держат композицию и
+  # НЕ акцентируют — «висят» сами по себе (как подчёркивание под заголовком).
+  # ЗЕЛЁНЫЙ В ОСТАЛЬНОМ — ОК: цифры, заливки/плашки/чипы/highlight, заливка
+  # колонок и серий графиков, бренд-стрелки (зелёные ИЛИ серые), КОМПОЗИЦИОННЫЕ
+  # линии (hero-рамки) и АКЦЕНТ-бары, привязанные к объекту (KPI-маркер над цифрой).
+  floating_green_pseudolines: true
+
+# ---- Размещение лого и заголовка (заморожённые константы) -------------------
+placement:
+  header:                               # DP §A.4 — заголовок контент-слайда
+    x: 35
+    y: 38
+    role: header                        # → typography.roles.header (20pt SemiBold CAPS)
+    underlay: false                     # без подложки
+    max_lines: 3                        # 2–3 строки без переносов слов
+    divider_below: false                # DP §A.5 — дивайдер под заголовком НЕ ставится
+  header_flow:                          # code flow_renderer — заголовок схемы
+    x: 35
+    y: 60
+  copyright:                            # копирайт-футер (из мастера шаблона; КОНСТАНТА)
+    x: 35
+    y: 696
+    w: 566
+    h: 19
+    size: 6                             # 6pt
+    color: copyright                    # → semantic_colors.copyright #BFBFBF
+    text: "ⓒ 2026 Cloud.ru Любое копирование и воспроизведение содержания (в том числе частичное) без разрешения правообладателя запрещено."
+  logo:                                 # BR §3 — лого Cloud.ru
+    file: "template/рефы/logo.svg"      # РЕАЛЬНЫЙ файл в репо (raster берётся из мастера)
+    # ВАЖНО (user 2026-06-02): лого есть на КАЖДОМ контент-слайде, в правом верхнем
+    # углу — оно приходит из МАСТЕРА шаблона (picture 'Рисунок 10'). Замеры из
+    # Cloud.ru_Template_2026.pptx. y=38 — РОВНО как у header (заголовок слева/лого
+    # справа выровнены), right=1245 — по правой safe-границе. Это снимает прежнее
+    # противоречие «лого только на финале».
+    content: { x: 1096, y: 38, w: 149, h: 29, right: 1245 }
+    finale: { donors: [25, 95] }        # крупная лого-дверь финал-слайда
+    min_height_px: 20
+    colors: ["Green", "Black", "White"]   # только эти; не Blue/Purple/Yellow
+    underlay_on_white: false
+    underlay_on_photo: true             # на фото/паттерне — белая подложка
+    underlay_gap_px: 1
+    clear_space: "знак"                 # охранное поле = высота знака со всех сторон
+
+# ---- Компоненты ------------------------------------------------------------
+components:
+  card:                                 # DP §A.1 — рабочая лошадка
+    fill: Gray                          # → palette base.Gray #F2F2F2
+    text: Black                         # → palette base.Black #222222
+    rounded: none
+    variants:                           # user 2026-06-02
+      default: { chip_pos: top_left }   # мало текста: чип слева сверху, заголовок ПОД чипом
+      text_heavy: { chip_pos: top_right }  # много текста: чип в ПРАВОМ углу, заголовок СЛЕВА
+                                        # вровень по высоте с чипом; перенос на 2-ю строку при наложении
+  chip:                                 # DP §A.10 — зелёный квадратный маячок
+    size: 40                            # острый квадрат, сторона кратна 10 (было 50 → меньше)
+    fill: Green
+    text: Black                         # контент ГРАФИТ regular (white-on-green запрещён)
+    text_size: 12                       # цифра в чипе — 12pt (user 2026-06-02)
+    weight: regular
+    rounded: none
+  accent_block:                         # СИЛЬНЫЙ акцент = субстанциональная зелёная
+    fill: Green                         # ЗАЛИВКА-БЛОК (графитовый текст/цифра на зелёном),
+    text: Black                         # колонка/плашка целиком. Так акцентируем (user 2026-06-02).
+    rounded: none
+  # accent_bar (тонкая зелёная полоса-маркер) — НЕ использовать: слабый акцент,
+  # «так не делай никогда» (user 2026-06-02). Заменён на accent_block / композицию.
+  divider:                              # смысловой разделитель внутри контента
+    fill: Gray
+  arrow:                                # DP §A.3 — ортогональные стрелки flow (процесс)
+    color: arrow                        # → semantic_colors.arrow #434343
+    width_pt: 1.0
+    ortho_only: true                    # только H/V, диагонали запрещены
+  brand_arrow:                          # DP §A.8 — фирменная декор-стрелка ↗
+    color_options: ["Green", "arrow"]   # зелёная ИЛИ серая — обе валидны (user 2026-06-02)
+    default: Green

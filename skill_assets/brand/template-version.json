@@ -1,0 +1,22 @@
+{
+  "_doc": "Маппинг ключевых слайдов в Cloud.ru шаблоне. При обновлении шаблона править только здесь — все native renderers подхватят. Индексы 1-based (как нумеруются слайды в PowerPoint).",
+
+  "template_file": "Cloud.ru_Template_2026.pptx",
+  "template_path": "../Cloud.ru_Template_2026.pptx",
+  "_template_path_doc": "Абсолютный путь к шаблону для авто-резолва (scripts/template_path.py). Поддерживает ~ и $VARS. Если переместишь шаблон — поправь только эту строку. Можно переопределить через env CLOUD_RU_TEMPLATE.",
+  "version": "2026.1",
+
+  "blank_donors": {
+    "_doc": "Слайды с минимальным контентом — используются как 'чистый холст' для native renderers (kpi/image/chart_pptx_native). white=30 (layout 'Контент / Белый 1', bg #FFFFFF), dark=51 (layout 'Контент / темный 1', bg #222222). У обоих TITLE-placeholder в (35,38). ИСПРАВЛЕНО 2026-05-29: было dark=22, но слайд 22 — белый layout (бага: тёмные слайды выходили белыми).",
+    "white": 30,
+    "dark": 51
+  },
+
+  "guide_donors": {
+    "_doc": "Guide-слайды (примеры размеров от дизайнеров Cloud.ru) — НЕ использовать как clone source, только справочно. СВЕРЕНО 2026-06-01 рендером: kpi_white=44 (белый KPI), kpi_dark=45 (тёмный KPI) — было 43/44, съехало на +1 после обновления шаблона 2026-05-26 (слайд 43 теперь дивайдер 'Важная мысль'). Таблицы 53/54 не сдвинулись.",
+    "kpi_white": 44,
+    "kpi_dark": 45,
+    "table_simple": 53,
+    "table_large": 54
+  }
+}

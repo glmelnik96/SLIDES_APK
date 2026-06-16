@@ -1,0 +1,185 @@
+/* Cloud.ru deck — motion.css. IBM Carbon motion: productive/expressive, стаггер. */
+:root{
+  --ease-productive:cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-expressive:cubic-bezier(0.4, 0.14, 0.3, 1);
+  --ease-entrance:cubic-bezier(0, 0, 0.38, 0.9);
+  --ease-exit:cubic-bezier(0.2, 0, 1, 0.9);
+  --fast-01:70ms;
+  --fast-02:110ms;
+  --moderate-01:150ms;
+  --moderate-02:240ms;
+  --slow-01:400ms;
+  --slow-02:700ms;
+}
+
+/* Вход: короткое смещение + fade (IBM: 8–24px, expressive entrance). */
+@keyframes m-enter{
+  from{opacity:0;transform:translateY(16px);}
+  to{opacity:1;transform:translateY(0);}
+}
+@keyframes m-enter-left{
+  from{opacity:0;transform:translateX(-16px);}
+  to{opacity:1;transform:translateX(0);}
+}
+@keyframes m-fade{
+  from{opacity:0;}
+  to{opacity:1;}
+}
+/* Доп. варианты появления (для разнообразия): справа + лёгкий «pop» с масштабом. */
+@keyframes m-enter-right{
+  from{opacity:0;transform:translateX(16px);}
+  to{opacity:1;transform:translateX(0);}
+}
+@keyframes m-enter-scale{
+  from{opacity:0;transform:scale(0.96);}
+  to{opacity:1;transform:scale(1);}
+}
+
+/* Элементы с .m-enter невидимы, пока слайд не активен. */
+.m-enter,.m-enter-left,.m-enter-right,.m-enter-scale,.m-fade{opacity:0;}
+
+.is-active .m-enter{
+  animation:m-enter var(--slow-01) var(--ease-expressive) forwards;
+}
+.is-active .m-enter-left{
+  animation:m-enter-left var(--slow-01) var(--ease-expressive) forwards;
+}
+.is-active .m-enter-right{
+  animation:m-enter-right var(--slow-01) var(--ease-expressive) forwards;
+}
+.is-active .m-enter-scale{
+  animation:m-enter-scale var(--slow-01) var(--ease-expressive) forwards;
+}
+.is-active .m-fade{
+  animation:m-fade var(--moderate-02) var(--ease-productive) forwards;
+}
+.is-active .m-enter--hero{
+  animation-duration:var(--slow-02);
+}
+
+/* Стаггер: каскад с шагом 70мс (IBM staggering). */
+.is-active .m-stagger>*{opacity:0;animation:m-enter var(--slow-01) var(--ease-expressive) forwards;}
+.is-active .m-stagger>*:nth-child(1){animation-delay:70ms;}
+.is-active .m-stagger>*:nth-child(2){animation-delay:140ms;}
+.is-active .m-stagger>*:nth-child(3){animation-delay:210ms;}
+.is-active .m-stagger>*:nth-child(4){animation-delay:280ms;}
+.is-active .m-stagger>*:nth-child(5){animation-delay:350ms;}
+.is-active .m-stagger>*:nth-child(6){animation-delay:420ms;}
+.is-active .m-stagger>*:nth-child(n+7){animation-delay:490ms;}
+
+/* ---- ЛУП-анимации (не только появления): «живой», но сдержанный декор.
+   Все infinite, играют ТОЛЬКО на активном слайде (через .is-active), и видимы
+   в любом кадре — скриншот-пайплайн снимает произвольный кадр лупа, поэтому
+   ни один кадр не должен скрывать/обрезать/сдвигать элемент. Только на ДЕКОРЕ
+   (точки, штрихи рамок/стрелок, лайнарт), никогда на тексте/контенте. Состояние
+   покоя (луп не запущен / reduced-motion / печать) — это видимое состояние. ---- */
+
+/* 1) Пульс акцента: opacity 0.55→1→0.55 (никогда не 0) + микро-масштаб от центра. */
+@keyframes m-loop-pulse{
+  0%,100%{opacity:.55;transform:scale(0.98);}
+  50%{opacity:1;transform:scale(1.02);}
+}
+/* 2) Дрейф паттерна точек: сдвигаем background-position (плитка повторяется
+      бесконечно — край никогда не оголяется), туда-обратно. */
+@keyframes m-loop-drift{
+  from{background-position:5px 5px;}
+  to{background-position:13px 11px;}
+}
+/* 3) «Обводка живёт»: мягкий шиммер штриха рамки/стрелок (0.55→1), без
+      marching-ants (тот выглядит дёшево и может попасть в кадр в слабой фазе). */
+@keyframes m-loop-draw{
+  0%,100%{opacity:.55;}
+  50%{opacity:1;}
+}
+/* 4) Медленный float облаков лайнарта timeline: translateY ±6px от центра. */
+@keyframes m-loop-float{
+  0%,100%{transform:translateY(-6px);}
+  50%{transform:translateY(6px);}
+}
+
+/* Покой = видимое состояние (на случай неактивного слайда или удаления анимации). */
+.m-loop-pulse{transform-origin:center;opacity:1;}
+.m-loop-draw{opacity:1;}
+.m-loop-float{transform:translateY(0);}
+
+.is-active .m-loop-pulse{animation:m-loop-pulse 3s var(--ease-expressive) infinite;}
+.is-active .m-loop-drift{animation:m-loop-drift 16s linear infinite alternate;}
+.is-active .m-loop-draw{animation:m-loop-draw 7s var(--ease-expressive) infinite alternate;}
+.is-active .m-loop-float{animation:m-loop-float 6s var(--ease-expressive) infinite;}
+
+/* ---- E2: ГРАФИКИ РАСТУТ ПРИ ПОЯВЛЕНИИ (keyed на .is-active). Все ≤700мс —
+   скриншот-пайплайн снимает финал на 900мс, поэтому покой = ФИНАЛ (бар полный,
+   дуга на месте, линия прорисована). Анимирует только активный слайд; неактивный
+   слайд и reduced-motion/print показывают конечное состояние мгновенно. ---- */
+
+/* Бары bar-chart/stacked-bar растут слева (scaleX 0→1). transform-box:fill-box
+   нужен, чтобы transform-origin:left работал по геометрии самого <rect> в SVG. */
+@keyframes m-grow-x{
+  from{transform:scaleX(0);}
+  to{transform:scaleX(1);}
+}
+/* Дуги donut/kpi-rings прорисовываются по кругу: dashoffset из «спрятано» в финал.
+   Конкретные start/end задаём через CSS-переменные на элементе (см. шаблоны). */
+@keyframes m-draw-arc{
+  from{stroke-dashoffset:var(--draw-from);}
+  to{stroke-dashoffset:var(--draw-to);}
+}
+/* Линия line-chart рисуется слева-направо (pathLength=1, dasharray 1 1). */
+@keyframes m-draw-line{
+  from{stroke-dashoffset:1;}
+  to{stroke-dashoffset:0;}
+}
+
+/* Покой = финал: бар полный, дуга на месте, линия видна, заливка/маркеры видны. */
+.bar-fill,.sb-seg{transform:scaleX(1);transform-origin:left center;transform-box:fill-box;}
+.arc-draw{stroke-dashoffset:var(--draw-to,0);}
+.line-draw{stroke-dasharray:1 1;stroke-dashoffset:0;}
+.line-fade{opacity:1;}
+
+/* Бары: рост слева, лёгкий стаггер по строкам (max delay+dur ≤700мс). */
+.is-active .bar-fill,.is-active .sb-seg{
+  animation:m-grow-x var(--slow-01) var(--ease-expressive) forwards;}
+.is-active .bar-fill:nth-of-type(2){animation-delay:60ms;}
+.is-active .bar-fill:nth-of-type(3){animation-delay:120ms;}
+.is-active .bar-fill:nth-of-type(4){animation-delay:180ms;}
+.is-active .bar-fill:nth-of-type(5){animation-delay:240ms;}
+.is-active .bar-fill:nth-of-type(n+6){animation-delay:300ms;}
+/* Дуги donut/kpi-rings прорисовываются за ~600мс. */
+.is-active .arc-draw{
+  animation:m-draw-arc var(--slow-02) var(--ease-expressive) forwards;}
+/* Линия рисуется ~600мс, заливка+маркеры проявляются ближе к концу (≤700мс). */
+.is-active .line-draw{
+  animation:m-draw-line var(--slow-02) var(--ease-productive) forwards;}
+.is-active .line-fade{
+  animation:m-fade var(--moderate-02) var(--ease-productive) 300ms backwards;}
+
+/* Доступность: мгновенный fade входов + ПОЛНАЯ остановка лупов в покое-видимом. */
+@media (prefers-reduced-motion: reduce){
+  .is-active .m-enter,.is-active .m-enter-left,.is-active .m-enter-right,
+  .is-active .m-enter-scale,.is-active .m-fade,
+  .is-active .m-stagger>*{animation:m-fade 1ms linear forwards;animation-delay:0ms;}
+  .is-active .m-loop-pulse,.is-active .m-loop-drift,
+  .is-active .m-loop-draw,.is-active .m-loop-float{animation:none;}
+  .m-loop-pulse,.m-loop-draw{opacity:1;transform:none;}
+  .m-loop-float{transform:none;}
+  /* E2: графики — мгновенно финал (бар полный, дуга/линия на месте, заливка видна). */
+  .is-active .bar-fill,.is-active .sb-seg,.is-active .arc-draw,
+  .is-active .line-draw,.is-active .line-fade{animation:none;}
+  .bar-fill,.sb-seg{transform:scaleX(1);}
+  .arc-draw{stroke-dashoffset:var(--draw-to,0);}
+  .line-draw{stroke-dashoffset:0;}
+  .line-fade{opacity:1;}
+}
+
+/* Печать: всё видимо без анимаций (входы и лупы — в видимом покое). */
+@media print{
+  .m-enter,.m-enter-left,.m-enter-right,.m-enter-scale,
+  .m-fade,.m-stagger>*{opacity:1 !important;animation:none !important;}
+  .m-loop-pulse,.m-loop-drift,.m-loop-draw,.m-loop-float{
+    animation:none !important;opacity:1 !important;transform:none !important;}
+  /* E2: графики в печати — финальное видимое состояние без анимаций. */
+  .bar-fill,.sb-seg{animation:none !important;transform:scaleX(1) !important;}
+  .arc-draw{animation:none !important;stroke-dashoffset:var(--draw-to,0) !important;}
+  .line-draw{animation:none !important;stroke-dashoffset:0 !important;}
+  .line-fade{animation:none !important;opacity:1 !important;}
+}
