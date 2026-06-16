@@ -3,38 +3,91 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Slides App</title>
+<title>Slides App — генерация презентаций</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+<header class="topbar">
+  <div class="brand">Slides<span>App</span></div>
+  <div class="topbar-sub">Генерация презентаций на моделях Cloud.ru</div>
+</header>
+
 <main class="wrap">
-  <h1>Генерация презентаций</h1>
-  <section class="modes">
-    <label class="mode"><input type="radio" name="mode" value="verstai" checked>
-      <span>Ребрендинг PPTX по шаблону</span><small>вход: .pptx → .pptx</small></label>
-    <label class="mode"><input type="radio" name="mode" value="design">
-      <span>Генерация PPTX без шаблона</span><small>вход: .pptx → .pptx</small></label>
-    <label class="mode"><input type="radio" name="mode" value="htmlnew">
-      <span>HTML-презентация</span><small>вход: md/txt/docx/pptx → HTML</small></label>
+  <!-- STEP 1 -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">1</span><h2>Выберите режим</h2></div>
+    <div class="modes" id="modes">
+      <label class="mode" data-mode="verstai">
+        <input type="radio" name="mode" value="verstai" checked>
+        <div class="mode-body">
+          <div class="mode-title">Ребрендинг PPTX по шаблону</div>
+          <div class="mode-desc">Готовый .pptx пересобирается по бренд-шаблону Cloud.ru.</div>
+          <div class="mode-io"><span class="tag">вход .pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">.pptx</span></div>
+        </div>
+      </label>
+      <label class="mode" data-mode="design">
+        <input type="radio" name="mode" value="design">
+        <div class="mode-body">
+          <div class="mode-title">Генерация PPTX без шаблона</div>
+          <div class="mode-desc">Нативный дизайн презентации с нуля по содержимому.</div>
+          <div class="mode-io"><span class="tag">вход .pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">.pptx</span></div>
+        </div>
+      </label>
+      <label class="mode" data-mode="htmlnew">
+        <input type="radio" name="mode" value="htmlnew">
+        <div class="mode-body">
+          <div class="mode-title">HTML-презентация <span class="badge">правка в браузере</span></div>
+          <div class="mode-desc">Документ &rarr; HTML-дека. Правка текста и чат-правки, экспорт в PNG.</div>
+          <div class="mode-io"><span class="tag">вход md / txt / docx / pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">HTML &middot; PNG</span></div>
+        </div>
+      </label>
+    </div>
   </section>
 
-  <div id="drop" class="drop">Перетащите файл или
-    <input type="file" id="file"></div>
-  <button id="create" class="btn">Создать</button>
+  <!-- STEP 2 -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">2</span><h2>Загрузите файл</h2></div>
+    <label class="drop" id="drop">
+      <input type="file" id="file" hidden>
+      <div class="drop-inner">
+        <div class="drop-icon">&uarr;</div>
+        <div class="drop-text" id="dropText">Перетащите файл сюда или нажмите, чтобы выбрать</div>
+        <div class="drop-hint" id="dropHint">Допустимо: .pptx</div>
+      </div>
+    </label>
+  </section>
 
-  <section id="progress" class="progress hidden">
+  <!-- STEP 3 -->
+  <section class="step">
+    <div class="step-head"><span class="step-num">3</span><h2>Запустите сборку</h2></div>
+    <button id="create" class="btn btn-lg" disabled>Создать презентацию</button>
+  </section>
+
+  <!-- PROGRESS -->
+  <section id="progress" class="panel hidden">
+    <div class="progress-head">
+      <span class="spinner"></span>
+      <span id="stageLabel" class="stage-label">Подготовка&hellip;</span>
+      <span id="stagePct" class="stage-pct">0%</span>
+    </div>
     <div class="bar"><div id="barfill"></div></div>
-    <p id="stage">…</p>
+    <div id="stageDetail" class="stage-detail"></div>
   </section>
 
-  <section id="result" class="result hidden"></section>
+  <!-- RESULT -->
+  <section id="result" class="panel hidden"></section>
 
+  <!-- HISTORY -->
   <section class="history">
-    <div class="hist-head"><h2>История</h2>
-      <button id="clear" class="btn-link">Очистить</button></div>
-    <ul id="histlist"></ul>
+    <div class="hist-head">
+      <h2>История сборок</h2>
+      <button id="clear" class="btn-link">Очистить</button>
+    </div>
+    <ul id="histlist" class="histlist"></ul>
+    <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию.</div>
   </section>
 </main>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

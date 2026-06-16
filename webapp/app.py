@@ -12,6 +12,7 @@ if not os.environ.get("SLIDES_APP_SKIP_SHIM"):
 from fastapi import (
     FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -110,6 +111,33 @@ def get_deck(session_id: str, download: int = 0):
 async def post_deck(session_id: str, request: Request) -> JSONResponse:
     body = await request.body()
     deck_edit.save_deck(session_id, body.decode("utf-8"))
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/jobs/{session_id}/chat")
+async def post_chat(session_id: str, request: Request) -> JSONResponse:
+    """Rewrite one slide of the deck per a chat instruction (htmlnew/HTML decks)."""
+    from webapp import chat_edit
+    data = await request.json()
+    try:
+        slide_index = int(data["slide_index"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "slide_index required (int)")
+    instruction = (data.get("instruction") or "").strip()
+    if not instruction:
+        raise HTTPException(400, "instruction required")
+    deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+    if deck is None:
+        raise HTTPException(404, "deck not found")
+    html = deck.read_text("utf-8")
+    try:
+        new_html = await run_in_threadpool(
+            chat_edit.rewrite_slide, html, slide_index, instruction)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001 — surface a clear message
+        raise HTTPException(500, f"chat edit failed: {exc}") from exc
+    deck_edit.save_deck(session_id, new_html)
     return JSONResponse({"ok": True})
 
 

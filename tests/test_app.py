@@ -63,3 +63,25 @@ def test_get_deck_seeds_from_result(monkeypatch, tmp_path):
     r = c.get("/api/jobs/abc/deck")
     assert r.status_code == 200
     assert "slide" in r.text
+
+
+def test_chat_endpoint_rewrites_slide(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    import webapp.deck_edit as de
+    import webapp.chat_edit as ce
+    de.save_deck("cs1", '<section class="slide">A</section>')
+    monkeypatch.setattr(appmod.runner, "result_path", lambda sid: None)
+    monkeypatch.setattr(ce, "rewrite_slide",
+                        lambda html, idx, instr, client=None:
+                        '<section class="slide">EDITED</section>')
+    c = _client()
+    r = c.post("/api/jobs/cs1/chat", json={"slide_index": 1, "instruction": "короче"})
+    assert r.status_code == 200
+    assert de.deck_path("cs1").read_text("utf-8") == '<section class="slide">EDITED</section>'
+
+
+def test_chat_endpoint_requires_instruction(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    c = _client()
+    r = c.post("/api/jobs/cs1/chat", json={"slide_index": 1, "instruction": "   "})
+    assert r.status_code == 400

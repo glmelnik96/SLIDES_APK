@@ -1,58 +1,135 @@
 const params = new URLSearchParams(location.search);
-const sessionId = params.get('session');
-const frame = document.getElementById('deck');
-document.getElementById('html').href = `/api/jobs/${sessionId}/deck?download=1`;
+const sessionId = params.get("session");
+const frame = document.getElementById("deck");
+document.getElementById("html").href = `/api/jobs/${sessionId}/deck?download=1`;
 
 let slides = [];
 let current = 0;
+let pendingGoTo = 0; // slide to show after the next iframe load
 
-frame.src = `/api/jobs/${sessionId}/deck`;
+function loadDeck() {
+  // cache-bust so edits/chat rewrites are reflected on reload
+  frame.src = `/api/jobs/${sessionId}/deck?t=${Date.now()}`;
+}
+
 frame.onload = () => {
   const doc = frame.contentDocument;
-  slides = [...doc.querySelectorAll('.slide')];
-  // Make text editable: every leaf element with text gets contenteditable.
-  slides.forEach((s) => s.querySelectorAll('*').forEach((el) => {
+  if (!doc) return;
+  slides = [...doc.querySelectorAll(".slide")];
+  // Make leaf text nodes editable in place.
+  slides.forEach((s) => s.querySelectorAll("*").forEach((el) => {
     if (el.children.length === 0 && el.textContent.trim()) {
-      el.setAttribute('contenteditable', 'true');
+      el.setAttribute("contenteditable", "true");
     }
   }));
-  buildThumbs(doc);
-  goTo(0);
+  buildThumbs();
+  goTo(Math.min(pendingGoTo, slides.length - 1));
 };
 
-function buildThumbs(doc) {
-  const box = document.getElementById('thumbs');
-  box.innerHTML = '';
+function buildThumbs() {
+  const box = document.getElementById("thumbs");
+  box.innerHTML = "";
   slides.forEach((_, i) => {
-    const t = document.createElement('div');
-    t.className = 'thumb';
-    t.textContent = 'Слайд ' + (i + 1);
+    const t = document.createElement("div");
+    t.className = "thumb";
+    t.textContent = "Слайд " + (i + 1);
     t.onclick = () => goTo(i);
     box.appendChild(t);
   });
 }
 
 function goTo(i) {
+  if (!slides.length) return;
   current = Math.max(0, Math.min(slides.length - 1, i));
   const win = frame.contentWindow;
-  if (win.deck && win.deck.goTo) win.deck.goTo(current);
-  document.getElementById('counter').textContent = `${current + 1} / ${slides.length}`;
-  [...document.querySelectorAll('.thumb')].forEach((t, idx) =>
-    t.classList.toggle('active', idx === current));
+  if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
+  document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
+  document.getElementById("chatTarget").textContent = `Слайд ${current + 1}`;
+  [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
+    t.classList.toggle("active", idx === current));
 }
 
-document.getElementById('prev').onclick = () => goTo(current - 1);
-document.getElementById('next').onclick = () => goTo(current + 1);
+document.getElementById("prev").onclick = () => goTo(current - 1);
+document.getElementById("next").onclick = () => goTo(current + 1);
 
-document.getElementById('save').onclick = async () => {
-  const html = '<!DOCTYPE html>' + frame.contentDocument.documentElement.outerHTML;
-  const r = await fetch(`/api/jobs/${sessionId}/deck`, {method:'POST', body: html});
-  alert(r.ok ? 'Сохранено' : 'Ошибка сохранения');
+function currentDeckHtml() {
+  return "<!DOCTYPE html>" + frame.contentDocument.documentElement.outerHTML;
+}
+
+async function saveDeck() {
+  const r = await fetch(`/api/jobs/${sessionId}/deck`, {
+    method: "POST", body: currentDeckHtml(),
+  });
+  return r.ok;
+}
+
+document.getElementById("save").onclick = async () => {
+  const ok = await saveDeck();
+  flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
 
-document.getElementById('png').onclick = async () => {
-  // Save current edits first so the render reflects them.
-  const html = '<!DOCTYPE html>' + frame.contentDocument.documentElement.outerHTML;
-  await fetch(`/api/jobs/${sessionId}/deck`, {method:'POST', body: html});
+document.getElementById("png").onclick = async () => {
+  await saveDeck(); // persist in-place edits before render
   location.href = `/api/jobs/${sessionId}/png.zip`;
 };
+
+function flash(btn, text) {
+  const orig = btn.textContent;
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+/* ---- chat ---- */
+const chatLog = document.getElementById("chatLog");
+const chatText = document.getElementById("chatText");
+const chatSend = document.getElementById("chatSend");
+
+function addMsg(cls, text) {
+  document.getElementById("chatEmpty")?.remove();
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.textContent = text;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return div;
+}
+
+async function sendChat() {
+  const instruction = chatText.value.trim();
+  if (!instruction) return;
+  const slideIndex = current + 1;
+  addMsg("user", `Слайд ${slideIndex}: ${instruction}`);
+  chatText.value = "";
+  chatSend.disabled = true;
+  const thinking = addMsg("bot", "Применяю правку…");
+  // Persist current in-place edits first so the model edits the latest version.
+  await saveDeck();
+  try {
+    const r = await fetch(`/api/jobs/${sessionId}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slide_index: slideIndex, instruction }),
+    });
+    if (!r.ok) {
+      thinking.className = "msg err";
+      thinking.textContent = "Ошибка: " + (await r.text());
+    } else {
+      thinking.textContent = `Слайд ${slideIndex} обновлён.`;
+      pendingGoTo = current;
+      loadDeck(); // reload iframe with the rewritten slide
+    }
+  } catch (e) {
+    thinking.className = "msg err";
+    thinking.textContent = "Ошибка сети: " + e;
+  } finally {
+    chatSend.disabled = false;
+  }
+}
+
+chatSend.onclick = sendChat;
+chatText.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
+});
+
+/* init */
+loadDeck();
