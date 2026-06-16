@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from webapp import deck_edit, history, render_png
 from webapp.paths import session_dir
-from webapp.runner import JobRunner
+from webapp.runner import CapacityError, JobRunner
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -65,20 +65,47 @@ async def create_job(mode: str = Form(...), file: UploadFile = File(...)) -> JSO
     dest.write_bytes(await file.read())
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
 
-    runner.start(inp)
+    try:
+        runner.start(inp)
+    except CapacityError as exc:
+        raise HTTPException(429, str(exc))
     kind = "pptx" if mode in _PPTX_MODES else "html"
     history.add(id=inp.session_id, mode=mode, source_filename=file.filename,
                 result_path=None, kind=kind)
     return JSONResponse({"session_id": inp.session_id, "kind": kind})
 
 
+@app.get("/api/jobs/active")
+def active_jobs() -> JSONResponse:
+    """Jobs currently building (up to MAX_ACTIVE), with current stage/pct."""
+    return JSONResponse(runner.active_jobs())
+
+
+@app.get("/api/jobs/{session_id}/status")
+def job_status(session_id: str) -> JSONResponse:
+    st = runner.status(session_id)
+    if st is None:
+        raise HTTPException(404, "unknown session")
+    return JSONResponse(st)
+
+
 @app.websocket("/ws/{session_id}")
 async def ws_progress(ws: WebSocket, session_id: str) -> None:
     await ws.accept()
+    status = runner.status(session_id)
     queue = runner.queue(session_id)
-    if queue is None:
+    if status is None and queue is None:
         await ws.send_json({"stage": "failed", "terminal": True,
                             "error": "unknown session"})
+        await ws.close()
+        return
+    # Send the current snapshot so a viewer opening a job mid-build sees progress.
+    if status is not None:
+        await ws.send_json(status)
+        if status.get("terminal"):
+            await ws.close()
+            return
+    if queue is None:
         await ws.close()
         return
     while True:

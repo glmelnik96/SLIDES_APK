@@ -101,6 +101,38 @@ $("#clear").onclick = async () => {
   loadHistory();
 };
 
+/* ---- active queue ---- */
+const MAX_ACTIVE = 5;
+
+async function loadActive() {
+  let items = [];
+  try { items = await (await fetch("/api/jobs/active")).json(); } catch (e) { return; }
+  const wrap = $("#activeWrap");
+  const ul = $("#activeList");
+  wrap.hidden = items.length === 0;
+  $("#queueCap").textContent = `${items.length} / ${MAX_ACTIVE}`;
+  ul.innerHTML = "";
+  for (const it of items) {
+    const running = it.stage && it.stage !== "queued";
+    const li = document.createElement("li");
+    const label = MODE_LABEL[it.mode] || it.mode;
+    const state = running
+      ? `${STAGE_LABEL[it.stage] || it.stage} · ${it.progress_pct || 0}%`
+      : "В очереди";
+    const kind = (it.mode === "verstai" || it.mode === "design") ? "pptx" : "html";
+    li.innerHTML =
+      `<div><div class="hist-mode">${label}</div>` +
+      `<div class="hist-meta">${state}</div></div>` +
+      `<div class="hist-spacer"></div>` +
+      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="${kind}">Открыть</button>`;
+    ul.appendChild(li);
+  }
+  ul.querySelectorAll("[data-open]").forEach((b) =>
+    b.addEventListener("click", () => streamProgress(b.dataset.open, b.dataset.kind)));
+}
+
+setInterval(loadActive, 2000);
+
 /* ---- create job ---- */
 $("#create").onclick = async () => {
   if (!selectedFile) return;
@@ -176,3 +208,4 @@ function showResult(sessionId, kind, ev) {
 syncModeHints();
 resetFile();
 loadHistory();
+loadActive();

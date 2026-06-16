@@ -85,3 +85,32 @@ def test_chat_endpoint_requires_instruction(monkeypatch, tmp_path):
     c = _client()
     r = c.post("/api/jobs/cs1/chat", json={"slide_index": 1, "instruction": "   "})
     assert r.status_code == 400
+
+
+def test_active_jobs_endpoint(monkeypatch):
+    monkeypatch.setattr(appmod.runner, "active_jobs",
+                        lambda: [{"session_id": "x", "mode": "htmlnew",
+                                  "stage": "designing", "progress_pct": 45}])
+    r = _client().get("/api/jobs/active")
+    assert r.status_code == 200
+    assert r.json()[0]["session_id"] == "x"
+
+
+def test_status_unknown_404(monkeypatch):
+    monkeypatch.setattr(appmod.runner, "status", lambda sid: None)
+    r = _client().get("/api/jobs/nope/status")
+    assert r.status_code == 404
+
+
+def test_create_job_capacity_429(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    from webapp.runner import CapacityError
+
+    def full(inp):
+        raise CapacityError("максимум 5 сборок одновременно")
+
+    monkeypatch.setattr(appmod.runner, "start", full)
+    c = _client()
+    r = c.post("/api/jobs", data={"mode": "htmlnew"},
+               files={"file": ("x.md", b"# hi", "text/markdown")})
+    assert r.status_code == 429
