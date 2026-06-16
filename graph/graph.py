@@ -31,9 +31,6 @@ output.
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any
-
 import structlog
 from langgraph.graph import END, START, StateGraph
 
@@ -59,7 +56,6 @@ from graph.nodes.pipeline import (
     render_png_node,
 )
 from schemas.session import SessionState
-from storage.redis_client import DB, url_for
 
 
 # Node-name constants kept here so wiring + tests share one source.
@@ -156,26 +152,3 @@ def _build_graph() -> StateGraph:
     g.add_edge(N_AUTOFIX, N_ASSEMBLE)
     g.add_edge(N_FINALIZE, END)
     return g
-
-
-@lru_cache(maxsize=1)
-def get_compiled_graph() -> Any:
-    """Compiled graph with RedisSaver — cached per-process.
-
-    Import is deferred so that unit tests can exercise the graph builder
-    without requiring the langgraph-checkpoint-redis package or a live Redis.
-    """
-    from langgraph.checkpoint.redis import RedisSaver
-
-    saver = RedisSaver.from_conn_string(url_for(DB.LANGGRAPH))
-    # Some versions of the lib expose a context manager — handle both shapes.
-    if hasattr(saver, "__enter__"):
-        saver = saver.__enter__()  # noqa: PLC2801 — long-lived process owns it
-    if hasattr(saver, "setup"):
-        saver.setup()
-    return _build_graph().compile(checkpointer=saver)
-
-
-def thread_config(session_id: str) -> dict[str, dict[str, str]]:
-    """LangGraph addresses checkpoints by `thread_id`. We use session_id."""
-    return {"configurable": {"thread_id": session_id}}

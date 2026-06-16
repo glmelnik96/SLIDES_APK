@@ -11,9 +11,6 @@ dependencies = [
     "python-dotenv>=1.0",
     # Orchestration (LangGraph pipeline for verstai/design)
     "langgraph>=0.2.50,<0.3",
-    "langgraph-checkpoint-redis>=0.0.6",
-    "celery[redis]>=5.5,<5.6",
-    "redis>=5.0,<6.0",
     # LLM client
     "openai>=2.0,<3.0",
     # Validation / config
@@ -48,7 +45,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["webapp*", "graph*", "llm*", "worker*", "schemas*", "storage*",
+include = ["webapp*", "graph*", "llm*", "worker*", "schemas*",
            "renderers*", "bot*", "htmlslides*", "skill_assets*", "scripts*"]
 
 [tool.setuptools.package-data]

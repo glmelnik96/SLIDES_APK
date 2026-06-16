@@ -1,34 +1,22 @@
-"""Progress channel — Redis pub/sub bridge between sync worker and async bot.
+"""Progress channel — emits ProgressEvent updates from the sync engine.
 
-Workers publish ProgressEvent JSON to channel `progress:{session_id}`.
-The bot subscribes and edits the user-facing status message with debouncing.
+The engine (LangGraph nodes / htmlslides build) calls ``stage``/``done``/
+``failed``/``cancelled`` here. ``publish`` is the single sink for those events;
+the web app's JobRunner replaces it at startup with a routing sink that fans
+events out to the right per-session queue (see ``webapp.runner``).
 
-Keep this module *sync* — it's imported into LangGraph nodes that run inside
-Celery prefork tasks. The async side lives in `bot/handlers/progress.py`.
+Keep this module *sync* — it's imported directly into the engine call path.
 """
 from __future__ import annotations
 
-import structlog
-
 from schemas.session import ProgressEvent, Stage
-from storage.redis_client import DB, sync_client
-
-logger = structlog.get_logger(__name__)
-
-
-def channel_name(session_id: str) -> str:
-    return f"progress:{session_id}"
 
 
 def publish(event: ProgressEvent) -> None:
-    """Publish a single progress event. Best-effort — failures are logged
-    but never propagate, so a Redis blip can't kill a slide-render task.
+    """Default sink — a no-op. The runtime (``webapp.runner``) overrides this
+    with its routing sink before any job starts; if a stray event is emitted
+    without a sink installed, drop it silently rather than crash the engine.
     """
-    try:
-        r = sync_client(DB.PUBSUB)
-        r.publish(channel_name(event.session_id), event.model_dump_json())
-    except Exception as e:  # noqa: BLE001
-        logger.warning("progress.publish_failed", session_id=event.session_id, error=str(e))
 
 
 def stage(session_id: str, stage_: Stage, pct: int, detail: str = "") -> None:

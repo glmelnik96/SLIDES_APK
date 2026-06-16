@@ -8,9 +8,6 @@ separate from ``graph.graph`` so /verstai can never be affected.
 """
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import Any
-
 from langgraph.graph import END, START, StateGraph
 
 from graph.designer.nodes import (
@@ -22,7 +19,6 @@ from graph.designer.nodes import (
 from graph.nodes.agents import brief_node, classify_node
 from graph.nodes.pipeline import parse_node
 from schemas.session import SessionState
-from storage.redis_client import DB, url_for
 
 N_PARSE = "parse"
 N_BRIEF = "brief"
@@ -52,15 +48,3 @@ def build_designer_graph() -> StateGraph:
     g.add_edge(N_ASSEMBLE, N_FINALIZE)
     g.add_edge(N_FINALIZE, END)
     return g
-
-
-@lru_cache(maxsize=1)
-def get_compiled_designer_graph() -> Any:
-    from langgraph.checkpoint.redis import RedisSaver
-
-    saver = RedisSaver.from_conn_string(url_for(DB.LANGGRAPH))
-    if hasattr(saver, "__enter__"):
-        saver = saver.__enter__()  # noqa: PLC2801 — long-lived process owns it
-    if hasattr(saver, "setup"):
-        saver.setup()
-    return build_designer_graph().compile(checkpointer=saver)
