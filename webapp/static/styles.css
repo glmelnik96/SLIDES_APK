@@ -1,0 +1,23 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background:#0f0f12; color:#eee; }
+.wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px; }
+h1 { font-size: 22px; }
+.modes { display:flex; flex-direction:column; gap:10px; margin:16px 0; }
+.mode { display:flex; flex-direction:column; padding:12px; border:1px solid #333;
+  border-radius:8px; cursor:pointer; }
+.mode small { color:#888; }
+.drop { border:2px dashed #444; border-radius:8px; padding:24px; text-align:center;
+  margin:12px 0; }
+.btn { background:#2a6; color:#fff; border:0; border-radius:8px; padding:10px 18px;
+  cursor:pointer; font-size:15px; }
+.btn-link { background:none; color:#88a; border:0; cursor:pointer; }
+.hidden { display:none; }
+.progress .bar { height:8px; background:#222; border-radius:4px; overflow:hidden; }
+#barfill { height:100%; width:0; background:#2a6; transition:width .3s; }
+.result { margin-top:16px; padding:16px; border:1px solid #2a6; border-radius:8px; }
+.history { margin-top:32px; }
+.hist-head { display:flex; justify-content:space-between; align-items:center; }
+#histlist { list-style:none; padding:0; }
+#histlist li { display:flex; justify-content:space-between; padding:8px 0;
+  border-bottom:1px solid #222; }
+a { color:#6ad; }

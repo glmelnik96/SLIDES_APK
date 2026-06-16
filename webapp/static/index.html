@@ -1,1 +1,40 @@
-<!DOCTYPE html><title>Slides</title>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slides App</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<main class="wrap">
+  <h1>Генерация презентаций</h1>
+  <section class="modes">
+    <label class="mode"><input type="radio" name="mode" value="verstai" checked>
+      <span>Ребрендинг PPTX по шаблону</span><small>вход: .pptx → .pptx</small></label>
+    <label class="mode"><input type="radio" name="mode" value="design">
+      <span>Генерация PPTX без шаблона</span><small>вход: .pptx → .pptx</small></label>
+    <label class="mode"><input type="radio" name="mode" value="htmlnew">
+      <span>HTML-презентация</span><small>вход: md/txt/docx/pptx → HTML</small></label>
+  </section>
+
+  <div id="drop" class="drop">Перетащите файл или
+    <input type="file" id="file"></div>
+  <button id="create" class="btn">Создать</button>
+
+  <section id="progress" class="progress hidden">
+    <div class="bar"><div id="barfill"></div></div>
+    <p id="stage">…</p>
+  </section>
+
+  <section id="result" class="result hidden"></section>
+
+  <section class="history">
+    <div class="hist-head"><h2>История</h2>
+      <button id="clear" class="btn-link">Очистить</button></div>
+    <ul id="histlist"></ul>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
