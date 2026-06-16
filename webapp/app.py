@@ -36,7 +36,7 @@ runner = JobRunner()
 
 @app.on_event("startup")
 async def _startup() -> None:
-    runner.bind_loop(asyncio.get_event_loop())
+    runner.bind_loop(asyncio.get_running_loop())
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -98,8 +98,8 @@ def download_result(session_id: str) -> FileResponse:
 
 @app.get("/api/jobs/{session_id}/deck", response_class=HTMLResponse)
 def get_deck(session_id: str, download: int = 0):
-    path = deck_edit.deck_path(session_id)
-    if not path.is_file():
+    path = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+    if path is None:
         raise HTTPException(404, "deck not found")
     if download:
         return FileResponse(path, filename="deck.html", media_type="text/html")
@@ -115,8 +115,8 @@ async def post_deck(session_id: str, request: Request) -> JSONResponse:
 
 @app.get("/api/jobs/{session_id}/png.zip")
 def get_png_zip(session_id: str) -> FileResponse:
-    deck = deck_edit.deck_path(session_id)
-    if not deck.is_file():
+    deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+    if deck is None:
         raise HTTPException(404, "deck not found")
     out = session_dir(session_id) / "deck.zip"
     try:

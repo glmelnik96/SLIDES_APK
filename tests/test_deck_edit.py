@@ -22,3 +22,27 @@ def test_save_deck_rejects_empty(monkeypatch, tmp_path):
     import pytest
     with pytest.raises(ValueError):
         deck_edit.save_deck("sess1", "   ")
+
+
+def test_ensure_deck_seeds_from_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    src = tmp_path / "report.html"
+    src.write_text("<html>engine</html>", encoding="utf-8")
+    p = deck_edit.ensure_deck("s1", str(src))
+    assert p is not None
+    assert p.name == "deck.html"
+    assert p.read_text("utf-8") == "<html>engine</html>"
+
+
+def test_ensure_deck_keeps_existing_edits(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    deck_edit.save_deck("s1", "<html>edited</html>")
+    src = tmp_path / "report.html"
+    src.write_text("<html>engine</html>", encoding="utf-8")
+    p = deck_edit.ensure_deck("s1", str(src))
+    assert p.read_text("utf-8") == "<html>edited</html>"
+
+
+def test_ensure_deck_none_when_no_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    assert deck_edit.ensure_deck("s1", None) is None

@@ -52,3 +52,14 @@ def test_create_job_rejects_bad_type(monkeypatch, tmp_path):
     r = c.post("/api/jobs", data={"mode": "verstai"},
                files={"file": ("x.md", b"hi", "text/markdown")})
     assert r.status_code == 400
+
+
+def test_get_deck_seeds_from_result(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    src = tmp_path / "report.html"
+    src.write_text("<section class='slide'>hi</section>", encoding="utf-8")
+    monkeypatch.setattr(appmod.runner, "result_path", lambda sid: str(src))
+    c = _client()
+    r = c.get("/api/jobs/abc/deck")
+    assert r.status_code == 200
+    assert "slide" in r.text
