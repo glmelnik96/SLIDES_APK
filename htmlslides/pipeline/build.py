@@ -57,6 +57,14 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     plan = plan_deck(client, doc, library,
                      slide_images=slide_images, freeform_ok=freeform_ok)
     plan = _normalize_indices(plan)
+    # Пустой план = валидный JSON {"slides": []} от модели (бывает под нагрузкой /
+    # лимитом Cloud.ru). Без этой проверки assemble отдаёт деку-пустышку, и билд
+    # завершается «успехом» с пустым .html. Падаем явно, чтобы вызывающий код
+    # эмитнул FAILED с понятной причиной, а не молчаливый пустой результат.
+    if not plan.slides:
+        raise LLMFormatError(
+            "планировщик вернул пустой план (0 слайдов) — повторите запуск; "
+            "возможно, превышен лимит запросов Cloud.ru")
     _dump(artifacts, "deckplan.json", plan.model_dump_json(indent=2))
 
     progress(f"fill: заполняю {len(plan.slides)} слайдов (параллельно)")

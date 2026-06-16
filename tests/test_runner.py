@@ -17,7 +17,7 @@ class _Event:
                 "result_path": self.result_path}
 
 
-async def test_run_forwards_events_and_captures_result(monkeypatch):
+async def test_run_forwards_events_and_captures_result(monkeypatch, tmp_path):
     r = runner.JobRunner()
     r.bind_loop(asyncio.get_running_loop())
 
@@ -25,9 +25,12 @@ async def test_run_forwards_events_and_captures_result(monkeypatch):
     prog = types.SimpleNamespace(publish=None)
     monkeypatch.setattr(runner, "_progress_module", lambda: prog)
 
+    out = tmp_path / "out.pptx"
+    out.write_bytes(b"PK\x03\x04")  # a real file so the empty-result net passes
+
     def fake_run(inp):
         prog.publish(_Event(stage="parsing"))
-        prog.publish(_Event(terminal=True, stage="done", result_path="/tmp/out.pptx"))
+        prog.publish(_Event(terminal=True, stage="done", result_path=str(out)))
 
     monkeypatch.setattr(runner, "_pipeline_run", fake_run)
 
@@ -41,8 +44,30 @@ async def test_run_forwards_events_and_captures_result(monkeypatch):
         if ev["terminal"]:
             break
     assert events[0]["stage"] == "parsing"
-    assert events[-1]["result_path"] == "/tmp/out.pptx"
-    assert r.result_path("s1") == "/tmp/out.pptx"
+    assert events[-1]["result_path"] == str(out)
+    assert r.result_path("s1") == str(out)
+
+
+async def test_empty_result_is_reported_as_failed(monkeypatch):
+    """A 'done' with a missing/empty result file must not be a silent success."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def fake_run(inp):
+        # Engine claims success but the file was never written.
+        prog.publish(_Event(terminal=True, stage="done",
+                            result_path="/no/such/file.pptx"))
+
+    monkeypatch.setattr(runner, "_pipeline_run", fake_run)
+    inp = types.SimpleNamespace(session_id="s1", mode="verstai")
+    q = r.start(inp)
+    ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["terminal"] is True
+    assert ev["stage"] == "failed"
+    assert "пуст" in ev["error"]
+    assert r.result_path("s1") is None
 
 
 async def test_worker_exception_emits_failed(monkeypatch):

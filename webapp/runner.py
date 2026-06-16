@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 MAX_ACTIVE = 5  # total jobs in the system: 1 running + up to 4 queued
@@ -104,11 +105,23 @@ class JobRunner:
             if sid in self._cancel and not getattr(event, "terminal", False):
                 raise JobCancelled(sid)
             data = event.model_dump(mode="json")
-            self._status[sid] = data
             if data.get("terminal"):
                 if data.get("stage") == "done":
-                    self._results[sid] = data.get("result_path")
+                    # Safety net: never deliver an empty "success". If the engine
+                    # reported done but produced no usable file (None path or a
+                    # missing file — e.g. a degenerate empty plan), surface it as a
+                    # clear failure instead of a silent empty result.
+                    rp = data.get("result_path")
+                    if rp and Path(rp).is_file():
+                        self._results[sid] = rp
+                    else:
+                        data = {"session_id": sid, "stage": "failed",
+                                "terminal": True, "progress_pct": 0,
+                                "result_path": None,
+                                "error": "движок вернул пустой результат "
+                                         "(файл не создан) — повторите запуск"}
                 self._active.discard(sid)
+            self._status[sid] = data
             q = self._queues.get(sid)
             if q is not None and self._loop is not None:
                 asyncio.run_coroutine_threadsafe(q.put(data), self._loop)

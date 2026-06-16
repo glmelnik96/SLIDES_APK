@@ -253,6 +253,12 @@ def native_assemble_node(state: SessionState, out_dir: str | None = None) -> dic
     _emit(state, Stage.RENDERING, pct=85, detail="сборка .pptx")
     arts = _artefacts(state)
     comps = [Composition(**c) for c in (arts.get("compositions") or [])]
+    # Без слайдов assemble отдал бы пустой .pptx, а граф эмитнул бы DONE —
+    # пользователь получил бы «успех» с пустым файлом. Падаем явно → FAILED.
+    if not comps:
+        raise ValueError(
+            "нет ни одного слайда для сборки (пустой план дизайнера) — "
+            "повторите запуск; возможно, превышен лимит запросов Cloud.ru")
     # Default to the shared per-session workdir (honours SLIDESBOT_WORKDIR) so
     # the bot container can read the file for send_document; an explicit out_dir
     # (host validation scripts) overrides it.
