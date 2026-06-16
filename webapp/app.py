@@ -81,6 +81,15 @@ def active_jobs() -> JSONResponse:
     return JSONResponse(runner.active_jobs())
 
 
+@app.post("/api/jobs/{session_id}/cancel")
+def cancel_job(session_id: str) -> JSONResponse:
+    """Stop a running or queued build. Cancellation is cooperative — a running
+    job aborts at its next progress checkpoint."""
+    if not runner.cancel(session_id):
+        raise HTTPException(404, "job not active")
+    return JSONResponse({"ok": True})
+
+
 @app.get("/api/jobs/{session_id}/status")
 def job_status(session_id: str) -> JSONResponse:
     st = runner.status(session_id)

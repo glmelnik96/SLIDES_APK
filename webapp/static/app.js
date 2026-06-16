@@ -124,11 +124,18 @@ async function loadActive() {
       `<div><div class="hist-mode">${label}</div>` +
       `<div class="hist-meta">${state}</div></div>` +
       `<div class="hist-spacer"></div>` +
-      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="${kind}">Открыть</button>`;
+      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="${kind}">Открыть</button>` +
+      `<button class="btn-link btn-stop" data-stop="${it.session_id}">Остановить</button>`;
     ul.appendChild(li);
   }
   ul.querySelectorAll("[data-open]").forEach((b) =>
     b.addEventListener("click", () => streamProgress(b.dataset.open, b.dataset.kind)));
+  ul.querySelectorAll("[data-stop]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      await fetch(`/api/jobs/${b.dataset.stop}/cancel`, { method: "POST" });
+      loadActive();
+    }));
 }
 
 setInterval(loadActive, 2000);
@@ -150,6 +157,45 @@ $("#create").onclick = async () => {
   streamProgress(session_id, kind);
 };
 
+/* If no progress event arrives for this many seconds, warn that the step is
+   taking long (helps tell a slow model call apart from a real hang). */
+const STALL_SECONDS = 30;
+let lastEventAt = 0;
+let heartbeatTimer = null;
+let currentSession = null;
+
+function logLine(stage, detail) {
+  const log = $("#progressLog");
+  const time = new Date().toLocaleTimeString("ru-RU");
+  const label = STAGE_LABEL[stage] || stage || "";
+  const text = detail ? `${label} · ${detail}` : label;
+  const last = log.lastElementChild;
+  if (last && last.dataset.text === text) return;  // skip identical repeats
+  const row = document.createElement("div");
+  row.dataset.text = text;
+  row.innerHTML = `<span class="log-time">${time}</span>${text}`;
+  log.appendChild(row);
+  while (log.children.length > 100) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function tickHeartbeat() {
+  const hb = $("#heartbeat");
+  if (!hb || !lastEventAt) return;
+  const secs = Math.round((Date.now() - lastEventAt) / 1000);
+  if (secs >= STALL_SECONDS) {
+    hb.classList.add("stale");
+    hb.textContent = `нет событий уже ${secs} сек — идёт долгий шаг модели, обычно это нормально`;
+  } else {
+    hb.classList.remove("stale");
+    hb.textContent = secs <= 1 ? "обновлено только что" : `обновлено ${secs} сек назад`;
+  }
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+}
+
 function streamProgress(sessionId, kind) {
   const prog = $("#progress");
   prog.classList.remove("hidden");
@@ -158,32 +204,63 @@ function streamProgress(sessionId, kind) {
   $("#stageLabel").textContent = "Подготовка…";
   $("#stagePct").textContent = "0%";
   $("#stageDetail").textContent = "";
+  $("#progressLog").innerHTML = "";
+  $("#stopBtn").disabled = false;
+  currentSession = sessionId;
+  lastEventAt = Date.now();
+  stopHeartbeat();
+  heartbeatTimer = setInterval(tickHeartbeat, 1000);
+  tickHeartbeat();
 
   const ws = new WebSocket(`ws://${location.host}/ws/${sessionId}`);
   ws.onmessage = (e) => {
     const ev = JSON.parse(e.data);
+    lastEventAt = Date.now();
+    tickHeartbeat();
     const pct = ev.progress_pct || 0;
     $("#barfill").style.width = pct + "%";
     $("#stagePct").textContent = pct + "%";
     $("#stageLabel").textContent = STAGE_LABEL[ev.stage] || ev.stage || "";
     if (ev.detail) $("#stageDetail").textContent = ev.detail;
+    logLine(ev.stage, ev.detail || ev.error);
     if (ev.terminal) {
       ws.close();
+      stopHeartbeat();
+      currentSession = null;
       prog.classList.add("hidden");
       showResult(sessionId, kind, ev);
       loadHistory();
     }
   };
   ws.onerror = () => {
+    stopHeartbeat();
     prog.classList.add("hidden");
     showResult(sessionId, kind, { stage: "failed", error: "Потеряно соединение с сервером" });
   };
 }
 
+$("#stopBtn").onclick = async () => {
+  if (!currentSession) return;
+  $("#stopBtn").disabled = true;
+  $("#stageDetail").textContent = "Останавливаю…";
+  try {
+    await fetch(`/api/jobs/${currentSession}/cancel`, { method: "POST" });
+  } catch (e) {
+    $("#stopBtn").disabled = false;
+  }
+};
+
 function showResult(sessionId, kind, ev) {
   const box = $("#result");
   box.classList.remove("hidden");
   box.classList.toggle("error", ev.stage === "failed");
+  if (ev.stage === "cancelled") {
+    box.innerHTML =
+      `<h3>Сборка остановлена</h3>` +
+      `<p>Генерация прервана по запросу.</p>` +
+      `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
+    return;
+  }
   if (ev.stage === "failed") {
     box.innerHTML =
       `<h3>Не удалось собрать презентацию</h3>` +

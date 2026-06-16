@@ -1,4 +1,6 @@
 import asyncio
+import threading
+import time
 import types
 import webapp.runner as runner
 
@@ -59,3 +61,49 @@ async def test_worker_exception_emits_failed(monkeypatch):
     assert ev["terminal"] is True
     assert ev["stage"] == "failed"
     assert "kaboom" in ev["error"]
+
+
+async def test_cancel_queued_job_emits_cancelled(monkeypatch):
+    """A job still waiting in the queue is cancelled instantly via its Future."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    release = threading.Event()
+    monkeypatch.setattr(runner, "_pipeline_run", lambda inp: release.wait(timeout=5))
+
+    a = types.SimpleNamespace(session_id="a", mode="verstai")
+    b = types.SimpleNamespace(session_id="b", mode="verstai")
+    r.start(a)          # occupies the single worker thread
+    qb = r.start(b)     # queued behind a — never starts
+
+    assert r.cancel("b") is True
+    ev = await asyncio.wait_for(qb.get(), timeout=2)
+    assert ev["terminal"] is True and ev["stage"] == "cancelled"
+    assert "b" not in r._active
+    release.set()
+
+
+async def test_cancel_running_job_aborts_at_next_event(monkeypatch):
+    """A running job aborts cooperatively: the sink raises at the next emit."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def run(inp):
+        prog.publish(_Event(stage="parsing"))
+        while "s1" not in r._cancel:      # wait for the stop request
+            time.sleep(0.005)
+        prog.publish(_Event(stage="classifying"))  # sink raises JobCancelled here
+
+    monkeypatch.setattr(runner, "_pipeline_run", run)
+    inp = types.SimpleNamespace(session_id="s1", mode="verstai")
+    q = r.start(inp)
+
+    first = await asyncio.wait_for(q.get(), timeout=2)
+    assert first["stage"] == "parsing"
+    assert r.cancel("s1") is True
+    ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["terminal"] is True and ev["stage"] == "cancelled"

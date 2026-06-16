@@ -22,6 +22,16 @@ class CapacityError(RuntimeError):
     """Raised when the active-job limit (MAX_ACTIVE) is reached."""
 
 
+class JobCancelled(Exception):
+    """Raised inside the worker thread to abort a job on user request.
+
+    Cancellation is cooperative: the routing sink raises this from within
+    ``worker.progress.publish`` the next time the engine emits progress, so the
+    abort lands at a safe checkpoint (between slides / pipeline nodes) and unwinds
+    the engine call stack back to ``work()``.
+    """
+
+
 def _progress_module():
     from worker import progress
     return progress
@@ -49,6 +59,8 @@ class JobRunner:
         self._status: dict[str, dict] = {}     # session_id -> latest event dict
         self._meta: dict[str, dict] = {}       # session_id -> {mode}
         self._active: set[str] = set()
+        self._futures: dict[str, Any] = {}     # session_id -> Future
+        self._cancel: set[str] = set()         # session_ids asked to stop
         self._sink_installed = False
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -88,6 +100,9 @@ class JobRunner:
 
         def sink(event: Any) -> None:
             sid = getattr(event, "session_id", None)
+            # Cooperative cancellation: abort the engine at this checkpoint.
+            if sid in self._cancel and not getattr(event, "terminal", False):
+                raise JobCancelled(sid)
             data = event.model_dump(mode="json")
             self._status[sid] = data
             if data.get("terminal"):
@@ -121,11 +136,42 @@ class JobRunner:
                 _pipeline_run(inp)
             except Exception as exc:  # noqa: BLE001
                 self._active.discard(session_id)
-                failed = {"stage": "failed", "terminal": True,
+                # A JobCancelled (or any error after a stop was requested, e.g. the
+                # engine framework re-wrapping it) is reported as a clean cancel.
+                if isinstance(exc, JobCancelled) or session_id in self._cancel:
+                    ev = {"stage": "cancelled", "terminal": True,
+                          "progress_pct": 0, "result_path": None}
+                else:
+                    ev = {"stage": "failed", "terminal": True,
                           "error": f"{type(exc).__name__}: {exc}", "result_path": None}
-                self._status[session_id] = failed
+                self._status[session_id] = ev
                 if self._loop is not None:
-                    asyncio.run_coroutine_threadsafe(queue.put(failed), self._loop)
+                    asyncio.run_coroutine_threadsafe(queue.put(ev), self._loop)
+            finally:
+                self._cancel.discard(session_id)
+                self._futures.pop(session_id, None)
 
-        self._pool.submit(work)
+        self._futures[session_id] = self._pool.submit(work)
         return queue
+
+    def cancel(self, session_id: str) -> bool:
+        """Request stop of an active job. Returns False if it isn't active.
+
+        A queued (not-yet-started) job is cancelled instantly via its Future and a
+        terminal `cancelled` event is emitted here. A running job is flagged; the
+        routing sink raises JobCancelled at the next progress checkpoint."""
+        if session_id not in self._active:
+            return False
+        self._cancel.add(session_id)
+        fut = self._futures.get(session_id)
+        if fut is not None and fut.cancel():  # was still queued — never ran
+            self._active.discard(session_id)
+            self._cancel.discard(session_id)
+            self._futures.pop(session_id, None)
+            ev = {"stage": "cancelled", "terminal": True,
+                  "progress_pct": 0, "result_path": None}
+            self._status[session_id] = ev
+            q = self._queues.get(session_id)
+            if q is not None and self._loop is not None:
+                asyncio.run_coroutine_threadsafe(q.put(ev), self._loop)
+        return True

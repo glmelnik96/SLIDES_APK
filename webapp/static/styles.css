@@ -108,6 +108,17 @@ h1, h2, h3, .brand, .stage-label, .mode-title { font-family: var(--font-display)
 .bar { height: 8px; background: #0c0d11; border-radius: 5px; overflow: hidden; }
 #barfill { height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
 .stage-detail { margin-top: 8px; color: var(--muted); font-size: 13px; min-height: 18px; word-break: break-word; }
+.btn-stop { margin-left: 12px; color: var(--danger); }
+.heartbeat { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.heartbeat.stale { color: var(--danger); }
+.progress-log {
+  margin-top: 10px; max-height: 150px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 8px; background: #0c0d11;
+  padding: 8px 10px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.5; color: var(--muted);
+}
+.progress-log:empty { display: none; }
+.progress-log .log-time { color: #4a4d57; margin-right: 8px; }
 .spinner {
   width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--accent);
   border-radius: 50%; animation: spin 0.8s linear infinite;
