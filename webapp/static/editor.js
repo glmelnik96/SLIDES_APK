@@ -22,9 +22,29 @@ frame.onload = () => {
       el.setAttribute("contenteditable", "true");
     }
   }));
+  suppressDeckNavOnEdit(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
 };
+
+// The deck engine (deck.js) attaches document-level click/keydown handlers that
+// page through slides (click in left/right third → prev/next; arrows/space → nav).
+// In the editor that hijacks clicking-to-edit and typing. We install capture-phase
+// listeners that stop propagation when the user is interacting with editable text,
+// so the deck's navigation handlers never fire during editing.
+function suppressDeckNavOnEdit(doc) {
+  doc.addEventListener("click", (e) => {
+    if (e.target.closest && e.target.closest('[contenteditable="true"]')) {
+      e.stopPropagation();
+    }
+  }, true);
+  doc.addEventListener("keydown", (e) => {
+    const el = e.target;
+    if (el && (el.isContentEditable || el.closest?.('[contenteditable="true"]'))) {
+      e.stopPropagation();
+    }
+  }, true);
+}
 
 function buildThumbs() {
   const box = document.getElementById("thumbs");
