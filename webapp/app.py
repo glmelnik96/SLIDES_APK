@@ -22,6 +22,23 @@ from webapp.runner import CapacityError, JobRunner
 
 _STATIC = Path(__file__).parent / "static"
 
+
+def _serve_shell(name: str) -> "HTMLResponse":
+    """Serve an app-shell HTML page with cache-busted static asset URLs.
+
+    Browsers aggressively cache /static/*.js|css; without busting, a shipped fix
+    to editor.js/app.js may never reach a user whose browser cached the old file.
+    We append ?v=<latest static mtime> to every local .js/.css reference so any
+    change invalidates the cache, while unchanged assets stay cacheable.
+    """
+    import re
+    html = (_STATIC / name).read_text("utf-8")
+    mtimes = [p.stat().st_mtime for p in _STATIC.glob("*.js")]
+    mtimes += [p.stat().st_mtime for p in _STATIC.glob("*.css")]
+    token = str(int(max(mtimes))) if mtimes else "0"
+    html = re.sub(r'(/static/[\w./-]+\.(?:js|css))"', rf'\1?v={token}"', html)
+    return HTMLResponse(html)
+
 # Allowed upload extensions per mode.
 _ALLOWED = {
     "verstai": {".pptx"},
@@ -42,12 +59,12 @@ async def _startup() -> None:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    return HTMLResponse((_STATIC / "index.html").read_text("utf-8"))
+    return _serve_shell("index.html")
 
 
 @app.get("/editor", response_class=HTMLResponse)
 def editor() -> HTMLResponse:
-    return HTMLResponse((_STATIC / "editor.html").read_text("utf-8"))
+    return _serve_shell("editor.html")
 
 
 @app.post("/api/jobs")

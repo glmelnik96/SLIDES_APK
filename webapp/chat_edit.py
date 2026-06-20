@@ -47,7 +47,11 @@ def _extract_section(reply: str) -> str:
 
 def _kimi():
     from htmlslides.pipeline.client import KimiClient
-    return KimiClient()
+    # Interactive single-slide edit: bound latency so a stalled request fails fast
+    # instead of riding the engine's long batch-build budget (300s × 5 retries).
+    # The browser also enforces its own 4-min ceiling; this keeps the server task
+    # from outliving it.
+    return KimiClient(timeout=90.0, max_retries=2)
 
 
 def _system_prompt() -> str:

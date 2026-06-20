@@ -76,6 +76,8 @@ class KimiClient:
                  base_url: Optional[str] = None,
                  model: Optional[str] = None,
                  rps: Optional[float] = None,
+                 timeout: float = 300.0,
+                 max_retries: int = 5,
                  transport=None) -> None:
         self.model = model or os.environ.get("CLOUDRU_MODEL", DEFAULT_MODEL)
         if rps is None:
@@ -97,8 +99,8 @@ class KimiClient:
         self._client = OpenAI(
             api_key=key,
             base_url=base_url or os.environ.get("CLOUDRU_BASE_URL", DEFAULT_BASE_URL),
-            max_retries=5,            # 429/5xx ретраит сам openai-клиент (экспонента)
-            timeout=300.0)
+            max_retries=max_retries,  # 429/5xx ретраит сам openai-клиент (экспонента)
+            timeout=timeout)
 
     def chat(self, messages: list[dict], *, max_tokens: int = 4096,
              temperature: float = 0.3) -> str:

@@ -73,7 +73,12 @@ document.getElementById("prev").onclick = () => goTo(current - 1);
 document.getElementById("next").onclick = () => goTo(current + 1);
 
 function currentDeckHtml() {
-  return "<!DOCTYPE html>" + frame.contentDocument.documentElement.outerHTML;
+  const doc = frame.contentDocument;
+  if (!doc || !doc.documentElement) {
+    // iframe is mid-reload or not ready — caller must handle this.
+    throw new Error("дека ещё не загрузилась, подождите секунду");
+  }
+  return "<!DOCTYPE html>" + doc.documentElement.outerHTML;
 }
 
 async function saveDeck() {
@@ -114,21 +119,54 @@ function addMsg(cls, text) {
   return div;
 }
 
+// A chat edit calls Kimi (a reasoning model) and can legitimately take a couple
+// of minutes. Bound it so a stalled request can never hang the page forever, and
+// keep the user informed + able to cancel.
+const CHAT_TIMEOUT_MS = 240000; // 4 min hard ceiling
+let chatInFlight = null;        // AbortController while a request is running
+let chatTimerId = null;
+
+function setChatBusy(busy) {
+  chatSend.textContent = busy ? "Отмена" : "Применить к слайду";
+  chatSend.classList.toggle("btn-stop", busy);
+}
+
+function tickElapsed(thinking, t0) {
+  const secs = Math.round((Date.now() - t0) / 1000);
+  thinking.textContent = `Применяю правку… ${secs} сек (можно отменить)`;
+}
+
 async function sendChat() {
+  // If a request is already running, the button acts as Cancel.
+  if (chatInFlight) {
+    chatInFlight.abort();
+    return;
+  }
   const instruction = chatText.value.trim();
   if (!instruction) return;
   const slideIndex = current + 1;
   addMsg("user", `Слайд ${slideIndex}: ${instruction}`);
   chatText.value = "";
-  chatSend.disabled = true;
+
   const thinking = addMsg("bot", "Применяю правку…");
-  // Persist current in-place edits first so the model edits the latest version.
-  await saveDeck();
+  const t0 = Date.now();
+  const controller = new AbortController();
+  chatInFlight = controller;
+  let timedOut = false;
+  setChatBusy(true);
+  chatTimerId = setInterval(() => tickElapsed(thinking, t0), 1000);
+  const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); },
+                               CHAT_TIMEOUT_MS);
+
   try {
+    // Persist current in-place edits first so the model edits the latest version.
+    // Inside try so a failure here can't leave the UI permanently stuck.
+    await saveDeck();
     const r = await fetch(`/api/jobs/${sessionId}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slide_index: slideIndex, instruction }),
+      signal: controller.signal,
     });
     if (!r.ok) {
       thinking.className = "msg err";
@@ -140,9 +178,20 @@ async function sendChat() {
     }
   } catch (e) {
     thinking.className = "msg err";
-    thinking.textContent = "Ошибка сети: " + e;
+    if (timedOut) {
+      thinking.textContent =
+        "Правка отменена: превышено время ожидания (4 мин). Попробуйте ещё раз.";
+    } else if (e && e.name === "AbortError") {
+      thinking.textContent = "Правка отменена.";
+    } else {
+      thinking.textContent = "Ошибка: " + (e && e.message ? e.message : e);
+    }
   } finally {
-    chatSend.disabled = false;
+    clearTimeout(timeoutId);
+    clearInterval(chatTimerId);
+    chatTimerId = null;
+    chatInFlight = null;
+    setChatBusy(false);
   }
 }
 

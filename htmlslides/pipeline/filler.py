@@ -13,12 +13,26 @@ from concurrent.futures import ThreadPoolExecutor
 
 from pydantic import BaseModel, Field
 
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError,
+)
+
 from ..brand import brand_rules
 from ..library import TemplateLibrary
 from ..models import DeckPlan, SlidePlan
 from .client import KimiClient, LLMFormatError
 from .linter import ALLOWED_CLASSES
 from .planner import slot_brief
+
+# Transient API failures that hit a SINGLE slide (after the OpenAI client already
+# exhausted its own retries): rate limits, timeouts, dropped connections, 5xx.
+# Under concurrent load these are common; they must NOT abort the whole deck.
+_TRANSIENT_API_ERRORS = (
+    RateLimitError, APITimeoutError, APIConnectionError, InternalServerError,
+)
 
 
 class FillError(RuntimeError):
@@ -128,6 +142,13 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
             return fill_slide(client, library, slide, deck_title=plan.title)
         except FillError as exc:
             progress(f"warn: слайд {slide.index} не заполнен ({exc}); фолбэк на blank")
+            return _fallback_slide(library, slide)
+        except _TRANSIENT_API_ERRORS as exc:
+            # Транзиентный сбой API на ОДНОМ слайде (лимит/таймаут/5xx после
+            # собственных ретраев клиента) НЕ должен ронять всю деку — частая
+            # ситуация под нагрузкой. Деградируем слайд на blank, как и FillError.
+            progress(f"warn: слайд {slide.index} — сбой API ({type(exc).__name__}); "
+                     "фолбэк на blank")
             return _fallback_slide(library, slide)
         except Exception:
             aborted.set()

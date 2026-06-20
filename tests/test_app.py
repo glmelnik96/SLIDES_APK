@@ -16,6 +16,17 @@ def test_index_served():
     assert "text/html" in r.headers["content-type"]
 
 
+def test_shell_cache_busts_static_assets():
+    """Served HTML shells must append ?v=<token> to local js/css so a shipped
+    fix to editor.js/app.js reaches browsers instead of being cached forever."""
+    import re
+    for path in ("/", "/editor"):
+        html = _client().get(path).text
+        assets = re.findall(r'/static/[\w./-]+\.(?:js|css)(\?v=\d+)?', html)
+        assert assets, f"no static assets found in {path}"
+        assert all(q for q in assets), f"un-busted static asset in {path}: {assets}"
+
+
 def test_history_endpoints(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
     c = _client()
