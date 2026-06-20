@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Any
 
 MAX_ACTIVE = 5  # total jobs in the system: 1 running + up to 4 queued
+MAX_PER_USER = 3  # how many jobs one user may have in the system at once
 
 
 class CapacityError(RuntimeError):
-    """Raised when the active-job limit (MAX_ACTIVE) is reached."""
+    """Raised when a capacity limit (global MAX_ACTIVE or per-user) is reached."""
 
 
 class JobCancelled(Exception):
@@ -49,12 +50,14 @@ def _mode_of(inp: Any) -> str:
 
 
 class JobRunner:
-    def __init__(self, max_active: int = MAX_ACTIVE) -> None:
+    def __init__(self, max_active: int = MAX_ACTIVE,
+                 max_per_user: int = MAX_PER_USER) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         # One worker = strict FIFO; queued jobs wait their turn. Matches the
         # shared Cloud.ru RPS ceiling (parallel jobs wouldn't go faster).
         self._pool = ThreadPoolExecutor(max_workers=1)
         self._max_active = max_active
+        self._max_per_user = max_per_user
         self._queues: dict[str, asyncio.Queue] = {}
         self._results: dict[str, str | None] = {}
         self._status: dict[str, dict] = {}     # session_id -> latest event dict
@@ -63,6 +66,13 @@ class JobRunner:
         self._futures: dict[str, Any] = {}     # session_id -> Future
         self._cancel: set[str] = set()         # session_ids asked to stop
         self._sink_installed = False
+        # Optional async hook(session_id, data) scheduled on the loop when a job
+        # reaches a terminal event — lets the app persist final status to the DB
+        # without the runner knowing about the DB.
+        self._terminal_hook: Any = None
+
+    def set_terminal_hook(self, hook: Any) -> None:
+        self._terminal_hook = hook
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -80,18 +90,25 @@ class JobRunner:
     def active_count(self) -> int:
         return len(self._active)
 
-    def active_jobs(self) -> list[dict]:
-        """Snapshot of jobs not yet terminal: id, mode, stage, progress_pct."""
+    def active_jobs(self, user_id: int | None = None) -> list[dict]:
+        """Snapshot of jobs not yet terminal: id, mode, stage, progress_pct.
+        If user_id is given, only that user's jobs are returned."""
         out = []
         for sid in self._active:
+            meta = self._meta.get(sid, {})
+            if user_id is not None and meta.get("user_id") != user_id:
+                continue
             st = self._status.get(sid) or {}
             out.append({
                 "session_id": sid,
-                "mode": self._meta.get(sid, {}).get("mode", ""),
+                "mode": meta.get("mode", ""),
                 "stage": st.get("stage", "queued"),
                 "progress_pct": st.get("progress_pct", 0),
             })
         return out
+
+    def owner(self, session_id: str) -> int | None:
+        return self._meta.get(session_id, {}).get("user_id")
 
     # ── routing sink ─────────────────────────────────────────────────────
     def _install_sink(self) -> None:
@@ -122,6 +139,9 @@ class JobRunner:
                                          "(файл не создан) — повторите запуск"}
                 self._active.discard(sid)
             self._status[sid] = data
+            if data.get("terminal") and self._terminal_hook and self._loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._terminal_hook(sid, data), self._loop)
             q = self._queues.get(sid)
             if q is not None and self._loop is not None:
                 asyncio.run_coroutine_threadsafe(q.put(data), self._loop)
@@ -130,16 +150,24 @@ class JobRunner:
         self._sink_installed = True
 
     # ── job lifecycle ────────────────────────────────────────────────────
-    def start(self, inp: Any) -> asyncio.Queue:
+    def start(self, inp: Any, *, user_id: int | None = None) -> asyncio.Queue:
         assert self._loop is not None, "bind_loop() must be called at startup"
         if len(self._active) >= self._max_active:
-            raise CapacityError(f"максимум {self._max_active} сборок одновременно")
+            raise CapacityError(f"очередь занята: максимум {self._max_active} "
+                                "сборок одновременно, попробуйте позже")
+        if user_id is not None:
+            mine = sum(1 for sid in self._active
+                       if self._meta.get(sid, {}).get("user_id") == user_id)
+            if mine >= self._max_per_user:
+                raise CapacityError(
+                    f"у вас уже {mine} активных сборок (лимит "
+                    f"{self._max_per_user}) — дождитесь завершения")
         self._install_sink()
         session_id = inp.session_id
         queue: asyncio.Queue = asyncio.Queue()
         self._queues[session_id] = queue
         self._results[session_id] = None
-        self._meta[session_id] = {"mode": _mode_of(inp)}
+        self._meta[session_id] = {"mode": _mode_of(inp), "user_id": user_id}
         self._status[session_id] = {"stage": "queued", "progress_pct": 0,
                                     "terminal": False}
         self._active.add(session_id)
@@ -152,13 +180,17 @@ class JobRunner:
                 # A JobCancelled (or any error after a stop was requested, e.g. the
                 # engine framework re-wrapping it) is reported as a clean cancel.
                 if isinstance(exc, JobCancelled) or session_id in self._cancel:
-                    ev = {"stage": "cancelled", "terminal": True,
-                          "progress_pct": 0, "result_path": None}
+                    ev = {"session_id": session_id, "stage": "cancelled",
+                          "terminal": True, "progress_pct": 0, "result_path": None}
                 else:
-                    ev = {"stage": "failed", "terminal": True,
-                          "error": f"{type(exc).__name__}: {exc}", "result_path": None}
+                    ev = {"session_id": session_id, "stage": "failed",
+                          "terminal": True, "result_path": None,
+                          "error": f"{type(exc).__name__}: {exc}"}
                 self._status[session_id] = ev
                 if self._loop is not None:
+                    if self._terminal_hook:
+                        asyncio.run_coroutine_threadsafe(
+                            self._terminal_hook(session_id, ev), self._loop)
                     asyncio.run_coroutine_threadsafe(queue.put(ev), self._loop)
             finally:
                 self._cancel.discard(session_id)

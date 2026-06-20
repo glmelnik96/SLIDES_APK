@@ -1,127 +1,178 @@
-import os
 import asyncio
+import os
 os.environ["SLIDES_APP_SKIP_SHIM"] = "1"
 
 from fastapi.testclient import TestClient
 import webapp.app as appmod
+import webapp.config as cfg
 
 
-def _client():
+def _client(monkeypatch, tmp_path, db="t.db"):
+    """TestClient with an isolated temp DB + workdir, emulating one process."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    monkeypatch.setattr(cfg.settings, "db_url",
+                        f"sqlite+aiosqlite:///{tmp_path / db}")
+    monkeypatch.setattr(cfg.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(cfg.settings, "dev_user_id", "")  # require header
     return TestClient(appmod.app)
 
 
-def test_index_served():
-    r = _client().get("/")
-    assert r.status_code == 200
-    assert "text/html" in r.headers["content-type"]
+def H(uid="u1"):
+    return {"X-User-Id": uid}
 
 
-def test_shell_cache_busts_static_assets():
-    """Served HTML shells must append ?v=<token> to local js/css so a shipped
-    fix to editor.js/app.js reaches browsers instead of being cached forever."""
+def _no_run(monkeypatch):
+    monkeypatch.setattr(appmod.runner, "start", lambda inp, **kw: asyncio.Queue())
+
+
+def test_index_served(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.get("/")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+
+
+def test_shell_cache_busts_static_assets(monkeypatch, tmp_path):
     import re
-    for path in ("/", "/editor"):
-        html = _client().get(path).text
-        assets = re.findall(r'/static/[\w./-]+\.(?:js|css)(\?v=\d+)?', html)
-        assert assets, f"no static assets found in {path}"
-        assert all(q for q in assets), f"un-busted static asset in {path}: {assets}"
+    with _client(monkeypatch, tmp_path) as c:
+        for path in ("/", "/editor"):
+            html = c.get(path).text
+            assets = re.findall(r'/static/[\w./-]+\.(?:js|css)(\?v=\d+)?', html)
+            assert assets and all(q for q in assets)
 
 
-def test_history_endpoints(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
-    c = _client()
-    assert c.get("/api/history").json() == []
-    import webapp.history as history
-    history.add(id="a", mode="htmlnew", source_filename="x.md",
-                result_path="p", kind="html")
-    assert len(c.get("/api/history").json()) == 1
-    assert c.post("/api/history/clear").status_code == 200
-    assert c.get("/api/history").json() == []
+def test_api_requires_gateway_header(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/api/history").status_code == 401
+        assert c.get("/api/jobs/active").status_code == 401
 
 
-def test_create_job_starts_runner(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+def test_create_job_starts_runner_html_only(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
     started = {}
-
-    def fake_start(inp):
-        started["mode"] = inp.mode.value
-        started["session"] = inp.session_id
-        return asyncio.Queue()
-
-    monkeypatch.setattr(appmod.runner, "start", fake_start)
-    c = _client()
-    r = c.post("/api/jobs", data={"mode": "htmlnew"},
-               files={"file": ("x.md", b"# hi", "text/markdown")})
-    assert r.status_code == 200
-    assert "session_id" in r.json()
-    assert started["mode"] == "htmlnew"
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(mode=inp.mode.value,
+                                                         user=kw.get("user_id"))
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert r.status_code == 200
+        assert r.json()["kind"] == "html"
+        assert started["mode"] == "htmlnew"
+        assert started["user"] is not None
 
 
-def test_create_job_rejects_bad_type(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
-    c = _client()
-    r = c.post("/api/jobs", data={"mode": "verstai"},
-               files={"file": ("x.md", b"hi", "text/markdown")})
-    assert r.status_code == 400
+def test_pptx_modes_rejected(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        for mode in ("verstai", "design"):
+            r = c.post("/api/jobs", data={"mode": mode},
+                       files={"file": ("x.pptx", b"PK", "application/octet-stream")},
+                       headers=H())
+            assert r.status_code == 400
 
 
-def test_get_deck_seeds_from_result(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
-    src = tmp_path / "report.html"
-    src.write_text("<section class='slide'>hi</section>", encoding="utf-8")
-    monkeypatch.setattr(appmod.runner, "result_path", lambda sid: str(src))
-    c = _client()
-    r = c.get("/api/jobs/abc/deck")
-    assert r.status_code == 200
-    assert "slide" in r.text
+def test_history_scoped_to_user(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/api/history", headers=H("u1")).json() == []
+        c.post("/api/jobs", data={"mode": "htmlnew"},
+               files={"file": ("a.md", b"# a", "text/markdown")}, headers=H("u1"))
+        # u1 sees their job; u2 sees nothing
+        assert len(c.get("/api/history", headers=H("u1")).json()) == 1
+        assert c.get("/api/history", headers=H("u2")).json() == []
 
 
-def test_chat_endpoint_rewrites_slide(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+def test_ownership_isolation_on_deck(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("a.md", b"# a", "text/markdown")}, headers=H("u1"))
+        sid = r.json()["session_id"]
+        de.save_deck(sid, '<section class="slide">A</section>')
+        # owner can read the deck; another user gets 404 (not 403 — no leak)
+        assert c.get(f"/api/jobs/{sid}/deck", headers=H("u1")).status_code == 200
+        assert c.get(f"/api/jobs/{sid}/deck", headers=H("u2")).status_code == 404
+
+
+def test_chat_endpoint_owner_only(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
     import webapp.deck_edit as de
     import webapp.chat_edit as ce
-    de.save_deck("cs1", '<section class="slide">A</section>')
-    monkeypatch.setattr(appmod.runner, "result_path", lambda sid: None)
     monkeypatch.setattr(ce, "rewrite_slide",
                         lambda html, idx, instr, client=None:
                         '<section class="slide">EDITED</section>')
-    c = _client()
-    r = c.post("/api/jobs/cs1/chat", json={"slide_index": 1, "instruction": "короче"})
-    assert r.status_code == 200
-    assert de.deck_path("cs1").read_text("utf-8") == '<section class="slide">EDITED</section>'
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        de.save_deck(sid, '<section class="slide">A</section>')
+        # non-owner blocked
+        assert c.post(f"/api/jobs/{sid}/chat", json={"slide_index": 1, "instruction": "x"},
+                      headers=H("u2")).status_code == 404
+        # owner ok
+        r = c.post(f"/api/jobs/{sid}/chat", json={"slide_index": 1, "instruction": "короче"},
+                   headers=H("u1"))
+        assert r.status_code == 200
+        assert de.deck_path(sid).read_text("utf-8") == '<section class="slide">EDITED</section>'
 
 
-def test_chat_endpoint_requires_instruction(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
-    c = _client()
-    r = c.post("/api/jobs/cs1/chat", json={"slide_index": 1, "instruction": "   "})
-    assert r.status_code == 400
+def test_chat_requires_instruction(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        de.save_deck(sid, '<section class="slide">A</section>')
+        r = c.post(f"/api/jobs/{sid}/chat", json={"slide_index": 1, "instruction": "  "},
+                   headers=H("u1"))
+        assert r.status_code == 400
 
 
-def test_active_jobs_endpoint(monkeypatch):
-    monkeypatch.setattr(appmod.runner, "active_jobs",
-                        lambda: [{"session_id": "x", "mode": "htmlnew",
-                                  "stage": "designing", "progress_pct": 45}])
-    r = _client().get("/api/jobs/active")
-    assert r.status_code == 200
-    assert r.json()[0]["session_id"] == "x"
-
-
-def test_status_unknown_404(monkeypatch):
-    monkeypatch.setattr(appmod.runner, "status", lambda sid: None)
-    r = _client().get("/api/jobs/nope/status")
-    assert r.status_code == 404
+def test_status_unknown_404(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        # not even a Job row → ownership check 404s
+        r = c.get("/api/jobs/nope/status", headers=H("u1"))
+        assert r.status_code == 404
 
 
 def test_create_job_capacity_429(monkeypatch, tmp_path):
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
     from webapp.runner import CapacityError
 
-    def full(inp):
+    def full(inp, **kw):
         raise CapacityError("максимум 5 сборок одновременно")
 
     monkeypatch.setattr(appmod.runner, "start", full)
-    c = _client()
-    r = c.post("/api/jobs", data={"mode": "htmlnew"},
-               files={"file": ("x.md", b"# hi", "text/markdown")})
-    assert r.status_code == 429
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert r.status_code == 429
+
+
+def test_runner_per_user_limit():
+    """A single user can't exceed the per-user active cap (others unaffected)."""
+    import asyncio as _aio
+    from webapp.runner import JobRunner, CapacityError
+
+    r = JobRunner(max_active=10, max_per_user=2)
+    r.bind_loop(_aio.new_event_loop())
+    r._install_sink = lambda: None  # skip real progress sink
+    r._pool.submit = lambda fn: None  # don't actually run
+
+    class _Inp:
+        def __init__(self, sid):
+            self.session_id, self.mode = sid, "htmlnew"
+
+    r.start(_Inp("a"), user_id=1)
+    r.start(_Inp("b"), user_id=1)
+    try:
+        r.start(_Inp("c"), user_id=1)
+        assert False, "expected CapacityError"
+    except CapacityError:
+        pass
+    # a different user is unaffected
+    r.start(_Inp("d"), user_id=2)

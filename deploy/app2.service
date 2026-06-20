@@ -1,0 +1,42 @@
+# systemd unit for App2 (Slides web app) running as the gateway upstream.
+#
+# Install:
+#   sudo cp deploy/app2.service /etc/systemd/system/app2.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now app2
+#   journalctl -u app2 -f          # logs
+#
+# The gateway is the only public entrypoint; it authenticates users and injects
+# X-User-Id / X-User-Email, then proxies (with the /slides prefix stripped) to
+# 127.0.0.1:8012 here. This unit binds locally only.
+
+[Unit]
+Description=Slides App2 (Cloud.ru) — gateway upstream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust user/path to the deploy target.
+User=app2
+Group=app2
+WorkingDirectory=/opt/app2
+EnvironmentFile=/opt/app2/.env
+# venv created at /opt/app2/.venv (python -m venv .venv && pip install .)
+ExecStart=/opt/app2/.venv/bin/python -m webapp
+Restart=on-failure
+RestartSec=3
+# Persist SQLite + session results across restarts; reconcile flips orphaned
+# queued/running jobs to failed on boot, so a restart is always safe.
+StateDirectory=app2
+TimeoutStopSec=20
+
+# Hardening: app only needs to read its tree and write DATA_DIR/sessions.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/app2/data
+
+[Install]
+WantedBy=multi-user.target

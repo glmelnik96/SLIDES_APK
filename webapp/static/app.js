@@ -1,20 +1,15 @@
 const $ = (s) => document.querySelector(s);
 
-const ACCEPT = {
-  verstai: ".pptx",
-  design: ".pptx",
-  htmlnew: ".md,.txt,.docx,.pptx",
-};
-const HINT = {
-  verstai: "Допустимо: .pptx",
-  design: "Допустимо: .pptx",
-  htmlnew: "Допустимо: .md, .txt, .docx, .pptx",
-};
-const MODE_LABEL = {
-  verstai: "Ребрендинг PPTX",
-  design: "Генерация PPTX",
-  htmlnew: "HTML-презентация",
-};
+// The gateway mounts this app under a URL prefix (e.g. /slides) and the browser
+// lives at /<prefix>/, so every API/WS/navigation URL must carry it. Empty for
+// standalone local dev. Injected by the server into the page.
+const PREFIX = window.__APP_PREFIX__ || "";
+const U = (p) => PREFIX + p;
+
+// App2 is HTML-only (single mode: htmlnew).
+const ACCEPT = { htmlnew: ".md,.txt,.docx,.pptx" };
+const HINT = { htmlnew: "Допустимо: .md, .txt, .docx, .pptx" };
+const MODE_LABEL = { htmlnew: "HTML-презентация" };
 const STAGE_LABEL = {
   queued: "В очереди",
   parsing: "Разбор документа",
@@ -77,7 +72,7 @@ drop.addEventListener("drop", (e) => {
 
 /* ---- history ---- */
 async function loadHistory() {
-  const items = await (await fetch("/api/history")).json();
+  const items = await (await fetch(U("/api/history"))).json();
   const ul = $("#histlist");
   ul.innerHTML = "";
   $("#histEmpty").classList.toggle("hidden", items.length > 0);
@@ -85,9 +80,8 @@ async function loadHistory() {
     const li = document.createElement("li");
     const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
     const label = MODE_LABEL[it.mode] || it.mode;
-    const action = it.kind === "html"
-      ? `<a class="btn btn-ghost" href="/editor?session=${it.id}">Открыть</a>`
-      : `<a class="btn btn-ghost" href="/api/jobs/${it.id}/result">Скачать .pptx</a>`;
+    const action =
+      `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
     li.innerHTML =
       `<div><div class="hist-mode">${label}</div>` +
       `<div class="hist-meta">${it.source_filename || ""} &middot; ${when}</div></div>` +
@@ -97,7 +91,7 @@ async function loadHistory() {
 }
 
 $("#clear").onclick = async () => {
-  await fetch("/api/history/clear", { method: "POST" });
+  await fetch(U("/api/history/clear"), { method: "POST" });
   loadHistory();
 };
 
@@ -106,7 +100,7 @@ const MAX_ACTIVE = 5;
 
 async function loadActive() {
   let items = [];
-  try { items = await (await fetch("/api/jobs/active")).json(); } catch (e) { return; }
+  try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) { return; }
   const wrap = $("#activeWrap");
   const ul = $("#activeList");
   wrap.hidden = items.length === 0;
@@ -119,12 +113,11 @@ async function loadActive() {
     const state = running
       ? `${STAGE_LABEL[it.stage] || it.stage} · ${it.progress_pct || 0}%`
       : "В очереди";
-    const kind = (it.mode === "verstai" || it.mode === "design") ? "pptx" : "html";
     li.innerHTML =
       `<div><div class="hist-mode">${label}</div>` +
       `<div class="hist-meta">${state}</div></div>` +
       `<div class="hist-spacer"></div>` +
-      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="${kind}">Открыть</button>` +
+      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="html">Открыть</button>` +
       `<button class="btn-link btn-stop" data-stop="${it.session_id}">Остановить</button>`;
     ul.appendChild(li);
   }
@@ -133,7 +126,7 @@ async function loadActive() {
   ul.querySelectorAll("[data-stop]").forEach((b) =>
     b.addEventListener("click", async () => {
       b.disabled = true;
-      await fetch(`/api/jobs/${b.dataset.stop}/cancel`, { method: "POST" });
+      await fetch(U(`/api/jobs/${b.dataset.stop}/cancel`), { method: "POST" });
       loadActive();
     }));
 }
@@ -147,7 +140,7 @@ $("#create").onclick = async () => {
   fd.append("mode", selectedMode());
   fd.append("file", selectedFile);
   $("#create").disabled = true;
-  const res = await fetch("/api/jobs", { method: "POST", body: fd });
+  const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {
     alert("Ошибка: " + (await res.text()));
     $("#create").disabled = false;
@@ -212,8 +205,10 @@ function streamProgress(sessionId, kind) {
   heartbeatTimer = setInterval(tickHeartbeat, 1000);
   tickHeartbeat();
 
-  const ws = new WebSocket(`ws://${location.host}/ws/${sessionId}`);
-  ws.onmessage = (e) => {
+  // Progress via SSE (the gateway proxies HTTP streaming, not WebSocket).
+  let finished = false;
+  const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
+  es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     lastEventAt = Date.now();
     tickHeartbeat();
@@ -224,7 +219,8 @@ function streamProgress(sessionId, kind) {
     if (ev.detail) $("#stageDetail").textContent = ev.detail;
     logLine(ev.stage, ev.detail || ev.error);
     if (ev.terminal) {
-      ws.close();
+      finished = true;
+      es.close();
       stopHeartbeat();
       currentSession = null;
       prog.classList.add("hidden");
@@ -232,8 +228,11 @@ function streamProgress(sessionId, kind) {
       loadHistory();
     }
   };
-  ws.onerror = () => {
+  es.onerror = () => {
+    if (finished) return; // normal stream close after the terminal event
+    es.close();
     stopHeartbeat();
+    currentSession = null;
     prog.classList.add("hidden");
     showResult(sessionId, kind, { stage: "failed", error: "Потеряно соединение с сервером" });
   };
@@ -244,7 +243,7 @@ $("#stopBtn").onclick = async () => {
   $("#stopBtn").disabled = true;
   $("#stageDetail").textContent = "Останавливаю…";
   try {
-    await fetch(`/api/jobs/${currentSession}/cancel`, { method: "POST" });
+    await fetch(U(`/api/jobs/${currentSession}/cancel`), { method: "POST" });
   } catch (e) {
     $("#stopBtn").disabled = false;
   }
@@ -268,17 +267,8 @@ function showResult(sessionId, kind, ev) {
       `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
     return;
   }
-  if (kind === "pptx") {
-    box.innerHTML =
-      `<h3>Презентация готова</h3>` +
-      `<p>Файл .pptx собран по бренду Cloud.ru.</p>` +
-      `<div class="res-actions">` +
-      `<a class="btn" href="/api/jobs/${sessionId}/result">Скачать .pptx</a>` +
-      `<button class="btn btn-ghost" onclick="location.reload()">Создать ещё</button></div>`;
-  } else {
-    // HTML deck — go straight to the editor.
-    location.href = `/editor?session=${sessionId}`;
-  }
+  // HTML deck — go straight to the editor.
+  location.href = U(`/editor?session=${sessionId}`);
 }
 
 /* init */

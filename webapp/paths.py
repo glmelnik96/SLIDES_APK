@@ -17,7 +17,3 @@ def session_dir(session_id: str) -> Path:
     d = workdir_root() / session_id
     d.mkdir(parents=True, exist_ok=True)
     return d
-
-
-def history_file() -> Path:
-    return workdir_root() / "history.json"

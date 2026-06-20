@@ -1,7 +1,11 @@
+// Gateway URL prefix (e.g. /slides); empty in standalone dev. Injected by server.
+const PREFIX = window.__APP_PREFIX__ || "";
+const U = (p) => PREFIX + p;
+
 const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
 const frame = document.getElementById("deck");
-document.getElementById("html").href = `/api/jobs/${sessionId}/deck?download=1`;
+document.getElementById("html").href = U(`/api/jobs/${sessionId}/deck?download=1`);
 
 let slides = [];
 let current = 0;
@@ -9,7 +13,7 @@ let pendingGoTo = 0; // slide to show after the next iframe load
 
 function loadDeck() {
   // cache-bust so edits/chat rewrites are reflected on reload
-  frame.src = `/api/jobs/${sessionId}/deck?t=${Date.now()}`;
+  frame.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}`);
 }
 
 frame.onload = () => {
@@ -89,7 +93,7 @@ function currentDeckHtml() {
 }
 
 async function saveDeck() {
-  const r = await fetch(`/api/jobs/${sessionId}/deck`, {
+  const r = await fetch(U(`/api/jobs/${sessionId}/deck`), {
     method: "POST", body: currentDeckHtml(),
   });
   return r.ok;
@@ -102,7 +106,7 @@ document.getElementById("save").onclick = async () => {
 
 document.getElementById("png").onclick = async () => {
   await saveDeck(); // persist in-place edits before render
-  location.href = `/api/jobs/${sessionId}/png.zip`;
+  location.href = U(`/api/jobs/${sessionId}/png.zip`);
 };
 
 function flash(btn, text) {
@@ -170,7 +174,7 @@ async function sendChat() {
     // Persist current in-place edits first so the model edits the latest version.
     // Inside try so a failure here can't leave the UI permanently stuck.
     await saveDeck();
-    const r = await fetch(`/api/jobs/${sessionId}/chat`, {
+    const r = await fetch(U(`/api/jobs/${sessionId}/chat`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ slide_index: slideIndex, instruction }),
@@ -209,4 +213,6 @@ chatText.addEventListener("keydown", (e) => {
 });
 
 /* init */
+const homeLink = document.querySelector("a.home");
+if (homeLink) homeLink.href = U("/");
 loadDeck();

@@ -5,5 +5,7 @@ __pycache__/
 .superpowers/
 *.egg-info/
 .pytest_cache/
+# app2 runtime data (sqlite db, sessions, results)
+data/
 # local scratch
 tmp_*.py
