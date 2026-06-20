@@ -78,7 +78,14 @@ function currentDeckHtml() {
     // iframe is mid-reload or not ready — caller must handle this.
     throw new Error("дека ещё не загрузилась, подождите секунду");
   }
-  return "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+  // Strip the editor-only contenteditable attributes we inject at load time so
+  // the persisted/downloaded/exported deck stays clean (otherwise a downloaded
+  // HTML deck would be globally editable). Clone so the live editing DOM keeps
+  // its contenteditable and in-place editing keeps working.
+  const clone = doc.documentElement.cloneNode(true);
+  clone.querySelectorAll("[contenteditable]").forEach(
+    (el) => el.removeAttribute("contenteditable"));
+  return "<!DOCTYPE html>" + clone.outerHTML;
 }
 
 async function saveDeck() {
@@ -173,7 +180,7 @@ async function sendChat() {
       thinking.textContent = "Ошибка: " + (await r.text());
     } else {
       thinking.textContent = `Слайд ${slideIndex} обновлён.`;
-      pendingGoTo = current;
+      pendingGoTo = slideIndex - 1; // show the edited slide, even if user navigated away
       loadDeck(); // reload iframe with the rewritten slide
     }
   } catch (e) {

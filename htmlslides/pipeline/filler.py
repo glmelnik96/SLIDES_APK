@@ -134,25 +134,39 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
     откатывается на blank с темой в заголовке (warn в progress). Прочие сбои
     (сеть/авторизация) гасят бюджет — отменяют ещё не начатые слайды и пробрасываются."""
     aborted = threading.Event()
+    total = len(plan.slides)
+    done_lock = threading.Lock()
+    done = 0
+
+    def _tick() -> None:
+        """Emit per-slide completion progress (thread-safe) so the UI shows live
+        movement during the long parallel fill instead of one frozen message."""
+        nonlocal done
+        with done_lock:
+            done += 1
+            k = done
+        progress(f"fill: слайд {k}/{total}")
 
     def one(slide: SlidePlan) -> SlidePlan:
         if aborted.is_set():  # барьер: после жёсткого сбоя соседа LLM не зовём
             return slide
         try:
-            return fill_slide(client, library, slide, deck_title=plan.title)
+            result = fill_slide(client, library, slide, deck_title=plan.title)
         except FillError as exc:
             progress(f"warn: слайд {slide.index} не заполнен ({exc}); фолбэк на blank")
-            return _fallback_slide(library, slide)
+            result = _fallback_slide(library, slide)
         except _TRANSIENT_API_ERRORS as exc:
             # Транзиентный сбой API на ОДНОМ слайде (лимит/таймаут/5xx после
             # собственных ретраев клиента) НЕ должен ронять всю деку — частая
             # ситуация под нагрузкой. Деградируем слайд на blank, как и FillError.
             progress(f"warn: слайд {slide.index} — сбой API ({type(exc).__name__}); "
                      "фолбэк на blank")
-            return _fallback_slide(library, slide)
+            result = _fallback_slide(library, slide)
         except Exception:
             aborted.set()
             raise
+        _tick()
+        return result
 
     pool = ThreadPoolExecutor(max_workers=workers)
     try:

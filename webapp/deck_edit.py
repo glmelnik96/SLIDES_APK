@@ -7,10 +7,19 @@ from pathlib import Path
 from webapp.paths import session_dir
 
 _SLIDE_RE = re.compile(r'<section[^>]*\bclass="[^"]*\bslide\b', re.IGNORECASE)
+# The browser editor injects contenteditable="true" on leaf nodes for in-place
+# editing; strip it on persist so the saved/downloaded/exported deck isn't left
+# globally editable. Matches the attribute with or without a value.
+_CONTENTEDITABLE_RE = re.compile(r'\s+contenteditable(?:\s*=\s*"[^"]*")?',
+                                 re.IGNORECASE)
 
 
 def count_slides(html: str) -> int:
     return len(_SLIDE_RE.findall(html))
+
+
+def strip_contenteditable(html: str) -> str:
+    return _CONTENTEDITABLE_RE.sub("", html)
 
 
 def deck_path(session_id: str) -> Path:
@@ -21,7 +30,7 @@ def save_deck(session_id: str, html: str) -> Path:
     if not html or not html.strip():
         raise ValueError("empty deck HTML")
     path = deck_path(session_id)
-    path.write_text(html, encoding="utf-8")
+    path.write_text(strip_contenteditable(html), encoding="utf-8")
     return path
 
 

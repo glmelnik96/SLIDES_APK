@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +33,19 @@ _STAGE_MAP: list[tuple[str, Stage, int]] = [
 ]
 
 
+# Пер-слайдовый прогресс заполнения: "fill: слайд k/N" → плавный pct внутри
+# стадии DESIGNING (фаза fill занимает 45→63, перед assemble на 65).
+_FILL_SLIDE_RE = re.compile(r"^fill:\s*слайд\s+(\d+)\s*/\s*(\d+)")
+_FILL_PCT_LO, _FILL_PCT_HI = 45, 63
+
+
 def map_progress(message: str) -> tuple[Stage, int] | None:
     """Сообщение build_deck → (Stage, pct); None — стадию не менять (warn и пр.)."""
+    m = _FILL_SLIDE_RE.match(message)
+    if m:
+        k, n = int(m.group(1)), max(1, int(m.group(2)))
+        pct = _FILL_PCT_LO + round((_FILL_PCT_HI - _FILL_PCT_LO) * min(k, n) / n)
+        return Stage.DESIGNING, pct
     for prefix, stage_, pct in _STAGE_MAP:
         if message.startswith(prefix):
             return stage_, pct
