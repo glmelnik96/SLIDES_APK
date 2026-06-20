@@ -47,11 +47,14 @@ def _extract_section(reply: str) -> str:
 
 def _kimi():
     from htmlslides.pipeline.client import KimiClient
-    # Interactive single-slide edit: bound latency so a stalled request fails fast
-    # instead of riding the engine's long batch-build budget (300s × 5 retries).
-    # The browser also enforces its own 4-min ceiling; this keeps the server task
-    # from outliving it.
-    return KimiClient(timeout=90.0, max_retries=2)
+    # Interactive single-slide edit. The big win is disabling Kimi-K2.6's reasoning:
+    # by default it spends 120-250s "thinking" before emitting the <section>, which
+    # made edits crawl. A single-slide HTML rewrite doesn't need deep reasoning, so
+    # we turn thinking off (text-only, valid here — no images) for a fast response.
+    # One attempt, no retry, with a generous timeout as a backstop under the
+    # browser's 5-min ceiling.
+    return KimiClient(timeout=280.0, max_retries=0,
+                      extra_body={"thinking": {"type": "disabled"}})
 
 
 def _system_prompt() -> str:

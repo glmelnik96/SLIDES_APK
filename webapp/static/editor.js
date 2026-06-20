@@ -127,9 +127,10 @@ function addMsg(cls, text) {
 }
 
 // A chat edit calls Kimi (a reasoning model) and can legitimately take a couple
-// of minutes. Bound it so a stalled request can never hang the page forever, and
-// keep the user informed + able to cancel.
-const CHAT_TIMEOUT_MS = 240000; // 4 min hard ceiling
+// of minutes (server budget: one ~210s pass). Auto-abort backstop sits above
+// that so a real hang can't lock the page forever; the user can also cancel any
+// time via the button, so this ceiling can be generous.
+const CHAT_TIMEOUT_MS = 300000; // 5 min hard ceiling
 let chatInFlight = null;        // AbortController while a request is running
 let chatTimerId = null;
 
@@ -187,7 +188,7 @@ async function sendChat() {
     thinking.className = "msg err";
     if (timedOut) {
       thinking.textContent =
-        "Правка отменена: превышено время ожидания (4 мин). Попробуйте ещё раз.";
+        "Правка отменена: превышено время ожидания (5 мин). Попробуйте ещё раз.";
     } else if (e && e.name === "AbortError") {
       thinking.textContent = "Правка отменена.";
     } else {

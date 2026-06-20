@@ -78,8 +78,12 @@ class KimiClient:
                  rps: Optional[float] = None,
                  timeout: float = 300.0,
                  max_retries: int = 5,
+                 extra_body: Optional[dict] = None,
                  transport=None) -> None:
         self.model = model or os.environ.get("CLOUDRU_MODEL", DEFAULT_MODEL)
+        # Per-request kwargs for every call (e.g. {"thinking": {"type": "disabled"}}
+        # to switch Kimi-K2.6 out of multi-minute reasoning for simple edits).
+        self._extra_body = extra_body
         if rps is None:
             _raw = os.environ.get("HTMLSLIDES_RPS", "10")
             try:
@@ -107,7 +111,8 @@ class KimiClient:
         self._gate.acquire()
         resp = self._client.chat.completions.create(
             model=self.model, messages=messages,
-            max_tokens=max_tokens, temperature=temperature)
+            max_tokens=max_tokens, temperature=temperature,
+            extra_body=self._extra_body or None)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], model_cls: Type[T], *,
