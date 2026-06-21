@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     user_queue_limit: int = Field(15, alias="USER_QUEUE_LIMIT")
     build_workers: int = Field(3, alias="BUILD_WORKERS")
 
+    # Per-build watchdog: a build exceeding this is force-failed and its worker
+    # freed, so a hung/zombie job can never hold a slot forever. ~2x the real
+    # build time (heavy decks ran ~10-17 min) → 40 min default.
+    build_timeout_sec: int = Field(2400, alias="BUILD_TIMEOUT_SEC")
+
     # Result retention (sessions + Job rows older than this are purged).
     retention_hours: int = Field(24, alias="RETENTION_HOURS")
 

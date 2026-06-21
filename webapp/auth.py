@@ -12,23 +12,39 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from webapp.config import settings
 from webapp.db import models
 
 
-async def upsert_user(session: AsyncSession, *, gateway_user_id: str,
-                      email: str) -> models.User:
+async def _get(session: AsyncSession, gateway_user_id: str) -> models.User | None:
     res = await session.execute(
         select(models.User).where(
             models.User.gateway_user_id == gateway_user_id))
-    user = res.scalar_one_or_none()
+    return res.scalar_one_or_none()
+
+
+async def upsert_user(session: AsyncSession, *, gateway_user_id: str,
+                      email: str) -> models.User:
+    user = await _get(session, gateway_user_id)
     if user is None:
+        # First-touch INSERT can race when a brand-new user fires several requests
+        # at once (now common with parallel build workers): two coroutines both see
+        # no row and both INSERT → the loser hits a UNIQUE violation. Treat that as
+        # "someone else just created it": roll back and re-read the committed row,
+        # so concurrent first requests resolve to the same user instead of 500ing.
         user = models.User(gateway_user_id=gateway_user_id, email=email)
         session.add(user)
-        await session.flush()
-    elif email and user.email != email:
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            user = await _get(session, gateway_user_id)
+            if user is None:
+                raise
+    if email and user.email != email:
         user.email = email
     return user
 

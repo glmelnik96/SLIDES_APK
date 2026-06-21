@@ -132,3 +132,34 @@ async def test_cancel_running_job_aborts_at_next_event(monkeypatch):
     assert r.cancel("s1") is True
     ev = await asyncio.wait_for(q.get(), timeout=2)
     assert ev["terminal"] is True and ev["stage"] == "cancelled"
+
+
+async def test_watchdog_force_fails_overrunning_build(monkeypatch):
+    """A build past build_timeout_sec is force-failed (not left as a zombie holding
+    the worker), and reported as a timeout — distinct from a user cancel."""
+    r = runner.JobRunner(build_timeout_sec=0.2)
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def run(inp):
+        # keep emitting progress (checkpoints) past the deadline; the watchdog marks
+        # the session and the sink raises JobCancelled at the next emit.
+        for _ in range(2000):
+            prog.publish(_Event(stage="designing"))
+            time.sleep(0.01)
+
+    monkeypatch.setattr(runner, "_pipeline_run", run)
+    inp = types.SimpleNamespace(session_id="s1", mode="verstai")
+    q = r.start(inp)
+
+    ev = None
+    while True:
+        e = await asyncio.wait_for(q.get(), timeout=3)
+        if e.get("terminal"):
+            ev = e
+            break
+    assert ev["stage"] == "failed"
+    assert "лимит времени" in (ev.get("error") or "")
+    assert "s1" not in r._active           # worker freed, no zombie
+    assert "s1" not in r._timers           # watchdog timer cleaned up

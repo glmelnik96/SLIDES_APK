@@ -65,7 +65,8 @@ app = FastAPI(title="Slides App")
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
 runner = JobRunner(max_active=_settings.max_active,
                    max_per_user=_settings.user_queue_limit,
-                   build_workers=_settings.build_workers)
+                   build_workers=_settings.build_workers,
+                   build_timeout_sec=_settings.build_timeout_sec)
 
 
 @app.on_event("startup")

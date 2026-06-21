@@ -82,6 +82,22 @@ a { color: var(--accent); }
 
 .wrap { max-width: 880px; margin: 0 auto; padding: 40px 28px 64px; }
 
+/* ===== Интро-блок: что делает раздел + как готовить исходник ===== */
+.intro { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.intro .eyebrow { margin-bottom: 10px; }
+/* Заголовок интро с фирменным диагональным штрихом-стрелкой слева (как h1 канона) */
+.intro-title { font-family: var(--font-display); font-size: 26px; line-height: 1.14;
+  letter-spacing: -0.01em; margin: 0 0 16px; position: relative; padding-left: 20px; }
+.intro-title::before { content: ""; position: absolute; left: 0; top: 4px; width: 9px; height: 24px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 100% 30%, 42% 30%, 42% 100%, 0 100%); }
+.intro-lead { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 12px; max-width: 760px; }
+.intro-lead:last-child { margin-bottom: 0; }
+.intro-lead b { color: var(--text); font-weight: 600; }
+.intro-lead code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px; color: var(--accent); background: var(--accent-dim);
+  border: 1px solid var(--accent-line); padding: 1px 5px; }
+
 /* ===== Шаги ===== */
 .step { margin-bottom: 32px; }
 .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }

@@ -89,6 +89,41 @@ def test_create_job_starts_runner_html_only(monkeypatch, tmp_path):
         assert started["user"] is not None
 
 
+def test_concurrent_first_touch_same_user_no_500(monkeypatch, tmp_path):
+    """A brand-new user firing several requests at once must not 500 on a racing
+    user INSERT (regression: parallel workers exposed a UNIQUE-constraint race in
+    upsert_user). All concurrent first-touch requests resolve to one user."""
+    import threading
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        results = []
+        lock = threading.Lock()
+
+        def hit():
+            r = c.get("/api/history", headers=H("brandnew"))
+            with lock:
+                results.append(r.status_code)
+
+        threads = [threading.Thread(target=hit) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert all(s == 200 for s in results), results
+        # exactly one user row created despite the concurrent first-touch
+        import asyncio as _aio
+        import webapp.auth as _auth
+
+        async def _count():
+            from sqlalchemy import func, select
+            from webapp.db import models
+            async with appmod.app.state.sessionmaker() as s:
+                n = await s.execute(select(func.count()).select_from(models.User)
+                                    .where(models.User.gateway_user_id == "brandnew"))
+                return n.scalar_one()
+        assert _aio.get_event_loop().run_until_complete(_count()) == 1
+
+
 def test_empty_file_rejected(monkeypatch, tmp_path):
     """Пустой/пробельный текстовый вход реджектится на сабмите (не занимает слот
     очереди и не «успешно» собирается в пустую деку)."""

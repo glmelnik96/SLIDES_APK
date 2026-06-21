@@ -15,6 +15,7 @@ latest status snapshot, and captures result_path on terminal `done`.
 from __future__ import annotations
 
 import asyncio
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from typing import Any
 MAX_ACTIVE = 60  # total jobs in the system (running + waiting) before 429
 MAX_PER_USER = 15  # how many jobs one user may have in the system at once
 BUILD_WORKERS = 3  # how many builds run in parallel (rest wait in the queue)
+BUILD_TIMEOUT_SEC = 2400  # per-build watchdog: force-fail a build past this (~40 min)
 
 
 class CapacityError(RuntimeError):
@@ -56,7 +58,8 @@ def _mode_of(inp: Any) -> str:
 class JobRunner:
     def __init__(self, max_active: int = MAX_ACTIVE,
                  max_per_user: int = MAX_PER_USER,
-                 build_workers: int = BUILD_WORKERS) -> None:
+                 build_workers: int = BUILD_WORKERS,
+                 build_timeout_sec: int = BUILD_TIMEOUT_SEC) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
         # N workers run builds in parallel; submissions beyond N wait in the pool's
         # internal FIFO queue. Real Cloud.ru concurrency is capped separately by the
@@ -64,6 +67,9 @@ class JobRunner:
         self._pool = ThreadPoolExecutor(max_workers=max(1, build_workers))
         self._max_active = max_active
         self._max_per_user = max_per_user
+        self._build_timeout = build_timeout_sec
+        self._timed_out: set[str] = set()      # sessions killed by the watchdog
+        self._timers: dict[str, threading.Timer] = {}
         self._queues: dict[str, asyncio.Queue] = {}
         self._results: dict[str, str | None] = {}
         self._status: dict[str, dict] = {}     # session_id -> latest event dict
@@ -155,6 +161,32 @@ class JobRunner:
         prog.publish = sink  # type: ignore[assignment]
         self._sink_installed = True
 
+    # ── watchdog ─────────────────────────────────────────────────────────
+    def _arm_watchdog(self, session_id: str) -> None:
+        """Start a timer that force-aborts a build past the deadline. Python can't
+        kill a thread, so we reuse cooperative cancellation: mark the session and
+        the sink raises JobCancelled at the next progress checkpoint. Each LLM call
+        returns within its own client timeout, so a checkpoint always arrives soon
+        after — bounding total runtime to ~deadline + one LLM timeout."""
+        if self._build_timeout <= 0:
+            return
+
+        def _fire() -> None:
+            if session_id not in self._active:
+                return
+            self._timed_out.add(session_id)
+            self._cancel.add(session_id)       # sink raises JobCancelled next emit
+
+        t = threading.Timer(self._build_timeout, _fire)
+        t.daemon = True
+        self._timers[session_id] = t
+        t.start()
+
+    def _disarm_watchdog(self, session_id: str) -> None:
+        t = self._timers.pop(session_id, None)
+        if t is not None:
+            t.cancel()
+
     # ── job lifecycle ────────────────────────────────────────────────────
     def start(self, inp: Any, *, user_id: int | None = None) -> asyncio.Queue:
         assert self._loop is not None, "bind_loop() must be called at startup"
@@ -179,13 +211,21 @@ class JobRunner:
         self._active.add(session_id)
 
         def work() -> None:
+            self._arm_watchdog(session_id)
             try:
                 _pipeline_run(inp)
             except Exception as exc:  # noqa: BLE001
                 self._active.discard(session_id)
+                # Watchdog: a build past the deadline was marked for abort; report
+                # it as a clear timeout failure, NOT a user cancel.
+                if session_id in self._timed_out:
+                    ev = {"session_id": session_id, "stage": "failed",
+                          "terminal": True, "progress_pct": 0, "result_path": None,
+                          "error": "сборка превысила лимит времени и была "
+                                   "остановлена — повторите запуск"}
                 # A JobCancelled (or any error after a stop was requested, e.g. the
                 # engine framework re-wrapping it) is reported as a clean cancel.
-                if isinstance(exc, JobCancelled) or session_id in self._cancel:
+                elif isinstance(exc, JobCancelled) or session_id in self._cancel:
                     ev = {"session_id": session_id, "stage": "cancelled",
                           "terminal": True, "progress_pct": 0, "result_path": None}
                 else:
@@ -199,7 +239,9 @@ class JobRunner:
                             self._terminal_hook(session_id, ev), self._loop)
                     asyncio.run_coroutine_threadsafe(queue.put(ev), self._loop)
             finally:
+                self._disarm_watchdog(session_id)
                 self._cancel.discard(session_id)
+                self._timed_out.discard(session_id)
                 self._futures.pop(session_id, None)
 
         self._futures[session_id] = self._pool.submit(work)
