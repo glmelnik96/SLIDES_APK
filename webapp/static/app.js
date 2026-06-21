@@ -1,5 +1,10 @@
 const $ = (s) => document.querySelector(s);
 
+// HTML-escape untrusted strings before innerHTML (e.g. an engine error message
+// surfaced in history) so they can't inject markup.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
 // The gateway mounts this app under a URL prefix (e.g. /slides) and the browser
 // lives at /<prefix>/, so every API/WS/navigation URL must carry it. Empty for
 // standalone local dev. Injected by the server into the page.
@@ -115,11 +120,19 @@ async function loadHistory() {
     const li = document.createElement("li");
     const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
     const label = MODE_LABEL[it.mode] || it.mode;
-    const action =
-      `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
+    // Only a successful build has a deck to open. failed/cancelled builds show
+    // their outcome (and the reason) instead of an "Открыть" link that would
+    // lead to a 404 deck in the editor.
+    const ok = it.status === "done";
+    const action = ok
+      ? `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`
+      : `<span class="hist-status hist-status--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>`;
+    const meta = ok || !it.error
+      ? `${it.source_filename || ""} &middot; ${when}`
+      : `${it.source_filename || ""} &middot; ${when} &middot; ${esc(it.error)}`;
     li.innerHTML =
       `<div><div class="hist-mode">${label}</div>` +
-      `<div class="hist-meta">${it.source_filename || ""} &middot; ${when}</div></div>` +
+      `<div class="hist-meta">${meta}</div></div>` +
       `<div class="hist-spacer"></div>${action}`;
     ul.appendChild(li);
   }

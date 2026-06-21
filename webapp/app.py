@@ -128,11 +128,20 @@ async def create_job(request: Request, mode: str = Form(...),
     if suffix not in _ALLOWED[mode]:
         raise HTTPException(400, f"bad file type {suffix} for mode {mode}")
 
+    raw = await file.read()
+    # Reject an empty upload up front: an all-whitespace doc would otherwise pass
+    # validation, occupy a queue slot and "succeed" with a contentless cover+
+    # contacts deck. Binary inputs (docx/pptx) carry structure even when "small",
+    # so only the plain-text formats are whitespace-checked.
+    if not raw.strip() or (suffix in (".md", ".txt")
+                           and not raw.decode("utf-8", "ignore").strip()):
+        raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
+
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(mode), input_s3_key=None,
                        source_filename=file.filename)
     dest = session_dir(inp.session_id) / f"input{suffix}"
-    dest.write_bytes(await file.read())
+    dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
 
     kind = "html"
@@ -289,6 +298,7 @@ async def get_history(request: Request,
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode, "kind": j.kind,
          "source_filename": j.source_filename, "status": j.status,
+         "error": j.error,
          "created_at": j.created_at.isoformat() if j.created_at else None}
         for j in jobs
     ])

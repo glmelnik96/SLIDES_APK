@@ -89,6 +89,42 @@ def test_create_job_starts_runner_html_only(monkeypatch, tmp_path):
         assert started["user"] is not None
 
 
+def test_empty_file_rejected(monkeypatch, tmp_path):
+    """Пустой/пробельный текстовый вход реджектится на сабмите (не занимает слот
+    очереди и не «успешно» собирается в пустую деку)."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        for body in (b"", b"   \n\t  "):
+            r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                       files={"file": ("e.md", body, "text/markdown")}, headers=H())
+            assert r.status_code == 400, body
+        # непустой проходит
+        ok = c.post("/api/jobs", data={"mode": "htmlnew"},
+                    files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert ok.status_code == 200
+
+
+def test_history_includes_error_for_failed(monkeypatch, tmp_path):
+    """История отдаёт причину провала, чтобы фронт показал её вместо «Открыть»."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("f.md", b"# hi", "text/markdown")},
+                     headers=H()).json()["session_id"]
+        import asyncio as _aio
+        import webapp.jobs_repo as _jr
+
+        async def _fail():
+            async with appmod.app.state.sessionmaker() as s:
+                await _jr.mark_terminal(s, sid, status="failed",
+                                        result_path=None, error="boom 42")
+                await s.commit()
+        _aio.get_event_loop().run_until_complete(_fail())
+        item = c.get("/api/history", headers=H()).json()[0]
+        assert item["status"] == "failed"
+        assert item["error"] == "boom 42"
+
+
 def test_pptx_modes_rejected(monkeypatch, tmp_path):
     _no_run(monkeypatch)
     with _client(monkeypatch, tmp_path) as c:

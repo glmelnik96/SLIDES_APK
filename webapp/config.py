@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     db_url: str = Field("sqlite+aiosqlite:///./data/app2.db", alias="DB_URL")
     data_dir: Path = Field(ROOT / "data", alias="DATA_DIR")
 
-    # Per-user queue fairness (global concurrency stays 1 — RPS-bound engine).
-    max_per_user_inflight: int = Field(1, alias="MAX_PER_USER_INFLIGHT")
+    # Per-user queue limit (how many builds one user may have in the system at
+    # once). Global concurrency stays 1 worker — the engine is RPS-bound.
     user_queue_limit: int = Field(5, alias="USER_QUEUE_LIMIT")
 
     # Result retention (sessions + Job rows older than this are purged).

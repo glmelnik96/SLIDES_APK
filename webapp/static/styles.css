@@ -193,6 +193,10 @@ a { color: var(--accent); }
 .hist-mode { font-weight: 600; font-size: 13px; }
 .hist-meta { color: var(--muted); font-size: 12px; }
 .hist-spacer { flex: 1; }
+/* Исход незавершённой сборки в истории (вместо «Открыть») — капс-микролейбл */
+.hist-status { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+.hist-status--failed { color: var(--danger); }
+.hist-status--cancelled { color: var(--warn-ink); }
 .hist-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 .queue-cap { color: var(--muted-2); font-size: 13px; font-weight: 400; }
 
