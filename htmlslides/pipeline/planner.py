@@ -9,12 +9,27 @@ import json
 from pathlib import Path
 from typing import Sequence
 
+import structlog
+
 from ..brand import brand_rules
 from ..library import SlotSpec, TemplateLibrary
 from ..models import DeckPlan
 from ..parsers.base import (Block, CodeBlock, ImageBlock, InputDoc, ListBlock,
                             TableBlock, TextBlock)
-from .client import KimiClient, image_part
+from .client import KimiClient, LLMFormatError, image_part
+
+logger = structlog.get_logger(__name__)
+
+# Reasoning-off fallback for the planner. Kimi-K2.6 reasoning occasionally runs
+# away and returns no/empty JSON (finish=length) → LLMFormatError, which aborts
+# the WHOLE build (unlike the filler, a planner failure has no graceful blank
+# fallback). On that failure we retry once with reasoning disabled: it can't burn
+# the budget on hidden reasoning, so it emits JSON; a slightly simpler plan beats
+# a total build failure. Kept as a FALLBACK (not the default) because Kimi only
+# partially honours the toggle for text — it doesn't speed the planner up, and the
+# reasoning-on plan has better structural quality. (Vision rebrand ignores the
+# toggle and always reasons — harmless there.)
+_PLANNER_NO_THINK = {"thinking": {"type": "disabled"}}
 
 PLANNER_SYSTEM = """\
 Ты — планировщик слайдов презентации в бренде Cloud.ru 2.0.
@@ -167,7 +182,17 @@ def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
     else:
         user = {"role": "user", "content": text}
     messages = [{"role": "system", "content": system}, user]
-    plan = client.chat_json(messages, DeckPlan, max_tokens=max_tokens)
+    try:
+        # reasoning ON — best structural quality
+        plan = client.chat_json(messages, DeckPlan, max_tokens=max_tokens)
+    except LLMFormatError as exc:
+        # Reasoning ran away → no/empty JSON after retries. Retry once with
+        # reasoning disabled so the build doesn't hard-fail. An empty plan also
+        # lands here: DeckPlan requires ≥1 slide, so {"slides":[]} fails
+        # validation and chat_json re-raises it as LLMFormatError.
+        logger.warning("planner.retry_no_think", error=str(exc))
+        plan = client.chat_json(messages, DeckPlan, max_tokens=max_tokens,
+                                extra_body=_PLANNER_NO_THINK)
     seen_accent = False
     for slide in plan.slides:
         # Страховка blank-misuse: blank — только аварийная заглушка fill-стадии.
