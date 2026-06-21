@@ -110,6 +110,42 @@ def test_history_scoped_to_user(monkeypatch, tmp_path):
         assert c.get("/api/history", headers=H("u2")).json() == []
 
 
+def test_clear_history_spares_active_run(monkeypatch, tmp_path):
+    """Clearing history must not delete an in-flight run's Job row (which would
+    404 its /events, /deck and /cancel and orphan the result). Regression for the
+    VM incident where 'Очистить' killed a running build."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        # one finished job + one still-active (status stays 'queued' with _no_run)
+        done = c.post("/api/jobs", data={"mode": "htmlnew"},
+                      files={"file": ("done.md", b"# d", "text/markdown")},
+                      headers=H("u1")).json()["session_id"]
+        active = c.post("/api/jobs", data={"mode": "htmlnew"},
+                        files={"file": ("run.md", b"# r", "text/markdown")},
+                        headers=H("u1")).json()["session_id"]
+        # mark the first terminal so clear has something to remove
+        import asyncio as _aio
+        import webapp.app as _app
+        import webapp.jobs_repo as _jr
+
+        async def _finish():
+            async with _app.app.state.sessionmaker() as s:
+                await _jr.mark_terminal(s, done, status="done",
+                                        result_path=None, error=None)
+                await s.commit()
+        _aio.get_event_loop().run_until_complete(_finish())
+
+        assert c.post("/api/history/clear", headers=H("u1")).status_code == 200
+        # active run's Job row survives (finished one is removed)
+        ids = {j["id"] for j in c.get("/api/history", headers=H("u1")).json()}
+        assert active in ids
+        assert done not in ids
+        # and the active run's owner-only deck endpoint no longer 404s on ownership
+        import webapp.deck_edit as de
+        de.save_deck(active, '<section class="slide">A</section>')
+        assert c.get(f"/api/jobs/{active}/deck", headers=H("u1")).status_code == 200
+
+
 def test_ownership_isolation_on_deck(monkeypatch, tmp_path):
     _no_run(monkeypatch)
     import webapp.deck_edit as de

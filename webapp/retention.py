@@ -18,6 +18,7 @@ from webapp.db import models
 from webapp.paths import session_dir
 
 _NONTERMINAL = ("queued", "running")
+_TERMINAL = ("done", "failed", "cancelled")
 _INTERVAL_SEC = 10 * 60
 
 
@@ -34,16 +35,18 @@ async def reconcile_interrupted(sessionmaker) -> int:
 
 
 async def purge_once(sessionmaker, *, ttl_hours: int) -> int:
-    """Delete Job rows (and their session dirs) older than ttl_hours. Returns
-    number of rows removed."""
+    """Delete TERMINAL Job rows (and their session dirs) older than ttl_hours.
+    Results are kept for the full TTL measured from job START (created_at). An
+    in-flight run (queued/running) is never purged, even if it somehow predates
+    the cutoff, so retention can't pull the row out from under a live build.
+    Returns the number of rows removed."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
+    cond = (models.Job.created_at < cutoff) & models.Job.status.in_(_TERMINAL)
     async with sessionmaker() as s:
-        rows = await s.execute(
-            select(models.Job.session_id).where(models.Job.created_at < cutoff))
+        rows = await s.execute(select(models.Job.session_id).where(cond))
         session_ids = [r[0] for r in rows.all()]
         if session_ids:
-            await s.execute(
-                delete(models.Job).where(models.Job.created_at < cutoff))
+            await s.execute(delete(models.Job).where(cond))
             await s.commit()
     for sid in session_ids:
         d = session_dir(sid)

@@ -58,3 +58,23 @@ async def test_purge_removes_old_rows(monkeypatch, tmp_path):
     async with Session() as s:
         ids = {j.session_id for j in (await s.execute(select(models.Job))).scalars()}
     assert ids == {"new"}
+
+
+async def test_purge_keeps_active_run_even_if_old(monkeypatch, tmp_path):
+    """An in-flight run (status=queued) is never purged, even past the TTL —
+    retention must not pull the row out from under a live build."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    Session = await _sm()
+    old = datetime.now(timezone.utc) - timedelta(hours=48)
+    async with Session() as s:
+        u = await _user(s)
+        s.add(models.Job(session_id="old-done", user_id=u.id, mode="htmlnew",
+                         kind="html", status="done", created_at=old))
+        s.add(models.Job(session_id="old-active", user_id=u.id, mode="htmlnew",
+                         kind="html", status="queued", created_at=old))
+        await s.commit()
+    removed = await retention.purge_once(Session, ttl_hours=24)
+    assert removed == 1
+    async with Session() as s:
+        ids = {j.session_id for j in (await s.execute(select(models.Job))).scalars()}
+    assert ids == {"old-active"}

@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "webapp"],
       "port": 8000
+    },
+    {
+      "name": "slides-dev",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/devserver.py", "--port", "8020"],
+      "port": 8020
     }
   ]
 }

@@ -133,6 +133,18 @@ async function loadActive() {
 
 setInterval(loadActive, 2000);
 
+// Contract §8 — rehydrate the in-flight run after a full page reload (canon-nav
+// links reload the page, dropping the SSE/JS state, but the build keeps running
+// server-side). On load, if a run is active and we're not already streaming one,
+// re-attach the progress view so navigation away and back never looks "stopped".
+async function autoResumeActive() {
+  if (currentSession) return;
+  let items = [];
+  try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) { return; }
+  if (!items.length || currentSession) return;
+  streamProgress(items[0].session_id, "html");
+}
+
 /* ---- create job ---- */
 $("#create").onclick = async () => {
   if (!selectedFile) return;
@@ -276,3 +288,4 @@ syncModeHints();
 resetFile();
 loadHistory();
 loadActive();
+autoResumeActive();

@@ -16,6 +16,62 @@ function loadDeck() {
   frame.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}`);
 }
 
+const STAGE_LABEL = {
+  queued: "В очереди", parsing: "Разбор документа",
+  classifying: "Планирование структуры", designing: "Заполнение слайдов",
+  rendering: "Сборка", validating: "Проверка качества",
+  autofixing: "Автоисправление", finalizing: "Финализация",
+};
+const overlay = document.getElementById("buildOverlay");
+const buildSub = document.getElementById("buildSub");
+const buildTitle = document.getElementById("buildTitle");
+
+function showOverlay(show) { overlay && overlay.classList.toggle("hidden", !show); }
+
+// Opening the editor for a run whose deck isn't built yet would otherwise show a
+// blank 404 iframe. Instead, gate on readiness: if the deck exists, load it; if
+// the run is still building, show progress (SSE) and load the deck when done.
+async function initEditor() {
+  let head;
+  try {
+    head = await fetch(U(`/api/jobs/${sessionId}/deck?probe=${Date.now()}`),
+                       { method: "GET", headers: { Range: "bytes=0-0" } });
+  } catch (e) { head = null; }
+  if (head && head.ok) { showOverlay(false); loadDeck(); return; }
+  if (head && head.status === 404) { waitForBuild(); return; }
+  // any other status (e.g. 401) — fall back to a plain load attempt
+  showOverlay(false); loadDeck();
+}
+
+function waitForBuild() {
+  showOverlay(true);
+  buildTitle.textContent = "Презентация ещё собирается…";
+  let done = false;
+  const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
+  es.onmessage = (e) => {
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+    const pct = ev.progress_pct || 0;
+    buildSub.textContent =
+      `${STAGE_LABEL[ev.stage] || ev.stage || ""} · ${pct}%` +
+      (ev.detail ? ` — ${ev.detail}` : "");
+    if (ev.terminal) {
+      done = true; es.close();
+      if (ev.stage === "done") { showOverlay(false); loadDeck(); }
+      else {
+        buildTitle.textContent =
+          ev.stage === "cancelled" ? "Сборка остановлена" : "Не удалось собрать";
+        buildSub.textContent = ev.error || "";
+      }
+    }
+  };
+  es.onerror = () => {
+    if (done) return;
+    es.close();
+    // Stream dropped but run may still be alive — retry readiness shortly.
+    setTimeout(initEditor, 3000);
+  };
+}
+
 frame.onload = () => {
   const doc = frame.contentDocument;
   if (!doc) return;
@@ -215,4 +271,4 @@ chatText.addEventListener("keydown", (e) => {
 /* init */
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
-loadDeck();
+initEditor();

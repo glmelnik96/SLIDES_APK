@@ -26,7 +26,16 @@
       <button class="btn btn-ghost" id="png">Скачать PNG (ZIP)</button>
       <a class="btn btn-ghost" id="html">Скачать HTML</a>
     </div>
-    <div id="frameWrap"><iframe id="deck" title="Презентация"></iframe></div>
+    <div id="frameWrap">
+      <iframe id="deck" title="Презентация"></iframe>
+      <div id="buildOverlay" class="build-overlay hidden">
+        <div class="build-overlay__card">
+          <div class="build-overlay__title" id="buildTitle">Презентация ещё собирается…</div>
+          <div class="build-overlay__sub" id="buildSub">Подготовка…</div>
+          <a class="btn btn-ghost" href="/">&larr; К списку сборок</a>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Chat panel -->
