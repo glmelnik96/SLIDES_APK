@@ -1,36 +1,64 @@
-"""Роль 1 — Deck Planner: InputDoc + каталог шаблонов -> DeckPlan (1 вызов Kimi).
+"""Роль 1 — Deck Planner: InputDoc + каталог шаблонов -> DeckPlan.
 
-Для pptx-входа (rebrand) дополнительно получает PNG исходных слайдов (vision)
-и переносит их структуру в бренд-шаблоны.
+Текстовый вход (основной путь) планируется ПО РАЗДЕЛАМ (map) параллельно, затем
+структура деки собирается в коде (reduce: cover/contacts/разнообразие/accent).
+Причина — монолитный вызов на весь документ систематически падал на крупных доках:
+Kimi-K2.6 уходит в reasoning-runaway и возвращает пустой content (no JSON), а у
+планировщика нет мягкой деградации, поэтому падал ВЕСЬ билд. Per-section вызовы
+малы (компактное меню + один раздел), no-think, с ретраями и код-фолбэком на раздел
+— пустой ответ роняет ОДИН слайд, а не деку (тот же паттерн отказоустойчивости, что
+у filler).
+
+Для pptx-входа (rebrand) сохранён монолитный vision-вызов: ему нужны PNG всех
+исходных слайдов разом, разбить по разделам нельзя.
 """
 from __future__ import annotations
 
 import json
+import re
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 import structlog
+from openai import (APIConnectionError, APITimeoutError, InternalServerError,
+                    RateLimitError)
+from pydantic import BaseModel, Field
 
 from ..brand import brand_rules
 from ..library import SlotSpec, TemplateLibrary
-from ..models import DeckPlan
+from ..models import DeckPlan, SlidePlan
 from ..parsers.base import (Block, CodeBlock, ImageBlock, InputDoc, ListBlock,
-                            TableBlock, TextBlock)
+                            Section, TableBlock, TextBlock)
 from .client import KimiClient, LLMFormatError, image_part
 
 logger = structlog.get_logger(__name__)
 
-# Reasoning-off fallback for the planner. Kimi-K2.6 reasoning occasionally runs
-# away and returns no/empty JSON (finish=length) → LLMFormatError, which aborts
-# the WHOLE build (unlike the filler, a planner failure has no graceful blank
-# fallback). On that failure we retry once with reasoning disabled: it can't burn
-# the budget on hidden reasoning, so it emits JSON; a slightly simpler plan beats
-# a total build failure. Kept as a FALLBACK (not the default) because Kimi only
-# partially honours the toggle for text — it doesn't speed the planner up, and the
-# reasoning-on plan has better structural quality. (Vision rebrand ignores the
-# toggle and always reasons — harmless there.)
+# Reasoning OFF for per-section planning. Малый вход + малый выход + no-think — самый
+# надёжный профиль вызова (см. project_planner_scaling: whole-doc падал 5/5, а
+# per-section с ретраями+фолбэком держит деку). Kimi чтит тумблер лишь частично,
+# поэтому это НЕ гарантия — гарантию даёт изоляция+ретраи+фолбэк ниже.
 _PLANNER_NO_THINK = {"thinking": {"type": "disabled"}}
 
+# Транзиентные сбои API на ОДИН раздел (после собственных ретраев openai-клиента):
+# лимит/таймаут/обрыв/5xx. Не должны ронять деку — деградируем раздел на эвристику.
+_TRANSIENT_API_ERRORS = (
+    RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
+
+# Семейство текстовых перечислений — взаимозаменяемы для правила разнообразия.
+# Чарты/таймлайны/спец-шаблоны НЕ свапаем (у них профильный смысл).
+_VARIETY_FAMILY = ("cards-6", "grid-2x2", "three-col", "two-col-cards")
+_VARIETY_SWAP = {
+    "cards-6": ("grid-2x2", "three-col", "two-col-cards"),
+    "grid-2x2": ("cards-6", "three-col", "two-col-cards"),
+    "three-col": ("cards-6", "grid-2x2", "two-col-cards"),
+    "two-col-cards": ("three-col", "cards-6", "grid-2x2"),
+}
+
+# ============================ ПРОМПТЫ ============================
+
+# Монолитный планировщик — ТОЛЬКО для vision-rebrand (pptx со скриншотами).
 PLANNER_SYSTEM = """\
 Ты — планировщик слайдов презентации в бренде Cloud.ru 2.0.
 Дано: исходный документ и каталог шаблонов слайдов с контрактами слотов.
@@ -43,69 +71,53 @@ PLANNER_SYSTEM = """\
 Правила:
 - Первый слайд — cover, последний — contacts.
 - template_id строго из каталога; type бери из каталога.
-- ПОЛНОТА: КАЖДЫЙ смысловой раздел исходника (заголовок ## и его содержимое) —
-  это ОТДЕЛЬНЫЙ слайд. НЕ объединяй два разных раздела в один слайд и НЕ
-  выбрасывай разделы. Сколько содержательных разделов — столько контентных
-  слайдов (плюс cover/contacts/разделители). Ориентир 6–18 слайдов; для богатого
-  документа делай больше слайдов, а не плотнее контент.
-- Один смысл — один слайд; цифры и факты не выдумывай.
-- В content.brief переноси конкретику исходника (цифры, названия, тезисы) БЕЗ
-  ПОТЕРИ СМЫСЛА. Сокращай формулировки, но не обрезай значащие части: «152-ФЗ
-  и 187-ФЗ» оставь как есть (НЕ «152, 187»); единицы, суффиксы и названия (ФЗ, %,
-  млрд, Tier III) сохраняй — голое число без них теряет смысл.
-- Явный маркер раздела в исходнике («Раздел N», «Часть N», «Глава N», «Этап N») —
-  это слайд-разделитель: используй section-dots или section-frame, в brief дай
-  короткое название раздела (поясняющий текст вынеси на следующий слайд).
-- blank — это АВАРИЙНАЯ заглушка, а НЕ контентный слайд: НЕ выбирай blank ни для
-  одного смыслового раздела. Короткий вводный/итоговый раздел из 1–2 предложений-
-  тезисов (без списка, чисел, сравнения) — это statement: ключевую мысль в brief,
-  она станет заголовком-тезисом, пояснение — подзаголовком. Любой раздел обязан
-  попасть на содержательный шаблон.
-- ВЫБОР ШАБЛОНА ПО КОЛИЧЕСТВУ именованных пунктов (название + описание):
-  ровно 2 → two-col-cards; ровно 3 → three-col ИЛИ cards-6; 4 → grid-2x2 или
-  cards-6; 5–6 → cards-6. ШЕСТЬ пунктов — это cards-6 (сетка 3×2), НЕ three-col:
-  three-col рассчитан только на ТРИ колонки, шесть пунктов в нём слипаются.
-  Тарифы / планы / пакеты с ОПИСАНИЕМ фич у каждого — тем же правилом
-  (2→two-col-cards, 3–6→cards-6). НО если варианты сравниваются по ОДНОМУ
-  числу (цена, стоимость, объём) без описания фич — это bar-chart (визуальное
-  сравнение величин нагляднее плоского текста: «18 / 54 / 120» одинаково велики
-  в карточках, но разительно разные столбиками).
-- Числовой ряд во времени → line-chart (тренд); сравнение величин → bar-chart;
-  доли целого → donut-chart; набор разрозненных метрик → stats-row;
-  состав по группам (несколько категорий, в каждой доли) → stacked-bar;
-  набор процентов выполнения/готовности/покрытия → kpi-rings;
-  последовательность этапов/шагов во времени → timeline;
-  «было/стало» → before-after; сетка 2×2 равнозначных тезисов → grid-2x2.
-  Если в исходнике есть такие данные — ОБЯЗАТЕЛЬНО используй профильный шаблон,
-  не сворачивай в текстовый список.
-- РАЗНООБРАЗИЕ ВЁРСТКИ (требование бренда): не ставь один и тот же шаблон чаще
-  2 раз на деку и не подряд. Если контент позволяет — выбирай разные макеты
-  соседних слайдов. Текстовые перечисления чередуй: cards-6, grid-2x2, three-col,
-  two-col-cards — а не только cards-6. statement — НЕ БОЛЕЕ ОДНОГО на всю деку
-  (это акцентный слайд-тезис; два statement подряд выглядят монотонно).
-- ЗЕЛЁНЫЙ АКЦЕНТ-СЛАЙД: для ОДНОГО самого сильного statement за деку (ключевой
-  тезис, манифест или призыв) добавь в его content поле "accent":"1" — он отрисуется
-  брендовым зелёным слайдом (графит на зелёном). Не чаще одного раза на деку и
-  только если в деке есть statement.
+- ПОЛНОТА: КАЖДЫЙ смысловой раздел исходника — ОТДЕЛЬНЫЙ слайд; не объединяй и не
+  выбрасывай разделы. Ориентир 6–18 слайдов.
+- В content.brief переноси конкретику исходника (цифры, названия) БЕЗ ПОТЕРИ СМЫСЛА;
+  сохраняй единицы и суффиксы (152-ФЗ, %, млрд, Tier III).
+- Выбор шаблона по числу пунктов: 2→two-col-cards; 3→three-col/cards-6; 4→grid-2x2;
+  5-6→cards-6. Числовые данные → bar/line/donut/stats-row/timeline/kpi-rings.
+- РАЗНООБРАЗИЕ: один шаблон не чаще 2 раз и не подряд; statement максимум один.
+{freeform_rule}
+
+БРЕНД-ПРАВИЛА:
+{rules}"""
+
+# Per-section планировщик (основной путь). Компактное МЕНЮ вместо полного каталога.
+SECTION_SYSTEM = """\
+Ты планируешь ОДИН раздел презентации Cloud.ru 2.0 в 1 (редко 2) слайда.
+Дано: меню шаблонов (id — назначение) и текст раздела.
+Верни ТОЛЬКО JSON вида:
+{{"slides":[{{"template_id":"<id из меню>","brief":"конкретные факты раздела"}}]}}
+
+Правила:
+- template_id СТРОГО из меню; обычно 1 слайд на раздел (2 — только если контента
+  реально много и он распадается на две темы).
+- Выбор шаблона по числу именованных пунктов: 2→two-col-cards; 3→three-col;
+  4→grid-2x2; 5-6→cards-6. Если варианты сравниваются по ОДНОМУ числу — bar-chart;
+  ряд во времени → line-chart/timeline; доли целого → donut-chart; набор метрик →
+  stats-row; проценты готовности → kpi-rings. Короткий тезис из 1-2 предложений без
+  списка/чисел → statement.
+- В brief — конкретика раздела (цифры, названия, тезисы), сохраняй единицы и
+  суффиксы (152-ФЗ, %, млрд, Tier III). Ничего не выдумывай.
+- НЕ выбирай cover/contacts/back-cover/blank — их ставит система.
 {freeform_rule}
 
 БРЕНД-ПРАВИЛА:
 {rules}"""
 
 _FREEFORM_ALLOWED = (
-    '- FREEFORM (произвольная брендовая раскладка): для слайдов с НЕТИПОВОЙ '
-    'структурой, которую шаблоны передают плохо — матрицы/таблицы ответственности, '
-    'концептуальные схемы и диаграммы потоков, карты экосистемы, нестандартные '
-    'композиции — ставь "freeform": true, "template_id": null (систему вёрстки '
-    'выберет генератор). Не натягивай такой контент на ближайший шаблон, если он '
-    'искажает смысл. Для типовых слайдов (тезис, перечисление, график, сравнение) '
-    'используй шаблоны.')
+    '- FREEFORM: для НЕТИПОВОЙ структуры (матрицы ответственности, концептуальные '
+    'схемы, карты экосистемы), которую шаблоны искажают — ставь "freeform": true и '
+    '"template_id": null.')
 _FREEFORM_FORBIDDEN = ('- freeform запрещён: каждый слайд обязан использовать '
-                       'шаблон из каталога.')
+                       'шаблон из меню/каталога.')
 
 _REBRAND_NOTE = ("Ниже — скриншоты слайдов исходной презентации (режим rebrand). "
                  "Перенеси её структуру, порядок и содержание слайдов в бренд-шаблоны.")
 
+
+# ============================ ОБЩЕЕ ============================
 
 def slot_brief(spec: SlotSpec) -> dict:
     """Компактное описание слота для промпта (нулевые лимиты опускаем)."""
@@ -124,11 +136,19 @@ def slot_brief(spec: SlotSpec) -> dict:
 
 
 def library_brief(library: TemplateLibrary) -> str:
-    """Компактный JSON каталога шаблонов для промпта планировщика."""
+    """Полный JSON каталога со слот-контрактами (для монолитного vision-вызова)."""
     items = [{"id": t.id, "type": t.type, "intent": t.intent,
               "slots": {n: slot_brief(s) for n, s in t.slots.items()}}
              for t in library.templates]
     return json.dumps(items, ensure_ascii=False)
+
+
+def library_menu(library: TemplateLibrary) -> str:
+    """Компактное меню «id (type): intent» — только для ВЫБОРА шаблона в map-шаге.
+
+    Полный слот-контракт планировщику не нужен (его получит filler по шаблону);
+    короткий вход резко снижает шанс reasoning-runaway → пустого ответа Kimi."""
+    return "\n".join(f"- {t.id} ({t.type}): {t.intent}" for t in library.templates)
 
 
 def doc_to_text(doc: InputDoc) -> str:
@@ -143,6 +163,17 @@ def doc_to_text(doc: InputDoc) -> str:
             rendered = _block_to_text(block)
             if rendered:
                 lines.append(rendered)
+    return "\n\n".join(lines)
+
+
+def _section_to_text(section: Section) -> str:
+    lines: list[str] = []
+    if section.heading:
+        lines.append(section.heading)
+    for block in section.blocks:
+        rendered = _block_to_text(block)
+        if rendered:
+            lines.append(rendered)
     return "\n\n".join(lines)
 
 
@@ -162,42 +193,200 @@ def _block_to_text(block: Block) -> str:
     return ""
 
 
-def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
-              slide_images: Sequence[Path] = (), freeform_ok: bool = False,
-              max_tokens: int = 16384) -> DeckPlan:
-    """Один вызов планировщика. Бросает SlotValidationError на неизвестный template_id.
+# ===================== MAP: план по разделу =====================
 
-    max_tokens щедрый: Kimi-K2.6 — reasoning-модель, на большом документе тратит
-    тысячи токенов на скрытое рассуждение ДО выдачи JSON. При 8192 ответ обрывался
-    на стадии reasoning (finish=length, пустой content) → LLMFormatError. Потолок
-    не цель: биллинг по факту, короткие планы укладываются и дешевле."""
+class _SectionSlide(BaseModel):
+    template_id: Optional[str] = None
+    freeform: bool = False
+    brief: str = ""
+
+
+class _SectionPlan(BaseModel):
+    slides: list[_SectionSlide] = Field(min_length=1)
+
+
+def _has_content(section: Section) -> bool:
+    return bool(section.heading or section.blocks)
+
+
+def _list_item_count(section: Section) -> int:
+    return sum(len(b.items) for b in section.blocks if isinstance(b, ListBlock))
+
+
+def _fallback_template(section: Section, library: TemplateLibrary) -> str:
+    """Эвристика выбора шаблона, когда LLM не дал валидный план раздела.
+
+    Деградация одного раздела вместо падения всей деки (калька с filler._fallback)."""
+    known = {t.id for t in library.templates}
+    items = _list_item_count(section)
+    by_items = {2: "two-col-cards", 3: "three-col", 4: "grid-2x2",
+                5: "cards-6", 6: "cards-6"}
+    cand = by_items.get(min(items, 6)) if items >= 2 else "statement"
+    for choice in (cand, "statement", "blank"):
+        if choice in known:
+            return choice
+    return next(iter(known))
+
+
+def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
+                  section: Section, *, freeform_ok: bool) -> list[SlidePlan]:
+    """Map-шаг: один раздел -> 1-2 SlidePlan. Любой сбой -> эвристический фолбэк."""
+    known = {t.id for t in library.templates}
+    rule = _FREEFORM_ALLOWED if freeform_ok else _FREEFORM_FORBIDDEN
+    system = SECTION_SYSTEM.format(menu=menu, freeform_rule=rule, rules=brand_rules())
+    heading = section.heading or "Раздел"
+    user = f"Раздел «{heading}».\n\nТекст раздела:\n{_section_to_text(section)}"
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": user}]
+    try:
+        sp = client.chat_json(messages, _SectionPlan, max_tokens=3072,
+                              extra_body=_PLANNER_NO_THINK)
+    except (LLMFormatError, *_TRANSIENT_API_ERRORS) as exc:
+        logger.warning("planner.section_fallback", heading=heading[:40],
+                       error=str(exc)[:80])
+        return [_fallback_slide(section, library)]
+
+    out: list[SlidePlan] = []
+    for ss in sp.slides[:2]:                       # не больше 2 слайдов на раздел
+        brief = ss.brief.strip() or _section_to_text(section)
+        if ss.freeform and freeform_ok:
+            out.append(SlidePlan(index=1, type="content", template_id=None,
+                                 freeform=True, content={"brief": brief}))
+            continue
+        tid = ss.template_id if ss.template_id in known else None
+        if tid is None or tid in ("cover", "contacts", "back-cover", "blank"):
+            tid = _fallback_template(section, library)
+        out.append(SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
+                             freeform=False, content={"brief": brief}))
+    return out or [_fallback_slide(section, library)]
+
+
+def _fallback_slide(section: Section, library: TemplateLibrary) -> SlidePlan:
+    tid = _fallback_template(section, library)
+    return SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
+                     freeform=False, content={"brief": _section_to_text(section)})
+
+
+# ===================== REDUCE: сборка деки в коде =====================
+
+def _cover_slide(doc: InputDoc, library: TemplateLibrary) -> SlidePlan:
+    spec = library.get("cover")
+    brief = doc.title or "Cloud.ru"
+    return SlidePlan(index=1, type=spec.type, template_id="cover",
+                     content={"brief": brief})
+
+
+def _contacts_slide(library: TemplateLibrary) -> SlidePlan:
+    spec = library.get("contacts")
+    return SlidePlan(index=1, type=spec.type, template_id="contacts",
+                     content={"brief": "Контакты Cloud.ru: cloud.ru"})
+
+
+def _enforce_variety(slides: list[SlidePlan], library: TemplateLibrary) -> None:
+    """Правило бренда: текстовый шаблон не чаще 2 раз и не подряд. Свап на
+    совместимый из семейства (чарты/спец-шаблоны не трогаем). In-place."""
+    known = {t.id for t in library.templates}
+    counts: dict[str, int] = {}
+    prev: Optional[str] = None
+    for slide in slides:
+        tid = slide.template_id
+        if not tid or tid not in _VARIETY_FAMILY:
+            prev = tid
+            continue
+        conflict = counts.get(tid, 0) >= 2 or tid == prev
+        if conflict:
+            for alt in _VARIETY_SWAP.get(tid, ()):
+                if alt in known and counts.get(alt, 0) < 2 and alt != prev:
+                    slide.template_id = alt
+                    slide.type = library.get(alt).type
+                    tid = alt
+                    break
+        counts[tid] = counts.get(tid, 0) + 1
+        prev = tid
+
+
+def _pick_accent(slides: list[SlidePlan]) -> None:
+    """≤1 зелёный accent-слайд на деку: первый statement (бренд-приём). In-place."""
+    for slide in slides:
+        if slide.template_id == "statement" and isinstance(slide.content, dict):
+            slide.content = {**slide.content, "accent": "1"}
+            return
+
+
+def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
+                    freeform_ok: bool, workers: int = 4) -> DeckPlan:
+    menu = library_menu(library)
+    sections = [s for s in doc.sections if _has_content(s)]
+
+    # MAP: разделы параллельно (RPS держит гейт клиента; фолбэк внутри _plan_section).
+    if sections:
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
+            futures = [pool.submit(_plan_section, client, library, menu, s,
+                                   freeform_ok=freeform_ok) for s in sections]
+            per_section = [f.result() for f in futures]
+        finally:
+            pool.shutdown()
+    else:
+        per_section = []
+
+    # REDUCE: cover + слайды разделов + contacts; разнообразие и accent — в коде.
+    slides: list[SlidePlan] = [_cover_slide(doc, library)]
+    for group in per_section:
+        slides.extend(group)
+    slides.append(_contacts_slide(library))
+    _enforce_variety(slides, library)
+    _pick_accent(slides)
+    for i, slide in enumerate(slides, start=1):
+        slide.index = i
+    return DeckPlan(title=doc.title or "Презентация", slides=slides)
+
+
+# ===================== VISION (rebrand): монолит =====================
+
+def _plan_deck_vision(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
+                      slide_images: Sequence[Path], *, freeform_ok: bool,
+                      max_tokens: int) -> DeckPlan:
     rule = _FREEFORM_ALLOWED if freeform_ok else _FREEFORM_FORBIDDEN
     system = PLANNER_SYSTEM.format(freeform_rule=rule, rules=brand_rules())
     text = (f"Каталог шаблонов:\n{library_brief(library)}\n\n"
             f"Исходный документ:\n{doc_to_text(doc)}")
-    if slide_images:
-        content: list[dict] = [{"type": "text", "text": text + "\n\n" + _REBRAND_NOTE}]
-        content.extend(image_part(p) for p in slide_images)
-        user: dict = {"role": "user", "content": content}
-    else:
-        user = {"role": "user", "content": text}
-    messages = [{"role": "system", "content": system}, user]
+    content: list[dict] = [{"type": "text", "text": text + "\n\n" + _REBRAND_NOTE}]
+    content.extend(image_part(p) for p in slide_images)
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": content}]
     try:
-        # reasoning ON — best structural quality
-        plan = client.chat_json(messages, DeckPlan, max_tokens=max_tokens)
+        return client.chat_json(messages, DeckPlan, max_tokens=max_tokens)
     except LLMFormatError as exc:
-        # Reasoning ran away → no/empty JSON after retries. Retry once with
-        # reasoning disabled so the build doesn't hard-fail. An empty plan also
-        # lands here: DeckPlan requires ≥1 slide, so {"slides":[]} fails
-        # validation and chat_json re-raises it as LLMFormatError.
         logger.warning("planner.retry_no_think", error=str(exc))
-        plan = client.chat_json(messages, DeckPlan, max_tokens=max_tokens,
+        return client.chat_json(messages, DeckPlan, max_tokens=max_tokens,
                                 extra_body=_PLANNER_NO_THINK)
+
+
+# ===================== ВХОД =====================
+
+def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
+              slide_images: Sequence[Path] = (), freeform_ok: bool = False,
+              max_tokens: int = 16384) -> DeckPlan:
+    """InputDoc + каталог -> DeckPlan.
+
+    Текстовый вход — map(по разделам)+reduce(в коде); pptx-rebrand со скриншотами —
+    монолитный vision-вызов. Бросает SlotValidationError на неизвестный template_id.
+    """
+    if slide_images:
+        plan = _plan_deck_vision(client, doc, library, slide_images,
+                                 freeform_ok=freeform_ok, max_tokens=max_tokens)
+    else:
+        plan = _plan_deck_text(client, doc, library, freeform_ok=freeform_ok)
+    return _finalize(plan, library, freeform_ok=freeform_ok)
+
+
+def _finalize(plan: DeckPlan, library: TemplateLibrary, *,
+              freeform_ok: bool) -> DeckPlan:
+    """Общие страховки для обоих путей: blank-misuse, freeform-контроль, валидация
+    template_id, дедуп зелёного accent."""
     seen_accent = False
     for slide in plan.slides:
-        # Страховка blank-misuse: blank — только аварийная заглушка fill-стадии.
-        # Если планировщик выбрал blank для контентного слайда, переводим на
-        # statement (оба type=content, бриф сохраняется → филлер заполнит из него).
         if not slide.freeform and slide.template_id == "blank":
             spec = library.get("statement")
             slide.template_id = "statement"
@@ -206,8 +395,6 @@ def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
             raise ValueError(f"slide {slide.index}: freeform запрещён (freeform_ok=False)")
         if not slide.freeform:
             library.get(slide.template_id)      # неизвестный id -> SlotValidationError
-        # Страховка: зелёный accent-слайд максимум один на деку (бренд) — снимаем
-        # accent со второго и далее, даже если планировщик поставил его несколько раз.
         if isinstance(slide.content, dict) and slide.content.get("accent"):
             if seen_accent:
                 slide.content = {k: v for k, v in slide.content.items() if k != "accent"}

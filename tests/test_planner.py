@@ -1,70 +1,104 @@
-"""Planner robustness: a flaky Kimi reply (no/empty JSON under reasoning runaway)
-must not abort the whole build. plan_deck retries once with reasoning disabled.
-Regression for the live failure `LLMFormatError: no JSON object after 2 retries`
-that aborted a run (the user perceived it as a crash mid-navigation)."""
+"""Planner map→reduce: текстовый вход планируется по разделам параллельно, затем
+структура собирается в коде. Регрессия для прод-падения `LLMFormatError: no JSON
+object`, которое роняло ВЕСЬ билд: теперь сбой раздела изолирован (эвристический
+фолбэк), а cover/contacts/разнообразие/accent детерминированы кодом."""
+import pytest
+
 from htmlslides.library import TemplateLibrary
-from htmlslides.models import DeckPlan, SlidePlan
-from htmlslides.parsers.base import InputDoc, Section, TextBlock
+from htmlslides.models import DeckPlan
+from htmlslides.parsers.base import InputDoc, ListBlock, Section, TextBlock
 from htmlslides.pipeline import planner
 from htmlslides.pipeline.client import LLMFormatError
+from htmlslides.pipeline.planner import _SectionPlan, _SectionSlide
 
 
 def _doc():
-    return InputDoc(title="T", sections=[
-        Section(heading="Раздел", level=2, blocks=[TextBlock(text="факт")])])
+    return InputDoc(title="Тест-дека", sections=[
+        Section(heading="Преимущества", level=2, blocks=[
+            ListBlock(items=["A — раз", "B — два", "C — три"])]),
+        Section(heading="Безопасность", level=2, blocks=[
+            TextBlock(text="Соответствие 152-ФЗ и 187-ФЗ.")]),
+    ])
 
 
-def _good_plan():
-    return DeckPlan(title="T", slides=[
-        SlidePlan(index=1, type="title", template_id="cover"),
-        SlidePlan(index=2, type="content", template_id="statement"),
-        SlidePlan(index=3, type="contacts", template_id="contacts")])
+class FakeClient:
+    """chat_json возвращает заранее заданные _SectionPlan по очереди вызовов;
+    значение-исключение бросается (эмуляция флапа Kimi)."""
+    def __init__(self, replies):
+        self._replies = list(replies)
+        self.calls = 0
+
+    def chat_json(self, messages, model_cls, *, max_tokens=4096, retries=2,
+                  extra_body=None):
+        self.calls += 1
+        r = self._replies.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
 
 
-def test_planner_default_keeps_reasoning():
-    """Happy path: a valid plan on the first (reasoning ON) attempt — no fallback,
-    no second call."""
-    library = TemplateLibrary.load()
-    calls = []
-
-    class FakeClient:
-        def chat_json(self, messages, model_cls, *, max_tokens=4096,
-                      retries=2, extra_body=None):
-            calls.append(extra_body)
-            return _good_plan()
-
-    plan = planner.plan_deck(FakeClient(), _doc(), library)
-    assert len(plan.slides) == 3
-    assert calls == [None]   # only the reasoning-ON attempt, no fallback
+def _sp(template_id, brief="факт"):
+    return _SectionPlan(slides=[_SectionSlide(template_id=template_id, brief=brief)])
 
 
-def test_planner_falls_back_to_no_think_on_format_error():
-    library = TemplateLibrary.load()
-    calls = []
-
-    class FakeClient:
-        def chat_json(self, messages, model_cls, *, max_tokens=4096,
-                      retries=2, extra_body=None):
-            calls.append(extra_body)
-            if len(calls) == 1:               # reasoning-ON attempt flakes
-                raise LLMFormatError("no JSON object")
-            return _good_plan()               # no-think retry succeeds
-
-    plan = planner.plan_deck(FakeClient(), _doc(), library)
-    assert [s.index for s in plan.slides] == [1, 2, 3]
-    assert calls[0] is None                                # first: reasoning ON
-    assert calls[1] == {"thinking": {"type": "disabled"}}  # retry: reasoning OFF
+def test_text_path_maps_sections_and_wraps_cover_contacts():
+    lib = TemplateLibrary.load()
+    client = FakeClient([_sp("three-col"), _sp("statement")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    ids = [s.template_id for s in plan.slides]
+    assert ids[0] == "cover" and ids[-1] == "contacts"
+    assert "three-col" in ids and "statement" in ids
+    assert [s.index for s in plan.slides] == list(range(1, len(plan.slides) + 1))
+    assert client.calls == 2                      # один вызов на раздел
 
 
-def test_planner_propagates_when_both_attempts_fail():
-    """If even the no-think retry can't produce JSON, fail loud (rare)."""
-    import pytest
-    library = TemplateLibrary.load()
+def test_section_failure_falls_back_not_aborts():
+    """Сбойный раздел не роняет деку — деградирует на эвристический шаблон."""
+    lib = TemplateLibrary.load()
+    client = FakeClient([LLMFormatError("no JSON object"), _sp("statement")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    # деки собралась: cover + 2 контентных + contacts
+    assert len(plan.slides) == 4
+    assert plan.slides[0].template_id == "cover"
+    # упавший раздел (3 пункта списка) ушёл на эвристику three-col, брифом — текст раздела
+    assert plan.slides[1].template_id == "three-col"
+    assert "раз" in plan.slides[1].content["brief"]
 
-    class FakeClient:
-        def chat_json(self, messages, model_cls, *, max_tokens=4096,
-                      retries=2, extra_body=None):
-            raise LLMFormatError("no JSON object")
 
-    with pytest.raises(LLMFormatError):
-        planner.plan_deck(FakeClient(), _doc(), library)
+def test_variety_swaps_adjacent_duplicate():
+    lib = TemplateLibrary.load()
+    # оба раздела просят cards-6 подряд → второй должен свапнуться на альтернативу
+    client = FakeClient([_sp("cards-6"), _sp("cards-6")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    content = [s.template_id for s in plan.slides if s.template_id not in
+               ("cover", "contacts")]
+    assert content[0] == "cards-6"
+    assert content[1] != "cards-6"                # разнообразие
+    assert content[1] in planner._VARIETY_SWAP["cards-6"]
+
+
+def test_accent_on_first_statement_only():
+    lib = TemplateLibrary.load()
+    client = FakeClient([_sp("statement"), _sp("statement")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    accented = [s for s in plan.slides if isinstance(s.content, dict)
+                and s.content.get("accent")]
+    assert len(accented) == 1
+    assert accented[0].template_id == "statement"
+
+
+def test_unknown_template_id_falls_back():
+    lib = TemplateLibrary.load()
+    client = FakeClient([_sp("totally-made-up"), _sp("statement")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    # неизвестный id заменён эвристикой (3 пункта → three-col), деки валидна
+    assert plan.slides[1].template_id in {t.id for t in lib.templates}
+
+
+def test_empty_plan_is_impossible():
+    """DeckPlan всегда непуст: даже без разделов есть cover+contacts."""
+    lib = TemplateLibrary.load()
+    client = FakeClient([])
+    plan = planner.plan_deck(client, InputDoc(title="Пусто", sections=[]), lib)
+    assert [s.template_id for s in plan.slides] == ["cover", "contacts"]
+    assert isinstance(plan, DeckPlan)
