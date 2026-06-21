@@ -99,15 +99,42 @@ def test_pptx_modes_rejected(monkeypatch, tmp_path):
             assert r.status_code == 400
 
 
+def _mark_done(session_id):
+    """Помечаем джоб терминальным (история показывает только завершённые)."""
+    import asyncio as _aio
+    import webapp.app as _app
+    import webapp.jobs_repo as _jr
+
+    async def _finish():
+        async with _app.app.state.sessionmaker() as s:
+            await _jr.mark_terminal(s, session_id, status="done",
+                                    result_path=None, error=None)
+            await s.commit()
+    _aio.get_event_loop().run_until_complete(_finish())
+
+
 def test_history_scoped_to_user(monkeypatch, tmp_path):
     _no_run(monkeypatch)
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/api/history", headers=H("u1")).json() == []
-        c.post("/api/jobs", data={"mode": "htmlnew"},
-               files={"file": ("a.md", b"# a", "text/markdown")}, headers=H("u1"))
-        # u1 sees their job; u2 sees nothing
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        _mark_done(sid)                       # история = только завершённые
+        # u1 sees their finished job; u2 sees nothing
         assert len(c.get("/api/history", headers=H("u1")).json()) == 1
         assert c.get("/api/history", headers=H("u2")).json() == []
+
+
+def test_history_excludes_unfinished_jobs(monkeypatch, tmp_path):
+    """Регрессия: ещё не собранная (queued/running) презентация НЕ должна попадать
+    в «Историю сборок» — только в «Активные сборки»."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        c.post("/api/jobs", data={"mode": "htmlnew"},
+               files={"file": ("q.md", b"# q", "text/markdown")}, headers=H("u1"))
+        # джоб остаётся queued (runner замокан) → история пуста
+        assert c.get("/api/history", headers=H("u1")).json() == []
 
 
 def test_clear_history_spares_active_run(monkeypatch, tmp_path):
@@ -124,23 +151,15 @@ def test_clear_history_spares_active_run(monkeypatch, tmp_path):
                         files={"file": ("run.md", b"# r", "text/markdown")},
                         headers=H("u1")).json()["session_id"]
         # mark the first terminal so clear has something to remove
-        import asyncio as _aio
-        import webapp.app as _app
-        import webapp.jobs_repo as _jr
-
-        async def _finish():
-            async with _app.app.state.sessionmaker() as s:
-                await _jr.mark_terminal(s, done, status="done",
-                                        result_path=None, error=None)
-                await s.commit()
-        _aio.get_event_loop().run_until_complete(_finish())
+        _mark_done(done)
 
         assert c.post("/api/history/clear", headers=H("u1")).status_code == 200
-        # active run's Job row survives (finished one is removed)
+        # finished job removed from history; active (queued) was never in history
+        # anyway (history = terminal only), but its Job ROW must survive the clear.
         ids = {j["id"] for j in c.get("/api/history", headers=H("u1")).json()}
-        assert active in ids
         assert done not in ids
-        # and the active run's owner-only deck endpoint no longer 404s on ownership
+        # active run's owner-only deck endpoint still works → its Job row survived
+        # (404 would mean the row was deleted out from under the running build).
         import webapp.deck_edit as de
         de.save_deck(active, '<section class="slide">A</section>')
         assert c.get(f"/api/jobs/{active}/deck", headers=H("u1")).status_code == 200

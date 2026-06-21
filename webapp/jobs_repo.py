@@ -36,8 +36,14 @@ async def get_owned(session: AsyncSession, session_id: str,
 
 async def list_for_user(session: AsyncSession, user_id: int,
                         limit: int = 10) -> list[models.Job]:
+    """История сборок = только завершённые джобы (done/failed/cancelled). Активные
+    (queued/running) сюда не попадают — они живут в «Активных сборках» (/api/jobs/
+    active). Иначе ещё не собранная презентация светилась бы в истории с кнопкой
+    «Открыть» (а заодно фантомный queued от 429 — он тоже терминальным не является)."""
     res = await session.execute(
-        select(models.Job).where(models.Job.user_id == user_id)
+        select(models.Job).where(
+            models.Job.user_id == user_id,
+            models.Job.status.in_(_TERMINAL))
         .order_by(models.Job.created_at.desc()).limit(limit))
     return list(res.scalars().all())
 

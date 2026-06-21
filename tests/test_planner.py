@@ -6,10 +6,12 @@ import pytest
 
 from htmlslides.library import TemplateLibrary
 from htmlslides.models import DeckPlan
-from htmlslides.parsers.base import InputDoc, ListBlock, Section, TextBlock
+from htmlslides.parsers.base import (InputDoc, ListBlock, Section, TableBlock,
+                                     TextBlock)
 from htmlslides.pipeline import planner
 from htmlslides.pipeline.client import LLMFormatError
-from htmlslides.pipeline.planner import _SectionPlan, _SectionSlide
+from htmlslides.pipeline.planner import (_fallback_template, _SectionPlan,
+                                         _SectionSlide)
 
 
 def _doc():
@@ -102,3 +104,36 @@ def test_empty_plan_is_impossible():
     plan = planner.plan_deck(client, InputDoc(title="Пусто", sections=[]), lib)
     assert [s.template_id for s in plan.slides] == ["cover", "contacts"]
     assert isinstance(plan, DeckPlan)
+
+
+def _sec(blocks):
+    return Section(heading="Раздел", level=2, blocks=blocks)
+
+
+def test_fallback_is_data_aware():
+    """Регрессия: при фолбэке раздела чарты/диаграммы/таблицы НЕ должны пропадать —
+    эвристика выбирает профильный data-шаблон по содержимому, а не только текст."""
+    lib = TemplateLibrary.load()
+    assert _fallback_template(
+        _sec([TableBlock(rows=[["a", "b"], ["1", "2"]])]), lib) == "service-table"
+    assert _fallback_template(
+        _sec([TextBlock(text="Аптайм 99.9%, покрытие 80%, рост 50%")]), lib) == "donut-chart"
+    assert _fallback_template(
+        _sec([TextBlock(text="18 млрд выручка, 500 ГБ, 3 раза рост")]), lib) == "stats-row"
+    assert _fallback_template(
+        _sec([TextBlock(text="было 10 млрд, стало 18 млрд")]), lib) == "bar-chart"
+    # без данных — прежнее текстовое поведение
+    assert _fallback_template(
+        _sec([ListBlock(items=["a", "b", "c"])]), lib) == "three-col"
+    assert _fallback_template(
+        _sec([TextBlock(text="Просто мысль без чисел.")]), lib) == "statement"
+
+
+def test_failed_numeric_section_yields_chart_not_text():
+    """Сквозной: раздел с числами, у которого LLM-вызов упал, всё равно даёт чарт."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        _sec([TextBlock(text="Доступность 99.95%, покрытие 100%, готовность 70%")])])
+    client = FakeClient([LLMFormatError("no JSON object")])
+    plan = planner.plan_deck(client, doc, lib)
+    assert plan.slides[1].template_id == "donut-chart"   # не текстовый шаблон

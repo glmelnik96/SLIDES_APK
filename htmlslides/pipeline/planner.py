@@ -102,11 +102,20 @@ SECTION_SYSTEM = """\
 Правила:
 - template_id СТРОГО из меню; обычно 1 слайд на раздел (2 — только если контента
   реально много и он распадается на две темы).
-- Выбор шаблона по числу именованных пунктов: 2→two-col-cards; 3→three-col;
-  4→grid-2x2; 5-6→cards-6. Если варианты сравниваются по ОДНОМУ числу — bar-chart;
-  ряд во времени → line-chart/timeline; доли целого → donut-chart; набор метрик →
-  stats-row; проценты готовности → kpi-rings. Короткий тезис из 1-2 предложений без
-  списка/чисел → statement.
+- ДАННЫЕ ВАЖНЕЕ ТЕКСТА: если в разделе есть числа, проценты, метрики, сравнения или
+  таблица — ВЫБИРАЙ ПРОФИЛЬНЫЙ data-шаблон, НЕ сворачивай в текстовый список:
+  · таблица (строки×столбцы) или «сервис + параметры» → service-table;
+  · 2 ключевые цифры-героя (выручка, рост) → kpi;
+  · 3-4 разрозненные метрики в ряд → stats-row;
+  · сравнение 3-6 величин по одному числу → bar-chart;
+  · доли целого (структура, %) → donut-chart;
+  · одна метрика во времени → line-chart;
+  · состав по категориям (части в каждой) → stacked-bar;
+  · проценты готовности/покрытия → kpi-rings;
+  · этапы/шаги во времени → timeline;
+  · «было → стало» → before-after.
+- Иначе по числу именованных пунктов: 2→two-col-cards; 3→three-col; 4→grid-2x2;
+  5-6→cards-6. Короткий тезис из 1-2 предложений без списка/чисел → statement.
 - В brief — конкретика раздела (цифры, названия, тезисы), сохраняй единицы и
   суффиксы (152-ФЗ, %, млрд, Tier III). Ничего не выдумывай.
 - НЕ выбирай cover/contacts/back-cover/blank — их ставит система.
@@ -222,16 +231,42 @@ def _list_item_count(section: Section) -> int:
     return sum(len(b.items) for b in section.blocks if isinstance(b, ListBlock))
 
 
+# Число с единицей/суффиксом — сигнал «здесь данные, а не проза» (152-ФЗ, 99.9%,
+# 18 млрд, Tier III, ×3, 500 ГБ). Голые годы/нумерация списка сюда не считаем.
+_NUMERIC_TOKEN = re.compile(
+    r"\d[\d.,]*\s*(?:%|млрд|млн|тыс|₽|руб|x|×|раз|ГБ|ТБ|TB|GB|Tier|ФЗ|сек|мс|ч|сут)",
+    re.IGNORECASE)
+_PERCENT = re.compile(r"\d[\d.,]*\s*%")
+
+
 def _fallback_template(section: Section, library: TemplateLibrary) -> str:
     """Эвристика выбора шаблона, когда LLM не дал валидный план раздела.
 
-    Деградация одного раздела вместо падения всей деки (калька с filler._fallback)."""
+    ВАЖНО: учитывает ДАННЫЕ раздела (таблицы/числа/проценты) — иначе чарты, диаграммы
+    и таблицы пропадали бы при каждом фолбэке (а на деградированном Cloud.ru фолбэк —
+    частый путь). Деградация одного раздела вместо падения всей деки."""
     known = {t.id for t in library.templates}
+    text = _section_to_text(section)
+    has_table = any(isinstance(b, TableBlock) for b in section.blocks)
+    numeric = len(_NUMERIC_TOKEN.findall(text))
+    percents = len(_PERCENT.findall(text))
     items = _list_item_count(section)
+
+    # Порядок проб: профильный data-шаблон → текстовый по числу пунктов → запасные.
+    candidates: list[str] = []
+    if has_table:
+        candidates.append("service-table")
+    if percents >= 2:                      # доли/проценты — кольцевая диаграмма
+        candidates.append("donut-chart")
+    if numeric >= 3:                       # набор метрик — крупные числа в ряд
+        candidates.append("stats-row")
+    elif numeric == 2:                     # пара величин — сравнение барами
+        candidates.append("bar-chart")
     by_items = {2: "two-col-cards", 3: "three-col", 4: "grid-2x2",
                 5: "cards-6", 6: "cards-6"}
-    cand = by_items.get(min(items, 6)) if items >= 2 else "statement"
-    for choice in (cand, "statement", "blank"):
+    candidates.append(by_items.get(min(items, 6)) if items >= 2 else "statement")
+    candidates += ["statement", "blank"]
+    for choice in candidates:
         if choice in known:
             return choice
     return next(iter(known))
