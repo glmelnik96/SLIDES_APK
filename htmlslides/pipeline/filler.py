@@ -134,7 +134,7 @@ def fill_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *
 
 
 def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
-              workers: int = 4, progress=lambda message: None) -> DeckPlan:
+              workers: int = 8, progress=lambda message: None) -> DeckPlan:
     """Параллельное заполнение всех слайдов (RPS держит гейт клиента).
 
     Мягкая деградация: FillError одного слайда НЕ валит всю деку — слайд

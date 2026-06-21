@@ -63,7 +63,9 @@ from webapp.config import settings as _settings
 
 app = FastAPI(title="Slides App")
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
-runner = JobRunner(max_per_user=_settings.user_queue_limit)
+runner = JobRunner(max_active=_settings.max_active,
+                   max_per_user=_settings.user_queue_limit,
+                   build_workers=_settings.build_workers)
 
 
 @app.on_event("startup")
