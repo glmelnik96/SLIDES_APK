@@ -90,7 +90,7 @@ async def test_worker_exception_emits_failed(monkeypatch):
 
 async def test_cancel_queued_job_emits_cancelled(monkeypatch):
     """A job still waiting in the queue is cancelled instantly via its Future."""
-    r = runner.JobRunner()
+    r = runner.JobRunner(build_workers=1)   # 1 worker so b genuinely queues behind a
     r.bind_loop(asyncio.get_running_loop())
     prog = types.SimpleNamespace(publish=None)
     monkeypatch.setattr(runner, "_progress_module", lambda: prog)

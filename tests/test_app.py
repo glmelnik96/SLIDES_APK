@@ -293,3 +293,70 @@ def test_runner_per_user_limit():
         pass
     # a different user is unaffected
     r.start(_Inp("d"), user_id=2)
+
+
+def test_runner_queues_beyond_parallelism_without_rejecting():
+    """Jobs beyond the parallel-worker count must be ACCEPTED (queued), not 429 —
+    they only fail once the system-wide max_active is reached."""
+    import asyncio as _aio
+    from webapp.runner import JobRunner, CapacityError
+
+    # 2 parallel workers but room for 5 in the system → 5 accepted, 6th rejected.
+    r = JobRunner(max_active=5, max_per_user=99, build_workers=2)
+    r.bind_loop(_aio.new_event_loop())
+    r._install_sink = lambda: None
+    r._pool.submit = lambda fn: None  # don't actually run; just exercise admission
+
+    class _Inp:
+        def __init__(self, sid):
+            self.session_id, self.mode = sid, "htmlnew"
+
+    for sid in ("a", "b", "c", "d", "e"):   # all queue fine despite only 2 workers
+        r.start(_Inp(sid), user_id=1)
+    assert r.active_count() == 5
+    try:
+        r.start(_Inp("f"), user_id=1)
+        assert False, "expected CapacityError at max_active"
+    except CapacityError:
+        pass
+
+
+def test_inflight_semaphore_caps_concurrent_calls(monkeypatch):
+    """The process-wide semaphore bounds simultaneous Cloud.ru calls regardless of
+    how many builds/threads call chat() at once."""
+    import threading
+    import time
+    import htmlslides.pipeline.client as clientmod
+
+    monkeypatch.setattr(clientmod, "_INFLIGHT", threading.BoundedSemaphore(3))
+    live = {"now": 0, "max": 0}
+    lock = threading.Lock()
+
+    class _Resp:
+        class _C:
+            class _M:
+                content = "ok"
+            message = _M()
+        choices = [_C()]
+
+    class _Transport:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    with lock:
+                        live["now"] += 1
+                        live["max"] = max(live["max"], live["now"])
+                    time.sleep(0.05)
+                    with lock:
+                        live["now"] -= 1
+                    return _Resp()
+
+    c = clientmod.KimiClient(rps=1000, transport=_Transport())
+    threads = [threading.Thread(target=lambda: c.chat([{"role": "user", "content": "x"}]))
+               for _ in range(12)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert live["max"] <= 3, f"semaphore breached: {live['max']}"

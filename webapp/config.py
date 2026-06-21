@@ -33,9 +33,15 @@ class Settings(BaseSettings):
     db_url: str = Field("sqlite+aiosqlite:///./data/app2.db", alias="DB_URL")
     data_dir: Path = Field(ROOT / "data", alias="DATA_DIR")
 
-    # Per-user queue limit (how many builds one user may have in the system at
-    # once). Global concurrency stays 1 worker — the engine is RPS-bound.
-    user_queue_limit: int = Field(5, alias="USER_QUEUE_LIMIT")
+    # Queue capacity. Goal: tasks WAIT in the queue rather than 429. These caps are
+    # safety valves (memory/abuse), set high enough to never trip in normal use.
+    # max_active = total jobs in the system (running + waiting); per-user = how many
+    # one user may have queued at once. Real parallelism is build_workers (how many
+    # builds run at once); the rest wait. Cloud.ru concurrency is bounded separately
+    # by CLOUDRU_MAX_INFLIGHT in the pipeline client, so workers can be raised safely.
+    max_active: int = Field(60, alias="QUEUE_MAX_ACTIVE")
+    user_queue_limit: int = Field(15, alias="USER_QUEUE_LIMIT")
+    build_workers: int = Field(3, alias="BUILD_WORKERS")
 
     # Result retention (sessions + Job rows older than this are purged).
     retention_hours: int = Field(24, alias="RETENTION_HOURS")

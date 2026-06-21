@@ -22,6 +22,16 @@ DEFAULT_MODEL = "moonshotai/Kimi-K2.6"
 
 T = TypeVar("T", bound=BaseModel)
 
+# Process-wide cap on CONCURRENT Cloud.ru requests, shared by every KimiClient
+# instance (each build makes its own client). This is the single safety valve that
+# lets us run several builds in parallel and raise filler/planner concurrency
+# without ever exceeding what Cloud.ru tolerates. Measured 2026-06-21: light
+# requests held to ~60 concurrent with 0 rejects (first 429 at 80), heavy reasoning
+# 12+ with 0 rejects — so 18 is a deliberately conservative ceiling with headroom.
+# Per-instance _RateGate still smooths requests/sec; this bounds simultaneity.
+_MAX_INFLIGHT = max(1, int(os.environ.get("CLOUDRU_MAX_INFLIGHT", "18")))
+_INFLIGHT = threading.BoundedSemaphore(_MAX_INFLIGHT)
+
 
 class LLMFormatError(RuntimeError):
     """Модель не вернула валидный JSON после ретрая (или JSON не найден)."""
@@ -115,10 +125,16 @@ class KimiClient:
         # 1-4 min per call. None here = fall back to the instance default.
         body = extra_body if extra_body is not None else self._extra_body
         self._gate.acquire()
-        resp = self._client.chat.completions.create(
-            model=self.model, messages=messages,
-            max_tokens=max_tokens, temperature=temperature,
-            extra_body=body or None)
+        # Bound process-wide simultaneous Cloud.ru calls (shared across all builds).
+        # Acquire around ONLY the network call and always release (context manager),
+        # so a slow/failing call can't leak a slot. Each task does one call then
+        # frees the slot — no task holds a slot while awaiting another, so the
+        # semaphore can't deadlock even with many parallel filler/planner threads.
+        with _INFLIGHT:
+            resp = self._client.chat.completions.create(
+                model=self.model, messages=messages,
+                max_tokens=max_tokens, temperature=temperature,
+                extra_body=body or None)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], model_cls: Type[T], *,

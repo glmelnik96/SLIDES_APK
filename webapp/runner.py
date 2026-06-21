@@ -1,13 +1,16 @@
-"""Run the engine in a worker thread and bridge worker.progress -> asyncio queues.
+"""Run the engine in worker threads and bridge worker.progress -> asyncio queues.
 
-Jobs run ONE AT A TIME (single worker thread = FIFO queue): the bottleneck is the
-shared Cloud.ru account RPS budget (~18 req/s), not local CPU, and one job already
-saturates it via the engine's internal parallelism. Up to MAX_ACTIVE jobs may sit
-in the system (1 running + the rest queued); a 6th is rejected with CapacityError.
+Several builds run in parallel (BUILD_WORKERS threads); the rest WAIT in the pool's
+queue — submissions are accepted up to MAX_ACTIVE and only then rejected with
+CapacityError, so under normal load tasks queue rather than fail. The hard ceiling
+on concurrent Cloud.ru calls lives in the pipeline client (CLOUDRU_MAX_INFLIGHT
+semaphore), shared across all running builds — that, not the worker count, is what
+protects the account, so build_workers can be raised safely.
 
 A single routing sink is installed on worker.progress.publish; it dispatches each
-ProgressEvent to the right per-session asyncio.Queue by event.session_id, records
-the latest status snapshot, and captures result_path on terminal `done`.
+ProgressEvent to the right per-session asyncio.Queue by event.session_id (parallel
+builds are isolated because every event carries its own session_id), records the
+latest status snapshot, and captures result_path on terminal `done`.
 """
 from __future__ import annotations
 
@@ -16,8 +19,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
-MAX_ACTIVE = 5  # total jobs in the system: 1 running + up to 4 queued
-MAX_PER_USER = 3  # how many jobs one user may have in the system at once
+MAX_ACTIVE = 60  # total jobs in the system (running + waiting) before 429
+MAX_PER_USER = 15  # how many jobs one user may have in the system at once
+BUILD_WORKERS = 3  # how many builds run in parallel (rest wait in the queue)
 
 
 class CapacityError(RuntimeError):
@@ -51,11 +55,13 @@ def _mode_of(inp: Any) -> str:
 
 class JobRunner:
     def __init__(self, max_active: int = MAX_ACTIVE,
-                 max_per_user: int = MAX_PER_USER) -> None:
+                 max_per_user: int = MAX_PER_USER,
+                 build_workers: int = BUILD_WORKERS) -> None:
         self._loop: asyncio.AbstractEventLoop | None = None
-        # One worker = strict FIFO; queued jobs wait their turn. Matches the
-        # shared Cloud.ru RPS ceiling (parallel jobs wouldn't go faster).
-        self._pool = ThreadPoolExecutor(max_workers=1)
+        # N workers run builds in parallel; submissions beyond N wait in the pool's
+        # internal FIFO queue. Real Cloud.ru concurrency is capped separately by the
+        # client's CLOUDRU_MAX_INFLIGHT semaphore, so more workers ≠ overload.
+        self._pool = ThreadPoolExecutor(max_workers=max(1, build_workers))
         self._max_active = max_active
         self._max_per_user = max_per_user
         self._queues: dict[str, asyncio.Queue] = {}
