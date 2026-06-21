@@ -24,6 +24,41 @@ const STAGE_LABEL = {
   cancelled: "Отменено",
 };
 
+// One-line "what's happening now" in plain language, expanded so the user knows
+// roughly how long each phase takes and that waiting is normal.
+const STAGE_HINT = {
+  queued: "Сборка скоро начнётся — вы в очереди.",
+  parsing: "Читаю ваш документ.",
+  classifying: "Продумываю структуру презентации — это один из самых долгих шагов (до пары минут).",
+  designing: "Оформляю слайды по очереди. Каждый слайд модель пишет отдельно, поэтому это занимает время.",
+  rendering: "Собираю презентацию воедино.",
+  validating: "Проверяю внешний вид каждого слайда на скриншотах — шаг небыстрый.",
+  autofixing: "Улучшаю слайды по результатам проверки.",
+  finalizing: "Почти готово.",
+};
+
+// Engine progress strings (e.g. "fill: слайд 4/5") → friendly Russian for the
+// detail line. Source of these prefixes: htmlslides/pipeline + worker/tasks.
+function friendlyDetail(detail) {
+  if (!detail) return "";
+  let m;
+  if ((m = detail.match(/^fill:\s*слайд\s+(\d+)\s*\/\s*(\d+)/)))
+    return `Оформляю слайд ${m[1]} из ${m[2]}`;
+  if ((m = detail.match(/^vision-qa:\s*слайд\s+(\d+)/)))
+    return `Проверяю внешний вид слайда ${m[1]}`;
+  if (detail.startsWith("старт")) return "Запускаю сборку";
+  if (detail.startsWith("parse:")) return "Читаю документ";
+  if (detail.startsWith("rebrand")) return "Анализирую исходные слайды";
+  if (detail.startsWith("plan:")) return "Продумываю структуру презентации";
+  if (detail.startsWith("fill: заполняю")) return "Оформляю слайды";
+  if (detail.startsWith("assemble:")) return "Собираю презентацию";
+  if (detail.startsWith("lint:")) return "Проверяю вёрстку";
+  if (detail.startsWith("vision-qa")) return "Проверяю внешний вид";
+  if (detail.startsWith("autofix:")) return "Улучшаю слайды по результатам проверки";
+  if (detail.startsWith("done:")) return "Готово";
+  return "";  // warnings & internal notes: keep them out of the user-facing line
+}
+
 let selectedFile = null;
 
 function selectedMode() {
@@ -142,7 +177,11 @@ async function autoResumeActive() {
   let items = [];
   try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) { return; }
   if (!items.length || currentSession) return;
-  streamProgress(items[0].session_id, "html");
+  // Seed the panel from the run's known stage/pct so returning to the page shows
+  // live progress immediately (not a reset "0%"), making clear the build kept going.
+  const it = items[0];
+  streamProgress(it.session_id, "html",
+                 { stage: it.stage, progress_pct: it.progress_pct, resumed: true });
 }
 
 /* ---- create job ---- */
@@ -168,12 +207,15 @@ const STALL_SECONDS = 30;
 let lastEventAt = 0;
 let heartbeatTimer = null;
 let currentSession = null;
+let currentStage = null;
 
 function logLine(stage, detail) {
   const log = $("#progressLog");
   const time = new Date().toLocaleTimeString("ru-RU");
+  const friendly = friendlyDetail(detail);
   const label = STAGE_LABEL[stage] || stage || "";
-  const text = detail ? `${label} · ${detail}` : label;
+  const text = friendly || label;
+  if (!text) return;
   const last = log.lastElementChild;
   if (last && last.dataset.text === text) return;  // skip identical repeats
   const row = document.createElement("div");
@@ -190,7 +232,8 @@ function tickHeartbeat() {
   const secs = Math.round((Date.now() - lastEventAt) / 1000);
   if (secs >= STALL_SECONDS) {
     hb.classList.add("stale");
-    hb.textContent = `нет событий уже ${secs} сек — идёт долгий шаг модели, обычно это нормально`;
+    const where = STAGE_HINT[currentStage] || "идёт долгий шаг модели.";
+    hb.textContent = `Обрабатываю уже ${secs} сек — это нормально: ${where}`;
   } else {
     hb.classList.remove("stale");
     hb.textContent = secs <= 1 ? "обновлено только что" : `обновлено ${secs} сек назад`;
@@ -201,17 +244,22 @@ function stopHeartbeat() {
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
 }
 
-function streamProgress(sessionId, kind) {
+function streamProgress(sessionId, kind, initial) {
   const prog = $("#progress");
   prog.classList.remove("hidden");
   $("#result").classList.add("hidden");
-  $("#barfill").style.width = "0%";
-  $("#stageLabel").textContent = "Подготовка…";
-  $("#stagePct").textContent = "0%";
-  $("#stageDetail").textContent = "";
+  const seedPct = initial && initial.progress_pct ? initial.progress_pct : 0;
+  const seedStage = initial && initial.stage ? initial.stage : null;
+  $("#barfill").style.width = seedPct + "%";
+  $("#stageLabel").textContent = seedStage ? (STAGE_LABEL[seedStage] || seedStage) : "Подготовка…";
+  $("#stagePct").textContent = seedPct + "%";
+  $("#stageDetail").textContent = initial && initial.resumed
+    ? "Сборка продолжается — она не прерывается при переходе между разделами."
+    : "Полная сборка обычно занимает несколько минут. Можно уйти со страницы или переключить раздел — сборка не прервётся, прогресс сохранится.";
   $("#progressLog").innerHTML = "";
   $("#stopBtn").disabled = false;
   currentSession = sessionId;
+  currentStage = seedStage;
   lastEventAt = Date.now();
   stopHeartbeat();
   heartbeatTimer = setInterval(tickHeartbeat, 1000);
@@ -225,10 +273,14 @@ function streamProgress(sessionId, kind) {
     lastEventAt = Date.now();
     tickHeartbeat();
     const pct = ev.progress_pct || 0;
+    currentStage = ev.stage || currentStage;
     $("#barfill").style.width = pct + "%";
     $("#stagePct").textContent = pct + "%";
     $("#stageLabel").textContent = STAGE_LABEL[ev.stage] || ev.stage || "";
-    if (ev.detail) $("#stageDetail").textContent = ev.detail;
+    // Detail line: live step in plain language, falling back to the stage hint.
+    const friendly = friendlyDetail(ev.detail);
+    $("#stageDetail").textContent =
+      friendly || STAGE_HINT[ev.stage] || $("#stageDetail").textContent;
     logLine(ev.stage, ev.detail || ev.error);
     if (ev.terminal) {
       finished = true;

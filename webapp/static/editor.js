@@ -22,6 +22,27 @@ const STAGE_LABEL = {
   rendering: "Сборка", validating: "Проверка качества",
   autofixing: "Автоисправление", finalizing: "Финализация",
 };
+
+// Engine progress strings → friendly Russian (mirrors app.js on the index page).
+function friendlyDetail(detail) {
+  if (!detail) return "";
+  let m;
+  if ((m = detail.match(/^fill:\s*слайд\s+(\d+)\s*\/\s*(\d+)/)))
+    return `Оформляю слайд ${m[1]} из ${m[2]}`;
+  if ((m = detail.match(/^vision-qa:\s*слайд\s+(\d+)/)))
+    return `Проверяю внешний вид слайда ${m[1]}`;
+  if (detail.startsWith("старт")) return "Запускаю сборку";
+  if (detail.startsWith("parse:")) return "Читаю документ";
+  if (detail.startsWith("rebrand")) return "Анализирую исходные слайды";
+  if (detail.startsWith("plan:")) return "Продумываю структуру презентации";
+  if (detail.startsWith("fill: заполняю")) return "Оформляю слайды";
+  if (detail.startsWith("assemble:")) return "Собираю презентацию";
+  if (detail.startsWith("lint:")) return "Проверяю вёрстку";
+  if (detail.startsWith("vision-qa")) return "Проверяю внешний вид";
+  if (detail.startsWith("autofix:")) return "Улучшаю слайды по результатам проверки";
+  if (detail.startsWith("done:")) return "Готово";
+  return "";
+}
 const overlay = document.getElementById("buildOverlay");
 const buildSub = document.getElementById("buildSub");
 const buildTitle = document.getElementById("buildTitle");
@@ -51,9 +72,8 @@ function waitForBuild() {
   es.onmessage = (e) => {
     let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
     const pct = ev.progress_pct || 0;
-    buildSub.textContent =
-      `${STAGE_LABEL[ev.stage] || ev.stage || ""} · ${pct}%` +
-      (ev.detail ? ` — ${ev.detail}` : "");
+    const friendly = friendlyDetail(ev.detail) || STAGE_LABEL[ev.stage] || ev.stage || "";
+    buildSub.textContent = `${friendly} · ${pct}%`;
     if (ev.terminal) {
       done = true; es.close();
       if (ev.stage === "done") { showOverlay(false); loadDeck(); }

@@ -107,6 +107,13 @@ FREEFORM_SYSTEM = """\
 # на blank). Сам контент слайда маленький, потолок не растит цену коротких ответов.
 _FILL_MAX_TOKENS = 8192
 
+# Заполнение слайда — это текст-в-JSON / текст-в-HTML по чёткому контракту, без
+# картинок: глубокое рассуждение Kimi-K2.6 здесь не нужно, а добавляет 1-4 мин на
+# вызов. Отключаем thinking для filler/autofix (как в интерактивных чат-правках,
+# где это проверено) — главный рычаг скорости сборки. Планировщик и vision-QA
+# рассуждение сохраняют (там оно по делу; vision игнорирует тумблер и так).
+_FILL_NO_THINK = {"thinking": {"type": "disabled"}}
+
 _FORBIDDEN_FRAGMENT = re.compile(
     r"\bstyle\s*=|<\s*(?:i|em|u|script)\b|box-shadow|text-shadow|gradient|border-radius",
     re.IGNORECASE)
@@ -232,7 +239,8 @@ def _fill_template(client: KimiClient, library: TemplateLibrary, slide: SlidePla
         user += "\n\n" + extra
     messages = [{"role": "system", "content": FILLER_SYSTEM},
                 {"role": "user", "content": user}]
-    filled = client.chat_json(messages, SlideContent, max_tokens=_FILL_MAX_TOKENS)
+    filled = client.chat_json(messages, SlideContent, max_tokens=_FILL_MAX_TOKENS,
+                              extra_body=_FILL_NO_THINK)
     errors = library.validate_content(slide.template_id, filled.content)
     if errors:
         details = "; ".join(f"{e.code}:{e.slot} {e.detail}".strip() for e in errors)
@@ -242,7 +250,8 @@ def _fill_template(client: KimiClient, library: TemplateLibrary, slide: SlidePla
             {"role": "user",
              "content": f"Контракт нарушен: {details}. Сократи/исправь и верни "
                         "ТОЛЬКО валидный JSON."}]
-        filled = client.chat_json(retry, SlideContent, max_tokens=_FILL_MAX_TOKENS)
+        filled = client.chat_json(retry, SlideContent, max_tokens=_FILL_MAX_TOKENS,
+                                  extra_body=_FILL_NO_THINK)
         errors = library.validate_content(slide.template_id, filled.content)
         if errors:
             details = "; ".join(f"{e.code}:{e.slot}" for e in errors)
@@ -259,7 +268,8 @@ def _fill_freeform(client: KimiClient, slide: SlidePlan, *,
         user += "\n\n" + extra
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": user}]
-    reply = client.chat(messages, max_tokens=_FILL_MAX_TOKENS)
+    reply = client.chat(messages, max_tokens=_FILL_MAX_TOKENS,
+                        extra_body=_FILL_NO_THINK)
     html = _extract_html(reply)
     if _FORBIDDEN_FRAGMENT.search(html):
         retry = messages + [
@@ -268,7 +278,8 @@ def _fill_freeform(client: KimiClient, slide: SlidePlan, *,
              "content": "Во фрагменте запрещённые приёмы (style= / i / em / u / "
                         "script / тени / градиенты / скругления). Перепиши без них, "
                         "верни ТОЛЬКО ```html-блок."}]
-        reply = client.chat(retry, max_tokens=_FILL_MAX_TOKENS)
+        reply = client.chat(retry, max_tokens=_FILL_MAX_TOKENS,
+                            extra_body=_FILL_NO_THINK)
         html = _extract_html(reply)
         if _FORBIDDEN_FRAGMENT.search(html):
             raise FillError(f"slide {slide.index}: freeform содержит запрещённые "

@@ -107,16 +107,23 @@ class KimiClient:
             timeout=timeout)
 
     def chat(self, messages: list[dict], *, max_tokens: int = 4096,
-             temperature: float = 0.3) -> str:
+             temperature: float = 0.3,
+             extra_body: Optional[dict] = None) -> str:
+        # Per-call extra_body overrides the instance default. Lets one client run
+        # reasoning ON for hard calls (planner/vision-QA) yet OFF for cheap
+        # text-only calls (filler/autofix) — Kimi-K2.6's reasoning otherwise adds
+        # 1-4 min per call. None here = fall back to the instance default.
+        body = extra_body if extra_body is not None else self._extra_body
         self._gate.acquire()
         resp = self._client.chat.completions.create(
             model=self.model, messages=messages,
             max_tokens=max_tokens, temperature=temperature,
-            extra_body=self._extra_body or None)
+            extra_body=body or None)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], model_cls: Type[T], *,
-                  max_tokens: int = 4096, retries: int = 2) -> T:
+                  max_tokens: int = 4096, retries: int = 2,
+                  extra_body: Optional[dict] = None) -> T:
         """plain-prompt JSON + Pydantic, до `retries` повторов при невалидном ответе.
 
         Kimi на Cloud.ru без response_format изредка отдаёт не-JSON (проза/пусто);
@@ -125,7 +132,7 @@ class KimiClient:
         convo = messages
         last_exc: Exception | None = None
         for _ in range(retries + 1):
-            reply = self.chat(convo, max_tokens=max_tokens)
+            reply = self.chat(convo, max_tokens=max_tokens, extra_body=extra_body)
             try:
                 return model_cls.model_validate_json(extract_json(reply))
             except (LLMFormatError, ValidationError) as exc:
