@@ -24,7 +24,7 @@ from webapp.runner import CapacityError, JobRunner
 _STATIC = Path(__file__).parent / "static"
 
 
-def _serve_shell(name: str) -> "HTMLResponse":
+def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
     """Serve an app-shell HTML page, gateway-prefixed and cache-busted.
 
     Two transforms:
@@ -48,6 +48,9 @@ def _serve_shell(name: str) -> "HTMLResponse":
     html = re.sub(r'(/static/[\w./-]+\.(?:js|css))"', rf'{prefix}\1?v={token}"', html)
     inject = f"<script>window.__APP_PREFIX__={json.dumps(prefix)};</script>"
     html = html.replace("<head>", "<head>\n" + inject, 1)
+    # Canon topbar shows the gateway-supplied email; no email = standalone dev.
+    from html import escape as _esc
+    html = html.replace("{{ email }}", _esc(email))
     return HTMLResponse(html)
 
 # App2 is HTML-only: the sole mode is htmlnew (document → editable HTML deck).
@@ -103,13 +106,15 @@ async def _owned_or_404(request: Request, session_id: str, user):
 
 
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    return _serve_shell("index.html")
+def index(request: Request) -> HTMLResponse:
+    return _serve_shell("index.html",
+                        email=request.headers.get("X-User-Email", ""))
 
 
 @app.get("/editor", response_class=HTMLResponse)
-def editor() -> HTMLResponse:
-    return _serve_shell("editor.html")
+def editor(request: Request) -> HTMLResponse:
+    return _serve_shell("editor.html",
+                        email=request.headers.get("X-User-Email", ""))
 
 
 @app.post("/api/jobs")

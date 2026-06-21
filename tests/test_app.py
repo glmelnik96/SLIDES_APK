@@ -41,6 +41,32 @@ def test_shell_cache_busts_static_assets(monkeypatch, tmp_path):
             assert assets and all(q for q in assets)
 
 
+def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/").text
+        # all three sections link to their gateway roots
+        assert 'href="/images"' in html
+        assert 'href="/creatives"' in html
+        # Слайды is the active section
+        assert 'href="/slides"    class="topnav__link is-active"' in html
+        assert ">Cloud.ru <span>Design</span>" in html
+
+
+def test_shell_injects_gateway_email(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/", headers={"X-User-Email": "u@cloud.ru"}).text
+        assert "u@cloud.ru" in html
+        assert "{{ email }}" not in html  # placeholder always resolved
+        # no email header → placeholder still resolved (empty), never leaks
+        assert "{{ email }}" not in c.get("/").text
+
+
+def test_default_bind_is_loopback():
+    """Contract §1: upstream must listen on loopback only, never 0.0.0.0."""
+    from webapp.config import Settings
+    assert Settings().host == "127.0.0.1"
+
+
 def test_api_requires_gateway_header(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/api/history").status_code == 401

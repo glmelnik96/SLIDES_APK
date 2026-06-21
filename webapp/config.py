@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # standalone local dev. The frontend prepends it to every API/asset/nav URL.
     app_prefix: str = Field("", alias="APP_PREFIX")
 
+    # Bind address. The contract requires the upstream to listen on loopback only
+    # (the gateway is the sole public entrypoint); never expose 0.0.0.0 in prod.
+    host: str = Field("127.0.0.1", alias="HOST")
     # Bind port (gateway upstream). 8012 for App2 per the integration contract.
     port: int = Field(8000, alias="PORT")
 

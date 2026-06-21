@@ -1,7 +1,8 @@
 """Run: python -m webapp
 
-Host/port come from config (PORT env / .env). Binds 0.0.0.0 so the gateway on
-the same VM can reach the upstream; the gateway is the only public entrypoint.
+Host/port come from config (HOST/PORT env / .env). Binds 127.0.0.1 by default:
+the gateway is the only public entrypoint and reaches this upstream over loopback
+on the same VM (integration contract §1). Do not bind 0.0.0.0 in production.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from webapp.config import settings
 
 
 def main() -> None:
-    uvicorn.run("webapp.app:app", host="0.0.0.0", port=settings.port,
+    uvicorn.run("webapp.app:app", host=settings.host, port=settings.port,
                 reload=False)
 
 
