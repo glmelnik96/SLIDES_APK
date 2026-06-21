@@ -41,6 +41,15 @@ logger = structlog.get_logger(__name__)
 # поэтому это НЕ гарантия — гарантию даёт изоляция+ретраи+фолбэк ниже.
 _PLANNER_NO_THINK = {"thinking": {"type": "disabled"}}
 
+# Потолок токенов на план одного раздела. Выход крошечный (~0.5KB), потолок служит
+# только предохранителем от reasoning-runaway: чем он ниже, тем быстрее пустой ответ
+# отвалится в фолбэк (а не будет минуту молотить скрытое рассуждение).
+_SECTION_MAX_TOKENS = 1280
+
+# Параллелизм map-шага. RPS держит гейт клиента (env HTMLSLIDES_RPS, дефолт 10),
+# так что 8 воркеров безопасны и сокращают wall-clock на многосекционных доках.
+_MAP_WORKERS = 8
+
 # Транзиентные сбои API на ОДИН раздел (после собственных ретраев openai-клиента):
 # лимит/таймаут/обрыв/5xx. Не должны ронять деку — деградируем раздел на эвристику.
 _TRANSIENT_API_ERRORS = (
@@ -239,8 +248,12 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": user}]
     try:
-        sp = client.chat_json(messages, _SectionPlan, max_tokens=3072,
-                              extra_body=_PLANNER_NO_THINK)
+        # max_tokens мал нарочно: валидный план раздела — ~0.5KB, потолок не нужен.
+        # Kimi частично игнорит no-think и при runaway жжёт ВЕСЬ бюджет до пустого
+        # ответа — низкий потолок делает такой провал в разы быстрее (к фолбэку).
+        # retries=1: вторую медленную попытку не ждём — деградируем эвристикой.
+        sp = client.chat_json(messages, _SectionPlan, max_tokens=_SECTION_MAX_TOKENS,
+                              retries=1, extra_body=_PLANNER_NO_THINK)
     except (LLMFormatError, *_TRANSIENT_API_ERRORS) as exc:
         logger.warning("planner.section_fallback", heading=heading[:40],
                        error=str(exc)[:80])
@@ -314,7 +327,7 @@ def _pick_accent(slides: list[SlidePlan]) -> None:
 
 
 def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
-                    freeform_ok: bool, workers: int = 4) -> DeckPlan:
+                    freeform_ok: bool, workers: int = _MAP_WORKERS) -> DeckPlan:
     menu = library_menu(library)
     sections = [s for s in doc.sections if _has_content(s)]
 
