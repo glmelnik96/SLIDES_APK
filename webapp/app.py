@@ -81,11 +81,25 @@ async def _startup() -> None:
     app.state.sessionmaker = make_sessionmaker(engine)
 
     async def _persist_terminal(session_id: str, data: dict) -> None:
+        status = data.get("stage", "failed")
         async with app.state.sessionmaker() as s:
             await jobs_repo.mark_terminal(
-                s, session_id, status=data.get("stage", "failed"),
+                s, session_id, status=status,
                 result_path=data.get("result_path"), error=data.get("error"))
             await s.commit()
+        # Usage log — best-effort and isolated in its OWN transaction so a logging
+        # failure can never roll back / block the terminal status above.
+        try:
+            from webapp import usage
+            async with app.state.sessionmaker() as s:
+                await usage.log_render(
+                    s, owner_user_id=runner.owner(session_id), status=status,
+                    workflow=runner.workflow(session_id),
+                    started_at=runner.started_at(session_id),
+                    result_path=data.get("result_path"))
+                await s.commit()
+        except Exception:  # noqa: BLE001 — analytics must never affect the build
+            pass
 
     runner.set_terminal_hook(_persist_terminal)
 

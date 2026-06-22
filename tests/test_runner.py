@@ -103,10 +103,20 @@ async def test_cancel_queued_job_emits_cancelled(monkeypatch):
     r.start(a)          # occupies the single worker thread
     qb = r.start(b)     # queued behind a — never starts
 
+    # the terminal hook must fire for a queued-cancel too, else the DB row would
+    # stay "queued" forever (missing from history and the usage log)
+    hooked = []
+
+    async def _hook(sid, data):
+        hooked.append((sid, data["stage"]))
+    r.set_terminal_hook(_hook)
+
     assert r.cancel("b") is True
     ev = await asyncio.wait_for(qb.get(), timeout=2)
     assert ev["terminal"] is True and ev["stage"] == "cancelled"
     assert "b" not in r._active
+    await asyncio.sleep(0.05)               # let the hook coroutine run
+    assert ("b", "cancelled") in hooked
     release.set()
 
 
@@ -137,15 +147,16 @@ async def test_cancel_running_job_aborts_at_next_event(monkeypatch):
 async def test_watchdog_force_fails_overrunning_build(monkeypatch):
     """A build past build_timeout_sec is force-failed (not left as a zombie holding
     the worker), and reported as a timeout — distinct from a user cancel."""
-    r = runner.JobRunner(build_timeout_sec=0.2)
+    r = runner.JobRunner(build_timeout_sec=0.3)
     r.bind_loop(asyncio.get_running_loop())
     prog = types.SimpleNamespace(publish=None)
     monkeypatch.setattr(runner, "_progress_module", lambda: prog)
 
     def run(inp):
         # keep emitting progress (checkpoints) past the deadline; the watchdog marks
-        # the session and the sink raises JobCancelled at the next emit.
-        for _ in range(2000):
+        # the session and the sink raises JobCancelled at the next emit. Runs well
+        # past the timeout so the test isn't sensitive to scheduler jitter.
+        for _ in range(10000):
             prog.publish(_Event(stage="designing"))
             time.sleep(0.01)
 
@@ -155,11 +166,17 @@ async def test_watchdog_force_fails_overrunning_build(monkeypatch):
 
     ev = None
     while True:
-        e = await asyncio.wait_for(q.get(), timeout=3)
+        e = await asyncio.wait_for(q.get(), timeout=10)
         if e.get("terminal"):
             ev = e
             break
     assert ev["stage"] == "failed"
     assert "лимит времени" in (ev.get("error") or "")
     assert "s1" not in r._active           # worker freed, no zombie
+    # the watchdog timer is cleaned up in work()'s finally, which runs in the
+    # worker thread AFTER the terminal event is queued — poll briefly for it.
+    for _ in range(100):
+        if "s1" not in r._timers:
+            break
+        await asyncio.sleep(0.02)
     assert "s1" not in r._timers           # watchdog timer cleaned up

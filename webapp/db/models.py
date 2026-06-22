@@ -6,9 +6,9 @@ row records each build so history survives restarts and access is scoped per use
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -52,3 +52,26 @@ class Job(Base):
         DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="jobs")
+
+
+class UsageEvent(Base):
+    """Append-only usage log (shared cross-app contract — see App1's UsageEvent).
+
+    One row per finished build (done/failed/cancelled). Anonymised metric only —
+    NO files, NO full prompt; ``meta`` holds a safe whitelist. Retention never
+    touches this table, so usage history accumulates long-term. Cross-app rollups
+    join on gateway_user_id + email."""
+    __tablename__ = "usage_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, index=True)
+    app: Mapped[str] = mapped_column(String(16), index=True)          # "slides"
+    gateway_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), index=True, nullable=True)
+    email: Mapped[str] = mapped_column(String(255), default="", index=True)
+    event: Mapped[str] = mapped_column(String(32))                    # "render"
+    workflow: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    meta: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)

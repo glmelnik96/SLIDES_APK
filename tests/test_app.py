@@ -124,6 +124,47 @@ def test_concurrent_first_touch_same_user_no_500(monkeypatch, tmp_path):
         assert _aio.get_event_loop().run_until_complete(_count()) == 1
 
 
+def test_usage_event_logged_and_survives_retention(monkeypatch, tmp_path):
+    """A finished build writes one anonymised usage row (right app/event/fields),
+    and retention must NOT purge it (it accumulates long-term)."""
+    import asyncio as _aio
+    from datetime import datetime, timedelta, timezone
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        # upsert a user via any authed call
+        c.get("/api/history", headers=H("usagetest"))
+        from sqlalchemy import select
+        from webapp import retention, usage
+        from webapp.db import models
+
+        async def _run():
+            sm = appmod.app.state.sessionmaker
+            async with sm() as s:
+                uid = (await s.execute(select(models.User.id).where(
+                    models.User.gateway_user_id == "usagetest"))).scalar_one()
+                await usage.log_render(
+                    s, owner_user_id=uid, status="done", workflow="htmlnew",
+                    started_at=datetime.now(timezone.utc) - timedelta(seconds=5),
+                    result_path=None)
+                await s.commit()
+            async with sm() as s:
+                rows = (await s.execute(select(models.UsageEvent))).scalars().all()
+                # retention purge of old terminal jobs must leave usage_events alone
+                await retention.purge_once(sm, ttl_hours=0)
+                rows_after = (await s.execute(
+                    select(models.UsageEvent))).scalars().all()
+            return rows, rows_after
+
+        rows, rows_after = _aio.get_event_loop().run_until_complete(_run())
+        assert len(rows) == 1
+        ev = rows[0]
+        assert ev.app == "slides" and ev.event == "render"
+        assert ev.status == "done" and ev.workflow == "htmlnew"
+        assert ev.gateway_user_id == "usagetest"
+        assert ev.duration_ms is not None and ev.duration_ms >= 0
+        assert len(rows_after) == 1   # survived retention
+
+
 def test_empty_file_rejected(monkeypatch, tmp_path):
     """Пустой/пробельный текстовый вход реджектится на сабмите (не занимает слот
     очереди и не «успешно» собирается в пустую деку)."""

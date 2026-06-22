@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -122,6 +123,14 @@ class JobRunner:
     def owner(self, session_id: str) -> int | None:
         return self._meta.get(session_id, {}).get("user_id")
 
+    def workflow(self, session_id: str) -> str | None:
+        return self._meta.get(session_id, {}).get("mode")
+
+    def started_at(self, session_id: str):
+        """When the build actually began running (None while still queued) — used
+        for usage-log duration, excludes queue wait."""
+        return self._meta.get(session_id, {}).get("started_at")
+
     # ── routing sink ─────────────────────────────────────────────────────
     def _install_sink(self) -> None:
         if self._sink_installed:
@@ -211,6 +220,9 @@ class JobRunner:
         self._active.add(session_id)
 
         def work() -> None:
+            meta = self._meta.get(session_id)
+            if meta is not None:
+                meta["started_at"] = datetime.now(timezone.utc)
             self._arm_watchdog(session_id)
             try:
                 _pipeline_run(inp)
@@ -260,10 +272,17 @@ class JobRunner:
         if fut is not None and fut.cancel():  # was still queued — never ran
             self._active.discard(session_id)
             self._cancel.discard(session_id)
+            self._disarm_watchdog(session_id)
             self._futures.pop(session_id, None)
-            ev = {"stage": "cancelled", "terminal": True,
+            ev = {"session_id": session_id, "stage": "cancelled", "terminal": True,
                   "progress_pct": 0, "result_path": None}
             self._status[session_id] = ev
+            # work() never runs for a queued-cancel, so fire the terminal hook here
+            # too — otherwise the DB row stays "queued" forever (missing from history
+            # and the usage log).
+            if self._loop is not None and self._terminal_hook:
+                asyncio.run_coroutine_threadsafe(
+                    self._terminal_hook(session_id, ev), self._loop)
             q = self._queues.get(session_id)
             if q is not None and self._loop is not None:
                 asyncio.run_coroutine_threadsafe(q.put(ev), self._loop)

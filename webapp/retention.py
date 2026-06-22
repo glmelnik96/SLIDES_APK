@@ -5,6 +5,10 @@ non-terminal state (queued/running) is orphaned. Flip those to failed on boot.
 
 retention: result/session data and Job rows are never cleaned otherwise. A
 background loop drops session dirs and Job rows older than the TTL.
+
+Note: only the ``jobs`` table is purged here. The append-only ``usage_events`` log
+is deliberately left untouched (shared usage-logging contract) so usage history
+accumulates long-term.
 """
 from __future__ import annotations
 
