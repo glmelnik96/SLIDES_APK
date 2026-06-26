@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import os
 from pathlib import Path
 
@@ -185,7 +186,7 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     is plan.json (DeckPlan-as-truth); deck.html is rendered from it. The draft then
     flows through the same /editor and /api/jobs/{id}/deck|png endpoints."""
     from uuid import uuid4
-    data = await request.json() if await request.body() else {}
+    data = await _json_body(request)
     mode = (data.get("mode") or "manual")
     if mode not in _DRAFT_MODES:
         raise HTTPException(400, f"unsupported draft mode: {mode}")
@@ -235,6 +236,21 @@ def _validation_errors(template_id: str, content: dict) -> list[dict]:
     return [{"code": e.code, "slot": e.slot, "detail": e.detail} for e in errs]
 
 
+async def _json_body(request: Request) -> dict:
+    """Parse a JSON request body, returning a clean 400 (not a 500) on malformed
+    input. An empty body is treated as {} so optional-body endpoints still work."""
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        data = _json.loads(raw)
+    except ValueError:
+        raise HTTPException(400, "malformed JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(400, "JSON object expected")
+    return data
+
+
 async def _draft_or_404(request: Request, session_id: str, user) -> draft.DraftPlan:
     """Owner-only access to a draft; returns its current DraftPlan."""
     await _owned_or_404(request, session_id, user)
@@ -259,7 +275,7 @@ async def add_draft_slide(session_id: str, request: Request,
                           user=Depends(get_current_user)) -> JSONResponse:
     from webapp import templates_api
     plan = await _draft_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     template_id = data.get("template_id")
     if not template_id or template_id not in {t["id"] for t in templates_api.catalog()}:
         raise HTTPException(400, "valid template_id required")
@@ -274,7 +290,7 @@ async def add_draft_slide(session_id: str, request: Request,
 async def update_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
     plan = await _draft_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     content = data.get("content")
     if not isinstance(content, dict):
         raise HTTPException(400, "content object required")
@@ -298,7 +314,7 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     slide becomes freeform (its <section> HTML is the content), mirroring how a
     chat-rewrite is stored — so a later form/agent edit doesn't clobber it."""
     plan = await _draft_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     html = (data.get("html") or "").strip()
     if not html:
         raise HTTPException(400, "html required")
@@ -327,7 +343,7 @@ async def delete_draft_slide(session_id: str, index: int, request: Request,
 async def move_draft_slide(session_id: str, index: int, request: Request,
                            user=Depends(get_current_user)) -> JSONResponse:
     plan = await _draft_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     try:
         to = int(data["to"])
         plan = draft.reorder(plan, index, to)
@@ -370,7 +386,7 @@ async def draft_agent(session_id: str, request: Request,
     returns the assistant's reply + whether the deck changed."""
     from webapp import chat_agent
     await _owned_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     message = (data.get("message") or "").strip()
     if not message:
         raise HTTPException(400, "message required")
@@ -422,7 +438,6 @@ async def job_events(session_id: str, request: Request,
     (not WebSocket), so progress rides Server-Sent Events. Emits the current
     snapshot, then each queued event until a terminal one closes the stream."""
     import asyncio
-    import json as _json
 
     from sse_starlette.sse import EventSourceResponse
 
@@ -482,7 +497,7 @@ async def post_chat(session_id: str, request: Request,
     """Rewrite one slide of the deck per a chat instruction (owner only)."""
     from webapp import chat_edit
     await _owned_or_404(request, session_id, user)
-    data = await request.json()
+    data = await _json_body(request)
     try:
         slide_index = int(data["slide_index"])
     except (KeyError, TypeError, ValueError):

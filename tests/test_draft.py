@@ -285,3 +285,13 @@ def test_rebuild_draft_dispatches_htmlpolish(monkeypatch, tmp_path):
 def test_rebuild_unknown_session_404(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.post("/api/drafts/deadbeef/rebuild", headers=H()).status_code == 404
+
+
+def test_malformed_json_body_returns_400_not_500(monkeypatch, tmp_path):
+    """A bad JSON body at these boundaries must be a clean 400, never a 500."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        r = c.post(f"/api/drafts/{sid}/slides",
+                   content="{not json", headers={**H(),
+                                                 "Content-Type": "application/json"})
+        assert r.status_code == 400
