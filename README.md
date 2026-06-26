@@ -166,7 +166,10 @@ sudo useradd -r -m -d /opt/app2 app2
 sudo -u app2 git clone <repo> /opt/app2 && cd /opt/app2
 sudo -u app2 python -m venv .venv
 sudo -u app2 .venv/bin/pip install .
-sudo -u app2 .venv/bin/playwright install chromium   # рендер PNG
+# Chromium для PNG-рендера И vision-QA. ВАЖНО: ставить в дерево приложения, а не в
+# ~/.cache — иначе ProtectHome=true в app2.service скроет браузер от сервиса и
+# vision-QA молча отключится (см. Environment=PLAYWRIGHT_BROWSERS_PATH в юните).
+sudo -u app2 PLAYWRIGHT_BROWSERS_PATH=/opt/app2/.playwright .venv/bin/playwright install chromium
 sudo -u app2 cp .env.example .env                    # заполнить значения
 
 sudo cp deploy/app2.service /etc/systemd/system/app2.service

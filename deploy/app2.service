@@ -23,6 +23,11 @@ Group=app2
 WorkingDirectory=/opt/app2
 EnvironmentFile=/opt/app2/.env
 # venv created at /opt/app2/.venv (python -m venv .venv && pip install .)
+# Vision-QA's Chromium MUST live inside the app tree, not ~/.cache — ProtectHome=true
+# (below) hides /home from the service, so a default `playwright install` is invisible
+# and vision-QA silently degrades. Install with this same PLAYWRIGHT_BROWSERS_PATH:
+#   PLAYWRIGHT_BROWSERS_PATH=/opt/app2/.playwright .venv/bin/playwright install chromium
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/app2/.playwright
 ExecStart=/opt/app2/.venv/bin/python -m webapp
 Restart=on-failure
 RestartSec=3
