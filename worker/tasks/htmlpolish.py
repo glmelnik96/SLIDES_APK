@@ -49,7 +49,10 @@ def run_htmlpolish(state: SessionState) -> dict[str, Any]:
 
     progress.stage(session_id, Stage.RENDERING, 60, detail="старт пересборки через движок")
     log.info("htmlpolish.start", slides=len(deck_plan.slides))
-    result = polish_plan(deck_plan, out, vision=True, progress=on_progress)
+    # vision_all=True: ревью КАЖДОГО слайда — пользователь нажал «Собрать через
+    # движок» ради качества, а не просто пересборки чистого HTML.
+    result = polish_plan(deck_plan, out, vision=True, vision_all=True,
+                         progress=on_progress)
     # Успех: дека теперь HTML-as-truth, черновик-структура больше не источник правды.
     try:
         draft.plan_path(session_id).unlink(missing_ok=True)

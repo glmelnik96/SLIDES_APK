@@ -301,8 +301,11 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: #000; }
   border-radius: 0; cursor: pointer; color: var(--text); font: inherit; overflow: hidden;
   transition: border-color .12s, background .12s; }
 .picker-item:hover { border-color: var(--accent); }
-/* 16:9 preview holding a 1920x1080 deck iframe scaled down */
-.picker-prev { position: relative; width: 100%; aspect-ratio: 16 / 9;
+/* 16:9 preview holding a 1920x1080 deck iframe scaled down. The grid columns are a
+   fixed 320px, so the preview is 320×180; we set the height EXPLICITLY rather than
+   via aspect-ratio — aspect-ratio collapses to 0 here because the only child (the
+   iframe) is absolutely positioned, giving the flex-column item no content height. */
+.picker-prev { position: relative; width: 100%; height: 180px; flex: 0 0 180px;
   background: #000; overflow: hidden; border-bottom: 1px solid var(--line); pointer-events: none; }
 .picker-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
   border: 0; transform: scale(0.16667); transform-origin: top left; }  /* 320/1920 */

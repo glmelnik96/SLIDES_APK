@@ -598,9 +598,10 @@ byId("rebuild")?.addEventListener("click", async () => {
   if (!draftPlan.slides || !draftPlan.slides.length) {
     alert("Черновик пуст — добавьте хотя бы один слайд."); return;
   }
-  if (!confirm("Прогнать черновик через движок? Будет вёрстка, проверка качества и " +
-               "автоисправление; после этого дека станет обычной (правки прямо на " +
-               "слайде). Займёт пару минут.")) return;
+  const n = draftPlan.slides.length;
+  if (!confirm(`Прогнать черновик через движок? Каждый из ${n} слайд(ов) пройдёт ` +
+               "вёрстку, визуальную проверку качества и автоисправление; после этого " +
+               "дека станет обычной (правки прямо на слайде). Это ~1–2 мин на слайд.")) return;
   rebuilding = true;
   const btn = byId("rebuild");
   btn.disabled = true; btn.textContent = "Запускаю…";

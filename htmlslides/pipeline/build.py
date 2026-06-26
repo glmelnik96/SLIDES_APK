@@ -79,14 +79,19 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
 def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                 client: Optional[KimiClient] = None,
                 library: Optional[TemplateLibrary] = None,
-                vision: bool = True, theme: str = "dark", max_autofix: int = 1,
+                vision: bool = True, vision_all: bool = False,
+                theme: str = "dark", max_autofix: int = 1,
                 artifacts: Optional[Path] = None,
                 progress: Progress = lambda message: None) -> Path:
     """Assemble + QA + autofix a fully-filled DeckPlan and write the deck.
 
     The post-fill tail of build_deck, exposed so an already-authored plan (e.g. a
     manual/chat-built draft) can be 'rebuilt through the engine' — the same lint +
-    vision-QA + one autofix round — without re-planning or re-filling from a doc."""
+    vision-QA + one autofix round — without re-planning or re-filling from a doc.
+
+    vision_all=True forces vision-QA over EVERY slide (not just lint-flagged or
+    freeform ones) — used by the manual/chat 'rebuild through the engine' button so
+    it actually reviews each slide rather than skipping a lint-clean deck."""
     out = Path(out_path)
     # Client is only needed for vision-QA and autofix; build it lazily so a pure
     # assemble (vision=False, max_autofix=0) needs no CLOUDRU_API_KEY.
@@ -99,7 +104,8 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
     html = assemble(plan, theme=theme)
 
     progress("lint: статические проверки")
-    notes = _qa_notes(plan, html, vision=vision, client=client, theme=theme,
+    notes = _qa_notes(plan, html, vision=vision, vision_all=vision_all,
+                      client=client, theme=theme,
                       artifacts=artifacts, progress=progress)
 
     if notes and max_autofix > 0:
@@ -145,8 +151,10 @@ def _normalize_indices(plan: DeckPlan) -> DeckPlan:
 
 def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
               theme: str = "dark", artifacts: Optional[Path],
-              progress: Progress) -> dict[int, list[str]]:
-    """slide_index -> замечания (линтер + замер bbox + vision-QA)."""
+              progress: Progress, vision_all: bool = False) -> dict[int, list[str]]:
+    """slide_index -> замечания (линтер + замер bbox + vision-QA).
+
+    vision_all=True ревьюит КАЖДЫЙ слайд (а не только flagged/freeform)."""
     notes: dict[int, list[str]] = {}
     for issue in lint_html(html):
         notes.setdefault(issue.slide_index, []).append(
@@ -166,7 +174,8 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
     if not vision:
         return notes
     freeform = {s.index for s in plan.slides if s.freeform}
-    if not (notes or freeform):
+    all_idx = {s.index for s in plan.slides} if vision_all else set()
+    if not (notes or freeform or all_idx):
         return notes
     from .screenshot import QAUnavailable, measure_overflow, screenshot_slides
     from .vision_qa import review_slide
@@ -177,7 +186,7 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
             for issue in measure_overflow(tmp_html):
                 notes.setdefault(issue.slide_index, []).append(
                     f"{issue.code}: {issue.detail}".rstrip())
-            targets = sorted(set(notes) | freeform)
+            targets = sorted(set(notes) | freeform | all_idx)
             shots = screenshot_slides(tmp_html, targets, artifacts or Path(tmp))
             briefs = {s.index: json.dumps(s.content, ensure_ascii=False)[:2000]
                       for s in plan.slides}
