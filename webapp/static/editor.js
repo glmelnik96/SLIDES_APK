@@ -168,7 +168,14 @@ function buildThumbs() {
 
 function goTo(i) {
   if (!slides.length) return;
+  // Persist any pending edit to the slide we're leaving BEFORE switching, so the
+  // debounced save can't fire later against the new slide (data loss / misroute).
+  if (mode === "manual" && i !== current) flushPendingSave();
   current = Math.max(0, Math.min(slides.length - 1, i));
+  // Keep the post-reload target aligned with the slide actually shown. Each save
+  // calls loadDeck(), whose iframe onload runs goTo(pendingGoTo); if pendingGoTo
+  // lagged behind navigation, that reload would snap back to a stale slide.
+  pendingGoTo = current;
   const win = frame.contentWindow;
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
   document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
@@ -483,19 +490,46 @@ function scheduleSave() {
   putTimer = setTimeout(saveCurrentSlide, 600);
 }
 
+// Run any pending debounced save NOW. Must be called before leaving the current
+// slide (navigation) or before a rebuild — otherwise the in-flight 600ms timer
+// fires later against the wrong `current`/DOM form and the last edit is lost or
+// written to the wrong slide. Returns the save promise so callers that need the
+// server to have the edit first (rebuild) can await it.
+function flushPendingSave() {
+  if (putTimer == null) return Promise.resolve();
+  clearTimeout(putTimer);
+  putTimer = null;
+  return saveCurrentSlide();
+}
+
 async function saveCurrentSlide() {
-  const slide = draftPlan.slides[current];
+  // Capture the slide index up front: `current` can change (navigation) during
+  // the awaited PUT, and the URL/marking must stay bound to the edited slide.
+  const idx = current;
+  putTimer = null;
+  const slide = draftPlan.slides[idx];
   if (!slide || slide.freeform) return;
   const content = collectContent();
   slide.content = content; // optimistic local update
-  const r = await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content }),
-  });
-  if (r.ok) {
+  let r;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+  } catch (e) {
+    r = null;
+  }
+  if (r && r.ok) {
     const { errors } = await r.json();
-    markFieldErrors(errors || []);
+    if (current === idx) markFieldErrors(errors || []); // only if still shown
     loadDeck(); // refresh preview
+  } else {
+    // Save failed (network/server): the optimistic local copy now diverges from
+    // the server. Resync from the server so we never silently write stale state
+    // back on the next edit, and tell the user.
+    await reloadDraft(idx);
+    alert("Не удалось сохранить слайд — изменения сброшены к последней сохранённой версии. Попробуйте ещё раз.");
   }
 }
 
@@ -509,6 +543,9 @@ function markFieldErrors(errors) {
 
 /* ---- slide actions ---- */
 async function changeTemplate(templateId) {
+  // Drop any pending save: the slide is replaced by a different template whose
+  // slots differ, so the in-flight content is moot and would only fire mid-swap.
+  clearTimeout(putTimer); putTimer = null;
   await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content: draftPlan.slides[current].content || {} }),
@@ -524,6 +561,7 @@ async function changeTemplate(templateId) {
 
 byId("addSlide")?.addEventListener("click", () =>
   openPicker(async (tid) => {
+    await flushPendingSave(); // preserve the current slide's edit before inserting
     await fetch(U(`/api/drafts/${sessionId}/slides`), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template_id: tid }),
@@ -533,6 +571,7 @@ byId("addSlide")?.addEventListener("click", () =>
 
 byId("slideDelete")?.addEventListener("click", async () => {
   if (!draftPlan.slides[current]) return;
+  clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
   await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
   await reloadDraft(Math.max(0, current - 1));
 });
@@ -542,6 +581,7 @@ byId("slideDown")?.addEventListener("click", () => moveSlide(current, current + 
 
 async function moveSlide(idx, to1) {
   if (to1 < 1 || to1 > draftPlan.slides.length) return;
+  await flushPendingSave(); // preserve the moving slide's edit before reordering
   await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: to1 }),
@@ -606,6 +646,9 @@ byId("rebuild")?.addEventListener("click", async () => {
   const btn = byId("rebuild");
   btn.disabled = true; btn.textContent = "Запускаю…";
   try {
+    // Make sure the last form edit reached the server's plan.json before rebuild
+    // reads it — otherwise a quick type→rebuild rebuilds a stale deck.
+    await flushPendingSave();
     const r = await fetch(U(`/api/drafts/${sessionId}/rebuild`), { method: "POST" });
     if (!r.ok) throw new Error(await r.text());
     watchRebuild();
