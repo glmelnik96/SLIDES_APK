@@ -176,7 +176,9 @@ function goTo(i) {
     mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
   [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
     t.classList.toggle("active", idx === current));
-  if (mode === "manual") renderBuilderForm();
+  // Only rebuild the form when the shown slide changed — NOT on the preview
+  // reloads that follow each save (those would wipe focus and in-progress rows).
+  if (mode === "manual" && builtFormFor !== current) renderBuilderForm();
 }
 
 document.getElementById("prev").onclick = () => goTo(current - 1);
@@ -324,6 +326,12 @@ chatText.addEventListener("keydown", (e) => {
 let catalog = [];          // [{id,type,intent,slots}]
 let draftPlan = { title: "", slides: [] };
 let putTimer = null;
+// Which slide index the builder form is currently rendered for. The preview
+// iframe reloads after every keystroke-save, which re-fires goTo(); rebuilding
+// the form there would destroy the input the user is typing in (losing focus and
+// any unsaved/empty rows). So we only (re)build the form when the shown slide
+// actually changes (navigation) or after a structural edit (which resets this).
+let builtFormFor = -1;
 
 const byId = (id) => document.getElementById(id);
 
@@ -335,6 +343,7 @@ async function fetchPlan() {
 async function reloadDraft(goToIndex) {
   await fetchPlan();
   if (goToIndex != null) pendingGoTo = goToIndex;
+  builtFormFor = -1;  // plan changed structurally → force a form rebuild
   loadDeck(); // re-render preview from the server's derived deck.html
 }
 
@@ -345,6 +354,7 @@ function renderBuilderForm() {
   const tplBox = byId("builderTpl");
   const empty = byId("builderEmpty");
   if (!form) return;
+  builtFormFor = current;   // mark the form as built for the current slide
   const slide = draftPlan.slides[current];
   if (!slide) { form.innerHTML = ""; tplBox.innerHTML = ""; empty.classList.remove("hidden"); return; }
   empty.classList.add("hidden");
@@ -391,15 +401,19 @@ function renderSlot(name, spec, value) {
     list.dataset.slot = name;
     list.dataset.kind = "list";
     const items = Array.isArray(value) ? value : [];
-    items.forEach((item) => list.appendChild(renderItem(spec, item)));
+    // Seed one empty row when the slot has no items yet, so the input fields are
+    // immediately visible (instead of a lone "+ пункт" the user has to discover).
+    const seed = items.length ? items : [{}];
+    seed.forEach((item) => list.appendChild(renderItem(spec, item)));
     wrap.appendChild(list);
     const add = document.createElement("button");
     add.type = "button"; add.className = "btn btn-ghost btn-sm";
     add.textContent = "+ пункт";
     add.onclick = () => {
       if (spec.max_items && list.children.length >= spec.max_items) return;
-      list.appendChild(renderItem(spec, {}));
-      scheduleSave();
+      const row = renderItem(spec, {});
+      list.appendChild(row);
+      row.querySelector("input")?.focus();   // ready to type; saved on first input
     };
     wrap.appendChild(add);
     if (spec.max_items) wrap.appendChild(hint(`до ${spec.max_items} пунктов`));
