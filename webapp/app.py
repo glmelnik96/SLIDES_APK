@@ -16,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from webapp import deck_edit, jobs_repo, render_png
+from webapp import deck_edit, draft, draft_render, jobs_repo, render_png
 from webapp.auth import get_current_user
 from webapp.paths import session_dir
 from webapp.runner import CapacityError, JobRunner
@@ -174,6 +174,158 @@ async def create_job(request: Request, mode: str = Form(...),
     return JSONResponse({"session_id": inp.session_id, "kind": kind})
 
 
+_DRAFT_MODES = {"manual", "chat"}
+
+
+@app.post("/api/drafts")
+async def create_draft(request: Request, user=Depends(get_current_user)
+                       ) -> JSONResponse:
+    """Start an empty draft deck (manual-fill or chat builder). Unlike /api/jobs
+    this runs no engine build — it creates an owned session whose source of truth
+    is plan.json (DeckPlan-as-truth); deck.html is rendered from it. The draft then
+    flows through the same /editor and /api/jobs/{id}/deck|png endpoints."""
+    from uuid import uuid4
+    data = await request.json() if await request.body() else {}
+    mode = (data.get("mode") or "manual")
+    if mode not in _DRAFT_MODES:
+        raise HTTPException(400, f"unsupported draft mode: {mode}")
+    session_id = uuid4().hex[:16]
+    plan = draft.DraftPlan(title=str(data.get("title") or ""))
+    draft.save_plan(session_id, plan)
+    draft_render.render_draft(session_id, plan)   # seed an (empty-state) deck.html
+    # Ownership row; status "draft" keeps it out of the runner queue, retention
+    # reconcile (queued/running only) and the build history (terminal only).
+    async with request.app.state.sessionmaker() as s:
+        await jobs_repo.create(s, session_id=session_id, user_id=user.id,
+                               mode=mode, kind="draft", source_filename=None,
+                               status="draft")
+        await s.commit()
+    return JSONResponse({"session_id": session_id, "kind": "draft", "mode": mode})
+
+
+@app.get("/api/templates")
+def list_templates(user=Depends(get_current_user)) -> JSONResponse:
+    """Slide-template catalog with slot contracts (drives the manual builder)."""
+    from webapp import templates_api
+    return JSONResponse(templates_api.catalog())
+
+
+def _validation_errors(template_id: str, content: dict) -> list[dict]:
+    from htmlslides.library import TemplateLibrary
+    errs = TemplateLibrary.load().validate_content(template_id, content)
+    return [{"code": e.code, "slot": e.slot, "detail": e.detail} for e in errs]
+
+
+async def _draft_or_404(request: Request, session_id: str, user) -> draft.DraftPlan:
+    """Owner-only access to a draft; returns its current DraftPlan."""
+    await _owned_or_404(request, session_id, user)
+    return draft.load_plan(session_id)
+
+
+@app.get("/api/drafts/{session_id}")
+async def get_draft(session_id: str, request: Request,
+                    user=Depends(get_current_user)) -> JSONResponse:
+    plan = await _draft_or_404(request, session_id, user)
+    return JSONResponse(plan.model_dump())
+
+
+def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
+    """Save the plan and re-render the derived deck.html from it."""
+    draft.save_plan(session_id, plan)
+    draft_render.render_draft(session_id, plan)
+
+
+@app.post("/api/drafts/{session_id}/slides")
+async def add_draft_slide(session_id: str, request: Request,
+                          user=Depends(get_current_user)) -> JSONResponse:
+    from webapp import templates_api
+    plan = await _draft_or_404(request, session_id, user)
+    data = await request.json()
+    template_id = data.get("template_id")
+    if not template_id or template_id not in {t["id"] for t in templates_api.catalog()}:
+        raise HTTPException(400, "valid template_id required")
+    at = data.get("at")
+    plan = draft.add_slide(plan, draft.DraftSlide(
+        template_id=template_id, content=data.get("content") or {}), at=at)
+    _persist_draft(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
+@app.put("/api/drafts/{session_id}/slides/{index}")
+async def update_draft_slide(session_id: str, index: int, request: Request,
+                             user=Depends(get_current_user)) -> JSONResponse:
+    plan = await _draft_or_404(request, session_id, user)
+    data = await request.json()
+    content = data.get("content")
+    if not isinstance(content, dict):
+        raise HTTPException(400, "content object required")
+    try:
+        target = plan.slides[index - 1]
+        plan = draft.update_slide(plan, index, content=content)
+    except IndexError:
+        raise HTTPException(404, "slide not found")
+    _persist_draft(session_id, plan)
+    # Soft validation: the deck still renders (clamped), but report any contract
+    # issues so the UI can flag fields without blocking the edit.
+    errors = (_validation_errors(target.template_id, content)
+              if target.template_id else [])
+    return JSONResponse({"plan": plan.model_dump(), "errors": errors})
+
+
+@app.delete("/api/drafts/{session_id}/slides/{index}")
+async def delete_draft_slide(session_id: str, index: int, request: Request,
+                             user=Depends(get_current_user)) -> JSONResponse:
+    plan = await _draft_or_404(request, session_id, user)
+    try:
+        plan = draft.delete_slide(plan, index)
+    except IndexError:
+        raise HTTPException(404, "slide not found")
+    _persist_draft(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/slides/{index}/move")
+async def move_draft_slide(session_id: str, index: int, request: Request,
+                           user=Depends(get_current_user)) -> JSONResponse:
+    plan = await _draft_or_404(request, session_id, user)
+    data = await request.json()
+    try:
+        to = int(data["to"])
+        plan = draft.reorder(plan, index, to)
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "to (int) required")
+    except IndexError:
+        raise HTTPException(404, "slide not found")
+    _persist_draft(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/agent")
+async def draft_agent(session_id: str, request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """One turn of the slide-building chat agent (owner only). Classifies the
+    user's message, mutates the DraftPlan accordingly, re-renders the deck, and
+    returns the assistant's reply + whether the deck changed."""
+    from webapp import chat_agent
+    await _owned_or_404(request, session_id, user)
+    data = await request.json()
+    message = (data.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "message required")
+    try:
+        current_index = int(data.get("current_index") or 1)
+    except (TypeError, ValueError):
+        current_index = 1
+    try:
+        res = await run_in_threadpool(
+            chat_agent.run_turn, session_id, message, current_index)
+    except Exception as exc:  # noqa: BLE001 — surface a clear message
+        raise HTTPException(500, f"agent failed: {exc}") from exc
+    if res.changed:
+        _persist_draft(session_id, draft.load_plan(session_id))
+    return JSONResponse(res.model_dump())
+
+
 @app.get("/api/jobs/active")
 def active_jobs(user=Depends(get_current_user)) -> JSONResponse:
     """The current user's jobs still building, with live stage/pct."""
@@ -288,6 +440,17 @@ async def post_chat(session_id: str, request: Request,
     except Exception as exc:  # noqa: BLE001 — surface a clear message
         raise HTTPException(500, f"chat edit failed: {exc}") from exc
     deck_edit.save_deck(session_id, new_html)
+    # For a draft (DeckPlan-as-truth), persist the rewrite into plan.json as a
+    # freeform slide, so a later form edit / re-render doesn't clobber it.
+    if draft.plan_path(session_id).is_file():
+        section = chat_edit.nth_section(new_html, slide_index)
+        if section:
+            plan = draft.load_plan(session_id)
+            if 1 <= slide_index <= len(plan.slides):
+                plan = draft.update_slide(plan, slide_index,
+                                          content={"html": section})
+                plan.slides[slide_index - 1].freeform = True
+                draft.save_plan(session_id, plan)
     return JSONResponse({"ok": True})
 
 

@@ -23,6 +23,10 @@ from webapp.paths import session_dir
 
 _NONTERMINAL = ("queued", "running")
 _TERMINAL = ("done", "failed", "cancelled")
+# Purged on the same TTL as finished builds (from created_at). A draft ("draft"
+# status) is also purgeable so abandoned drafts don't accumulate forever; 24h of
+# continuous editing on one draft is implausible.
+_PURGEABLE = _TERMINAL + ("draft",)
 _INTERVAL_SEC = 10 * 60
 
 
@@ -45,7 +49,7 @@ async def purge_once(sessionmaker, *, ttl_hours: int) -> int:
     the cutoff, so retention can't pull the row out from under a live build.
     Returns the number of rows removed."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
-    cond = (models.Job.created_at < cutoff) & models.Job.status.in_(_TERMINAL)
+    cond = (models.Job.created_at < cutoff) & models.Job.status.in_(_PURGEABLE)
     async with sessionmaker() as s:
         rows = await s.execute(select(models.Job.session_id).where(cond))
         session_ids = [r[0] for r in rows.all()]

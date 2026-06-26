@@ -27,6 +27,12 @@ def count_slides(deck_html: str) -> int:
     return len(_SECTION_RE.findall(deck_html))
 
 
+def nth_section(deck_html: str, index: int) -> str:
+    """Return the index-th (1-based) ``<section>`` of a deck, or "" if absent."""
+    spans = _SECTION_RE.findall(deck_html)
+    return spans[index - 1] if 1 <= index <= len(spans) else ""
+
+
 def _replace_nth_section(deck_html: str, index: int, new_section: str) -> str:
     spans = [m.span() for m in _SECTION_RE.finditer(deck_html)]
     if not (1 <= index <= len(spans)):

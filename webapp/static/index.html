@@ -29,39 +29,67 @@
     <p class="intro-lead">Проще всего подготовить исходник через нейросеть (ChatGPT, Claude, GigaChat и т.п.): попросите её собрать <b>.md-файл</b> с заголовками <code>##</code> для каждого раздела и короткими тезисами, цифрами и списками внутри &mdash; например: &laquo;Сделай markdown-конспект презентации про наш продукт: раздел на каждую тему через <code>##</code>, внутри 3&ndash;5 тезисов с конкретными цифрами&raquo;. Чем чётче разделы и факты в документе, тем точнее получится структура и тем больше будет наглядных графиков вместо сплошного текста.</p>
   </section>
 
-  <!-- STEP 1 -->
-  <section class="step">
-    <div class="step-head"><span class="step-num">1</span><h2>Что получится</h2></div>
-    <div class="modes" id="modes">
-      <label class="mode" data-mode="htmlnew">
-        <input type="radio" name="mode" value="htmlnew" checked>
-        <div class="mode-body">
-          <div class="mode-title">HTML-презентация <span class="badge">правка в браузере</span></div>
-          <div class="mode-desc">Документ &rarr; HTML-дека в бренде Cloud.ru. Правка текста и чат-правки, экспорт в PNG.</div>
-          <div class="mode-io"><span class="tag">вход md / txt / docx / pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">HTML &middot; PNG</span></div>
-        </div>
-      </label>
+  <!-- ENTRY: три способа начать -->
+  <section class="entry">
+    <div class="eyebrow">С чего начать</div>
+    <div class="entry-cards">
+      <button type="button" class="entry-card is-active" id="entryUpload" data-entry="upload">
+        <span class="entry-num">1</span>
+        <span class="entry-title">Загрузить документ</span>
+        <span class="entry-desc">Готовый md / txt / docx / pptx &rarr; модель сама соберёт деку со структурой и графиками.</span>
+        <span class="entry-cta">Выбрано &darr;</span>
+      </button>
+      <button type="button" class="entry-card" id="entryManual" data-entry="manual">
+        <span class="entry-num">2</span>
+        <span class="entry-title">Заполнить шаблон</span>
+        <span class="entry-desc">Соберите деку из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
+        <span class="entry-cta">Открыть конструктор &rarr;</span>
+      </button>
+      <button type="button" class="entry-card" id="entryChat" data-entry="chat">
+        <span class="entry-num">3</span>
+        <span class="entry-title">Собрать в чате</span>
+        <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
+        <span class="entry-cta">Открыть чат &rarr;</span>
+      </button>
     </div>
   </section>
 
-  <!-- STEP 2 -->
-  <section class="step">
-    <div class="step-head"><span class="step-num">2</span><h2>Загрузите файл</h2></div>
-    <label class="drop" id="drop">
-      <input type="file" id="file" hidden>
-      <div class="drop-inner">
-        <div class="drop-icon">&uarr;</div>
-        <div class="drop-text" id="dropText">Перетащите файл сюда или нажмите, чтобы выбрать</div>
-        <div class="drop-hint" id="dropHint">Допустимо: .pptx</div>
+  <!-- UPLOAD FLOW (точка входа 1) -->
+  <div id="uploadFlow">
+    <!-- STEP 1 -->
+    <section class="step">
+      <div class="step-head"><span class="step-num">1</span><h2>Что получится</h2></div>
+      <div class="modes" id="modes">
+        <label class="mode" data-mode="htmlnew">
+          <input type="radio" name="mode" value="htmlnew" checked>
+          <div class="mode-body">
+            <div class="mode-title">HTML-презентация <span class="badge">правка в браузере</span></div>
+            <div class="mode-desc">Документ &rarr; HTML-дека в бренде Cloud.ru. Правка текста и чат-правки, экспорт в PNG.</div>
+            <div class="mode-io"><span class="tag">вход md / txt / docx / pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">HTML &middot; PNG</span></div>
+          </div>
+        </label>
       </div>
-    </label>
-  </section>
+    </section>
 
-  <!-- STEP 3 -->
-  <section class="step">
-    <div class="step-head"><span class="step-num">3</span><h2>Запустите сборку</h2></div>
-    <button id="create" class="btn btn-lg" disabled>Создать презентацию</button>
-  </section>
+    <!-- STEP 2 -->
+    <section class="step">
+      <div class="step-head"><span class="step-num">2</span><h2>Загрузите файл</h2></div>
+      <label class="drop" id="drop">
+        <input type="file" id="file" hidden>
+        <div class="drop-inner">
+          <div class="drop-icon">&uarr;</div>
+          <div class="drop-text" id="dropText">Перетащите файл сюда или нажмите, чтобы выбрать</div>
+          <div class="drop-hint" id="dropHint">Допустимо: .pptx</div>
+        </div>
+      </label>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="step">
+      <div class="step-head"><span class="step-num">3</span><h2>Запустите сборку</h2></div>
+      <button id="create" class="btn btn-lg" disabled>Создать презентацию</button>
+    </section>
+  </div>
 
   <!-- PROGRESS -->
   <section id="progress" class="panel hidden">

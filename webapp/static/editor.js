@@ -4,6 +4,8 @@ const U = (p) => PREFIX + p;
 
 const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
+const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built deck)
+const isDraft = mode === "manual" || mode === "chat";
 const frame = document.getElementById("deck");
 document.getElementById("html").href = U(`/api/jobs/${sessionId}/deck?download=1`);
 
@@ -96,13 +98,16 @@ frame.onload = () => {
   const doc = frame.contentDocument;
   if (!doc) return;
   slides = [...doc.querySelectorAll(".slide")];
-  // Make leaf text nodes editable in place.
-  slides.forEach((s) => s.querySelectorAll("*").forEach((el) => {
-    if (el.children.length === 0 && el.textContent.trim()) {
-      el.setAttribute("contenteditable", "true");
-    }
-  }));
-  suppressDeckNavOnEdit(doc);
+  // Built decks are HTML-as-truth → in-place contenteditable. Drafts are
+  // DeckPlan-as-truth → edits go through forms/chat, so keep the deck read-only.
+  if (!isDraft) {
+    slides.forEach((s) => s.querySelectorAll("*").forEach((el) => {
+      if (el.children.length === 0 && el.textContent.trim()) {
+        el.setAttribute("contenteditable", "true");
+      }
+    }));
+    suppressDeckNavOnEdit(doc);
+  }
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
 };
@@ -144,9 +149,11 @@ function goTo(i) {
   const win = frame.contentWindow;
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
   document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
-  document.getElementById("chatTarget").textContent = `Слайд ${current + 1}`;
+  document.getElementById("chatTarget").textContent =
+    mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
   [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
     t.classList.toggle("active", idx === current));
+  if (mode === "manual") renderBuilderForm();
 }
 
 document.getElementById("prev").onclick = () => goTo(current - 1);
@@ -215,7 +222,8 @@ let chatInFlight = null;        // AbortController while a request is running
 let chatTimerId = null;
 
 function setChatBusy(busy) {
-  chatSend.textContent = busy ? "Отмена" : "Применить к слайду";
+  const idle = mode === "chat" ? "Отправить" : "Применить к слайду";
+  chatSend.textContent = busy ? "Отмена" : idle;
   chatSend.classList.toggle("btn-stop", busy);
 }
 
@@ -230,6 +238,7 @@ async function sendChat() {
     chatInFlight.abort();
     return;
   }
+  if (mode === "chat") return sendAgent();   // feature 3: slide-building agent
   const instruction = chatText.value.trim();
   if (!instruction) return;
   const slideIndex = current + 1;
@@ -288,7 +297,311 @@ chatText.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
 });
 
+/* ===================== DRAFT BUILDER (manual mode) ===================== */
+let catalog = [];          // [{id,type,intent,slots}]
+let draftPlan = { title: "", slides: [] };
+let putTimer = null;
+
+const byId = (id) => document.getElementById(id);
+
+async function fetchPlan() {
+  const r = await fetch(U(`/api/drafts/${sessionId}`));
+  if (r.ok) draftPlan = await r.json();
+}
+
+async function reloadDraft(goToIndex) {
+  await fetchPlan();
+  if (goToIndex != null) pendingGoTo = goToIndex;
+  loadDeck(); // re-render preview from the server's derived deck.html
+}
+
+function tplOf(id) { return catalog.find((t) => t.id === id); }
+
+function renderBuilderForm() {
+  const form = byId("builderForm");
+  const tplBox = byId("builderTpl");
+  const empty = byId("builderEmpty");
+  if (!form) return;
+  const slide = draftPlan.slides[current];
+  if (!slide) { form.innerHTML = ""; tplBox.innerHTML = ""; empty.classList.remove("hidden"); return; }
+  empty.classList.add("hidden");
+
+  if (slide.freeform) {
+    tplBox.innerHTML = `<span class="tpl-name">Свободный слайд</span>`;
+    form.innerHTML = `<p class="builder-note">Этот слайд отредактирован через чат. ` +
+      `Дальнейшие правки — через чат справа.</p>`;
+    return;
+  }
+  const tpl = tplOf(slide.template_id);
+  tplBox.innerHTML =
+    `<span class="tpl-name">Макет: ${slide.template_id}</span>` +
+    `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
+  byId("changeTpl").onclick = () => openPicker((tid) => changeTemplate(tid));
+
+  form.innerHTML = "";
+  if (!tpl) return;
+  for (const [name, spec] of Object.entries(tpl.slots)) {
+    form.appendChild(renderSlot(name, spec, slide.content[name]));
+  }
+}
+
+function renderSlot(name, spec, value) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const label = document.createElement("label");
+  label.textContent = name + (spec.required ? " *" : "");
+  wrap.appendChild(label);
+
+  if (spec.kind === "text") {
+    const long = (spec.max_chars || 0) > 40;
+    const el = document.createElement(long ? "textarea" : "input");
+    if (spec.max_chars) el.maxLength = spec.max_chars;
+    el.value = value == null ? "" : String(value);
+    el.dataset.slot = name;
+    el.dataset.kind = "text";
+    el.oninput = scheduleSave;
+    wrap.appendChild(el);
+    if (spec.max_chars) wrap.appendChild(hint(`до ${spec.max_chars} символов`));
+  } else if (spec.kind === "list") {
+    const list = document.createElement("div");
+    list.className = "field-list";
+    list.dataset.slot = name;
+    list.dataset.kind = "list";
+    const items = Array.isArray(value) ? value : [];
+    items.forEach((item) => list.appendChild(renderItem(spec, item)));
+    wrap.appendChild(list);
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "btn btn-ghost btn-sm";
+    add.textContent = "+ пункт";
+    add.onclick = () => {
+      if (spec.max_items && list.children.length >= spec.max_items) return;
+      list.appendChild(renderItem(spec, {}));
+      scheduleSave();
+    };
+    wrap.appendChild(add);
+    if (spec.max_items) wrap.appendChild(hint(`до ${spec.max_items} пунктов`));
+  } else if (spec.kind === "group") {
+    wrap.appendChild(renderItem(spec, value || {}, name));
+  }
+  return wrap;
+}
+
+function renderItem(spec, item, groupSlot) {
+  const row = document.createElement("div");
+  row.className = "field-item";
+  if (groupSlot) { row.dataset.slot = groupSlot; row.dataset.kind = "group"; }
+  for (const [sub, subSpec] of Object.entries(spec.item_slots || {})) {
+    const inp = document.createElement("input");
+    inp.placeholder = sub + (subSpec.required ? " *" : "");
+    if (subSpec.max_chars) inp.maxLength = subSpec.max_chars;
+    inp.value = item[sub] == null ? "" : String(item[sub]);
+    inp.dataset.sub = sub;
+    inp.oninput = scheduleSave;
+    row.appendChild(inp);
+  }
+  if (!groupSlot) {
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
+    del.textContent = "✕";
+    del.onclick = () => { row.remove(); scheduleSave(); };
+    row.appendChild(del);
+  }
+  return row;
+}
+
+function hint(text) {
+  const s = document.createElement("span");
+  s.className = "field-hint"; s.textContent = text; return s;
+}
+
+function collectContent() {
+  const form = byId("builderForm");
+  const content = {};
+  form.querySelectorAll('[data-kind="text"]').forEach((el) => {
+    if (el.value.trim()) content[el.dataset.slot] = el.value;
+  });
+  form.querySelectorAll('[data-kind="list"]').forEach((list) => {
+    const items = [];
+    list.querySelectorAll(".field-item").forEach((row) => {
+      const obj = {};
+      row.querySelectorAll("[data-sub]").forEach((inp) => {
+        if (inp.value.trim()) obj[inp.dataset.sub] = inp.value;
+      });
+      if (Object.keys(obj).length) items.push(obj);
+    });
+    if (items.length) content[list.dataset.slot] = items;
+  });
+  form.querySelectorAll('[data-kind="group"]').forEach((row) => {
+    const obj = {};
+    row.querySelectorAll("[data-sub]").forEach((inp) => {
+      if (inp.value.trim()) obj[inp.dataset.sub] = inp.value;
+    });
+    if (Object.keys(obj).length) content[row.dataset.slot] = obj;
+  });
+  return content;
+}
+
+function scheduleSave() {
+  clearTimeout(putTimer);
+  putTimer = setTimeout(saveCurrentSlide, 600);
+}
+
+async function saveCurrentSlide() {
+  const slide = draftPlan.slides[current];
+  if (!slide || slide.freeform) return;
+  const content = collectContent();
+  slide.content = content; // optimistic local update
+  const r = await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (r.ok) {
+    const { errors } = await r.json();
+    markFieldErrors(errors || []);
+    loadDeck(); // refresh preview
+  }
+}
+
+function markFieldErrors(errors) {
+  const bad = new Set(errors.map((e) => e.slot.split(/[.[]/)[0]));
+  byId("builderForm").querySelectorAll(".field").forEach((f) => {
+    const slot = f.querySelector("[data-slot]")?.dataset.slot;
+    f.classList.toggle("field-error", slot && bad.has(slot));
+  });
+}
+
+/* ---- slide actions ---- */
+async function changeTemplate(templateId) {
+  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: draftPlan.slides[current].content || {} }),
+  });
+  // template change = delete + re-add at the same position with new template
+  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
+  await fetch(U(`/api/drafts/${sessionId}/slides`), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ template_id: templateId, at: current + 1 }),
+  });
+  await reloadDraft(current);
+}
+
+byId("addSlide")?.addEventListener("click", () =>
+  openPicker(async (tid) => {
+    await fetch(U(`/api/drafts/${sessionId}/slides`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template_id: tid }),
+    });
+    await reloadDraft(draftPlan.slides.length); // jump to the new last slide
+  }));
+
+byId("slideDelete")?.addEventListener("click", async () => {
+  if (!draftPlan.slides[current]) return;
+  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
+  await reloadDraft(Math.max(0, current - 1));
+});
+
+byId("slideUp")?.addEventListener("click", () => moveSlide(current, current));     // to 1-based current = up
+byId("slideDown")?.addEventListener("click", () => moveSlide(current, current + 2));
+
+async function moveSlide(idx, to1) {
+  if (to1 < 1 || to1 > draftPlan.slides.length) return;
+  await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: to1 }),
+  });
+  await reloadDraft(to1 - 1);
+}
+
+/* ---- template picker ---- */
+function openPicker(onPick) {
+  const picker = byId("picker");
+  const grid = byId("pickerGrid");
+  grid.innerHTML = "";
+  catalog.forEach((t) => {
+    const card = document.createElement("button");
+    card.type = "button"; card.className = "picker-item";
+    card.innerHTML = `<span class="picker-id">${t.id}</span>` +
+      `<span class="picker-intent">${t.intent || ""}</span>`;
+    card.onclick = () => { picker.classList.add("hidden"); onPick(t.id); };
+    grid.appendChild(card);
+  });
+  picker.classList.remove("hidden");
+}
+byId("pickerClose")?.addEventListener("click", () =>
+  byId("picker").classList.add("hidden"));
+
+async function initDraftBuilder() {
+  if (mode === "manual") {
+    byId("addSlide")?.classList.remove("hidden");
+    byId("builder")?.classList.remove("hidden");
+    const r = await fetch(U("/api/templates"));
+    if (r.ok) catalog = await r.json();
+  }
+  if (mode === "chat") setupChatMode();
+  await fetchPlan();
+}
+
+/* ---- feature 3: slide-building chat agent ---- */
+function setupChatMode() {
+  const head = document.querySelector(".chat-head");
+  if (head) head.innerHTML =
+    "<h3>Сборка в чате</h3>" +
+    "<p>Опишите презентацию — ассистент спланирует структуру и создаст слайды. " +
+    "Команды: «добавь слайд про…», «перепиши покороче», «удали слайд», «назови презентацию…».</p>";
+  const target = byId("chatTarget");
+  if (target) target.textContent = "Ассистент";
+  chatText.placeholder = "Например: сделай презентацию про наш продукт для инвесторов";
+  chatSend.textContent = "Отправить";
+}
+
+async function sendAgent() {
+  const message = chatText.value.trim();
+  if (!message) return;
+  addMsg("user", message);
+  chatText.value = "";
+  const thinking = addMsg("bot", "Думаю…");
+  const t0 = Date.now();
+  const controller = new AbortController();
+  chatInFlight = controller;
+  let timedOut = false;
+  setChatBusy(true);
+  chatTimerId = setInterval(() => tickElapsed(thinking, t0), 1000);
+  const timeoutId = setTimeout(() => { timedOut = true; controller.abort(); },
+                               CHAT_TIMEOUT_MS);
+  try {
+    const r = await fetch(U(`/api/drafts/${sessionId}/agent`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, current_index: current + 1 }),
+      signal: controller.signal,
+    });
+    if (!r.ok) {
+      thinking.className = "msg err";
+      thinking.textContent = "Ошибка: " + (await r.text());
+    } else {
+      const res = await r.json();
+      thinking.textContent = res.reply || "Готово.";
+      if (res.changed) {
+        await fetchPlan();
+        if (res.go_to) pendingGoTo = res.go_to - 1;
+        loadDeck();
+      }
+    }
+  } catch (e) {
+    thinking.className = "msg err";
+    thinking.textContent = timedOut
+      ? "Превышено время ожидания (5 мин). Попробуйте ещё раз."
+      : (e && e.name === "AbortError" ? "Отменено."
+         : "Ошибка: " + (e && e.message ? e.message : e));
+  } finally {
+    clearTimeout(timeoutId);
+    clearInterval(chatTimerId);
+    chatTimerId = null;
+    chatInFlight = null;
+    setChatBusy(false);
+  }
+}
+
 /* init */
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
-initEditor();
+if (isDraft) { initDraftBuilder().then(initEditor); } else { initEditor(); }

@@ -348,6 +348,39 @@ function showResult(sessionId, kind, ev) {
   location.href = U(`/editor?session=${sessionId}`);
 }
 
+/* entry cards: choose how to start (upload | manual draft | chat draft) */
+async function startDraft(mode, btn) {
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.querySelector(".entry-cta").textContent = "Создаю…";
+  try {
+    const r = await fetch(U("/api/drafts"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+    if (!r.ok) throw new Error("draft create failed");
+    const { session_id } = await r.json();
+    location.href = U(`/editor?session=${session_id}&mode=${mode}`);
+  } catch (e) {
+    btn.disabled = false;
+    btn.querySelector(".entry-cta").textContent = "Ошибка, попробуйте ещё раз";
+  }
+}
+
+document.querySelectorAll(".entry-card").forEach((card) => {
+  card.onclick = () => {
+    const entry = card.dataset.entry;
+    if (entry === "upload") {
+      document.querySelectorAll(".entry-card").forEach((c) =>
+        c.classList.toggle("is-active", c === card));
+      $("#uploadFlow").classList.remove("hidden");
+      $("#uploadFlow").scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      startDraft(entry, card);
+    }
+  };
+});
+
 /* init */
 syncModeHints();
 resetFile();

@@ -17,9 +17,10 @@ _TERMINAL = {"done", "failed", "cancelled"}
 
 
 async def create(session: AsyncSession, *, session_id: str, user_id: int,
-                 mode: str, kind: str, source_filename: str | None) -> models.Job:
+                 mode: str, kind: str, source_filename: str | None,
+                 status: str = "queued") -> models.Job:
     job = models.Job(session_id=session_id, user_id=user_id, mode=mode, kind=kind,
-                     source_filename=source_filename, status="queued")
+                     source_filename=source_filename, status=status)
     session.add(job)
     await session.flush()
     return job

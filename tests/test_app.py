@@ -52,6 +52,16 @@ def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
         assert ">Cloud.ru <span>Design</span>" in html
 
 
+def test_index_has_three_entry_cards(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/").text
+        assert 'data-entry="upload"' in html
+        assert 'data-entry="manual"' in html
+        assert 'data-entry="chat"' in html
+        # the upload flow (file input + create) is still present for entry 1
+        assert 'id="uploadFlow"' in html and 'id="create"' in html
+
+
 def test_shell_injects_gateway_email(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/", headers={"X-User-Email": "u@cloud.ru"}).text

@@ -12,6 +12,7 @@
   <aside class="thumbs">
     <div class="thumbs-title">Слайды</div>
     <div id="thumbs"></div>
+    <button class="btn btn-ghost addslide hidden" id="addSlide">+ Добавить слайд</button>
   </aside>
 
   <!-- Stage: one big slide -->
@@ -39,6 +40,23 @@
     </div>
   </div>
 
+  <!-- Builder panel (manual draft mode) -->
+  <aside class="builder hidden" id="builder">
+    <div class="builder-head">
+      <h3>Заполнение слайда</h3>
+      <div class="builder-actions">
+        <button class="btn btn-ghost btn-sm" id="slideUp" title="Выше">&#9650;</button>
+        <button class="btn btn-ghost btn-sm" id="slideDown" title="Ниже">&#9660;</button>
+        <button class="btn btn-ghost btn-sm btn-danger" id="slideDelete" title="Удалить">&#10005;</button>
+      </div>
+    </div>
+    <div class="builder-tpl" id="builderTpl"></div>
+    <form class="builder-form" id="builderForm"></form>
+    <div class="builder-empty" id="builderEmpty">
+      Добавьте слайд кнопкой «+ Добавить слайд» слева, выберите макет и заполните поля.
+    </div>
+  </aside>
+
   <!-- Chat panel -->
   <aside class="chat">
     <div class="chat-head">
@@ -58,6 +76,18 @@
     </div>
   </aside>
 </div>
+
+<!-- Template picker (manual mode) -->
+<div class="picker hidden" id="picker">
+  <div class="picker-card">
+    <div class="picker-head">
+      <h3 id="pickerTitle">Выберите макет слайда</h3>
+      <button class="btn btn-ghost btn-sm" id="pickerClose">&#10005;</button>
+    </div>
+    <div class="picker-grid" id="pickerGrid"></div>
+  </div>
+</div>
+
 <script src="/static/editor.js"></script>
 </body>
 </html>
