@@ -16,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from webapp import deck_edit, draft, draft_render, jobs_repo, render_png
+from webapp import chat_edit, deck_edit, draft, draft_render, jobs_repo, render_png
 from webapp.auth import get_current_user
 from webapp.paths import session_dir
 from webapp.runner import CapacityError, JobRunner
@@ -210,6 +210,25 @@ def list_templates(user=Depends(get_current_user)) -> JSONResponse:
     return JSONResponse(templates_api.catalog())
 
 
+@app.get("/api/templates/{template_id}/preview", response_class=HTMLResponse)
+def template_preview(template_id: str, user=Depends(get_current_user)):
+    """A one-slide deck with representative sample content — the visual preview
+    shown in the template picker. Reuses the real engine so the preview matches
+    the actual output."""
+    from htmlslides.assembler import assemble
+    from htmlslides.library import TemplateLibrary
+    from htmlslides.models import DeckPlan, SlidePlan
+    from webapp import templates_api
+    try:
+        spec = TemplateLibrary.load().get(template_id)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(404, "unknown template")
+    plan = DeckPlan(title="", slides=[SlidePlan(
+        index=1, type=spec.type, template_id=template_id,
+        content=templates_api.sample_content(template_id))])
+    return HTMLResponse(assemble(plan))
+
+
 def _validation_errors(template_id: str, content: dict) -> list[dict]:
     from htmlslides.library import TemplateLibrary
     errs = TemplateLibrary.load().validate_content(template_id, content)
@@ -272,6 +291,26 @@ async def update_draft_slide(session_id: str, index: int, request: Request,
     return JSONResponse({"plan": plan.model_dump(), "errors": errors})
 
 
+@app.put("/api/drafts/{session_id}/slides/{index}/html")
+async def update_draft_slide_html(session_id: str, index: int, request: Request,
+                                  user=Depends(get_current_user)) -> JSONResponse:
+    """Persist an in-place (contenteditable) edit of a draft slide. The edited
+    slide becomes freeform (its <section> HTML is the content), mirroring how a
+    chat-rewrite is stored — so a later form/agent edit doesn't clobber it."""
+    plan = await _draft_or_404(request, session_id, user)
+    data = await request.json()
+    html = (data.get("html") or "").strip()
+    if not html:
+        raise HTTPException(400, "html required")
+    section = chat_edit.nth_section(html, 1) or html  # accept a bare <section>
+    if not (1 <= index <= len(plan.slides)):
+        raise HTTPException(404, "slide not found")
+    plan = draft.update_slide(plan, index, content={"html": section})
+    plan.slides[index - 1].freeform = True
+    _persist_draft(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
 @app.delete("/api/drafts/{session_id}/slides/{index}")
 async def delete_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
@@ -298,6 +337,29 @@ async def move_draft_slide(session_id: str, index: int, request: Request,
         raise HTTPException(404, "slide not found")
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/rebuild")
+async def rebuild_draft(session_id: str, request: Request,
+                        user=Depends(get_current_user)) -> JSONResponse:
+    """Rebuild a manual/chat draft through the engine (mode=htmlpolish): the same
+    assemble → lint → vision-QA → autofix pass an uploaded doc gets. Runs on the
+    SAME session via the job runner (progress over /events), overwrites deck.html
+    in place, and on success the session becomes a normal built deck (plan.json is
+    dropped — it's HTML-as-truth afterwards)."""
+    from schemas.session import Mode, SessionInput
+    plan = await _draft_or_404(request, session_id, user)
+    if not plan.slides:
+        raise HTTPException(400, "черновик пуст — добавьте хотя бы один слайд")
+    inp = SessionInput(session_id=session_id, user_id=user.id, chat_id=0,
+                       progress_message_id=0, mode=Mode.HTMLPOLISH,
+                       input_s3_key=str(draft.plan_path(session_id)),
+                       source_filename=None)
+    try:
+        runner.start(inp, user_id=user.id)
+    except CapacityError as exc:
+        raise HTTPException(429, str(exc))
+    return JSONResponse({"session_id": session_id, "kind": "htmlpolish"})
 
 
 @app.post("/api/drafts/{session_id}/agent")

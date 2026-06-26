@@ -39,3 +39,38 @@ def catalog() -> list[dict]:
             "slots": {n: _slot_dict(s) for n, s in t.slots.items()},
         })
     return out
+
+
+# Representative sample text per common slot name (for the visual preview only).
+_SAMPLE = {
+    "title": "Заголовок слайда", "subtitle": "Короткий подзаголовок",
+    "heading": "Пункт", "text": "Короткое описание пункта",
+    "label": "Метрика", "value": "99%", "caption": "пояснение",
+    "highlight": "Главное", "accent": "NEW", "name": "Сервис",
+    "left": "Было", "right": "Стало", "before": "Раньше", "after": "Теперь",
+    "stat": "85%", "year": "2025", "period": "Q1",
+}
+
+
+def _sample_value(name: str, spec: SlotSpec):
+    if spec.kind == "text":
+        s = _SAMPLE.get(name, "Текст")
+        return s[: spec.max_chars] if spec.max_chars else s
+    if spec.kind == "list":
+        n = min(spec.max_items or 3, 4) or 3
+        return [_sample_group(spec) for _ in range(n)]
+    if spec.kind == "group":
+        return _sample_group(spec)
+    return ""
+
+
+def _sample_group(spec: SlotSpec) -> dict:
+    if spec.item_slots:
+        return {n: _sample_value(n, s) for n, s in spec.item_slots.items()}
+    return {}
+
+
+def sample_content(template_id: str) -> dict:
+    """Representative content for a template, to render a visual preview."""
+    spec = TemplateLibrary.load().get(template_id)
+    return {n: _sample_value(n, s) for n, s in spec.slots.items()}

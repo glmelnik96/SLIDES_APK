@@ -17,6 +17,15 @@ def test_run_htmlnew_path(monkeypatch):
     assert calls["htmlnew"] == "STATE"
 
 
+def test_run_htmlpolish_path(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(pb, "_state_from_input", lambda inp: "STATE")
+    monkeypatch.setitem(pb._ENGINE, "htmlpolish",
+                        lambda: lambda s: calls.setdefault("htmlpolish", s))
+    pb.run(_FakeInp("htmlpolish"))
+    assert calls["htmlpolish"] == "STATE"
+
+
 def test_run_verstai_compiles_and_invokes(monkeypatch):
     invoked = {}
 

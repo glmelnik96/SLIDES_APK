@@ -174,6 +174,7 @@ a { color: var(--accent); }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
 .btn-ghost:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
+.btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
 .btn-link { background: none; color: var(--muted); border: 0; cursor: pointer; font-size: 13px; }
 .btn-link:hover { color: var(--text); }
 
@@ -288,18 +289,24 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: #000; }
 /* ===== Пикер макетов ===== */
 .picker { position: fixed; inset: 0; background: rgba(10,10,10,.82); z-index: 20;
   display: grid; place-items: center; padding: 24px; }
-.picker-card { width: min(720px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+.picker-card { width: min(1060px, 100%); max-height: 84vh; display: flex; flex-direction: column;
   background: var(--bg-soft); border: 1px solid var(--line); }
 .picker-head { display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .picker-head h3 { margin: 0; font-size: 15px; }
 .picker-grid { overflow-y: auto; padding: 16px; display: grid;
-  grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.picker-item { display: flex; flex-direction: column; gap: 4px; text-align: left;
-  padding: 12px 14px; background: transparent; border: 1px solid var(--line);
-  border-radius: 0; cursor: pointer; color: var(--text); font: inherit;
+  grid-template-columns: repeat(auto-fill, 320px); gap: 12px; justify-content: center; }
+.picker-item { display: flex; flex-direction: column; gap: 0; text-align: left;
+  padding: 0; background: transparent; border: 1px solid var(--line);
+  border-radius: 0; cursor: pointer; color: var(--text); font: inherit; overflow: hidden;
   transition: border-color .12s, background .12s; }
-.picker-item:hover { border-color: var(--accent); background: var(--panel-2); }
+.picker-item:hover { border-color: var(--accent); }
+/* 16:9 preview holding a 1920x1080 deck iframe scaled down */
+.picker-prev { position: relative; width: 100%; aspect-ratio: 16 / 9;
+  background: #000; overflow: hidden; border-bottom: 1px solid var(--line); pointer-events: none; }
+.picker-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+  border: 0; transform: scale(0.16667); transform-origin: top left; }  /* 320/1920 */
+.picker-meta { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; }
 .picker-id { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
 .picker-intent { font-size: 12px; color: var(--muted); line-height: 1.4; }
 

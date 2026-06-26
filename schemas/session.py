@@ -19,6 +19,7 @@ class Mode(str, Enum):
     DESIGN = "design"  # /design — from-scratch native-vector designer skill
     HTML = "html"      # /html — LLM-authored HTML/CSS → Chromium PNG → pptx
     HTMLNEW = "htmlnew"  # /htmlnew — htmlslides package: doc → self-contained HTML deck
+    HTMLPOLISH = "htmlpolish"  # rebuild a manual/chat draft (DeckPlan) through the engine QA pass
 
 
 class Stage(str, Enum):
@@ -69,7 +70,8 @@ class SessionState(BaseModel):
     user_id: int
     chat_id: int
     progress_message_id: int
-    mode: Literal["verstai", "audit", "brief", "design", "html", "htmlnew"]
+    mode: Literal["verstai", "audit", "brief", "design", "html", "htmlnew",
+                  "htmlpolish"]
     created_at_iso: str
 
     # Pipeline

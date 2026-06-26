@@ -218,3 +218,70 @@ def test_slide_endpoints_validation_and_ownership(monkeypatch, tmp_path):
         assert c.get(f"/api/drafts/{sid}", headers=H("intruder")).status_code == 404
         assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
                       headers=H("intruder")).status_code == 404
+
+
+# ── template visual preview ─────────────────────────────────────────────────
+def test_template_preview_renders_sample_slide(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.get("/api/templates/cards-6/preview", headers=H())
+        assert r.status_code == 200
+        assert r.text.count("<section") == 1 and "<style" in r.text
+        # unknown template → 404
+        assert c.get("/api/templates/nope/preview", headers=H()).status_code == 404
+
+
+# ── in-place (contenteditable) edit → freeform sync ─────────────────────────
+def test_inline_html_edit_makes_slide_freeform(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        section = ('<section class="slide" data-template="cover">'
+                   '<h1>Отредактировано вручную</h1></section>')
+        r = c.put(f"/api/drafts/{sid}/slides/1/html",
+                  json={"html": section}, headers=H())
+        assert r.status_code == 200
+        plan = r.json()
+        assert plan["slides"][0]["freeform"] is True
+        assert "Отредактировано" in plan["slides"][0]["content"]["html"]
+        # empty html → 400; out-of-range → 404
+        assert c.put(f"/api/drafts/{sid}/slides/1/html", json={"html": "  "},
+                     headers=H()).status_code == 400
+        assert c.put(f"/api/drafts/{sid}/slides/9/html", json={"html": section},
+                     headers=H()).status_code == 404
+
+
+# ── rebuild draft through the engine (mode=htmlpolish) ──────────────────────
+def test_rebuild_draft_dispatches_htmlpolish(monkeypatch, tmp_path):
+    """The rebuild endpoint runs the same session through the engine via the job
+    runner with mode=htmlpolish; we stub the engine to avoid network."""
+    from webapp import pipeline_bridge
+    captured = {}
+
+    def fake_polish_runner():
+        def run(state):
+            captured["session_id"] = state.session_id
+            captured["mode"] = state.mode
+            # simulate the engine writing the polished deck + emitting done
+            from webapp import deck_edit
+            from worker import progress
+            out = deck_edit.deck_path(state.session_id)
+            out.write_text("<!DOCTYPE html><section class='slide'>ok</section>",
+                           encoding="utf-8")
+            progress.done(state.session_id, detail="done", result_path=str(out))
+        return run
+
+    monkeypatch.setitem(pipeline_bridge._ENGINE, "htmlpolish", fake_polish_runner)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        # empty draft can't be rebuilt
+        assert c.post(f"/api/drafts/{sid}/rebuild", headers=H()).status_code == 400
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        r = c.post(f"/api/drafts/{sid}/rebuild", headers=H())
+        assert r.status_code == 200 and r.json()["kind"] == "htmlpolish"
+        # cross-user can't rebuild
+        assert c.post(f"/api/drafts/{sid}/rebuild", headers=H("intruder")).status_code == 404
+
+
+def test_rebuild_unknown_session_404(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.post("/api/drafts/deadbeef/rebuild", headers=H()).status_code == 404

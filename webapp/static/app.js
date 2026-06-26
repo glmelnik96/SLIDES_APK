@@ -367,6 +367,9 @@ async function startDraft(mode, btn) {
   }
 }
 
+const ENTRY_CTA = { upload: "Выбрано ↓", manual: "Открыть конструктор →",
+                    chat: "Открыть чат →" };
+
 document.querySelectorAll(".entry-card").forEach((card) => {
   card.onclick = () => {
     const entry = card.dataset.entry;
@@ -379,6 +382,16 @@ document.querySelectorAll(".entry-card").forEach((card) => {
       startDraft(entry, card);
     }
   };
+});
+
+// Returning via browser Back restores this page from the bfcache with a draft
+// card still stuck "Создаю…"/disabled — re-enable cards so they're clickable again.
+window.addEventListener("pageshow", () => {
+  document.querySelectorAll(".entry-card").forEach((c) => {
+    c.disabled = false;
+    const cta = c.querySelector(".entry-cta");
+    if (cta) cta.textContent = ENTRY_CTA[c.dataset.entry] || "";
+  });
 });
 
 /* init */

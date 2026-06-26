@@ -98,19 +98,42 @@ frame.onload = () => {
   const doc = frame.contentDocument;
   if (!doc) return;
   slides = [...doc.querySelectorAll(".slide")];
-  // Built decks are HTML-as-truth → in-place contenteditable. Drafts are
-  // DeckPlan-as-truth → edits go through forms/chat, so keep the deck read-only.
-  if (!isDraft) {
-    slides.forEach((s) => s.querySelectorAll("*").forEach((el) => {
-      if (el.children.length === 0 && el.textContent.trim()) {
-        el.setAttribute("contenteditable", "true");
-      }
-    }));
-    suppressDeckNavOnEdit(doc);
-  }
+  // In-place text editing works everywhere. Built decks are HTML-as-truth, so
+  // edits persist via saveDeck(). Drafts are DeckPlan-as-truth, so an inline edit
+  // converts that slide to a freeform slide in the plan (synced on blur).
+  slides.forEach((s, i) => s.querySelectorAll("*").forEach((el) => {
+    if (el.children.length === 0 && el.textContent.trim()) {
+      el.setAttribute("contenteditable", "true");
+      if (isDraft) el.addEventListener("blur", () => syncDraftSlideHtml(i));
+    }
+  }));
+  suppressDeckNavOnEdit(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
 };
+
+// Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
+let draftHtmlSaving = false;
+async function syncDraftSlideHtml(i) {
+  if (draftHtmlSaving) return;
+  const doc = frame.contentDocument;
+  const section = doc && doc.querySelectorAll(".slide")[i];
+  if (!section) return;
+  const clone = section.cloneNode(true);
+  clone.querySelectorAll("[contenteditable]").forEach(
+    (el) => el.removeAttribute("contenteditable"));
+  draftHtmlSaving = true;
+  try {
+    await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html: clone.outerHTML }),
+    });
+    await fetchPlan();
+    if (mode === "manual") renderBuilderForm(); // slide is now freeform
+  } finally {
+    draftHtmlSaving = false;
+  }
+}
 
 // The deck engine (deck.js) attaches document-level click/keydown handlers that
 // page through slides (click in left/right third → prev/next; arrows/space → nav).
@@ -520,8 +543,20 @@ function openPicker(onPick) {
   catalog.forEach((t) => {
     const card = document.createElement("button");
     card.type = "button"; card.className = "picker-item";
-    card.innerHTML = `<span class="picker-id">${t.id}</span>` +
+    // visual preview: a scaled iframe of the real one-slide render (lazy src)
+    const prev = document.createElement("div");
+    prev.className = "picker-prev";
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.tabIndex = -1;
+    ifr.src = U(`/api/templates/${t.id}/preview`);
+    prev.appendChild(ifr);
+    const meta = document.createElement("div");
+    meta.className = "picker-meta";
+    meta.innerHTML = `<span class="picker-id">${t.id}</span>` +
       `<span class="picker-intent">${t.intent || ""}</span>`;
+    card.appendChild(prev);
+    card.appendChild(meta);
     card.onclick = () => { picker.classList.add("hidden"); onPick(t.id); };
     grid.appendChild(card);
   });
@@ -531,6 +566,7 @@ byId("pickerClose")?.addEventListener("click", () =>
   byId("picker").classList.add("hidden"));
 
 async function initDraftBuilder() {
+  byId("rebuild")?.classList.remove("hidden");   // «Собрать через движок» — в обоих режимах
   if (mode === "manual") {
     byId("addSlide")?.classList.remove("hidden");
     byId("builder")?.classList.remove("hidden");
@@ -539,6 +575,58 @@ async function initDraftBuilder() {
   }
   if (mode === "chat") setupChatMode();
   await fetchPlan();
+}
+
+/* ---- rebuild the draft through the engine (mode=htmlpolish) ---- */
+let rebuilding = false;
+byId("rebuild")?.addEventListener("click", async () => {
+  if (rebuilding) return;
+  if (!draftPlan.slides || !draftPlan.slides.length) {
+    alert("Черновик пуст — добавьте хотя бы один слайд."); return;
+  }
+  if (!confirm("Прогнать черновик через движок? Будет вёрстка, проверка качества и " +
+               "автоисправление; после этого дека станет обычной (правки прямо на " +
+               "слайде). Займёт пару минут.")) return;
+  rebuilding = true;
+  const btn = byId("rebuild");
+  btn.disabled = true; btn.textContent = "Запускаю…";
+  try {
+    const r = await fetch(U(`/api/drafts/${sessionId}/rebuild`), { method: "POST" });
+    if (!r.ok) throw new Error(await r.text());
+    watchRebuild();
+  } catch (e) {
+    rebuilding = false; btn.disabled = false; btn.textContent = "Собрать через движок";
+    alert("Не удалось запустить пересборку: " + (e && e.message ? e.message : e));
+  }
+});
+
+// Show the build overlay + stream progress; on success reload as a normal built
+// deck (drop the draft mode so the editor switches to HTML-as-truth editing).
+function watchRebuild() {
+  showOverlay(true);
+  buildTitle.textContent = "Пересобираю через движок…";
+  let done = false;
+  const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
+  es.onmessage = (e) => {
+    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
+    const pct = ev.progress_pct || 0;
+    const friendly = friendlyDetail(ev.detail) || STAGE_LABEL[ev.stage] || ev.stage || "";
+    buildSub.textContent = `${friendly} · ${pct}%`;
+    if (ev.terminal) {
+      done = true; es.close();
+      if (ev.stage === "done") {
+        location.href = U(`/editor?session=${sessionId}`); // reload as built deck
+      } else {
+        buildTitle.textContent =
+          ev.stage === "cancelled" ? "Пересборка остановлена" : "Не удалось пересобрать";
+        buildSub.textContent = ev.error || "";
+        rebuilding = false;
+        const btn = byId("rebuild");
+        btn.disabled = false; btn.textContent = "Собрать через движок";
+      }
+    }
+  };
+  es.onerror = () => { if (!done) { es.close(); setTimeout(watchRebuild, 3000); } };
 }
 
 /* ---- feature 3: slide-building chat agent ---- */

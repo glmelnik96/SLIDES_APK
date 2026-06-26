@@ -25,3 +25,17 @@ def test_per_slide_fill_stage_is_designing():
 def test_other_prefixes_unaffected():
     assert map_progress("assemble: собираю HTML") == (Stage.RENDERING, 65)
     assert map_progress("warn: что-то пошло не так") is None
+
+
+def test_polish_plan_assembles_offline(tmp_path):
+    """polish_plan with vision off + no autofix needs no network/API key and
+    writes a valid deck — the building block for draft rebuild (htmlpolish)."""
+    from pathlib import Path
+    from htmlslides.models import DeckPlan, SlidePlan
+    from htmlslides.pipeline.build import polish_plan
+    plan = DeckPlan(title="T", slides=[SlidePlan(
+        index=1, type="title", template_id="cover",
+        content={"title": "Привет", "subtitle": "мир"})])
+    out = polish_plan(plan, tmp_path / "deck.html", vision=False, max_autofix=0)
+    html = Path(out).read_text("utf-8")
+    assert html.count("<section") == 1 and "Привет" in html

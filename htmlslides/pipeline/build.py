@@ -71,6 +71,30 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     plan = fill_deck(client, library, plan, progress=progress)
     _dump(artifacts, "deckfill.json", plan.model_dump_json(indent=2))
 
+    return polish_plan(plan, out, client=client, library=library, vision=vision,
+                       theme=theme, max_autofix=max_autofix, artifacts=artifacts,
+                       progress=progress)
+
+
+def polish_plan(plan: DeckPlan, out_path: str | Path, *,
+                client: Optional[KimiClient] = None,
+                library: Optional[TemplateLibrary] = None,
+                vision: bool = True, theme: str = "dark", max_autofix: int = 1,
+                artifacts: Optional[Path] = None,
+                progress: Progress = lambda message: None) -> Path:
+    """Assemble + QA + autofix a fully-filled DeckPlan and write the deck.
+
+    The post-fill tail of build_deck, exposed so an already-authored plan (e.g. a
+    manual/chat-built draft) can be 'rebuilt through the engine' — the same lint +
+    vision-QA + one autofix round — without re-planning or re-filling from a doc."""
+    out = Path(out_path)
+    # Client is only needed for vision-QA and autofix; build it lazily so a pure
+    # assemble (vision=False, max_autofix=0) needs no CLOUDRU_API_KEY.
+    if client is None and (vision or max_autofix > 0):
+        client = KimiClient()
+    library = library or TemplateLibrary.load()
+    plan = _normalize_indices(plan)
+
     progress("assemble: собираю HTML")
     html = assemble(plan, theme=theme)
 

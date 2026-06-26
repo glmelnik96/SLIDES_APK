@@ -24,9 +24,9 @@
   <!-- INTRO -->
   <section class="intro">
     <div class="eyebrow">Слайды</div>
-    <h1 class="intro-title">Документ &rarr; презентация в бренде Cloud.ru</h1>
-    <p class="intro-lead">Этот раздел превращает обычный текстовый документ в готовую HTML-презентацию в фирменном стиле Cloud.ru: модель сама разбивает текст на слайды, подбирает вёрстку, строит графики, диаграммы и таблицы по вашим цифрам. От вас нужен один файл (.md, .txt, .docx или .pptx) с содержанием будущей деки &mdash; структурируйте его заголовками разделов, и каждый раздел станет отдельным слайдом. Готовую деку можно править прямо в браузере, переписывать слайды через чат и скачивать в HTML или PNG.</p>
-    <p class="intro-lead">Проще всего подготовить исходник через нейросеть (ChatGPT, Claude, GigaChat и т.п.): попросите её собрать <b>.md-файл</b> с заголовками <code>##</code> для каждого раздела и короткими тезисами, цифрами и списками внутри &mdash; например: &laquo;Сделай markdown-конспект презентации про наш продукт: раздел на каждую тему через <code>##</code>, внутри 3&ndash;5 тезисов с конкретными цифрами&raquo;. Чем чётче разделы и факты в документе, тем точнее получится структура и тем больше будет наглядных графиков вместо сплошного текста.</p>
+    <h1 class="intro-title">Презентации в бренде Cloud.ru</h1>
+    <p class="intro-lead">Здесь можно собрать HTML-презентацию в фирменном стиле Cloud.ru тремя способами: <b>загрузить готовый документ</b> (модель сама разобьёт его на слайды, подберёт вёрстку и построит графики), <b>заполнить шаблон вручную</b> из готовых макетов или <b>собрать деку в чате</b> &mdash; ассистент спланирует структуру и создаст слайды по одному. Любую готовую деку можно править прямо в браузере, дорабатывать через чат и скачивать в HTML или PNG.</p>
+    <p class="intro-lead">Для загрузки подойдёт <b>.md / .txt / .docx / .pptx</b>. Проще всего подготовить исходник через нейросеть (ChatGPT, Claude, GigaChat): попросите собрать markdown с заголовками <code>##</code> для каждого раздела и короткими тезисами с цифрами внутри &mdash; чем чётче разделы и факты, тем точнее структура и тем больше наглядных графиков вместо сплошного текста.</p>
   </section>
 
   <!-- ENTRY: три способа начать -->
@@ -56,37 +56,25 @@
 
   <!-- UPLOAD FLOW (точка входа 1) -->
   <div id="uploadFlow">
+    <!-- скрытый вход для совместимости с app.js (selectedMode) -->
+    <input type="radio" name="mode" value="htmlnew" checked hidden>
+
     <!-- STEP 1 -->
     <section class="step">
-      <div class="step-head"><span class="step-num">1</span><h2>Что получится</h2></div>
-      <div class="modes" id="modes">
-        <label class="mode" data-mode="htmlnew">
-          <input type="radio" name="mode" value="htmlnew" checked>
-          <div class="mode-body">
-            <div class="mode-title">HTML-презентация <span class="badge">правка в браузере</span></div>
-            <div class="mode-desc">Документ &rarr; HTML-дека в бренде Cloud.ru. Правка текста и чат-правки, экспорт в PNG.</div>
-            <div class="mode-io"><span class="tag">вход md / txt / docx / pptx</span><span class="arrow">&rarr;</span><span class="tag tag-out">HTML &middot; PNG</span></div>
-          </div>
-        </label>
-      </div>
-    </section>
-
-    <!-- STEP 2 -->
-    <section class="step">
-      <div class="step-head"><span class="step-num">2</span><h2>Загрузите файл</h2></div>
+      <div class="step-head"><span class="step-num">1</span><h2>Загрузите файл</h2></div>
       <label class="drop" id="drop">
         <input type="file" id="file" hidden>
         <div class="drop-inner">
           <div class="drop-icon">&uarr;</div>
           <div class="drop-text" id="dropText">Перетащите файл сюда или нажмите, чтобы выбрать</div>
-          <div class="drop-hint" id="dropHint">Допустимо: .pptx</div>
+          <div class="drop-hint" id="dropHint">Допустимо: .md, .txt, .docx, .pptx</div>
         </div>
       </label>
     </section>
 
-    <!-- STEP 3 -->
+    <!-- STEP 2 -->
     <section class="step">
-      <div class="step-head"><span class="step-num">3</span><h2>Запустите сборку</h2></div>
+      <div class="step-head"><span class="step-num">2</span><h2>Запустите сборку</h2></div>
       <button id="create" class="btn btn-lg" disabled>Создать презентацию</button>
     </section>
   </div>
