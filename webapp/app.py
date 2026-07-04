@@ -113,6 +113,18 @@ async def _startup() -> None:
         name="retention-loop")
 
 
+_DECK_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _deck_lock(session_id: str) -> asyncio.Lock:
+    """Per-session lock serializing writes to deck.html, so concurrent editors
+    (browser save vs chat rewrite) can't interleave a read-modify-write."""
+    lock = _DECK_LOCKS.get(session_id)
+    if lock is None:
+        lock = _DECK_LOCKS.setdefault(session_id, asyncio.Lock())
+    return lock
+
+
 async def _owned_or_404(request: Request, session_id: str, user):
     """Refuse access to a session the current user does not own (404, not 403,
     so existence isn't leaked). Returns the Job row."""
@@ -251,9 +263,25 @@ async def _json_body(request: Request) -> dict:
     return data
 
 
-async def _draft_or_404(request: Request, session_id: str, user) -> draft.DraftPlan:
-    """Owner-only access to a draft; returns its current DraftPlan."""
+async def _draft_or_404(request: Request, session_id: str, user,
+                        *, mutate: bool = False) -> draft.DraftPlan:
+    """Owner-only access to a draft; returns its current DraftPlan.
+
+    Guards the DeckPlan-as-truth lifecycle: after a successful engine rebuild
+    plan.json is dropped (the session becomes HTML-as-truth), so draft endpoints
+    must refuse instead of silently operating on an empty plan — otherwise a
+    stale tab could overwrite the built deck with a near-empty one. Mutations
+    are also refused while a rebuild is running, so edits aren't silently lost
+    to the worker that loaded the plan at start."""
     await _owned_or_404(request, session_id, user)
+    if not draft.plan_path(session_id).is_file():
+        raise HTTPException(
+            409, "черновик уже собран движком — правьте деку в редакторе")
+    if mutate:
+        st = runner.status(session_id)
+        if st is not None and not st.get("terminal"):
+            raise HTTPException(
+                409, "идёт пересборка черновика — дождитесь завершения")
     return draft.load_plan(session_id)
 
 
@@ -274,7 +302,7 @@ def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
 async def add_draft_slide(session_id: str, request: Request,
                           user=Depends(get_current_user)) -> JSONResponse:
     from webapp import templates_api
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     template_id = data.get("template_id")
     if not template_id or template_id not in {t["id"] for t in templates_api.catalog()}:
@@ -289,7 +317,7 @@ async def add_draft_slide(session_id: str, request: Request,
 @app.put("/api/drafts/{session_id}/slides/{index}")
 async def update_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     content = data.get("content")
     if not isinstance(content, dict):
@@ -313,7 +341,7 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     """Persist an in-place (contenteditable) edit of a draft slide. The edited
     slide becomes freeform (its <section> HTML is the content), mirroring how a
     chat-rewrite is stored — so a later form/agent edit doesn't clobber it."""
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     html = (data.get("html") or "").strip()
     if not html:
@@ -330,7 +358,7 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
 @app.delete("/api/drafts/{session_id}/slides/{index}")
 async def delete_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     try:
         plan = draft.delete_slide(plan, index)
     except IndexError:
@@ -342,7 +370,7 @@ async def delete_draft_slide(session_id: str, index: int, request: Request,
 @app.post("/api/drafts/{session_id}/slides/{index}/move")
 async def move_draft_slide(session_id: str, index: int, request: Request,
                            user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     try:
         to = int(data["to"])
@@ -364,7 +392,7 @@ async def rebuild_draft(session_id: str, request: Request,
     in place, and on success the session becomes a normal built deck (plan.json is
     dropped — it's HTML-as-truth afterwards)."""
     from schemas.session import Mode, SessionInput
-    plan = await _draft_or_404(request, session_id, user)
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
     if not plan.slides:
         raise HTTPException(400, "черновик пуст — добавьте хотя бы один слайд")
     inp = SessionInput(session_id=session_id, user_id=user.id, chat_id=0,
@@ -385,7 +413,7 @@ async def draft_agent(session_id: str, request: Request,
     user's message, mutates the DraftPlan accordingly, re-renders the deck, and
     returns the assistant's reply + whether the deck changed."""
     from webapp import chat_agent
-    await _owned_or_404(request, session_id, user)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     message = (data.get("message") or "").strip()
     if not message:
@@ -487,7 +515,15 @@ async def post_deck(session_id: str, request: Request,
                     user=Depends(get_current_user)) -> JSONResponse:
     await _owned_or_404(request, session_id, user)
     body = await request.body()
-    deck_edit.save_deck(session_id, body.decode("utf-8"))
+    try:
+        html = body.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "deck HTML must be valid UTF-8")
+    async with _deck_lock(session_id):
+        try:
+            deck_edit.save_deck(session_id, html)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
     return JSONResponse({"ok": True})
 
 
@@ -516,11 +552,24 @@ async def post_chat(session_id: str, request: Request,
         raise HTTPException(400, str(exc))
     except Exception as exc:  # noqa: BLE001 — surface a clear message
         raise HTTPException(500, f"chat edit failed: {exc}") from exc
-    deck_edit.save_deck(session_id, new_html)
+    section = chat_edit.nth_section(new_html, slide_index)
+    # The LLM call above takes seconds-to-minutes and runs UNLOCKED; the deck may
+    # have been saved meanwhile (another tab, contenteditable autosave). Splice
+    # only the rewritten <section> into a FRESH read under the lock, so a
+    # concurrent edit of other slides is never clobbered by our stale snapshot.
+    async with _deck_lock(session_id):
+        fresh = deck.read_text("utf-8")
+        if fresh != html and section:
+            try:
+                new_html = chat_edit._replace_nth_section(  # noqa: SLF001
+                    fresh, slide_index, section)
+            except ValueError:
+                raise HTTPException(
+                    409, "дека изменилась во время правки — повторите запрос")
+        deck_edit.save_deck(session_id, new_html)
     # For a draft (DeckPlan-as-truth), persist the rewrite into plan.json as a
     # freeform slide, so a later form edit / re-render doesn't clobber it.
     if draft.plan_path(session_id).is_file():
-        section = chat_edit.nth_section(new_html, slide_index)
         if section:
             plan = draft.load_plan(session_id)
             if 1 <= slide_index <= len(plan.slides):

@@ -199,6 +199,11 @@ class JobRunner:
     # ── job lifecycle ────────────────────────────────────────────────────
     def start(self, inp: Any, *, user_id: int | None = None) -> asyncio.Queue:
         assert self._loop is not None, "bind_loop() must be called at startup"
+        # Idempotence guard: the same session must never run twice at once
+        # (e.g. a double-click on rebuild). Starting again would overwrite
+        # _futures/_queues for the sid and race two builds over the same files.
+        if inp.session_id in self._active:
+            raise CapacityError("эта сборка уже идёт — дождитесь завершения")
         if len(self._active) >= self._max_active:
             raise CapacityError(f"очередь занята: максимум {self._max_active} "
                                 "сборок одновременно, попробуйте позже")

@@ -282,6 +282,42 @@ def test_rebuild_draft_dispatches_htmlpolish(monkeypatch, tmp_path):
         assert c.post(f"/api/drafts/{sid}/rebuild", headers=H("intruder")).status_code == 404
 
 
+def test_draft_endpoints_409_after_plan_dropped(monkeypatch, tmp_path):
+    """After a successful rebuild plan.json is dropped (the session becomes
+    HTML-as-truth). A stale tab's draft calls must then get a clear 409 — not
+    silently operate on an empty plan and overwrite the built deck."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        draft.plan_path(sid).unlink()          # what a successful rebuild does
+        assert c.get(f"/api/drafts/{sid}", headers=H()).status_code == 409
+        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+                      headers=H()).status_code == 409
+        assert c.put(f"/api/drafts/{sid}/slides/1", json={"content": {}},
+                     headers=H()).status_code == 409
+        assert c.delete(f"/api/drafts/{sid}/slides/1", headers=H()).status_code == 409
+        assert c.post(f"/api/drafts/{sid}/rebuild", headers=H()).status_code == 409
+        assert c.post(f"/api/drafts/{sid}/agent", json={"message": "привет"},
+                      headers=H()).status_code == 409
+
+
+def test_draft_mutation_blocked_during_rebuild(monkeypatch, tmp_path):
+    """While a rebuild is running the worker holds a snapshot of the plan; a
+    concurrent edit would be silently lost when it finishes. Mutations → 409,
+    reads stay allowed."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        monkeypatch.setattr(appmod.runner, "status",
+                            lambda s: {"terminal": False} if s == sid else None)
+        assert c.put(f"/api/drafts/{sid}/slides/1",
+                     json={"content": {"title": "x"}}, headers=H()).status_code == 409
+        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+                      headers=H()).status_code == 409
+        # reads are safe during a rebuild
+        assert c.get(f"/api/drafts/{sid}", headers=H()).status_code == 200
+
+
 def test_rebuild_unknown_session_404(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.post("/api/drafts/deadbeef/rebuild", headers=H()).status_code == 404

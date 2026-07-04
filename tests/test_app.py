@@ -322,6 +322,54 @@ def test_chat_endpoint_owner_only(monkeypatch, tmp_path):
         assert de.deck_path(sid).read_text("utf-8") == '<section class="slide">EDITED</section>'
 
 
+def test_post_deck_rejects_non_utf8_and_empty(monkeypatch, tmp_path):
+    """Malformed save bodies must be a clean 400, and must not corrupt the deck."""
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        de.save_deck(sid, '<section class="slide">A</section>')
+        # 0xFF/0xFE are never valid UTF-8 → 400, not a 500 traceback
+        assert c.post(f"/api/jobs/{sid}/deck", content=b"\xff\xfe broken",
+                      headers=H("u1")).status_code == 400
+        # blank body → 400 (save_deck's ValueError surfaced, not a 500)
+        assert c.post(f"/api/jobs/{sid}/deck", content=b"   ",
+                      headers=H("u1")).status_code == 400
+        # the stored deck survived both bad saves untouched
+        assert de.deck_path(sid).read_text("utf-8") == '<section class="slide">A</section>'
+
+
+def test_chat_rewrite_preserves_concurrent_save(monkeypatch, tmp_path):
+    """The LLM rewrite runs unlocked for seconds; if another tab saves the deck
+    meanwhile, the chat result must be spliced into the FRESH deck — the stale
+    snapshot must not clobber the concurrent edit of other slides."""
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    import webapp.chat_edit as ce
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        de.save_deck(sid, '<section class="slide">one</section>'
+                          '<section class="slide">two</section>')
+
+        def fake_rewrite(html, idx, instr, client=None):
+            # "another tab" saves an edit to slide 1 while the LLM is in flight
+            de.save_deck(sid, html.replace("one", "ONE-EDITED"))
+            return html.replace("two", "TWO-REWRITTEN")
+
+        monkeypatch.setattr(ce, "rewrite_slide", fake_rewrite)
+        r = c.post(f"/api/jobs/{sid}/chat",
+                   json={"slide_index": 2, "instruction": "перепиши"},
+                   headers=H("u1"))
+        assert r.status_code == 200
+        final = de.deck_path(sid).read_text("utf-8")
+        assert "ONE-EDITED" in final and "TWO-REWRITTEN" in final
+        assert ">one<" not in final and ">two<" not in final
+
+
 def test_chat_requires_instruction(monkeypatch, tmp_path):
     _no_run(monkeypatch)
     import webapp.deck_edit as de

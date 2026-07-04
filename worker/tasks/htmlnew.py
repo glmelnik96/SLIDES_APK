@@ -12,8 +12,8 @@ from typing import Any
 
 import structlog
 
-from graph.nodes.pipeline import _session_workdir
 from schemas.session import SessionState, Stage
+from webapp.paths import session_dir
 from worker import progress
 
 logger = structlog.get_logger(__name__)
@@ -64,7 +64,10 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
     session_id = state.session_id
     input_path = Path(state.input_s3_key)
     stem = Path(state.source_filename or input_path.name).stem or "deck"
-    out = _session_workdir(session_id) / f"{stem}.html"
+    # Единый корень с webapp (paths.session_dir): раньше здесь был _session_workdir
+    # из бот-эры с ДРУГИМ дефолтным корнем (…/slidesbot вместо …/slidesapp/sessions),
+    # из-за чего результат жил вне session_dir и не попадал под 24ч-ретеншен.
+    out = session_dir(session_id) / f"{stem}.html"
     log = logger.bind(session_id=session_id)
 
     current: tuple[Stage, int] = (Stage.PARSING, 5)

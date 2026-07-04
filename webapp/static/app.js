@@ -11,10 +11,14 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 const PREFIX = window.__APP_PREFIX__ || "";
 const U = (p) => PREFIX + p;
 
-// App2 is HTML-only (single mode: htmlnew).
-const ACCEPT = { htmlnew: ".md,.txt,.docx,.pptx" };
-const HINT = { htmlnew: "Допустимо: .md, .txt, .docx, .pptx" };
-const MODE_LABEL = { htmlnew: "HTML-презентация" };
+// App2 is HTML-only: uploads always build with the single engine mode.
+const MODE = "htmlnew";
+// Job rows carry the entry-point mode: htmlnew (upload) / manual / chat.
+const MODE_LABEL = {
+  htmlnew: "HTML-презентация",
+  manual: "Конструктор",
+  chat: "Чат-ассистент",
+};
 const STAGE_LABEL = {
   queued: "В очереди",
   parsing: "Разбор документа",
@@ -65,19 +69,6 @@ function friendlyDetail(detail) {
 }
 
 let selectedFile = null;
-
-function selectedMode() {
-  return document.querySelector('input[name="mode"]:checked').value;
-}
-
-function syncModeHints() {
-  const m = selectedMode();
-  $("#file").setAttribute("accept", ACCEPT[m]);
-  $("#dropHint").textContent = HINT[m];
-}
-
-document.querySelectorAll('input[name="mode"]').forEach((r) =>
-  r.addEventListener("change", () => { syncModeHints(); resetFile(); }));
 
 /* ---- file selection (click + drag&drop) ---- */
 const drop = $("#drop");
@@ -201,7 +192,7 @@ async function autoResumeActive() {
 $("#create").onclick = async () => {
   if (!selectedFile) return;
   const fd = new FormData();
-  fd.append("mode", selectedMode());
+  fd.append("mode", MODE);
   fd.append("file", selectedFile);
   $("#create").disabled = true;
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
@@ -395,7 +386,6 @@ window.addEventListener("pageshow", () => {
 });
 
 /* init */
-syncModeHints();
 resetFile();
 loadHistory();
 loadActive();

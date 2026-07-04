@@ -1,8 +1,10 @@
 """Map a SessionInput.mode to the engine path that runs it.
 
-verstai/design compile a LangGraph WITHOUT a checkpointer (no Redis), exactly like
-scripts/live_run.py. htmlnew calls run_htmlnew directly (it is not a LangGraph).
-Engine imports are lazy so unit tests can stub them via the _ENGINE registry.
+The web app only ever submits htmlnew/htmlpolish (plain function calls, not
+LangGraph). verstai/design are the dormant native-PPTX branch: they compile a
+LangGraph WITHOUT a checkpointer (no Redis) and are kept wired for a future
+PPTX-export feature. Engine imports are lazy so unit tests can stub them via
+the _ENGINE registry.
 """
 from __future__ import annotations
 

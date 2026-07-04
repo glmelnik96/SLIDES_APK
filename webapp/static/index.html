@@ -56,14 +56,12 @@
 
   <!-- UPLOAD FLOW (точка входа 1) -->
   <div id="uploadFlow">
-    <!-- скрытый вход для совместимости с app.js (selectedMode) -->
-    <input type="radio" name="mode" value="htmlnew" checked hidden>
 
     <!-- STEP 1 -->
     <section class="step">
       <div class="step-head"><span class="step-num">1</span><h2>Загрузите файл</h2></div>
       <label class="drop" id="drop">
-        <input type="file" id="file" hidden>
+        <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
         <div class="drop-inner">
           <div class="drop-icon">&uarr;</div>
           <div class="drop-text" id="dropText">Перетащите файл сюда или нажмите, чтобы выбрать</div>

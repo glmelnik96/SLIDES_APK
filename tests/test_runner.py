@@ -88,6 +88,30 @@ async def test_worker_exception_emits_failed(monkeypatch):
     assert "kaboom" in ev["error"]
 
 
+async def test_duplicate_start_same_session_rejected(monkeypatch):
+    """Starting a session that is already active (double-click on rebuild) must
+    be refused: a second start would overwrite _futures/_queues for the sid and
+    race two builds over the same session files."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    release = threading.Event()
+    monkeypatch.setattr(runner, "_pipeline_run", lambda inp: release.wait(timeout=5))
+
+    inp = types.SimpleNamespace(session_id="s1", mode="verstai")
+    q = r.start(inp)
+    try:
+        r.start(inp)
+        assert False, "expected CapacityError for a duplicate start"
+    except runner.CapacityError:
+        pass
+    # the original job is untouched: same queue, still active
+    assert r.queue("s1") is q and "s1" in r._active
+    release.set()
+
+
 async def test_cancel_queued_job_emits_cancelled(monkeypatch):
     """A job still waiting in the queue is cancelled instantly via its Future."""
     r = runner.JobRunner(build_workers=1)   # 1 worker so b genuinely queues behind a
