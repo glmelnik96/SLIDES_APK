@@ -346,7 +346,7 @@ def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
         outline = client.chat_json(
             [{"role": "system", "content": _ENRICH_SYSTEM},
              {"role": "user", "content": user}],
-            EnrichedOutline, max_tokens=1500, retries=2,
+            EnrichedOutline, max_tokens=4000, retries=2,
             extra_body={"thinking": {"type": "disabled"}})
     except Exception:  # noqa: BLE001
         outline = None
