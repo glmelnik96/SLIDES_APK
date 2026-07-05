@@ -101,6 +101,22 @@ drop.addEventListener("drop", (e) => {
   if (f) setFile(f);
 });
 
+/* ---- empty state (канон v4): показать при первом входе, скрыть при контенте ---- */
+function updateEmptyState() {
+  const el = $("#workspaceEmpty");
+  if (!el) return;
+  const hasContent =
+    !$("#progress").classList.contains("hidden") ||
+    !$("#result").classList.contains("hidden") ||
+    !$("#activeWrap").hidden ||
+    $("#histlist").children.length > 0;
+  el.hidden = hasContent;
+  // Пока показан empty-state, секция истории с «Пока пусто» дублирует его — прячем
+  // (как на /images: пустая история скрыта, вместо неё сценарии).
+  const hist = $("#histlist").closest(".history");
+  if (hist) hist.hidden = !hasContent;
+}
+
 /* ---- history ---- */
 async function loadHistory() {
   const items = await (await fetch(U("/api/history"))).json();
@@ -127,6 +143,7 @@ async function loadHistory() {
       `<div class="hist-spacer"></div>${action}`;
     ul.appendChild(li);
   }
+  updateEmptyState();
 }
 
 $("#clear").onclick = async () => {
@@ -168,6 +185,7 @@ async function loadActive() {
       await fetch(U(`/api/jobs/${b.dataset.stop}/cancel`), { method: "POST" });
       loadActive();
     }));
+  updateEmptyState();
 }
 
 setInterval(loadActive, 2000);
@@ -252,6 +270,7 @@ function streamProgress(sessionId, kind, initial) {
   const prog = $("#progress");
   prog.classList.remove("hidden");
   $("#result").classList.add("hidden");
+  updateEmptyState();
   const seedPct = initial && initial.progress_pct ? initial.progress_pct : 0;
   const seedStage = initial && initial.stage ? initial.stage : null;
   $("#barfill").style.width = seedPct + "%";

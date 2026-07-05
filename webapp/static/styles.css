@@ -80,7 +80,18 @@ a { color: var(--accent); }
   transition: border-color .12s, color .12s; }
 .logout-form button:hover { border-color: var(--muted); color: var(--text); }
 
-.wrap { max-width: 880px; margin: 0 auto; padding: 40px 28px 64px; }
+/* Канон v4: main 1240px (как /images) + декоративные свечения на тёмной плоскости */
+.wrap { max-width: 1240px; margin: 0 auto; padding: 40px 28px 64px; position: relative; }
+.wrap::before { content: ""; position: absolute; top: -120px; right: -140px;
+  width: 560px; height: 560px; pointer-events: none;
+  background: radial-gradient(circle, rgba(38, 208, 124, .09), transparent 65%); }
+.wrap::after { content: ""; position: absolute; bottom: -160px; left: -200px;
+  width: 480px; height: 480px; pointer-events: none;
+  background: radial-gradient(circle, rgba(38, 208, 124, .05), transparent 65%); }
+.wrap > * { position: relative; }
+/* свечения с отрицательными отступами не должны давать горизонтальный скролл;
+   clip (не hidden) — чтобы не сломать position: sticky в workspace__controls */
+html, body { overflow-x: clip; }
 
 /* ===== Интро-блок: что делает раздел + как готовить исходник ===== */
 .intro { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
@@ -108,8 +119,10 @@ a { color: var(--accent); }
   transition: border-color .12s, background .12s; font: inherit; color: var(--text); }
 .entry-card:hover { border-color: var(--accent); background: var(--panel-2); }
 .entry-card.is-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.entry-num { width: 22px; height: 22px; display: grid; place-items: center;
-  background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 12px; }
+/* v4: номер — капс-микролейбл («01 · …»), как card__num на лендинге платформы */
+.entry-num { font-size: 12px; letter-spacing: .14em; color: var(--muted-2);
+  font-weight: 600; transition: color .15s; }
+.entry-card:hover .entry-num, .entry-card.is-active .entry-num { color: var(--accent); }
 .entry-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
 .entry-desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .entry-cta { margin-top: auto; color: var(--accent); font-size: 12px;
@@ -119,12 +132,11 @@ a { color: var(--accent); }
 /* ===== Шаги ===== */
 .step { margin-bottom: 32px; }
 .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-/* Номер шага — квадрат-чип с акцентом (прямые углы, как сватчи палитры) */
-.step-num {
-  width: 24px; height: 24px; border-radius: 0; background: var(--accent);
-  color: var(--accent-ink); font-weight: 700; display: grid; place-items: center; font-size: 13px;
-}
-.step-head h2 { font-size: 17px; margin: 0; font-weight: 600; }
+/* v4: номер шага — капс-микролейбл с нумерацией «01 · …» */
+.step-num { font-size: 12px; letter-spacing: .14em; color: var(--muted-2); font-weight: 600; }
+.step-num::after { content: "·"; margin-left: 10px; color: var(--muted-2); }
+.step-head h2 { font-size: 13px; margin: 0; font-weight: 600; font-family: var(--font-text);
+  letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
 
 /* ===== Зона загрузки ===== */
 .drop {
@@ -306,3 +318,39 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: #000; }
 }
 .chat-input textarea:focus { outline: none; border-color: var(--accent); }
 .chat-target { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+
+/* ============================================================================
+   Канон v4 (layout): двухколоночный workspace — как /images @ 6791254.
+   Слева sticky-колонка управления (точки входа + загрузка), справа выдача
+   (прогресс / результат / очередь / история) за 1px-хайрлайном. Токены v3
+   и имена существующих селекторов/id не тронуты — только layout-обвязка.
+   ============================================================================ */
+.workspace { display: grid; grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
+  gap: 44px; align-items: start; }
+.workspace__controls { position: sticky; top: 28px; }
+.workspace__controls .step:last-child { margin-bottom: 0; }
+/* в узкой колонке управления карточки точек входа складываются в столбик */
+.workspace__controls .entry-cards { grid-template-columns: 1fr; }
+.workspace__controls .entry-card { min-height: 0; }
+.workspace__output { display: flex; flex-direction: column; gap: 30px; min-height: 400px;
+  border-left: 1px solid var(--line-soft); padding-left: 44px; }
+.workspace__output > * { margin-top: 0; }
+.workspace__output .history { margin-top: 0; }
+
+/* Empty-state первой загрузки: прозрачная панель на хайрлайне, капс-заголовок,
+   лёгкое радиальное свечение в правом верхнем углу (как .empty эталона) */
+.empty { padding: 30px 34px; border: 1px solid var(--line); border-radius: var(--r-lg);
+  color: var(--muted);
+  background:
+    radial-gradient(560px 300px at 85% -10%, rgba(38, 208, 124, .07), transparent 70%),
+    rgba(255, 255, 255, .015); }
+.empty h2 { margin: 0 0 14px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted-2); font-family: var(--font-text); font-weight: 600; }
+.empty ul { margin: 0; padding-left: 18px; line-height: 1.9; font-size: 14px; }
+.empty ul b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 1023px) {
+  .workspace { grid-template-columns: 1fr; gap: 8px; }
+  .workspace__controls { position: static; }
+  .workspace__output { border-left: none; padding-left: 0; margin-top: 24px; }
+}

@@ -29,24 +29,28 @@
     <p class="intro-lead">Для загрузки подойдёт <b>.md / .txt / .docx / .pptx</b>. Проще всего подготовить исходник через нейросеть (ChatGPT, Claude, GigaChat): попросите собрать markdown с заголовками <code>##</code> для каждого раздела и короткими тезисами с цифрами внутри &mdash; чем чётче разделы и факты, тем точнее структура и тем больше наглядных графиков вместо сплошного текста.</p>
   </section>
 
+  <!-- Канон v4: двухколоночный workspace — слева управление (sticky), справа выдача -->
+  <div class="workspace">
+  <div class="workspace__controls">
+
   <!-- ENTRY: три способа начать -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
     <div class="entry-cards">
       <button type="button" class="entry-card is-active" id="entryUpload" data-entry="upload">
-        <span class="entry-num">1</span>
+        <span class="entry-num">01</span>
         <span class="entry-title">Загрузить документ</span>
         <span class="entry-desc">Готовый md / txt / docx / pptx &rarr; модель сама соберёт деку со структурой и графиками.</span>
         <span class="entry-cta">Выбрано &darr;</span>
       </button>
       <button type="button" class="entry-card" id="entryManual" data-entry="manual">
-        <span class="entry-num">2</span>
+        <span class="entry-num">02</span>
         <span class="entry-title">Заполнить шаблон</span>
         <span class="entry-desc">Соберите деку из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
         <span class="entry-cta">Открыть конструктор &rarr;</span>
       </button>
       <button type="button" class="entry-card" id="entryChat" data-entry="chat">
-        <span class="entry-num">3</span>
+        <span class="entry-num">03</span>
         <span class="entry-title">Собрать в чате</span>
         <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
         <span class="entry-cta">Открыть чат &rarr;</span>
@@ -59,7 +63,7 @@
 
     <!-- STEP 1 -->
     <section class="step">
-      <div class="step-head"><span class="step-num">1</span><h2>Загрузите файл</h2></div>
+      <div class="step-head"><span class="step-num">01</span><h2>Загрузите файл</h2></div>
       <label class="drop" id="drop">
         <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
         <div class="drop-inner">
@@ -72,9 +76,23 @@
 
     <!-- STEP 2 -->
     <section class="step">
-      <div class="step-head"><span class="step-num">2</span><h2>Запустите сборку</h2></div>
+      <div class="step-head"><span class="step-num">02</span><h2>Запустите сборку</h2></div>
       <button id="create" class="btn btn-lg" disabled>Создать презентацию</button>
     </section>
+  </div>
+
+  </div><!-- /.workspace__controls -->
+  <div class="workspace__output">
+
+  <!-- EMPTY STATE: первый вход, пока нет сборок -->
+  <div id="workspaceEmpty" class="empty" hidden>
+    <h2>Сценарии</h2>
+    <ul>
+      <li><b>Загрузить документ</b> — md / txt / docx / pptx: модель сама разобьёт его на слайды, подберёт вёрстку и построит графики.</li>
+      <li><b>Заполнить шаблон</b> — соберите деку из готовых макетов вручную, заполняя поля.</li>
+      <li><b>Собрать в чате</b> — опишите презентацию, ассистент спланирует структуру и создаст слайды.</li>
+      <li>Готовую деку можно править прямо в браузере, дорабатывать через чат и скачивать в <b>HTML или PNG</b>.</li>
+    </ul>
   </div>
 
   <!-- PROGRESS -->
@@ -111,6 +129,9 @@
     <ul id="histlist" class="histlist"></ul>
     <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию.</div>
   </section>
+
+  </div><!-- /.workspace__output -->
+  </div><!-- /.workspace -->
 </main>
 
 <script src="/static/app.js"></script>

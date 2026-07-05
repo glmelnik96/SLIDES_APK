@@ -101,10 +101,20 @@ frame.onload = () => {
   // In-place text editing works everywhere. Built decks are HTML-as-truth, so
   // edits persist via saveDeck(). Drafts are DeckPlan-as-truth, so an inline edit
   // converts that slide to a freeform slide in the plan (synced on blur).
+  // CRITICAL: sync only when the content actually changed. A bare focus+blur
+  // (user clicks the preview, then clicks elsewhere) must NOT convert the slide
+  // to freeform — that used to wipe the builder form/template on a mere click.
   slides.forEach((s, i) => s.querySelectorAll("*").forEach((el) => {
     if (el.children.length === 0 && el.textContent.trim()) {
       el.setAttribute("contenteditable", "true");
-      if (isDraft) el.addEventListener("blur", () => syncDraftSlideHtml(i));
+      if (isDraft) {
+        el.addEventListener("focus", () => { el.__origHtml = el.innerHTML; });
+        el.addEventListener("blur", () => {
+          const changed = el.__origHtml !== undefined && el.innerHTML !== el.__origHtml;
+          el.__origHtml = undefined;
+          if (changed) syncDraftSlideHtml(i);
+        });
+      }
     }
   }));
   suppressDeckNavOnEdit(doc);
@@ -120,8 +130,16 @@ async function syncDraftSlideHtml(i) {
   const section = doc && doc.querySelectorAll(".slide")[i];
   if (!section) return;
   const clone = section.cloneNode(true);
+  // Strip editor + deck.js runtime state so it doesn't get baked into the plan:
+  // contenteditable (ours), .is-active (current-slide marker) and the count-up
+  // animation's data-count-final / mid-animation counter text (deck.js).
+  clone.classList.remove("is-active");
   clone.querySelectorAll("[contenteditable]").forEach(
     (el) => el.removeAttribute("contenteditable"));
+  clone.querySelectorAll("[data-count-final]").forEach((el) => {
+    el.textContent = el.getAttribute("data-count-final");
+    el.removeAttribute("data-count-final");
+  });
   draftHtmlSaving = true;
   try {
     await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
@@ -543,18 +561,22 @@ function markFieldErrors(errors) {
 
 /* ---- slide actions ---- */
 async function changeTemplate(templateId) {
-  // Drop any pending save: the slide is replaced by a different template whose
-  // slots differ, so the in-flight content is moot and would only fire mid-swap.
+  // Drop any pending debounced save — we take the freshest form values directly.
   clearTimeout(putTimer); putTimer = null;
-  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content: draftPlan.slides[current].content || {} }),
-  });
-  // template change = delete + re-add at the same position with new template
+  const slide = draftPlan.slides[current];
+  // Merge: plan content keeps slots the current form doesn't render (so a swap
+  // A→B→A restores A's slots), form values win for the slots the user can see.
+  const content = slide && !slide.freeform
+    ? { ...(slide.content || {}), ...collectContent() }
+    : (slide && slide.content) || {};
+  // template change = delete + re-add at the same position with the new template.
+  // The content rides along: overlapping slots (title, items, …) carry over; the
+  // rest stays in plan.json (draft_render ignores unknown slots), so switching
+  // back restores it. Without this the swap silently wiped the slide's content.
   await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
   await fetch(U(`/api/drafts/${sessionId}/slides`), {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ template_id: templateId, at: current + 1 }),
+    body: JSON.stringify({ template_id: templateId, at: current + 1, content }),
   });
   await reloadDraft(current);
 }
