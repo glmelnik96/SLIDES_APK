@@ -23,6 +23,8 @@ class DraftSlide(BaseModel):
     template_id: str | None = None
     freeform: bool = False
     content: dict = Field(default_factory=dict)
+    brief: str = ""        # тема слайда в аутлайне (до сборки)
+    filled: bool = False   # прогнан ли через fill_slide
 
 
 class DraftPlan(BaseModel):

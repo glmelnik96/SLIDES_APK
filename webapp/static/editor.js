@@ -651,6 +651,7 @@ async function initDraftBuilder() {
   }
   if (mode === "chat") setupChatMode();
   await fetchPlan();
+  if (mode === "chat") renderOutline();
 }
 
 /* ---- rebuild the draft through the engine (mode=htmlpolish) ---- */
@@ -720,13 +721,87 @@ function setupChatMode() {
   if (target) target.textContent = "Ассистент";
   chatText.placeholder = "Например: сделай презентацию про наш продукт для инвесторов";
   chatSend.textContent = "Отправить";
+  byId("outline")?.classList.remove("hidden");   // показать живую панель аутлайна
 }
+
+// True while at least one outline slide is planned but not yet filled (a real
+// build target). Used to toggle the "Собрать деку" button and guard doBuild().
+function hasBuildTargets() {
+  return (draftPlan.slides || []).some(
+    (s) => s && s.brief && !s.filled && !s.freeform);
+}
+
+// Render the live outline panel from draftPlan.slides. Each row shows the slide
+// number, its title/brief, and a badge (в плане / готов). The «Собрать деку»
+// button is shown only when there's something to build.
+function renderOutline() {
+  const list = byId("outlineList");
+  if (!list) return;
+  list.innerHTML = "";
+  (draftPlan.slides || []).forEach((s, i) => {
+    const li = document.createElement("li");
+    const num = document.createElement("span");
+    num.className = "outline-num";
+    num.textContent = i + 1;
+    const label = document.createElement("span");
+    label.className = "outline-label";
+    label.textContent = (s.content && s.content.title) || s.brief || "—";
+    const badge = document.createElement("span");
+    badge.className = "outline-badge " + (s.filled ? "is-ready" : "is-plan");
+    badge.textContent = s.filled ? "готов" : "в плане";
+    li.appendChild(num);
+    li.appendChild(label);
+    li.appendChild(badge);
+    list.appendChild(li);
+  });
+  byId("buildDeck")?.classList.toggle("hidden", !hasBuildTargets());
+}
+
+// Fill the whole outline in one shot via POST /api/drafts/{id}/build. Synchronous
+// endpoint (tens of seconds) — we show the indeterminate build overlay meanwhile.
+let building = false;
+async function doBuild() {
+  if (building) return;
+  if (!hasBuildTargets()) { addMsg("bot", "Аутлайн пуст — нечего собирать."); return; }
+  building = true;
+  showOverlay(true);
+  buildTitle.textContent = "Собираю деку…";
+  buildSub.textContent = "";
+  try {
+    const r = await fetch(U(`/api/drafts/${sessionId}/build`), { method: "POST" });
+    if (!r.ok) {
+      addMsg("bot", "Не удалось собрать: " + (await r.text()));
+      return;
+    }
+    try { draftPlan = await r.json(); } catch (_) { await fetchPlan(); }
+    renderOutline();
+    loadDeck();
+  } catch (e) {
+    addMsg("bot", "Не удалось собрать: " + (e && e.message ? e.message : e));
+  } finally {
+    building = false;
+    showOverlay(false);
+  }
+}
+
+byId("buildDeck")?.addEventListener("click", doBuild);
 
 async function sendAgent() {
   const message = chatText.value.trim();
   if (!message) return;
   addMsg("user", message);
   chatText.value = "";
+  // Deterministic build trigger (secondary to the «Собрать деку» button and the
+  // LLM build flag): unambiguous Russian build verbs fire the build directly,
+  // without a classifier round-trip. Handled BEFORE any thinking-bubble/timer
+  // setup, so there's nothing to leave dangling — doBuild() runs its own overlay.
+  // NB: english "go"/"build" are deliberately excluded — they collide with deck
+  // topics (a slide «про Go» / «build-систему») and would misfire a full build.
+  if (/(^|\s)(собери(те)?|собирай(те)?|собер[её]м|приступ(ай|им|аем|айте)|поехали|погнали)\b/i.test(message)) {
+    addMsg("bot", "Собираю деку…");
+    await doBuild();
+    return;
+  }
   const thinking = addMsg("bot", "Думаю…");
   const t0 = Date.now();
   const controller = new AbortController();
@@ -750,9 +825,11 @@ async function sendAgent() {
       thinking.textContent = res.reply || "Готово.";
       if (res.changed) {
         await fetchPlan();
+        renderOutline();
         if (res.go_to) pendingGoTo = res.go_to - 1;
         loadDeck();
       }
+      if (res.build === true) await doBuild();
     }
   } catch (e) {
     thinking.className = "msg err";

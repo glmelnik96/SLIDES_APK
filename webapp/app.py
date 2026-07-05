@@ -432,6 +432,23 @@ async def draft_agent(session_id: str, request: Request,
     return JSONResponse(res.model_dump())
 
 
+@app.post("/api/drafts/{session_id}/build")
+async def build_draft(session_id: str, request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Fill the whole light outline: run every un-filled outline slide through
+    the engine's per-slide fill + re-render, synchronously (owner only). The
+    build/render happen inside ``chat_agent.build_outline``; we just return the
+    now-filled plan."""
+    from webapp import chat_agent
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    targets = [s for s in plan.slides if s.brief and not s.filled
+               and not s.freeform]
+    if not targets:
+        raise HTTPException(400, "нечего собирать — аутлайн пуст")
+    await run_in_threadpool(chat_agent.build_outline, session_id)
+    return JSONResponse(draft.load_plan(session_id).model_dump())
+
+
 @app.get("/api/jobs/active")
 def active_jobs(user=Depends(get_current_user)) -> JSONResponse:
     """The current user's jobs still building, with live stage/pct."""

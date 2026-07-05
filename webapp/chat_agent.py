@@ -66,7 +66,7 @@ def save_chat(session_id: str, convo: Conversation) -> None:
 
 # ── intent classification ────────────────────────────────────────────────────
 class Intent(BaseModel):
-    action: str          # plan | add | rewrite | delete | move | retitle | chat
+    action: str          # plan | add | rewrite | delete | move | retitle | build_now | chat
     topic: str = ""      # for add/rewrite: what the slide/edit is about
     to: int | None = None  # for move: target 1-based position
 
@@ -83,6 +83,7 @@ _INTENT_SYSTEM = (
     "- delete: удалить текущий слайд.\n"
     "- move: переместить текущий слайд (to = новая позиция, 1-based).\n"
     "- retitle: задать заголовок всей презентации (topic = заголовок).\n"
+    "- build_now: пользователь просит собрать/приступить к сборке всей деки.\n"
     "- chat: вопрос или реплика, не меняющая деку.\n"
     "Верни только JSON, без пояснений."
 )
@@ -110,7 +111,9 @@ def _slide_digest(plan: draft.DraftPlan) -> str:
         title = ""
         if isinstance(s.content, dict):
             title = str(s.content.get("title") or s.content.get("heading") or "")
-        lines.append(f"{i}. [{tid}] {title}".rstrip())
+        # Аутлайн: у незаполненного слайда заголовка ещё нет — покажем тему.
+        label = title or (s.brief or "")
+        lines.append(f"{i}. [{tid}] {label}".rstrip())
     return "\n".join(lines)
 
 
@@ -129,6 +132,26 @@ class AgentResult(BaseModel):
     reply: str                 # assistant message to show in chat
     changed: bool = False      # whether the deck/plan changed (UI should reload)
     go_to: int | None = None   # 1-based slide to focus after the change
+    build: bool = False        # front should trigger the build (POST .../build)
+
+
+# ── structured outline (level 1: plan the whole deck as a light outline) ─────
+class OutlineItem(BaseModel):
+    title: str = ""      # заголовок слайда (кладётся в content.title)
+    brief: str = ""      # что на слайде — тема для последующей сборки
+
+
+class OutlineDraft(BaseModel):
+    slides: list[OutlineItem] = Field(default_factory=list)
+
+
+_OUTLINE_SYSTEM = (
+    "Ты — ассистент-конструктор презентаций Cloud.ru. По запросу пользователя "
+    "составь структуру презентации — список слайдов. Верни ТОЛЬКО JSON вида "
+    '{"slides": [{"title": "...", "brief": "..."}]}, где title — короткий '
+    "заголовок слайда, brief — 1–2 предложения о том, что на слайде. Пиши "
+    "по-русски, по-деловому. От 3 до 12 слайдов. Без пояснений вне JSON."
+)
 
 
 _PLAN_SYSTEM = (
@@ -202,23 +225,18 @@ def run_turn(session_id: str, message: str, current_index: int,
             result = AgentResult(reply="Не получилось переместить — неверная позиция.")
 
     elif intent.action == "add":
-        library = TemplateLibrary.load()
-        tid = _pick_template(client, library, intent.topic or message, ctx)
-        spec = library.get(tid)
-        # fill_slide понимает контекст: тема деки + бриф (что на слайде).
-        sp = SlidePlan(index=len(plan.slides) + 1, type=spec.type,
-                       template_id=tid,
-                       content={"brief": intent.topic or message})
-        try:
-            sp = fill_slide(client, library, sp, deck_title=plan.title)
-            new = draft.DraftSlide(template_id=tid, content=sp.content)
-        except Exception:  # noqa: BLE001 — degrade to an empty slide, never crash
-            new = draft.DraftSlide(template_id=tid, content={})
-        plan = draft.add_slide(plan, new)
+        # Лёгкий аутлайн: только тема, БЕЗ синхронной сборки (fill_slide переехал
+        # в build_outline). Слайд остаётся незаполненным до кнопки «Собрать деку».
+        topic = intent.topic or message
+        plan = draft.add_slide(
+            plan, draft.DraftSlide(brief=topic, filled=False))
         draft.save_plan(session_id, plan)
-        result = AgentResult(
-            reply=f"Добавил слайд «{tid}» про: {intent.topic or 'тему'}.",
-            changed=True, go_to=len(plan.slides))
+        result = AgentResult(reply=f"Добавил в план: {topic}.",
+                             changed=True, go_to=len(plan.slides))
+
+    elif intent.action == "build_now":
+        # Не жарим синхронно (может быть много слайдов) — сигналим фронту.
+        result = AgentResult(reply="Собираю деку…", build=True)
 
     elif intent.action == "rewrite":
         if not (1 <= current_index <= len(plan.slides)):
@@ -243,7 +261,32 @@ def run_turn(session_id: str, message: str, current_index: int,
                     reply="Не получилось переписать слайд — попробуйте иначе.")
 
     elif intent.action == "plan":
-        result = AgentResult(reply=_talk(client, _PLAN_SYSTEM, ctx, message))
+        # Ядро П2: генерируем структурный аутлайн и дописываем его как
+        # незаполненные слайды (заголовок → content.title, тема → brief).
+        try:
+            outline = client.chat_json(
+                [{"role": "system", "content": _OUTLINE_SYSTEM},
+                 {"role": "user",
+                  "content": f"Контекст:\n{ctx}\n\nЗапрос:\n{message}"}],
+                OutlineDraft, max_tokens=1500, retries=1,
+                extra_body={"thinking": {"type": "disabled"}})
+        except Exception:  # noqa: BLE001
+            outline = None
+        if outline and outline.slides:
+            for item in outline.slides:
+                plan = draft.add_slide(plan, draft.DraftSlide(
+                    brief=item.brief or item.title, filled=False,
+                    content={"title": item.title} if item.title else {}))
+            draft.save_plan(session_id, plan)
+            lines = "\n".join(
+                f"{i}. {it.title or it.brief}".rstrip()
+                for i, it in enumerate(outline.slides, start=1))
+            result = AgentResult(
+                reply=f"Набросал план ({len(outline.slides)} сл.):\n{lines}",
+                changed=True, go_to=len(plan.slides))
+        else:  # fallback — старое текстовое обсуждение
+            result = AgentResult(
+                reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
 
     else:  # chat
         result = AgentResult(reply=_talk(client, _CHAT_SYSTEM, ctx, message))
@@ -251,6 +294,38 @@ def run_turn(session_id: str, message: str, current_index: int,
     convo.turns.append(Turn(role="assistant", text=result.reply))
     save_chat(session_id, convo)
     return result
+
+
+def build_outline(session_id: str, *, client: Any | None = None) -> None:
+    """Fill the whole outline: run every un-filled outline slide through
+    ``fill_slide`` and re-render the deck. Saves after each slide (resilient to
+    a mid-build crash) and never lets one bad slide abort the run."""
+    from htmlslides.library import TemplateLibrary
+    from htmlslides.pipeline.filler import fill_slide
+    from htmlslides.models import SlidePlan
+    from webapp import draft_render  # inside to avoid an import cycle
+
+    client = client or _kimi()
+    library = TemplateLibrary.load()
+    plan = draft.load_plan(session_id)
+    convo = load_chat(session_id)
+    for i, s in enumerate(plan.slides, start=1):
+        if not (s.brief and not s.filled and not s.freeform):
+            continue
+        ctx = context_brief(plan, convo, i)
+        tid = _pick_template(client, library, s.brief, ctx)
+        spec = library.get(tid)
+        sp = SlidePlan(index=i, type=spec.type, template_id=tid,
+                       content={"brief": s.brief})
+        try:
+            sp = fill_slide(client, library, sp, deck_title=plan.title)
+            plan = draft.update_slide(plan, i, content=sp.content,
+                                      template_id=tid)
+        except Exception:  # noqa: BLE001 — keep template only, never crash
+            plan = draft.update_slide(plan, i, template_id=tid)
+        plan.slides[i - 1].filled = True
+        draft.save_plan(session_id, plan)  # save after EACH slide (resilience)
+    draft_render.render_draft(session_id, plan)  # final render
 
 
 def _pick_template(client: Any, library, topic: str, ctx: str) -> str:
