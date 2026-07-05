@@ -260,10 +260,13 @@ def _pick_template(client: Any, library, topic: str, ctx: str) -> str:
     system = ("Выбери ОДИН id макета слайда под смысл. " + _TEMPLATE_HINT +
               "\nВерни ТОЛЬКО id из списка: " + ", ".join(ids))
     try:
+        # Бюджет не 24, а 256: MiniMax-M3 всегда эмитит короткий reasoning (~100
+        # токенов) ПЕРЕД content, и на 24/64 токенах content выходит пустым →
+        # выбор макета всегда падал в "blank". Порог по замеру — между 64 и 128.
         reply = client.chat([
             {"role": "system", "content": system},
             {"role": "user", "content": f"Контекст:\n{ctx}\n\nСлайд про: {topic}"},
-        ], max_tokens=24).strip()
+        ], max_tokens=256).strip()
         for tid in ids:
             if tid in reply:
                 return tid

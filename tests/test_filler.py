@@ -43,7 +43,7 @@ def test_transient_api_error_degrades_one_slide_not_whole_deck():
 
 
 def test_template_fill_disables_reasoning_for_speed():
-    """Filler must call Kimi with thinking disabled — reasoning adds 1-4 min per
+    """Filler must call the LLM with thinking disabled — reasoning adds 1-4 min per
     slide and isn't needed for contract-bound text. Regression for build speed."""
     library = TemplateLibrary.load()
     seen = {}

@@ -494,3 +494,37 @@ def test_inflight_semaphore_caps_concurrent_calls(monkeypatch):
     for t in threads:
         t.join()
     assert live["max"] <= 3, f"semaphore breached: {live['max']}"
+
+
+def test_default_model_is_minimax_m3(monkeypatch):
+    """KimiClient() without CLOUDRU_MODEL env must use MiniMax-M3 as default."""
+    import htmlslides.pipeline.client as clientmod
+
+    monkeypatch.delenv("CLOUDRU_MODEL", raising=False)
+
+    class _Dummy:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    pass
+
+    c = clientmod.KimiClient(rps=1000, transport=_Dummy())
+    assert c.model == "MiniMaxAI/MiniMax-M3"
+
+
+def test_cloudru_model_env_overrides_default(monkeypatch):
+    """CLOUDRU_MODEL env must override the default model."""
+    import htmlslides.pipeline.client as clientmod
+
+    monkeypatch.setenv("CLOUDRU_MODEL", "moonshotai/Kimi-K2.6")
+
+    class _Dummy:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    pass
+
+    c = clientmod.KimiClient(rps=1000, transport=_Dummy())
+    assert c.model == "moonshotai/Kimi-K2.6"

@@ -1,7 +1,10 @@
-"""Kimi-K2.6 через Cloud.ru FM: RPS-гейт, plain-prompt JSON + Pydantic + 1 ретрай.
+"""Cloud.ru FM client: RPS-гейт, plain-prompt JSON + Pydantic + 1 ретрай.
 
-response_format на Cloud.ru не поддержан, поэтому структурированный вывод —
-просьба вернуть JSON + extract_json + Pydantic-валидация + один ретрай.
+Модель по умолчанию — MiniMax-M3 (vision, content всегда заполнен, reasoning
+короткий). Переопределение через env CLOUDRU_MODEL (полезно для A/B-сравнений
+и отката на другую модель). response_format на Cloud.ru не поддержан, поэтому
+структурированный вывод — просьба вернуть JSON + extract_json + Pydantic-
+валидация + один ретрай.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
 DEFAULT_BASE_URL = "https://foundation-models.api.cloud.ru/v1"
-DEFAULT_MODEL = "moonshotai/Kimi-K2.6"
+DEFAULT_MODEL = "MiniMaxAI/MiniMax-M3"
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -76,7 +79,10 @@ def image_part(png_path: str | Path) -> dict:
 
 
 class KimiClient:
-    """Обёртка openai-клиента: модель/гейт/JSON-валидация. transport= для тестов.
+    """Cloud.ru FM client: модель/гейт/JSON-валидация. transport= для тестов.
+
+    Модель по умолчанию — MiniMax-M3 (env CLOUDRU_MODEL для переопределения).
+    Имя класса KimiClient сохранено для совместимости импортов по всему репо.
 
     rps по умолчанию берётся из env HTMLSLIDES_RPS; если env не задан — 10.
     Явный аргумент rps= всегда имеет приоритет над env.
@@ -92,7 +98,7 @@ class KimiClient:
                  transport=None) -> None:
         self.model = model or os.environ.get("CLOUDRU_MODEL", DEFAULT_MODEL)
         # Per-request kwargs for every call (e.g. {"thinking": {"type": "disabled"}}
-        # to switch Kimi-K2.6 out of multi-minute reasoning for simple edits).
+        # to suppress reasoning for simple edits — harmless on models that ignore it).
         self._extra_body = extra_body
         if rps is None:
             _raw = os.environ.get("HTMLSLIDES_RPS", "10")
@@ -121,7 +127,7 @@ class KimiClient:
              extra_body: Optional[dict] = None) -> str:
         # Per-call extra_body overrides the instance default. Lets one client run
         # reasoning ON for hard calls (planner/vision-QA) yet OFF for cheap
-        # text-only calls (filler/autofix) — Kimi-K2.6's reasoning otherwise adds
+        # text-only calls (filler/autofix) — reasoning-heavy models otherwise add
         # 1-4 min per call. None here = fall back to the instance default.
         body = extra_body if extra_body is not None else self._extra_body
         self._gate.acquire()
@@ -142,7 +148,7 @@ class KimiClient:
                   extra_body: Optional[dict] = None) -> T:
         """plain-prompt JSON + Pydantic, до `retries` повторов при невалидном ответе.
 
-        Kimi на Cloud.ru без response_format изредка отдаёт не-JSON (проза/пусто);
+        Cloud.ru FM без response_format изредка отдаёт не-JSON (проза/пусто);
         два повтора с жёстким «верни ТОЛЬКО JSON» гасят такие транзиентные осечки.
         """
         convo = messages

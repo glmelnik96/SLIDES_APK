@@ -7,7 +7,7 @@ Two complementary gates per slide, mirroring the proven /design mechanism
    canons (READY/NOT-READY + concrete reasons). Catches canon violations the
    renderer would faithfully draw (white canvas on a content slide, multiple
    green accents, broken logo markup, gradients/shadows).
-2. ``judge_slide`` — Kimi vision judges the rendered PNG against the brand
+2. ``judge_slide`` — LLM vision judges the rendered PNG against the brand
    exemplar for the slide's archetype. Catches what only pixels show: overflow,
    clipping, top-clumped layouts, overlap, illegible contrast.
 

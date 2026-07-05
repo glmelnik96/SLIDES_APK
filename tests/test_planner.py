@@ -25,7 +25,7 @@ def _doc():
 
 class FakeClient:
     """chat_json возвращает заранее заданные _SectionPlan по очереди вызовов;
-    значение-исключение бросается (эмуляция флапа Kimi)."""
+    значение-исключение бросается (эмуляция транзиентного сбоя LLM)."""
     def __init__(self, replies):
         self._replies = list(replies)
         self.calls = 0

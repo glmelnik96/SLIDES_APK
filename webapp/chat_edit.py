@@ -1,10 +1,10 @@
-"""Chat-driven single-slide edit of an HTML deck via Kimi.
+"""Chat-driven single-slide edit of an HTML deck via LLM.
 
 Given the assembled deck HTML and a 1-based slide index, send that slide's
-<section> plus the user's instruction to Kimi and swap the revised <section>
-back into the deck. Reuses htmlslides' brand rules and allowed-class allowlist
-for on-brand output. Operates on the persisted deck.html — no changes to the
-source engine repositories.
+<section> plus the user's instruction to the model and swap the revised
+<section> back into the deck. Reuses htmlslides' brand rules and allowed-class
+allowlist for on-brand output. Operates on the persisted deck.html — no changes
+to the source engine repositories.
 """
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ _FORBIDDEN = re.compile(
     r"\bstyle\s*=|<\s*(?:i|em|u|script)\b|box-shadow|text-shadow|gradient|border-radius",
     re.IGNORECASE,
 )
-# Kimi-K2.6 always reasons (reasoning counts against completion tokens), so a full
-# content slide needs a large budget or the closing </section> gets truncated away.
-# Mirrors the generous Kimi budgets in Slides_bot/llm/roles.py.
+# Reasoning-heavy models count reasoning against completion tokens, so a full
+# content slide needs a large budget or the closing </section> gets truncated.
+# Keep generous budget as a safety margin for any model behind CLOUDRU_MODEL.
 _MAX_TOKENS = 16000
 _FENCE_RE = re.compile(r"```(?:html)?\s*(.*?)```", re.DOTALL)
 
@@ -53,10 +53,9 @@ def _extract_section(reply: str) -> str:
 
 def _kimi():
     from htmlslides.pipeline.client import KimiClient
-    # Interactive single-slide edit. The big win is disabling Kimi-K2.6's reasoning:
-    # by default it spends 120-250s "thinking" before emitting the <section>, which
-    # made edits crawl. A single-slide HTML rewrite doesn't need deep reasoning, so
-    # we turn thinking off (text-only, valid here — no images) for a fast response.
+    # Interactive single-slide edit. Thinking disabled suppresses deep reasoning on
+    # models that support it (saves 120-250s per call on reasoning-heavy models).
+    # MiniMax-M3 accepts the toggle silently; reasoning is short regardless.
     # One attempt, no retry, with a generous timeout as a backstop under the
     # browser's 5-min ceiling.
     return KimiClient(timeout=280.0, max_retries=0,

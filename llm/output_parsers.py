@@ -20,7 +20,7 @@ from llm.roles import ROLES, Role
 
 # Hard ceiling on auto-bumped max_tokens. Beyond this we accept the
 # failure rather than burn more cost on a likely-broken role/prompt.
-# 24000 = empirical worst case observed 2026-06-04 (Kimi vision visual
+# 24000 = empirical worst case observed 2026-06-04 (LLM vision visual
 # verifier on 14-slide deck: completion_tokens=22502). Static defaults
 # in roles.py are tuned to make truncation rare; this ceiling is the
 # rare-case safety net, not the steady state.
@@ -32,7 +32,7 @@ def _is_truncated(result: LLMResult) -> bool:
 
     Two signals, either is sufficient:
       • ``finish_reason == "length"`` — canonical OpenAI cap-hit marker.
-      • Empty content — Kimi vision sometimes spends the entire budget on
+      • Empty content — some models spend the entire budget on
         reasoning and emits zero content tokens. ``finish_reason`` is then
         also "length" but we keep the empty-content check as a belt-and-
         braces for providers that mis-report finish_reason.

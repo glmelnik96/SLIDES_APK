@@ -488,7 +488,7 @@ class VisualVerdict(BaseModel):
     @field_validator("score_avg", mode="before")
     @classmethod
     def _round_score_avg(cls, v: Any) -> Any:
-        # Kimi-vision returned ``64.8`` on the 2026-06-04 live run, which
+        # LLM vision returned ``64.8`` on the 2026-06-04 live run, which
         # tripped Pydantic's int_from_float. Round to nearest int instead
         # of failing — the 0.x precision loss is meaningless for a 0-100
         # rubric. Same coercion is applied to ``BrandReport`` and

@@ -53,7 +53,7 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     doc = parse_file(src)
     slide_images = _render_source_slides(src, mode, artifacts, progress)
 
-    progress("plan: планирую деку (Kimi)")
+    progress(f"plan: планирую деку ({client.model})")
     plan = plan_deck(client, doc, library,
                      slide_images=slide_images, freeform_ok=freeform_ok)
     plan = _normalize_indices(plan)

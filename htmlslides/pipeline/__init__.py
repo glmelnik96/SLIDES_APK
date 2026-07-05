@@ -1,1 +1,1 @@
-"""Пайплайн генерации деки на Kimi-K2.6 (Cloud.ru Foundation Models)."""
+"""Пайплайн генерации деки через Cloud.ru Foundation Models (MiniMax-M3)."""
