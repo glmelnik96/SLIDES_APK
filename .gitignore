@@ -9,3 +9,5 @@ __pycache__/
 data/
 # local scratch
 tmp_*.py
+# model-eval artifacts (decks, PNGs, reports)
+scripts/eval_out/
