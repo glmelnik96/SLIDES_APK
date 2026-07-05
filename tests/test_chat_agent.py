@@ -45,13 +45,16 @@ def test_intent_retitle(monkeypatch, tmp_path):
     assert draft.load_plan("s").title == "Новый тайтл"
 
 
-def test_intent_add_picks_template_and_fills(monkeypatch, tmp_path):
+def test_intent_add_appends_light_outline_slide(monkeypatch, tmp_path):
+    # add — лёгкий аутлайн: тема в brief, без синхронной сборки/шаблона.
     _seed(tmp_path, monkeypatch)
     c = FakeClient({"action": "add", "topic": "наши сервисы"}, template="cards-6")
     res = chat_agent.run_turn("s", "добавь слайд про наши сервисы", 1, client=c)
     plan = draft.load_plan("s")
     assert res.changed and len(plan.slides) == 1
-    assert plan.slides[0].template_id == "cards-6"
+    assert plan.slides[0].brief == "наши сервисы"
+    assert plan.slides[0].filled is False
+    assert plan.slides[0].template_id is None
     assert res.go_to == 1
 
 

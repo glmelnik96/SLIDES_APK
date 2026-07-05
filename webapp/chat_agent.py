@@ -166,10 +166,13 @@ _OUTLINE_SYSTEM = (
 _ENRICH_SYSTEM = (
     "Ты дорабатываешь план презентации Cloud.ru. Тебе дан список слайдов "
     "(номер, заголовок, текущее описание) и запрос пользователя. Обнови "
-    "ОПИСАНИЯ (brief) слайдов — добавь тезисы, факты, акценты, опираясь на "
-    "обсуждение. НЕ добавляй и НЕ удаляй слайды, не меняй их количество и "
-    "порядок. Верни ТОЛЬКО JSON вида "
-    '{"slides":[{"index":N,"brief":"..."}]} для тех слайдов, что меняешь.'
+    "ОПИСАНИЯ (brief) слайдов: добавь тезисы, факты, цифры, акценты. НЕ "
+    "добавляй и НЕ удаляй слайды, не меняй их количество и порядок. "
+    "Отвечай СРАЗУ одним JSON-объектом вида "
+    '{"slides":[{"index":1,"brief":"..."}]}, по одному элементу на каждый '
+    "изменённый слайд (index — номер из списка, 1-based; brief — новое "
+    "описание). НЕ пиши никакого текста, рассуждений или Markdown до или "
+    "после JSON. Без пояснений вне JSON."
 )
 
 
@@ -343,7 +346,7 @@ def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
         outline = client.chat_json(
             [{"role": "system", "content": _ENRICH_SYSTEM},
              {"role": "user", "content": user}],
-            EnrichedOutline, max_tokens=1500, retries=1,
+            EnrichedOutline, max_tokens=1500, retries=2,
             extra_body={"thinking": {"type": "disabled"}})
     except Exception:  # noqa: BLE001
         outline = None
