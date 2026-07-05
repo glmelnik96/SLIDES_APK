@@ -791,19 +791,6 @@ async function sendAgent() {
   if (!message) return;
   addMsg("user", message);
   chatText.value = "";
-  // Deterministic build trigger (secondary to the «Собрать деку» button and the
-  // LLM build flag): unambiguous Russian build verbs fire the build directly,
-  // without a classifier round-trip. Handled BEFORE any thinking-bubble/timer
-  // setup, so there's nothing to leave dangling — doBuild() runs its own overlay.
-  // NB: english "go"/"build" are deliberately excluded — they collide with deck
-  // topics (a slide «про Go» / «build-систему») and would misfire a full build.
-  // NB: trailing boundary is (?![а-яё]) not \b — JS \b is ASCII-only and never
-  // matches after a Cyrillic letter, so \b would break every Russian trigger.
-  if (/(^|\s)(собери(те)?|собирай(те)?|собер[её]м|приступ(ай|им|аем|айте)|поехали|погнали)(?![а-яё])/i.test(message)) {
-    addMsg("bot", "Собираю деку…");
-    await doBuild();
-    return;
-  }
   const thinking = addMsg("bot", "Думаю…");
   const t0 = Date.now();
   const controller = new AbortController();
@@ -831,7 +818,6 @@ async function sendAgent() {
         if (res.go_to) pendingGoTo = res.go_to - 1;
         loadDeck();
       }
-      if (res.build === true) await doBuild();
     }
   } catch (e) {
     thinking.className = "msg err";

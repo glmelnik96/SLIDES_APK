@@ -66,7 +66,7 @@ def save_chat(session_id: str, convo: Conversation) -> None:
 
 # ── intent classification ────────────────────────────────────────────────────
 class Intent(BaseModel):
-    action: str          # plan | add | rewrite | delete | move | retitle | build_now | chat
+    action: str          # plan | add | rewrite | delete | move | retitle | enrich | build_now | chat
     topic: str = ""      # for add/rewrite: what the slide/edit is about
     to: int | None = None  # for move: target 1-based position
 
@@ -83,7 +83,8 @@ _INTENT_SYSTEM = (
     "- delete: удалить текущий слайд.\n"
     "- move: переместить текущий слайд (to = новая позиция, 1-based).\n"
     "- retitle: задать заголовок всей презентации (topic = заголовок).\n"
-    "- build_now: пользователь просит собрать/приступить к сборке всей деки.\n"
+    "- enrich: пользователь просит наполнить/детализировать/раскрыть существующие слайды плана контентом — обогатить их описания (brief). НЕ создаёт слайды.\n"
+    "- build_now: пользователь ЯВНО просит запустить сборку/заполнение готового плана.\n"
     "- chat: вопрос или реплика, не меняющая деку.\n"
     "Верни только JSON, без пояснений."
 )
@@ -132,7 +133,6 @@ class AgentResult(BaseModel):
     reply: str                 # assistant message to show in chat
     changed: bool = False      # whether the deck/plan changed (UI should reload)
     go_to: int | None = None   # 1-based slide to focus after the change
-    build: bool = False        # front should trigger the build (POST .../build)
 
 
 # ── structured outline (level 1: plan the whole deck as a light outline) ─────
@@ -145,12 +145,31 @@ class OutlineDraft(BaseModel):
     slides: list[OutlineItem] = Field(default_factory=list)
 
 
+class EnrichedItem(BaseModel):
+    index: int          # 1-based, какой слайд плана
+    brief: str = ""     # обновлённое описание
+
+
+class EnrichedOutline(BaseModel):
+    slides: list[EnrichedItem] = Field(default_factory=list)
+
+
 _OUTLINE_SYSTEM = (
     "Ты — ассистент-конструктор презентаций Cloud.ru. По запросу пользователя "
     "составь структуру презентации — список слайдов. Верни ТОЛЬКО JSON вида "
     '{"slides": [{"title": "...", "brief": "..."}]}, где title — короткий '
     "заголовок слайда, brief — 1–2 предложения о том, что на слайде. Пиши "
     "по-русски, по-деловому. От 3 до 12 слайдов. Без пояснений вне JSON."
+)
+
+
+_ENRICH_SYSTEM = (
+    "Ты дорабатываешь план презентации Cloud.ru. Тебе дан список слайдов "
+    "(номер, заголовок, текущее описание) и запрос пользователя. Обнови "
+    "ОПИСАНИЯ (brief) слайдов — добавь тезисы, факты, акценты, опираясь на "
+    "обсуждение. НЕ добавляй и НЕ удаляй слайды, не меняй их количество и "
+    "порядок. Верни ТОЛЬКО JSON вида "
+    '{"slides":[{"index":N,"brief":"..."}]} для тех слайдов, что меняешь.'
 )
 
 
@@ -234,17 +253,14 @@ def run_turn(session_id: str, message: str, current_index: int,
         result = AgentResult(reply=f"Добавил в план: {topic}.",
                              changed=True, go_to=len(plan.slides))
 
+    elif intent.action == "enrich":
+        plan, result = _enrich_briefs(client, session_id, plan, ctx, message)
+
     elif intent.action == "build_now":
-        # Есть незаполненный аутлайн → сигналим фронту собрать (не жарим здесь
-        # синхронно, слайдов может быть много). Но на ПУСТОМ плане «сделай
-        # презентацию про X» — это просьба СПЛАНИРОВАТЬ, а не собрать (собирать
-        # нечего) → трактуем как plan, иначе первый же запрос упрётся в «пусто».
-        has_targets = any(
-            s.brief and not s.filled and not s.freeform for s in plan.slides)
-        if has_targets:
-            result = AgentResult(reply="Собираю деку…", build=True)
-        else:
-            plan, result = _generate_outline(client, session_id, plan, ctx, message)
+        # Сборка — строго по кнопке в UI, чат её не запускает и не сигналит.
+        result = AgentResult(
+            reply="Когда план готов — нажми «Заполнить слайды» справа, чтобы собрать деку.",
+            changed=False)
 
     elif intent.action == "rewrite":
         if not (1 <= current_index <= len(plan.slides)):
@@ -304,6 +320,42 @@ def _generate_outline(client: Any, session_id: str, plan: draft.DraftPlan,
         return plan, AgentResult(
             reply=f"Набросал план ({len(outline.slides)} сл.):\n{lines}",
             changed=True, go_to=len(plan.slides))
+    return plan, AgentResult(
+        reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
+
+
+def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
+                   ctx: str, message: str) -> tuple[draft.DraftPlan, AgentResult]:
+    """Обогатить brief'ы существующих незаполненных слайдов аутлайна на месте
+    по контексту обсуждения. Слайды не добавляются/не удаляются. (plan, result)."""
+    # Цели — только незаполненные обычные слайды (готовые/freeform не трогаем).
+    targets = [i for i, s in enumerate(plan.slides, start=1)
+               if s.brief and not s.filled and not s.freeform]
+    if not targets:
+        return plan, AgentResult(
+            reply="В плане пока нет слайдов для доработки — сначала набросаем структуру.",
+            changed=False)
+    lines = "\n".join(
+        f"{i}. {plan.slides[i - 1].content.get('title', '')} — {plan.slides[i - 1].brief}"
+        for i in targets)
+    user = (f"Контекст:\n{ctx}\n\nАутлайн:\n{lines}\n\nЗапрос:\n{message}")
+    try:
+        outline = client.chat_json(
+            [{"role": "system", "content": _ENRICH_SYSTEM},
+             {"role": "user", "content": user}],
+            EnrichedOutline, max_tokens=1500, retries=1,
+            extra_body={"thinking": {"type": "disabled"}})
+    except Exception:  # noqa: BLE001
+        outline = None
+    if outline and outline.slides:
+        applied = 0
+        for item in outline.slides:
+            if item.index in targets:
+                plan.slides[item.index - 1].brief = item.brief
+                applied += 1
+        draft.save_plan(session_id, plan)
+        return plan, AgentResult(
+            reply=f"Дополнил план деталями ({applied} сл.).", changed=True)
     return plan, AgentResult(
         reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
 

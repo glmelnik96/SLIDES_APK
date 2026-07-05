@@ -331,6 +331,7 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: #000; }
 .outline-badge.is-plan { color: var(--muted); }
 .outline-badge.is-ready { color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim); }
 #buildDeck { width: 100%; }
+.outline-hint { margin-top: 4px; font-size: 11px; line-height: 1.4; color: var(--muted-2); }
 
 /* ============================================================================
    Канон v4 (layout): двухколоночный workspace — как /images @ 6791254.

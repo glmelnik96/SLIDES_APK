@@ -23,7 +23,7 @@
       <span class="counter" id="counter">1 / 1</span>
       <button class="btn btn-ghost" id="next">&#9654;</button>
       <span class="sp"></span>
-      <button class="btn btn-accent hidden" id="rebuild" title="Прогнать черновик через движок: вёрстка, проверка качества, автоисправление">Собрать через движок</button>
+      <button class="btn btn-accent hidden" id="rebuild" title="Пересобрать ГОТОВУЮ деку через движок с проверкой качества и автоисправлением — для полировки, не для первичной сборки.">Улучшить через движок</button>
       <button class="btn" id="save">Сохранить</button>
       <button class="btn btn-ghost" id="png">Скачать PNG (ZIP)</button>
       <a class="btn btn-ghost" id="html">Скачать HTML</a>
@@ -67,7 +67,8 @@
     <div class="outline hidden" id="outline">
       <div class="outline-head">План деки</div>
       <ol class="outline-list" id="outlineList"></ol>
-      <button class="btn btn-accent hidden" id="buildDeck">Собрать деку</button>
+      <button class="btn btn-accent hidden" id="buildDeck" title="Прогнать план через движок: заполнить каждый слайд контентом и собрать деку.">Заполнить слайды</button>
+      <div class="outline-hint">Обсуди план в чате, потом заполни слайды одной кнопкой.</div>
     </div>
     <div class="chat-log" id="chatLog">
       <div class="chat-empty" id="chatEmpty">
