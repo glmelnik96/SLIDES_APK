@@ -797,7 +797,9 @@ async function sendAgent() {
   // setup, so there's nothing to leave dangling — doBuild() runs its own overlay.
   // NB: english "go"/"build" are deliberately excluded — they collide with deck
   // topics (a slide «про Go» / «build-систему») and would misfire a full build.
-  if (/(^|\s)(собери(те)?|собирай(те)?|собер[её]м|приступ(ай|им|аем|айте)|поехали|погнали)\b/i.test(message)) {
+  // NB: trailing boundary is (?![а-яё]) not \b — JS \b is ASCII-only and never
+  // matches after a Cyrillic letter, so \b would break every Russian trigger.
+  if (/(^|\s)(собери(те)?|собирай(те)?|собер[её]м|приступ(ай|им|аем|айте)|поехали|погнали)(?![а-яё])/i.test(message)) {
     addMsg("bot", "Собираю деку…");
     await doBuild();
     return;

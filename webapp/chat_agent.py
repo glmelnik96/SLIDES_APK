@@ -235,8 +235,16 @@ def run_turn(session_id: str, message: str, current_index: int,
                              changed=True, go_to=len(plan.slides))
 
     elif intent.action == "build_now":
-        # Не жарим синхронно (может быть много слайдов) — сигналим фронту.
-        result = AgentResult(reply="Собираю деку…", build=True)
+        # Есть незаполненный аутлайн → сигналим фронту собрать (не жарим здесь
+        # синхронно, слайдов может быть много). Но на ПУСТОМ плане «сделай
+        # презентацию про X» — это просьба СПЛАНИРОВАТЬ, а не собрать (собирать
+        # нечего) → трактуем как plan, иначе первый же запрос упрётся в «пусто».
+        has_targets = any(
+            s.brief and not s.filled and not s.freeform for s in plan.slides)
+        if has_targets:
+            result = AgentResult(reply="Собираю деку…", build=True)
+        else:
+            plan, result = _generate_outline(client, session_id, plan, ctx, message)
 
     elif intent.action == "rewrite":
         if not (1 <= current_index <= len(plan.slides)):
@@ -261,32 +269,7 @@ def run_turn(session_id: str, message: str, current_index: int,
                     reply="Не получилось переписать слайд — попробуйте иначе.")
 
     elif intent.action == "plan":
-        # Ядро П2: генерируем структурный аутлайн и дописываем его как
-        # незаполненные слайды (заголовок → content.title, тема → brief).
-        try:
-            outline = client.chat_json(
-                [{"role": "system", "content": _OUTLINE_SYSTEM},
-                 {"role": "user",
-                  "content": f"Контекст:\n{ctx}\n\nЗапрос:\n{message}"}],
-                OutlineDraft, max_tokens=1500, retries=1,
-                extra_body={"thinking": {"type": "disabled"}})
-        except Exception:  # noqa: BLE001
-            outline = None
-        if outline and outline.slides:
-            for item in outline.slides:
-                plan = draft.add_slide(plan, draft.DraftSlide(
-                    brief=item.brief or item.title, filled=False,
-                    content={"title": item.title} if item.title else {}))
-            draft.save_plan(session_id, plan)
-            lines = "\n".join(
-                f"{i}. {it.title or it.brief}".rstrip()
-                for i, it in enumerate(outline.slides, start=1))
-            result = AgentResult(
-                reply=f"Набросал план ({len(outline.slides)} сл.):\n{lines}",
-                changed=True, go_to=len(plan.slides))
-        else:  # fallback — старое текстовое обсуждение
-            result = AgentResult(
-                reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
+        plan, result = _generate_outline(client, session_id, plan, ctx, message)
 
     else:  # chat
         result = AgentResult(reply=_talk(client, _CHAT_SYSTEM, ctx, message))
@@ -294,6 +277,35 @@ def run_turn(session_id: str, message: str, current_index: int,
     convo.turns.append(Turn(role="assistant", text=result.reply))
     save_chat(session_id, convo)
     return result
+
+
+def _generate_outline(client: Any, session_id: str, plan: draft.DraftPlan,
+                      ctx: str, message: str) -> tuple[draft.DraftPlan, AgentResult]:
+    """Ядро П2: сгенерировать структурный аутлайн и дописать его как
+    незаполненные слайды (заголовок → content.title, тема → brief). При сбое
+    генерации — откат на текстовое обсуждение. Возвращает (plan, result)."""
+    try:
+        outline = client.chat_json(
+            [{"role": "system", "content": _OUTLINE_SYSTEM},
+             {"role": "user",
+              "content": f"Контекст:\n{ctx}\n\nЗапрос:\n{message}"}],
+            OutlineDraft, max_tokens=1500, retries=1,
+            extra_body={"thinking": {"type": "disabled"}})
+    except Exception:  # noqa: BLE001
+        outline = None
+    if outline and outline.slides:
+        for item in outline.slides:
+            plan = draft.add_slide(plan, draft.DraftSlide(
+                brief=item.brief or item.title, filled=False,
+                content={"title": item.title} if item.title else {}))
+        draft.save_plan(session_id, plan)
+        lines = "\n".join(f"{i}. {it.title or it.brief}".rstrip()
+                          for i, it in enumerate(outline.slides, start=1))
+        return plan, AgentResult(
+            reply=f"Набросал план ({len(outline.slides)} сл.):\n{lines}",
+            changed=True, go_to=len(plan.slides))
+    return plan, AgentResult(
+        reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
 
 
 def build_outline(session_id: str, *, client: Any | None = None) -> None:
