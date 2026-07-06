@@ -148,6 +148,16 @@ def test_propose_content_no_targets(monkeypatch, tmp_path):
     assert res.changed is False
 
 
+def test_propose_content_thin_brief_suggests_enrich(monkeypatch, tmp_path):
+    # A too-general one-line brief → model returns nothing → guide to enrich first.
+    _seed(tmp_path, monkeypatch,
+          slides=[draft.DraftSlide(brief="наши сервисы", filled=False)])
+    c = FakeClient({"action": "propose_content"}, proposed={"slides": []})
+    res = chat_agent.run_turn("s", "разложи", 1, client=c)
+    assert res.changed is False
+    assert "дополни" in res.reply.lower()
+
+
 def test_build_outline_skips_typed_slides(monkeypatch, tmp_path):
     # a typed slide must NOT be sent through the LLM fill during build.
     _seed(tmp_path, monkeypatch, slides=[draft.DraftSlide(

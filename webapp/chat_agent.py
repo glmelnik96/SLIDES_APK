@@ -432,9 +432,16 @@ def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
         return plan, AgentResult(
             reply=(f"Разложил по полям {applied} сл. Проверь и поправь в "
                    "аутлайне — потом жми «Собрать»."), changed=True)
-    return plan, AgentResult(
-        reply="Не получилось разложить слайды по полям — попробуй иначе.",
-        changed=False)
+    # Ничего не разложилось. Самая частая причина — слишком общие brief'ы
+    # (модели не из чего лепить поля). Подскажем обогатить план сначала.
+    thin = all(len(plan.slides[i - 1].brief) < 40 for i in targets)
+    if thin:
+        reply = ("Слайды слишком общие, чтобы разложить по полям. Сначала "
+                 "«дополни план деталями» — добавь тезисы, цифры, факты, — "
+                 "потом снова жми «Предложить контент».")
+    else:
+        reply = "Не получилось разложить слайды по полям — попробуй иначе."
+    return plan, AgentResult(reply=reply, changed=False)
 
 
 def build_outline(session_id: str, *, client: Any | None = None) -> None:
