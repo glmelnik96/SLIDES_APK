@@ -355,6 +355,27 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     return JSONResponse(plan.model_dump())
 
 
+@app.put("/api/drafts/{session_id}/slides/{index}/fields")
+async def update_draft_slide_fields(session_id: str, index: int, request: Request,
+                                    user=Depends(get_current_user)) -> JSONResponse:
+    """Set a slide's typed structured content (slide_type + fields). Validated
+    against the type contract; on success the slide renders deterministically
+    (no LLM). Invalid fields → 400 (the slide is left untouched)."""
+    from webapp import slide_types
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    data = await _json_body(request)
+    slide_type = data.get("slide_type")
+    norm = slide_types.validate_fields(slide_type, data.get("fields"))
+    if norm is None:
+        raise HTTPException(400, "invalid slide_type or fields")
+    if not 1 <= index <= len(plan.slides):
+        raise HTTPException(404, "slide not found")
+    plan.slides[index - 1] = plan.slides[index - 1].model_copy(
+        update={"slide_type": slide_type, "fields": norm, "filled": False})
+    _persist_draft(session_id, plan)
+    return JSONResponse({"plan": plan.model_dump(), "errors": []})
+
+
 @app.delete("/api/drafts/{session_id}/slides/{index}")
 async def delete_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
@@ -442,7 +463,7 @@ async def build_draft(session_id: str, request: Request,
     from webapp import chat_agent
     plan = await _draft_or_404(request, session_id, user, mutate=True)
     targets = [s for s in plan.slides if s.brief and not s.filled
-               and not s.freeform]
+               and not s.freeform and not s.slide_type]
     if not targets:
         raise HTTPException(400, "нечего собирать — аутлайн пуст")
     await run_in_threadpool(chat_agent.build_outline, session_id)

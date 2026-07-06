@@ -267,6 +267,51 @@ def test_template_preview_renders_sample_slide(monkeypatch, tmp_path):
         assert c.get("/api/templates/nope/preview", headers=H()).status_code == 404
 
 
+# ── typed structured slide content (fields endpoint + build guard) ──────────
+def test_update_slide_fields_endpoint(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        # set typed fields
+        r = c.put(f"/api/drafts/{sid}/slides/1/fields",
+                  json={"slide_type": "bullets",
+                        "fields": {"heading": "Строение",
+                                   "bullets": ["шляпка", "ножка"]}}, headers=H())
+        assert r.status_code == 200
+        slide = r.json()["plan"]["slides"][0]
+        assert slide["slide_type"] == "bullets"
+        assert slide["fields"]["bullets"] == ["шляпка", "ножка"]
+        # the deck now renders that slide as cards-6 (deterministic, no LLM)
+        assert 'data-template="cards-6"' in c.get(
+            f"/api/jobs/{sid}/deck", headers=H()).text
+        # invalid fields (no heading) → 400
+        assert c.put(f"/api/drafts/{sid}/slides/1/fields",
+                     json={"slide_type": "bullets", "fields": {"bullets": ["a"]}},
+                     headers=H()).status_code == 400
+        # unknown type → 400
+        assert c.put(f"/api/drafts/{sid}/slides/1/fields",
+                     json={"slide_type": "quote", "fields": {"heading": "h"}},
+                     headers=H()).status_code == 400
+        # out of range → 404
+        assert c.put(f"/api/drafts/{sid}/slides/9/fields",
+                     json={"slide_type": "title", "fields": {"heading": "h"}},
+                     headers=H()).status_code == 404
+        # cross-user → 404
+        assert c.put(f"/api/drafts/{sid}/slides/1/fields",
+                     json={"slide_type": "title", "fields": {"heading": "h"}},
+                     headers=H("intruder")).status_code == 404
+
+
+def test_build_guard_ignores_typed_only_deck(monkeypatch, tmp_path):
+    # a deck whose only slide is typed has nothing to LLM-build → 400 guard.
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.put(f"/api/drafts/{sid}/slides/1/fields",
+              json={"slide_type": "title", "fields": {"heading": "H"}}, headers=H())
+        assert c.post(f"/api/drafts/{sid}/build", headers=H()).status_code == 400
+
+
 # ── in-place (contenteditable) edit → freeform sync ─────────────────────────
 def test_inline_html_edit_makes_slide_freeform(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:

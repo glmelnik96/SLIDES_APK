@@ -29,7 +29,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from webapp import draft
+from webapp import draft, slide_types
 from webapp.paths import session_dir
 
 _TEMPLATE_HINT = (
@@ -66,7 +66,7 @@ def save_chat(session_id: str, convo: Conversation) -> None:
 
 # ── intent classification ────────────────────────────────────────────────────
 class Intent(BaseModel):
-    action: str          # plan | add | rewrite | delete | move | retitle | enrich | build_now | chat
+    action: str          # plan | add | rewrite | delete | move | retitle | enrich | propose_content | build_now | chat
     topic: str = ""      # for add/rewrite: what the slide/edit is about
     to: int | None = None  # for move: target 1-based position
 
@@ -84,6 +84,7 @@ _INTENT_SYSTEM = (
     "- move: переместить текущий слайд (to = новая позиция, 1-based).\n"
     "- retitle: задать заголовок всей презентации (topic = заголовок).\n"
     "- enrich: пользователь просит наполнить/детализировать/раскрыть существующие слайды плана контентом — обогатить их описания (brief). НЕ создаёт слайды.\n"
+    "- propose_content: пользователь просит РАЗЛОЖИТЬ слайды по структурированным полям — предложить конкретный контент по типам (заголовок, тезисы-список, цифры, две колонки). Отличие от enrich: enrich дописывает текстовое описание, propose_content раскладывает слайд в типизированные поля. НЕ создаёт слайды.\n"
     "- build_now: пользователь ЯВНО просит запустить сборку/заполнение готового плана.\n"
     "- chat: вопрос или реплика, не меняющая деку.\n"
     "Верни только JSON, без пояснений."
@@ -154,6 +155,16 @@ class EnrichedOutline(BaseModel):
     slides: list[EnrichedItem] = Field(default_factory=list)
 
 
+class ProposedItem(BaseModel):
+    index: int                 # 1-based слайд плана
+    slide_type: str = ""       # title | bullets | stats | two_col
+    fields: dict = Field(default_factory=dict)
+
+
+class ProposedContent(BaseModel):
+    slides: list[ProposedItem] = Field(default_factory=list)
+
+
 _OUTLINE_SYSTEM = (
     "Ты — ассистент-конструктор презентаций Cloud.ru. По запросу пользователя "
     "составь структуру презентации — список слайдов. Верни ТОЛЬКО JSON вида "
@@ -173,6 +184,21 @@ _ENRICH_SYSTEM = (
     "изменённый слайд (index — номер из списка, 1-based; brief — новое "
     "описание). НЕ пиши никакого текста, рассуждений или Markdown до или "
     "после JSON. Без пояснений вне JSON."
+)
+
+
+_PROPOSE_SYSTEM = (
+    "Ты раскладываешь слайды презентации Cloud.ru по СТРУКТУРИРОВАННЫМ полям. "
+    "Тебе дан список слайдов (номер, заголовок, описание). Для каждого выбери "
+    "ОДИН тип и заполни поля по его смыслу. Типы и поля:\n"
+    "- title: обложка/титул. fields: {\"heading\": str, \"subtitle\": str}\n"
+    "- bullets: список тезисов. fields: {\"heading\": str, \"bullets\": [str, ...]} (2–6 пунктов)\n"
+    "- stats: цифры/метрики. fields: {\"heading\": str, \"stats\": [{\"value\": str, \"label\": str}, ...]} (2–4)\n"
+    "- two_col: две колонки/сравнение. fields: {\"heading\": str, \"left\": [str, ...], \"right\": [str, ...]}\n"
+    "Если слайд не ложится ни в один тип — пропусти его (не включай в ответ). "
+    "heading обязателен у каждого. Отвечай СРАЗУ одним JSON-объектом вида "
+    '{"slides":[{"index":1,"slide_type":"bullets","fields":{...}}]}. '
+    "НЕ пиши текста, рассуждений или Markdown до или после JSON."
 )
 
 
@@ -258,6 +284,9 @@ def run_turn(session_id: str, message: str, current_index: int,
 
     elif intent.action == "enrich":
         plan, result = _enrich_briefs(client, session_id, plan, ctx, message)
+
+    elif intent.action == "propose_content":
+        plan, result = _propose_content(client, session_id, plan, ctx, message)
 
     elif intent.action == "build_now":
         # Сборка — строго по кнопке в UI, чат её не запускает и не сигналит.
@@ -363,6 +392,51 @@ def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
         reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
 
 
+def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
+                     ctx: str, message: str) -> tuple[draft.DraftPlan, AgentResult]:
+    """Разложить сырые слайды аутлайна по типизированным полям. Невалидные
+    предложения игнорируются (слайд остаётся сырым → fallback на сборке).
+    Слайды не добавляются/не удаляются. Возвращает (plan, result)."""
+    targets = [i for i, s in enumerate(plan.slides, start=1)
+               if s.brief and not s.filled and not s.freeform and not s.slide_type]
+    if not targets:
+        return plan, AgentResult(
+            reply="Нет сырых слайдов для раскладки — сначала набросаем план.",
+            changed=False)
+    lines = "\n".join(
+        f"{i}. {plan.slides[i - 1].content.get('title', '')} — {plan.slides[i - 1].brief}"
+        for i in targets)
+    user = f"Контекст:\n{ctx}\n\nСлайды:\n{lines}\n\nЗапрос:\n{message}"
+    try:
+        proposed = client.chat_json(
+            [{"role": "system", "content": _PROPOSE_SYSTEM},
+             {"role": "user", "content": user}],
+            ProposedContent, max_tokens=4000, retries=2,
+            extra_body={"thinking": {"type": "disabled"}})
+    except Exception:  # noqa: BLE001
+        proposed = None
+    applied = 0
+    if proposed and proposed.slides:
+        for item in proposed.slides:
+            if item.index not in targets:
+                continue
+            norm = slide_types.validate_fields(item.slide_type, item.fields)
+            if norm is None:
+                continue  # не ложится в тип → слайд остаётся сырым (fallback)
+            plan.slides[item.index - 1] = plan.slides[item.index - 1].model_copy(
+                update={"slide_type": item.slide_type, "fields": norm,
+                        "filled": False})
+            applied += 1
+    if applied:
+        draft.save_plan(session_id, plan)
+        return plan, AgentResult(
+            reply=(f"Разложил по полям {applied} сл. Проверь и поправь в "
+                   "аутлайне — потом жми «Собрать»."), changed=True)
+    return plan, AgentResult(
+        reply="Не получилось разложить слайды по полям — попробуй иначе.",
+        changed=False)
+
+
 def build_outline(session_id: str, *, client: Any | None = None) -> None:
     """Fill the whole outline: run every un-filled outline slide through
     ``fill_slide`` and re-render the deck. Saves after each slide (resilient to
@@ -377,7 +451,7 @@ def build_outline(session_id: str, *, client: Any | None = None) -> None:
     plan = draft.load_plan(session_id)
     convo = load_chat(session_id)
     for i, s in enumerate(plan.slides, start=1):
-        if not (s.brief and not s.filled and not s.freeform):
+        if not (s.brief and not s.filled and not s.freeform and not s.slide_type):
             continue
         ctx = context_brief(plan, convo, i)
         tid = _pick_template(client, library, s.brief, ctx)

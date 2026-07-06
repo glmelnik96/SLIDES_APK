@@ -8,16 +8,20 @@ from webapp import chat_agent, draft
 class FakeClient:
     """Scripts model replies. chat_json is used by the intent classifier (returns
     Intent JSON); chat is used for template pick / planner-talk / slide fill."""
-    def __init__(self, intent: dict, *, template="cards-6", text="ответ"):
+    def __init__(self, intent: dict, *, template="cards-6", text="ответ",
+                 proposed=None):
         self._intent = intent
         self._template = template
         self._text = text
+        self._proposed = proposed  # dict for ProposedContent, or None
 
     def chat_json(self, messages, model_cls, **kw):
         # the classifier asks for Intent; the filler asks for SlideContent
         name = model_cls.__name__
         if name == "Intent":
             return model_cls.model_validate(self._intent)
+        if name == "ProposedContent":
+            return model_cls.model_validate(self._proposed or {"slides": []})
         # SlideContent for fill_slide → minimal valid-ish content
         return model_cls.model_validate({"content": {"title": "T",
                                                       "cards": [{"text": "x"}]}})
@@ -106,3 +110,58 @@ def test_context_brief_includes_slides_and_history(monkeypatch, tmp_path):
     convo = chat_agent.Conversation(turns=[chat_agent.Turn(role="user", text="hi")])
     brief = chat_agent.context_brief(plan, convo, 1)
     assert "cover" in brief and "Привет" in brief and "hi" in brief
+
+
+def test_intent_propose_content_fills_typed_fields(monkeypatch, tmp_path):
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(brief="строение гриба", filled=False),
+        draft.DraftSlide(brief="в цифрах", filled=False)])
+    proposed = {"slides": [
+        {"index": 1, "slide_type": "bullets",
+         "fields": {"heading": "Строение", "bullets": ["шляпка", "ножка"]}},
+        {"index": 2, "slide_type": "stats",
+         "fields": {"heading": "Цифры", "stats": [{"value": "90%", "label": "лес"}]}},
+    ]}
+    c = FakeClient({"action": "propose_content"}, proposed=proposed)
+    res = chat_agent.run_turn("s", "разложи слайды по полям", 1, client=c)
+    plan = draft.load_plan("s")
+    assert res.changed
+    assert plan.slides[0].slide_type == "bullets"
+    assert plan.slides[0].fields["bullets"] == ["шляпка", "ножка"]
+    assert plan.slides[1].slide_type == "stats"
+
+
+def test_propose_content_skips_invalid_item(monkeypatch, tmp_path):
+    _seed(tmp_path, monkeypatch, slides=[draft.DraftSlide(brief="x", filled=False)])
+    # missing heading → invalid → slide stays raw
+    proposed = {"slides": [{"index": 1, "slide_type": "bullets",
+                            "fields": {"bullets": ["a"]}}]}
+    c = FakeClient({"action": "propose_content"}, proposed=proposed)
+    chat_agent.run_turn("s", "разложи", 1, client=c)
+    assert draft.load_plan("s").slides[0].slide_type is None
+
+
+def test_propose_content_no_targets(monkeypatch, tmp_path):
+    _seed(tmp_path, monkeypatch)  # empty plan
+    c = FakeClient({"action": "propose_content"}, proposed={"slides": []})
+    res = chat_agent.run_turn("s", "разложи", 1, client=c)
+    assert res.changed is False
+
+
+def test_build_outline_skips_typed_slides(monkeypatch, tmp_path):
+    # a typed slide must NOT be sent through the LLM fill during build.
+    _seed(tmp_path, monkeypatch, slides=[draft.DraftSlide(
+        brief="строение", slide_type="bullets",
+        fields={"heading": "Строение", "bullets": ["a", "b"]})])
+
+    class Boom:
+        def chat_json(self, *a, **k):
+            raise AssertionError("classifier/fill must not run for typed slides")
+
+        def chat(self, *a, **k):
+            raise AssertionError("template pick must not run for typed slides")
+
+    chat_agent.build_outline("s", client=Boom())
+    plan = draft.load_plan("s")
+    assert plan.slides[0].slide_type == "bullets"   # unchanged
+    assert plan.slides[0].filled is False           # never LLM-filled
