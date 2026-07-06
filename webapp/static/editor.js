@@ -889,7 +889,7 @@ async function doBuild() {
   building = true;
   showOverlay(true);
   buildTitle.textContent = "Собираю деку…";
-  buildSub.textContent = "";
+  buildSub.textContent = "Заполняю сырые слайды…";
   try {
     const r = await fetch(U(`/api/drafts/${sessionId}/build`), { method: "POST" });
     if (!r.ok) {
