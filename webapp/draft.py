@@ -23,8 +23,10 @@ class DraftSlide(BaseModel):
     template_id: str | None = None
     freeform: bool = False
     content: dict = Field(default_factory=dict)
-    brief: str = ""        # тема слайда в аутлайне (до сборки)
-    filled: bool = False   # прогнан ли через fill_slide
+    brief: str = ""              # тема слайда в аутлайне (до сборки)
+    filled: bool = False         # прогнан ли через fill_slide (только для сырых)
+    slide_type: str | None = None  # типизированный слайд: title|bullets|stats|two_col
+    fields: dict | None = None     # структурированные поля под slide_type
 
 
 class DraftPlan(BaseModel):

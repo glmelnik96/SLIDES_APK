@@ -16,7 +16,7 @@ from htmlslides.assembler import assemble
 from htmlslides.library import SlotSpec, TemplateLibrary
 from htmlslides.models import DeckPlan, SlidePlan
 
-from webapp import deck_edit
+from webapp import deck_edit, slide_types
 from webapp.draft import DraftPlan
 
 _PLACEHOLDER = "…"
@@ -43,6 +43,15 @@ def _to_deck_plan(plan: DraftPlan) -> DeckPlan:
             slides.append(SlidePlan(index=i, type="content", freeform=True,
                                     content={"html": str(s.content.get("html", ""))}))
             continue
+        if s.slide_type:
+            tid, content = slide_types.map_typed(s.slide_type, s.fields or {})
+            if tid:
+                spec = library.get(tid)
+                slides.append(SlidePlan(
+                    index=i, type=spec.type, template_id=tid,
+                    content=_safe_content(library, tid, content)))
+                continue
+            # invalid typed fields → fall through to the raw path below
         tid = s.template_id or "blank"
         spec = library.get(tid)
         slides.append(SlidePlan(index=i, type=spec.type, template_id=tid,

@@ -63,6 +63,20 @@ def test_load_save_roundtrip(monkeypatch, tmp_path):
     assert draft.load_plan("nope").slides == []
 
 
+def test_draftslide_typed_fields_roundtrip(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    p = draft.DraftPlan(slides=[draft.DraftSlide(
+        brief="строение гриба", slide_type="bullets",
+        fields={"heading": "Строение", "bullets": ["шляпка", "ножка"]})])
+    draft.save_plan("typed", p)
+    back = draft.load_plan("typed")
+    assert back.slides[0].slide_type == "bullets"
+    assert back.slides[0].fields["bullets"] == ["шляпка", "ножка"]
+    # default: a plain slide has no type
+    assert draft.DraftSlide().slide_type is None
+    assert draft.DraftSlide().fields is None
+
+
 # ── draft_render: never raises on partial/over-limit/empty content ───────────
 def test_render_empty_draft_shows_placeholder_deck(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
@@ -91,6 +105,29 @@ def test_render_clamps_overlong_text_and_lists(monkeypatch, tmp_path):
     # must not raise despite over-limit content
     html = draft_render.render_draft("sid", p).read_text("utf-8")
     assert html.count("<section") == 2
+
+
+def test_render_typed_bullets_slide_uses_cards6_no_llm(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    p = draft.DraftPlan(slides=[draft.DraftSlide(
+        brief="строение", slide_type="bullets",
+        fields={"heading": "Строение гриба",
+                "bullets": ["шляпка", "ножка", "мицелий"]})])
+    html = draft_render.render_draft("sidt", p).read_text("utf-8")
+    assert html.count("<section") == 1
+    assert 'data-template="cards-6"' in html
+    assert "Строение гриба" in html and "мицелий" in html
+
+
+def test_render_typed_invalid_fields_falls_back_to_raw(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    # slide_type set but fields invalid (no heading) → not the typed template;
+    # falls through to the raw path (template_id or 'blank'), still renders.
+    p = draft.DraftPlan(slides=[draft.DraftSlide(
+        brief="x", slide_type="bullets", fields={"bullets": ["a"]})])
+    html = draft_render.render_draft("sidt2", p).read_text("utf-8")
+    assert html.count("<section") == 1
+    assert 'data-template="cards-6"' not in html
 
 
 def test_render_freeform_slide(monkeypatch, tmp_path):
