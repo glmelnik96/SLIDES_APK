@@ -728,30 +728,153 @@ function setupChatMode() {
 // build target). Used to toggle the "Собрать деку" button and guard doBuild().
 function hasBuildTargets() {
   return (draftPlan.slides || []).some(
-    (s) => s && s.brief && !s.filled && !s.freeform);
+    (s) => s && s.brief && !s.filled && !s.freeform && !s.slide_type);
 }
 
-// Render the live outline panel from draftPlan.slides. Each row shows the slide
-// number, its title/brief, and a badge (в плане / готов). The «Собрать деку»
-// button is shown only when there's something to build.
+const TYPE_LABEL = { title: "титул", bullets: "список", stats: "цифры",
+                     two_col: "две колонки" };
+
+// Debounced per-slide field save. Mirrors the manual builder's edit debounce so a
+// rapid edit followed by navigation/rebuild isn't lost.
+const fieldTimers = {};
+function saveFields(idx, slideType, fields) {
+  clearTimeout(fieldTimers[idx]);
+  fieldTimers[idx] = setTimeout(async () => {
+    try {
+      const r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx}/fields`), {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slide_type: slideType, fields }),
+      });
+      if (r.ok) { draftPlan = (await r.json()).plan; loadDeck(); }
+    } catch (_) { /* transient; next edit retries */ }
+  }, 500);
+}
+
+function fieldInput(value, onInput) {
+  const el = document.createElement("input");
+  el.className = "field-input";
+  el.value = value || "";
+  el.addEventListener("input", onInput);
+  return el;
+}
+
+function hint(card, text) {
+  const h = document.createElement("div");
+  h.className = "field-hint";
+  h.textContent = text;
+  card.appendChild(h);
+}
+
+// Build the editable card for a typed slide. Reads current values from s.fields,
+// writes edits back through saveFields. One small builder per type.
+function renderFieldCard(s, idx) {
+  const card = document.createElement("div");
+  card.className = "field-card";
+  const f = Object.assign({}, s.fields || {});
+  const commit = () => saveFields(idx, s.slide_type, f);
+
+  const addRow = (labelText, input) => {
+    const row = document.createElement("label");
+    row.className = "field-row";
+    const cap = document.createElement("span");
+    cap.className = "field-cap";
+    cap.textContent = labelText;
+    row.appendChild(cap);
+    row.appendChild(input);
+    card.appendChild(row);
+  };
+
+  addRow("Заголовок", fieldInput(f.heading, (e) => {
+    f.heading = e.target.value; commit();
+  }));
+
+  if (s.slide_type === "title") {
+    addRow("Подзаголовок", fieldInput(f.subtitle, (e) => {
+      f.subtitle = e.target.value; commit();
+    }));
+  } else if (s.slide_type === "bullets") {
+    f.bullets = f.bullets || [];
+    addRow("Тезисы", fieldInput(f.bullets.join(" | "), (e) => {
+      f.bullets = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
+      commit();
+    }));
+    hint(card, "Пункты через | (вертикальная черта)");
+  } else if (s.slide_type === "stats") {
+    f.stats = f.stats || [];
+    addRow("Цифры", fieldInput(
+      f.stats.map((x) => `${x.value}=${x.label}`).join(" | "), (e) => {
+        f.stats = e.target.value.split("|").map((p) => {
+          const [value, label] = p.split("=");
+          return { value: (value || "").trim(), label: (label || "").trim() };
+        }).filter((x) => x.value || x.label);
+        commit();
+      }));
+    hint(card, "value=label, пары через |  (напр. 99%=аптайм | 3=региона)");
+  } else if (s.slide_type === "two_col") {
+    f.left = f.left || []; f.right = f.right || [];
+    addRow("Левая колонка", fieldInput(f.left.join(" | "), (e) => {
+      f.left = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
+      commit();
+    }));
+    addRow("Правая колонка", fieldInput(f.right.join(" | "), (e) => {
+      f.right = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
+      commit();
+    }));
+    hint(card, "Пункты через | в каждой колонке");
+  }
+  return card;
+}
+
+// A raw slide: offer to structure it via the chat agent (propose_content).
+function renderRawActions(idx) {
+  const wrap = document.createElement("div");
+  wrap.className = "outline-raw";
+  const btn = document.createElement("button");
+  btn.className = "outline-propose";
+  btn.textContent = "Предложить контент";
+  btn.addEventListener("click", () => {
+    chatText.value = "Разложи слайды по структурированным полям";
+    sendAgent();
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+// Render the live outline. Typed slides show editable field-cards (what you see
+// is what renders); raw slides show the brief + a "Предложить контент" action.
 function renderOutline() {
   const list = byId("outlineList");
   if (!list) return;
   list.innerHTML = "";
   (draftPlan.slides || []).forEach((s, i) => {
     const li = document.createElement("li");
+    li.className = "outline-item";
+    const head = document.createElement("div");
+    head.className = "outline-head";
     const num = document.createElement("span");
     num.className = "outline-num";
     num.textContent = i + 1;
     const label = document.createElement("span");
     label.className = "outline-label";
-    label.textContent = (s.content && s.content.title) || s.brief || "—";
+    label.textContent =
+      (s.fields && s.fields.heading) || (s.content && s.content.title) ||
+      s.brief || "—";
     const badge = document.createElement("span");
-    badge.className = "outline-badge " + (s.filled ? "is-ready" : "is-plan");
-    badge.textContent = s.filled ? "готов" : "в плане";
-    li.appendChild(num);
-    li.appendChild(label);
-    li.appendChild(badge);
+    if (s.slide_type) {
+      badge.className = "outline-badge is-typed";
+      badge.textContent = TYPE_LABEL[s.slide_type] || s.slide_type;
+    } else {
+      badge.className = "outline-badge " + (s.filled ? "is-ready" : "is-plan");
+      badge.textContent = s.filled ? "готов" : "сырой";
+    }
+    head.appendChild(num);
+    head.appendChild(label);
+    head.appendChild(badge);
+    li.appendChild(head);
+    if (s.slide_type) li.appendChild(renderFieldCard(s, i + 1));
+    else if (s.brief && !s.filled && !s.freeform) {
+      li.appendChild(renderRawActions(i + 1));
+    }
     list.appendChild(li);
   });
   byId("buildDeck")?.classList.toggle("hidden", !hasBuildTargets());
