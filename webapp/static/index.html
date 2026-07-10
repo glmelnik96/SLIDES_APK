@@ -43,13 +43,15 @@
         <span class="entry-desc">Готовый md / txt / docx / pptx &rarr; модель сама соберёт деку со структурой и графиками.</span>
         <span class="entry-cta">Выбрано &darr;</span>
       </button>
-      <button type="button" class="entry-card" id="entryManual" data-entry="manual">
+      <!-- Временно скрыто: живой e2e показал, что «Заполнить шаблон» и «Собрать
+           в чате» работают плохо. Вернуть, когда доведём эти потоки. -->
+      <button type="button" class="entry-card" id="entryManual" data-entry="manual" hidden>
         <span class="entry-num">02</span>
         <span class="entry-title">Заполнить шаблон</span>
         <span class="entry-desc">Соберите деку из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
         <span class="entry-cta">Открыть конструктор &rarr;</span>
       </button>
-      <button type="button" class="entry-card" id="entryChat" data-entry="chat">
+      <button type="button" class="entry-card" id="entryChat" data-entry="chat" hidden>
         <span class="entry-num">03</span>
         <span class="entry-title">Собрать в чате</span>
         <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
@@ -89,8 +91,9 @@
     <h2>Сценарии</h2>
     <ul>
       <li><b>Загрузить документ</b> — md / txt / docx / pptx: модель сама разобьёт его на слайды, подберёт вёрстку и построит графики.</li>
-      <li><b>Заполнить шаблон</b> — соберите деку из готовых макетов вручную, заполняя поля.</li>
-      <li><b>Собрать в чате</b> — опишите презентацию, ассистент спланирует структуру и создаст слайды.</li>
+      <!-- Временно скрыто вместе с точками входа «Заполнить шаблон» / «Собрать в чате». -->
+      <li hidden><b>Заполнить шаблон</b> — соберите деку из готовых макетов вручную, заполняя поля.</li>
+      <li hidden><b>Собрать в чате</b> — опишите презентацию, ассистент спланирует структуру и создаст слайды.</li>
       <li>Готовую деку можно править прямо в браузере, дорабатывать через чат и скачивать в <b>HTML или PNG</b>.</li>
     </ul>
   </div>
