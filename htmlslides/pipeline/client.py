@@ -110,6 +110,12 @@ class KimiClient:
         if rps <= 0:
             raise ValueError(f"HTMLSLIDES_RPS must be > 0, got {rps!r}")
         self._gate = _RateGate(rps)
+        # usage копим суммарно и потокобезопасно: chat() зовут параллельно
+        # (design_exact_deck/fill_deck). cached_tokens покажет, включился ли
+        # кэш общего префикса промпта (главный рычаг экономии Этапа 2).
+        self._usage_lock = threading.Lock()
+        self.usage_total = {"prompt_tokens": 0, "completion_tokens": 0,
+                            "cached_tokens": 0, "calls": 0}
         if transport is not None:
             self._client = transport
             return
@@ -121,6 +127,19 @@ class KimiClient:
             base_url=base_url or os.environ.get("CLOUDRU_BASE_URL", DEFAULT_BASE_URL),
             max_retries=max_retries,  # 429/5xx ретраит сам openai-клиент (экспонента)
             timeout=timeout)
+
+    def _record_usage(self, resp) -> None:
+        """Сложить usage ответа в self.usage_total. Моки без usage игнорируем."""
+        usage = getattr(resp, "usage", None)
+        details = getattr(usage, "prompt_tokens_details", None) if usage is not None else None
+        cached = getattr(details, "cached_tokens", 0) if details is not None else 0
+        with self._usage_lock:
+            if usage is not None:
+                self.usage_total["prompt_tokens"] += getattr(usage, "prompt_tokens", 0) or 0
+                self.usage_total["completion_tokens"] += (
+                    getattr(usage, "completion_tokens", 0) or 0)
+                self.usage_total["cached_tokens"] += cached or 0
+            self.usage_total["calls"] += 1
 
     def chat(self, messages: list[dict], *, max_tokens: int = 4096,
              temperature: float = 0.3,
@@ -141,6 +160,7 @@ class KimiClient:
                 model=self.model, messages=messages,
                 max_tokens=max_tokens, temperature=temperature,
                 extra_body=body or None)
+        self._record_usage(resp)
         return resp.choices[0].message.content or ""
 
     def chat_json(self, messages: list[dict], model_cls: Type[T], *,

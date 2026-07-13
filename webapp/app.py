@@ -149,6 +149,7 @@ def editor(request: Request) -> HTMLResponse:
 
 @app.post("/api/jobs")
 async def create_job(request: Request, mode: str = Form(...),
+                     exact_transfer: str = Form(default="false"),
                      file: UploadFile = File(...),
                      user=Depends(get_current_user)) -> JSONResponse:
     from schemas.session import Mode, SessionInput
@@ -169,7 +170,8 @@ async def create_job(request: Request, mode: str = Form(...),
 
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(mode), input_s3_key=None,
-                       source_filename=file.filename)
+                       source_filename=file.filename,
+                       exact_transfer=exact_transfer.lower() in ("1", "true", "on", "yes"))
     dest = session_dir(inp.session_id) / f"input{suffix}"
     dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})

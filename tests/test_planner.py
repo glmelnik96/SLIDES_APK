@@ -137,3 +137,86 @@ def test_failed_numeric_section_yields_chart_not_text():
     client = FakeClient([LLMFormatError("no JSON object")])
     plan = planner.plan_deck(client, doc, lib)
     assert plan.slides[1].template_id == "donut-chart"   # не текстовый шаблон
+
+
+# ===================== Разделители секций (дивайдеры) =====================
+
+def test_part_title_sections_become_dividers():
+    """Раздел-«шапка части» (заголовок без тела) -> детерминированный разделитель,
+    а не титул; LLM для него не зовётся, нумерация 01/02, макеты чередуются."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="Часть 1", level=1, blocks=[]),
+        Section(heading="Обзор", level=2, blocks=[TextBlock(text="Обзор рынка.")]),
+        Section(heading="Часть 2", level=1, blocks=[]),
+        Section(heading="Итоги", level=2, blocks=[TextBlock(text="Выводы по проекту.")]),
+    ])
+    client = FakeClient([_sp("statement"), _sp("statement")])
+    plan = planner.plan_deck(client, doc, lib)
+    ids = [s.template_id for s in plan.slides]
+    assert client.calls == 2                       # шапки частей LLM не трогают
+    assert ids[0] == "cover" and ids[-1] == "contacts"
+    dots = next(s for s in plan.slides if s.template_id == "section-dots")
+    frame = next(s for s in plan.slides if s.template_id == "section-frame")
+    assert dots.content == {"label": "ЧАСТЬ 1", "number": "01"}
+    assert frame.content == {"label": "ЧАСТЬ 2", "number": "02"}
+    # разделитель заполнен детерминированно — без ключа brief (филлер его пропустит)
+    assert "brief" not in dots.content
+    assert not lib.validate_content("section-dots", dots.content)
+
+
+def test_top_level_sections_with_subsections_get_dividers():
+    """Главы верхнего уровня, у которых есть вложенные подразделы, получают
+    разделитель перед своим контентом — распределение по структуре."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="Инфраструктура", level=1, blocks=[TextBlock(text="Введение.")]),
+        Section(heading="Сеть", level=2, blocks=[TextBlock(text="Про сеть.")]),
+        Section(heading="Хранилище", level=2, blocks=[TextBlock(text="Про диски.")]),
+        Section(heading="Безопасность", level=1, blocks=[TextBlock(text="Введение 2.")]),
+        Section(heading="Доступ", level=2, blocks=[TextBlock(text="Про доступ.")]),
+    ])
+    client = FakeClient([_sp("statement")] * 5)
+    plan = planner.plan_deck(client, doc, lib)
+    ids = [s.template_id for s in plan.slides]
+    assert ids.count("section-dots") + ids.count("section-frame") == 2
+    assert client.calls == 5                       # у всех 5 разделов есть контент
+    # дивайдер стоит ПЕРЕД контентом своей главы
+    assert ids[1] in ("section-dots", "section-frame")
+
+
+def test_flat_doc_gets_no_dividers():
+    """Плоский документ (все разделы одного уровня с контентом) — без разделителей."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="A", level=2, blocks=[TextBlock(text="Текст A.")]),
+        Section(heading="B", level=2, blocks=[TextBlock(text="Текст B.")]),
+        Section(heading="C", level=2, blocks=[TextBlock(text="Текст C.")]),
+    ])
+    client = FakeClient([_sp("statement")] * 3)
+    plan = planner.plan_deck(client, doc, lib)
+    ids = [s.template_id for s in plan.slides]
+    assert "section-dots" not in ids and "section-frame" not in ids
+
+
+def test_single_divider_is_suppressed_and_section_survives():
+    """Один-единственный кандидат подавляется (одинокий дивайдер бессмыслен), но
+    сам раздел не теряется — уходит в контент как раньше."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="Часть 1", level=1, blocks=[]),
+        Section(heading="Обзор", level=2, blocks=[TextBlock(text="Обзор.")]),
+    ])
+    client = FakeClient([_sp("statement"), _sp("statement")])
+    plan = planner.plan_deck(client, doc, lib)
+    ids = [s.template_id for s in plan.slides]
+    assert "section-dots" not in ids and "section-frame" not in ids
+    assert client.calls == 2                       # оба раздела ушли в body
+    assert len(plan.slides) == 4                   # cover + 2 + contacts, ничего не пропало
+
+
+def test_divider_label_trims_on_word_boundary():
+    lib = TemplateLibrary.load()
+    # section-frame label max_chars=14 → режем по слову, капсом
+    assert planner._divider_label("Информационная безопасность", 14) == "ИНФОРМАЦИОННАЯ"
+    assert planner._divider_label("Часть 1", 16) == "ЧАСТЬ 1"

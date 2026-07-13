@@ -79,14 +79,15 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
             current = mapped
         progress.stage(session_id, current[0], current[1], detail=message)
 
+    mode_arg = "exact" if state.exact_transfer else pick_mode(input_path)
     progress.stage(session_id, Stage.PARSING, 5, detail="старт сборки HTML")
-    log.info("htmlnew.start", input=str(input_path), mode=pick_mode(input_path))
+    log.info("htmlnew.start", input=str(input_path), mode=mode_arg)
     result = build_deck(
         input_path,
         out,
-        mode=pick_mode(input_path),
+        mode=mode_arg,
         vision=True,
-        freeform_ok=True,        # включён управляемый freeform (вариант B)
+        freeform_ok=True,        # включён управляемый freeform (вариант B); в exact игнорируется
         progress=on_progress,
     )
     log.info("htmlnew.done", result=str(result))

@@ -57,6 +57,9 @@ class Section(BaseModel):
     heading: str = ""
     level: int = 0                   # 0 = преамбула без заголовка
     blocks: list[Block] = Field(default_factory=list)
+    notes: str = ""                  # заметки докладчика (pptx): контекст для
+    #                                  планировщика; в контент слайда НЕ идут
+    #                                  (иначе утекут в режиме «Точный перенос»)
 
 
 class InputDoc(BaseModel):

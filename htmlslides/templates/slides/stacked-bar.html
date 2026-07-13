@@ -29,6 +29,7 @@
 {% set legend = content.legend %}
 {% set n = bars | length %}
 {% set ladder = [1.0, 0.78, 0.56, 0.38] %}
+{% set gap = 8 %}
 {% set bars_top = 80 %}
 {% set bars_h = 540 %}
 {% set pitch = bars_h / n %}
@@ -60,27 +61,34 @@
     {% set cy = bars_top + loop.index0 * pitch + pitch / 2 %}
     {% set y = cy - bar_h / 2 %}
     {% set vals = [b.v1, b.v2, b.v3, b.v4] %}
-    {% set sm = namespace(total=0.0) %}
-    {% for v in vals %}{% if v %}{% set sm.total = sm.total + (v | num) %}{% endif %}{% endfor %}
+    {% set sm = namespace(total=0.0, nz=0) %}
+    {% for v in vals %}{% if v %}{% set sm.total = sm.total + (v | num) %}{% set sm.nz = sm.nz + 1 %}{% endif %}{% endfor %}
     {% set total = sm.total or 1 %}
     <text x="0" y="{{ cy }}" dominant-baseline="middle"
           font-size="30" font-weight="400" fill="var(--fg-body)">{{ b.label }}</text>
     <rect x="{{ bar_x }}" y="{{ y }}" width="{{ track_w }}" height="{{ bar_h }}"
           fill="var(--bg-card)"/>
-    {% set seg = namespace(offset=0.0) %}
+    {% set seg = namespace(offset=0.0, seen=0) %}
     {% for v in vals %}
     {% if v %}
+    {% set seg.seen = seg.seen + 1 %}
     {% set sw = (v | num) / total * track_w %}
     {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
     {% set pct = ((v | num) / total * 100) | round | int %}
-    <rect class="sb-seg" x="{{ bar_x + seg.offset }}" y="{{ y }}" width="{{ sw }}" height="{{ bar_h }}"
+    {#- Тонкий зазор-разделитель между сегментами: рисуем sw минус gap, «хвост»
+        открывает трек (var(--bg-card)), чтобы соседние приглушённые сегменты не
+        сливались. Последний сегмент бара рисуем на всю ширину (иначе справа у края
+        трека останется щель); крошечные сегменты (< gap+12) не режем. -#}
+    {% set draww = sw - gap if (seg.seen < sm.nz and sw > gap + 12) else sw %}
+    <rect class="sb-seg" x="{{ bar_x + seg.offset }}" y="{{ y }}" width="{{ draww }}" height="{{ bar_h }}"
           fill="var(--accent)" fill-opacity="{{ op }}"/>
     {#- %-метка внутри сегмента. Раньше порог sw>90 прятал узкий 3-й сегмент (~7% от
         1280px ≈ 90px) — выглядело как пропущенные данные. Снижаем порог до 60px и
         для узких сегментов (60..90px) берём шрифт поменьше (20px вместо 26px);
-        уже 60px (<~5%) — метку молча опускаем (физически не влезает). -#}
+        уже 60px (<~5%) — метку молча опускаем (физически не влезает). Центрируем по
+        нарисованной ширине draww, чтобы % стоял по центру зелёного, а не зазора. -#}
     {% if sw >= 60 %}
-    <text x="{{ bar_x + seg.offset + sw / 2 }}" y="{{ cy }}" text-anchor="middle"
+    <text x="{{ bar_x + seg.offset + draww / 2 }}" y="{{ cy }}" text-anchor="middle"
           dominant-baseline="middle" font-size="{{ 26 if sw >= 90 else 20 }}" font-weight="500"
           fill="var(--bg)">{{ pct }}%</text>
     {% endif %}

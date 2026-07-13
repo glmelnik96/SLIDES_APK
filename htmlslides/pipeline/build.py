@@ -41,6 +41,8 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
       openai.* (APIError и наследники) — сеть/авторизация при вызовах LLM.
     """
     src, out = Path(input_path), Path(out_path)
+    if mode == "exact":
+        return _build_exact(src, out, theme=theme, progress=progress)
     if mode == "rebrand" and src.suffix.lower() != ".pptx":
         raise ValueError("mode=rebrand доступен только для .pptx")
     client = client or KimiClient()
@@ -74,6 +76,61 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     return polish_plan(plan, out, client=client, library=library, vision=vision,
                        theme=theme, max_autofix=max_autofix, artifacts=artifacts,
                        progress=progress)
+
+
+def _build_exact(src: Path, out: Path, *, theme: str,
+                 progress: Progress) -> Path:
+    """Точный перенос: 1 слайд источника → 1 слайд, текст дословно, без ИИ.
+
+    pptx читаем существующим parse_pptx (дословный текст + картинки, 1 секция на
+    слайд); .md/.txt режем по меткам «Слайд N:». docx на Этапе 1 не поддержан.
+    """
+    from ..parsers import parse_file
+    from ..parsers.base import InputDoc
+    from ..parsers.exact_text import split_exact_text
+    from .exact_builder import build_exact_plan
+
+    progress(f"parse: {src.name}")
+    suffix = src.suffix.lower()
+    if suffix == ".pptx":
+        doc = parse_file(src)
+    elif suffix in (".md", ".txt"):
+        raw = src.read_text(encoding="utf-8")
+        doc = InputDoc(title=src.stem,
+                       sections=split_exact_text(raw, progress=progress))
+    else:
+        raise ValueError(
+            "точный перенос на Этапе 1 поддерживает .pptx/.md/.txt, "
+            f"не {suffix or 'без расширения'}")
+    if not doc.sections:
+        raise LLMFormatError(
+            "источник пуст (0 слайдов) — точную деку не собираем")
+
+    progress(f"plan: {len(doc.sections)} слайдов 1-в-1")
+    plan, warnings = build_exact_plan(doc)
+    for w in warnings:
+        progress(f"warn: {w}")
+
+    # Этап 2: ИИ-вёрстка каждого слайда по протоколу меток. Нет ключа → пропускаем,
+    # остаётся детерминированный html Этапа 1 (дека собирается всегда).
+    from .exact_designer import design_exact_deck
+    client = _exact_client_or_none(progress)
+    if client is not None:
+        progress("design: ИИ-вёрстка exact-слайдов")
+        plan = design_exact_deck(client, doc, plan, progress=progress)
+
+    # polish без vision/autofix: только assemble.
+    return polish_plan(plan, out, theme=theme, vision=False, max_autofix=0,
+                       progress=progress)
+
+
+def _exact_client_or_none(progress: Progress) -> Optional[KimiClient]:
+    """Клиент для ИИ-вёрстки exact-слайдов; нет ключа → None (собираем как Этап 1)."""
+    try:
+        return KimiClient()
+    except RuntimeError as exc:
+        progress(f"warn: нет ключа к ИИ ({exc}); точный перенос без дизайна (как Этап 1)")
+        return None
 
 
 def polish_plan(plan: DeckPlan, out_path: str | Path, *,
@@ -220,8 +277,15 @@ def _render_source_slides(src: Path, mode: str, artifacts: Optional[Path],
         images = render_pptx_pngs(src, base / "source-slides")
         progress(f"rebrand: {len(images)} скриншотов исходных слайдов")
         return images
-    except (RenderUnavailable, subprocess.CalledProcessError,
-            subprocess.TimeoutExpired) as exc:
+    except RenderUnavailable as exc:
+        # Нет LibreOffice/pypdfium — «зрение» на этой машине невозможно в принципе.
+        # Деградируем на текст ВЕЗДЕ, включая rebrand: иначе любую pptx нельзя
+        # собрать без установки LibreOffice (планировщик просто отработает по тексту).
+        progress(f"rebrand-скриншоты недоступны ({exc}), работаю по тексту")
+        return []
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        # LibreOffice есть, но споткнулся на этом файле (битый/завис). В явном
+        # rebrand это проблема файла, а не машины — не прячем; в auto деградируем.
         if mode == "rebrand":
             raise
         progress(f"rebrand-скриншоты недоступны ({exc}), работаю по тексту")

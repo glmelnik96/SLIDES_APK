@@ -230,6 +230,11 @@ def _brief(slide: SlidePlan) -> str:
 
 def _fill_template(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *,
                    deck_title: str, extra: str) -> SlidePlan:
+    # Детерминированно заполненный слайд (напр. section-divider) несёт готовые
+    # слоты вместо брифа — пропускаем без вызова LLM, если контракт уже выполнен.
+    if not extra and "brief" not in slide.content and not library.validate_content(
+            slide.template_id, slide.content):
+        return slide
     template = library.get(slide.template_id)
     slots = json.dumps({n: slot_brief(s) for n, s in template.slots.items()},
                        ensure_ascii=False)
