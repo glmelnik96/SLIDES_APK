@@ -22,6 +22,7 @@ def test_build_exact_from_text_offline(tmp_path, monkeypatch):
     assert result == out
     html = out.read_text(encoding="utf-8")
     assert html.count('data-template="exact"') == 2
+    assert "t-hero-156" in html                              # бренд-раскладка, не голый текст
     assert "Дословный текст один." in html
     assert "Дословный текст два." in html
 
@@ -53,43 +54,16 @@ def test_build_exact_docx_rejected(tmp_path):
         build_deck(src, tmp_path / "o.html", mode="exact")
 
 
-def test_build_exact_no_key_skips_ai(tmp_path, monkeypatch):
-    """Без ключа design_exact_deck НЕ зовётся — детерминированный результат."""
+def test_build_exact_no_ai_calls(tmp_path, monkeypatch):
+    """exact-путь детерминированный: ИИ-клиент не создаётся вовсе."""
     monkeypatch.delenv("CLOUDRU_API_KEY", raising=False)
-
-    import htmlslides.pipeline.exact_designer as designer
-
-    def _boom(*a, **k):
-        raise AssertionError("ИИ не должен вызываться без ключа")
-
-    monkeypatch.setattr(designer, "design_exact_deck", _boom)
-    src = _write_text_deck(tmp_path / "deck.txt")
-    out = tmp_path / "deck.html"
-    build_deck(src, out, mode="exact")                       # не падает
-    assert out.read_text(encoding="utf-8").count('data-template="exact"') == 2
-
-
-def test_build_exact_designs_with_client(tmp_path, monkeypatch):
-    """Есть клиент → слайды проходят через ИИ-вёрстку; текст остаётся дословным."""
     import htmlslides.pipeline.build as buildmod
 
-    good = ('```html<section class="slide" data-template="freeform">'
-            '<div class="content-head"><h3 class="content-head-title t-head-42">'
-            '{{a1}}</h3></div><div class="row"><div class="col">{{a2}}</div>'
-            '</div></section>```')
+    def _boom(*a, **k):
+        raise AssertionError("exact не должен создавать ИИ-клиент")
 
-    class _FakeClient:
-        model = "fake"
-        usage_total = {}
-        def chat(self, messages, *, max_tokens=4096, extra_body=None):
-            return good
-
-    monkeypatch.setattr(buildmod, "_exact_client_or_none",
-                        lambda progress: _FakeClient())
+    monkeypatch.setattr(buildmod, "KimiClient", _boom)
     src = _write_text_deck(tmp_path / "deck.txt")
     out = tmp_path / "deck.html"
-    build_deck(src, out, mode="exact")
-    html = out.read_text(encoding="utf-8")
-    assert 'class="col"' in html                             # брендовая вёрстка от ИИ
-    assert "Дословный текст один." in html                   # дословность
-    assert html.count('data-template="exact"') == 2
+    build_deck(src, out, mode="exact")                       # не падает без ИИ
+    assert out.read_text(encoding="utf-8").count('data-template="exact"') == 2

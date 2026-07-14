@@ -111,26 +111,13 @@ def _build_exact(src: Path, out: Path, *, theme: str,
     for w in warnings:
         progress(f"warn: {w}")
 
-    # Этап 2: ИИ-вёрстка каждого слайда по протоколу меток. Нет ключа → пропускаем,
-    # остаётся детерминированный html Этапа 1 (дека собирается всегда).
-    from .exact_designer import design_exact_deck
-    client = _exact_client_or_none(progress)
-    if client is not None:
-        progress("design: ИИ-вёрстка exact-слайдов")
-        plan = design_exact_deck(client, doc, plan, progress=progress)
+    # Этап 2 (ИИ-вёрстка) отключён намеренно: вёрстка теперь детерминированная
+    # (build_exact_plan → flow-раскладки), ноль ИИ-вызовов — нет таймаутов и
+    # заглушек. exact_designer.py остаётся в репо, но из exact-пути не зовётся.
 
     # polish без vision/autofix: только assemble.
     return polish_plan(plan, out, theme=theme, vision=False, max_autofix=0,
                        progress=progress)
-
-
-def _exact_client_or_none(progress: Progress) -> Optional[KimiClient]:
-    """Клиент для ИИ-вёрстки exact-слайдов; нет ключа → None (собираем как Этап 1)."""
-    try:
-        return KimiClient()
-    except RuntimeError as exc:
-        progress(f"warn: нет ключа к ИИ ({exc}); точный перенос без дизайна (как Этап 1)")
-        return None
 
 
 def polish_plan(plan: DeckPlan, out_path: str | Path, *,
