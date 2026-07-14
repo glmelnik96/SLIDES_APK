@@ -12,6 +12,15 @@ _SLIDE_RE = re.compile(r'<section[^>]*\bclass="[^"]*\bslide\b', re.IGNORECASE)
 # globally editable. Matches the attribute with or without a value.
 _CONTENTEDITABLE_RE = re.compile(r'\s+contenteditable(?:\s*=\s*"[^"]*")?',
                                  re.IGNORECASE)
+# deck.js marks the visible slide with class "is-active". The editor serializes
+# the live DOM on save, so that runtime marker gets baked onto whichever slide
+# was showing. On reload deck.js activates slide 1 but never clears the stale
+# marker, leaving two slides visible at once — the later one (e.g. contacts)
+# overlaid every slide ("all slides became contacts after refresh"). Strip the
+# token from <section> class attributes only; the identical token also names CSS
+# animation selectors in the embedded <style>, which must stay intact.
+_SECTION_CLASS_RE = re.compile(r'(<section\b[^>]*\bclass=")([^"]*)(")',
+                               re.IGNORECASE)
 
 
 def count_slides(html: str) -> int:
@@ -22,6 +31,14 @@ def strip_contenteditable(html: str) -> str:
     return _CONTENTEDITABLE_RE.sub("", html)
 
 
+def strip_is_active(html: str) -> str:
+    def _clean(m: "re.Match[str]") -> str:
+        classes = [c for c in m.group(2).split() if c != "is-active"]
+        return m.group(1) + " ".join(classes) + m.group(3)
+
+    return _SECTION_CLASS_RE.sub(_clean, html)
+
+
 def deck_path(session_id: str) -> Path:
     return session_dir(session_id) / "deck.html"
 
@@ -30,7 +47,7 @@ def save_deck(session_id: str, html: str) -> Path:
     if not html or not html.strip():
         raise ValueError("empty deck HTML")
     path = deck_path(session_id)
-    path.write_text(strip_contenteditable(html), encoding="utf-8")
+    path.write_text(strip_is_active(strip_contenteditable(html)), encoding="utf-8")
     return path
 
 

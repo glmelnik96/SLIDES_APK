@@ -166,6 +166,13 @@
     if (!slides.length) return;
     progressEl = document.querySelector(".deck-progress");
 
+    /* Инвариант: активен РОВНО один слайд. goTo() снимает .is-active только с
+       предыдущего current, поэтому любой «застрявший» маркер в исходном HTML
+       (редактор сохраняет живой DOM вместе с .is-active того слайда, что был на
+       экране) остался бы виден поверх остальных — тот слайд «дублировался» бы на
+       все. Сбрасываем маркер со всех слайдов ДО первого goTo. */
+    for (var s = 0; s < slides.length; s++) slides[s].classList.remove("is-active");
+
     rescale();
     autofitExact();
     autofitStats();
