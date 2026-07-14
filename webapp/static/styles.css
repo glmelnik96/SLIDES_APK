@@ -150,6 +150,35 @@ html, body { overflow-x: clip; }
 .drop-text { margin-top: 8px; font-size: 14px; }
 .drop-hint { margin-top: 4px; color: var(--muted); font-size: 12px; }
 
+/* ===== Опция «Точный перенос» (переключатель под drop-зоной) ===== */
+.opt-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 12px; padding: 13px 15px;
+  border: 1px solid var(--line); background: var(--bg-soft);
+  cursor: pointer; user-select: none;
+  transition: border-color .15s, background .15s;
+}
+.opt-row:hover { border-color: var(--muted-2); }
+.opt-row:has(.opt-check:checked) { border-color: var(--accent-line); background: var(--accent-dim); }
+/* нативный чекбокс прячем, но оставляем доступным с клавиатуры; рисуем свой .opt-box */
+.opt-check { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
+.opt-box {
+  position: relative; flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px;
+  border: 1px solid var(--muted-2); background: transparent;
+  transition: border-color .15s, background .15s;
+}
+.opt-box::after {                       /* галочка: угол рамки, повёрнутый на 45° */
+  content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px;
+  border: solid var(--accent-ink); border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0); transition: transform .12s;
+}
+.opt-check:checked + .opt-box { background: var(--accent); border-color: var(--accent); }
+.opt-check:checked + .opt-box::after { transform: rotate(45deg) scale(1); }
+.opt-check:focus-visible + .opt-box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opt-text { display: flex; flex-direction: column; gap: 3px; }
+.opt-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.opt-desc { font-size: 12px; line-height: 1.45; color: var(--muted); }
+
 /* ===== Кнопки ===== */
 .btn {
   background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: var(--r);
