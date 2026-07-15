@@ -112,7 +112,17 @@ frame.onload = () => {
         el.addEventListener("blur", () => {
           const changed = el.__origHtml !== undefined && el.innerHTML !== el.__origHtml;
           el.__origHtml = undefined;
-          if (changed) syncDraftSlideHtml(i);
+          if (changed) {
+            // A green count-up number (.js-count) carries a persistent
+            // data-count-final (set once by deck.js, never refreshed). An inline
+            // edit changes textContent but NOT that attribute, so syncDraftSlideHtml
+            // would bake the stale final value and silently revert the edit on the
+            // next navigation. Refresh it to the edited text first.
+            if (el.hasAttribute("data-count-final")) {
+              el.setAttribute("data-count-final", el.textContent);
+            }
+            syncDraftSlideHtml(i);
+          }
         });
       }
     }
@@ -403,6 +413,35 @@ function renderBuilderForm() {
   }
 }
 
+// Читает файл-картинку и возвращает data-URI, ужатый до maxW по ширине (с
+// сохранением пропорций) и перекодированный в JPEG — чтобы не тащить многомегабайтный
+// оригинал в plan.json/экспорт. Рисуем через canvas; если браузер не смог декодировать
+// файл — промис реджектится (вызывающий покажет ошибку).
+function imageFileToDataURL(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, (maxW / img.naturalWidth) || 1);
+        const w = Math.max(1, Math.round(img.naturalWidth * scale));
+        const h = Math.max(1, Math.round(img.naturalHeight * scale));
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL("image/jpeg", quality));
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e);
+      }
+    };
+    img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
 function renderSlot(name, spec, value) {
   const wrap = document.createElement("div");
   wrap.className = "field";
@@ -413,6 +452,75 @@ function renderSlot(name, spec, value) {
   if (spec.kind === "text") {
     const long = (spec.max_chars || 0) > 40;
     const el = document.createElement(long ? "textarea" : "input");
+    if (name === "image") {
+      // Загрузка своего изображения. data-URI храним в скрытом text-слоте, который
+      // collectContent() кладёт в content.image — шаблон сам вписывает его в маску
+      // (cover-image) или в <img> (service-table/timeline). Пустое значение → шаблон
+      // показывает дефолтную картинку из библиотеки. Крупные файлы ужимаем на клиенте
+      // (canvas → JPEG, до 2040px), чтобы data-URI не раздувал plan.json/экспорт.
+      const holder = document.createElement("input");
+      holder.type = "hidden";
+      holder.dataset.slot = name;
+      holder.dataset.kind = "text";
+      holder.value = value == null ? "" : String(value);
+
+      const file = document.createElement("input");
+      file.type = "file";
+      file.accept = "image/*";
+      file.hidden = true;
+
+      // Нативный <input type=file> прячем внутрь <label>, стилизованного как кнопка
+      // интерфейса (.btn-ghost) — клик по лейблу открывает системный диалог выбора.
+      const pick = document.createElement("label");
+      pick.className = "btn btn-ghost btn-sm field-file";
+      pick.textContent = "Загрузить изображение";
+      pick.appendChild(file);
+
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "btn btn-ghost btn-sm";
+      reset.textContent = "Сбросить к шаблону";
+
+      const row = document.createElement("div");
+      row.className = "field-file-row";
+      row.appendChild(pick);
+      row.appendChild(reset);
+
+      const status = document.createElement("div");
+      status.className = "field-hint";
+
+      const refresh = () => {
+        const custom = !!holder.value;
+        status.textContent = custom
+          ? "Загружено своё изображение"
+          : "По умолчанию — изображение из шаблона";
+        reset.hidden = !custom;
+      };
+      file.addEventListener("change", async () => {
+        const f = file.files && file.files[0];
+        if (!f) return;
+        try {
+          holder.value = await imageFileToDataURL(f, 2040, 0.85);
+        } catch (e) {
+          status.textContent = "Не удалось прочитать файл — попробуйте другой";
+          return;
+        }
+        refresh();
+        scheduleSave();
+      });
+      reset.addEventListener("click", () => {
+        holder.value = "";
+        file.value = "";
+        refresh();
+        scheduleSave();
+      });
+
+      wrap.appendChild(holder);
+      wrap.appendChild(row);
+      wrap.appendChild(status);
+      refresh();
+      return wrap;
+    }
     if (spec.max_chars) el.maxLength = spec.max_chars;
     el.value = value == null ? "" : String(value);
     el.dataset.slot = name;
@@ -758,7 +866,10 @@ function fieldInput(value, onInput) {
   return el;
 }
 
-function hint(card, text) {
+// Append a hint line into a typed-slide field card. Named distinctly from the
+// manual builder's hint(text)->node (below) so the two never collide — a prior
+// duplicate `hint` shadowed that one and crashed the whole builder form render.
+function appendHint(card, text) {
   const h = document.createElement("div");
   h.className = "field-hint";
   h.textContent = text;
@@ -798,7 +909,7 @@ function renderFieldCard(s, idx) {
       f.bullets = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
       commit();
     }));
-    hint(card, "Пункты через | (вертикальная черта)");
+    appendHint(card, "Пункты через | (вертикальная черта)");
   } else if (s.slide_type === "stats") {
     f.stats = f.stats || [];
     addRow("Цифры", fieldInput(
@@ -809,7 +920,7 @@ function renderFieldCard(s, idx) {
         }).filter((x) => x.value || x.label);
         commit();
       }));
-    hint(card, "value=label, пары через |  (напр. 99%=аптайм | 3=региона)");
+    appendHint(card, "value=label, пары через |  (напр. 99%=аптайм | 3=региона)");
   } else if (s.slide_type === "two_col") {
     f.left = f.left || []; f.right = f.right || [];
     addRow("Левая колонка", fieldInput(f.left.join(" | "), (e) => {
@@ -820,7 +931,7 @@ function renderFieldCard(s, idx) {
       f.right = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
       commit();
     }));
-    hint(card, "Пункты через | в каждой колонке");
+    appendHint(card, "Пункты через | в каждой колонке");
   }
   return card;
 }

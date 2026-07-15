@@ -8,6 +8,22 @@
   --cl-grey3:#434343;
   --cl-text-gray:#5C5C5C;
   --cl-copyright:#BFBFBF;
+  /* Дополнительная палитра — эталон Cloud.ru_Template_2026.pptx (theme accent2..6) +
+     palette.json (единый источник истины). Green — ГЛАВНЫЙ акцент; эти цвета
+     ДОПОЛНИТЕЛЬНЫЕ: по «иерархии масс» каждый ≤ green, применять редко/точечно.
+     Графики остаются одноцветными (зелёный + opacity-лесенка) — «без радуги» инвариант. */
+  --cl-yellow:#CFF500;        /* base.Yellow — лаймовый акцент */
+  --cl-purple:#A068FF;        /* base.Purple */
+  --cl-aqua:#18F4CF;          /* extended.Aquamarine */
+  --cl-ultramarine:#0063FF;   /* extended.Ultramarine — насыщенный синий (= pptx accent2) */
+  --cl-blue-lt:#C0E0FC;       /* base.Blue — светлый (фон изображений) */
+  --cl-magenta:#FF00FF;       /* extended.Magenta */
+  --cl-carrot:#FF4517;        /* extended.Carrot */
+  --cl-coral:#FF0642;         /* extended.Coral */
+  --cl-dk2:#4E4E4E;           /* pptx dk2 — средний графит */
+  /* Пастельные тинты — ТОЛЬКО для доп. серий графиков (palette.chart_extension) */
+  --cl-pastel-mint:#C9F2EA; --cl-pastel-yellow:#E8F5C7; --cl-pastel-green:#A8E5C9;
+  --cl-mid-gray:#BDBDBD; --cl-dark-gray:#666666;
   --font:"SB Sans Display",Verdana,sans-serif;
   --font-display:"SB Sans Display",Verdana,sans-serif;
   --font-text:"SB Sans Text",Verdana,sans-serif;
@@ -19,13 +35,13 @@ html[data-theme="dark"]{
   --bg:#222222; --fg:#FFFFFF; --fg-body:#F2F2F2; --fg-muted:#D3D3D3;
   --fg-slide-num:#D3D3D3; --bg-card:#383838; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#D3D3D3; --card-label:var(--cl-green);
-  --image-bg:#C0E0FC;
+  --image-bg:var(--cl-blue-lt);
 }
 html[data-theme="light"]{
   --bg:#FFFFFF; --fg:#222222; --fg-body:#000000; --fg-muted:#595959;
   --fg-slide-num:#000000; --bg-card:#F2F2F2; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#222222; --card-label:#000000;
-  --image-bg:#C0E0FC;
+  --image-bg:var(--cl-blue-lt);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:var(--radius);}
 html,body{height:100%;}
@@ -78,7 +94,7 @@ a{color:inherit;}
   text-transform:uppercase;}                              /* Header 1 — заголовок service-table */
 .t-head-36{font-size:36px;font-weight:600;line-height:1.0;letter-spacing:-.72px;}  /* Header 4 — единицы KPI, номера строк */
 .t-body-30{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;color:var(--fg-body);}  /* Body 2 — основной текст контента */
-.t-number-320{font-size:320px;font-weight:500;line-height:1.32;letter-spacing:-16px;}  /* KPI-цифра 320px Medium */
+.t-number-320{font-size:320px;font-weight:400;line-height:1.32;letter-spacing:-16px;}  /* KPI-цифра 320px Regular */
 
 /* ---- компоненты ---- */
 /* .card/.accent-block — flex-column с выравниванием контента по ВЕРХУ и левому краю
@@ -146,21 +162,27 @@ a{color:inherit;}
 .cover-subtitle{color:var(--fg);}  /* типографика — роль .t-sub-36 */
 /* «Шурешки» кавера: нижняя полоса вертикальных штрихов — единственный hero-макет
    без паттерна получил свой акцент (роль как statement-dots, но линиями). Полоса
-   стоит в нижней зоне (top:840), ниже блока титула, а opacity:.5 держит её
-   деликатной — акцент, а не шум. pointer-events:none — не мешает выделению текста. */
-.cover-hatch{position:absolute;left:60px;top:840px;width:1800px;height:183px;
+   стоит в нижней зоне (top:830), ниже блока титула, а opacity:.5 держит её
+   деликатной — акцент, а не шум. pointer-events:none — не мешает выделению текста.
+   Шаг штрихов 20px (линия 2px + 18px пустоты). Линия именно 2px, а не 1px: хэйрлайн
+   в 1px не переживает суб-пиксельную растеризацию — при масштабировании деки (вьюер,
+   превью-тумбнейл) часть линий гаснет и полоса выглядит рваной. 2px растеризуется
+   ровно и держится при уменьшении. */
+.cover-hatch{position:absolute;left:60px;top:830px;width:1800px;height:183px;
   pointer-events:none;opacity:.5;
   background-image:repeating-linear-gradient(90deg,
-    var(--line) 0, var(--line) 1px, transparent 1px, transparent 13px);}
+    var(--line) 0, var(--line) 2px, transparent 2px, transparent 20px);}
 
 /* ---- statement (figma 3393:11145/3393:10882) ---- */
+/* Оба текстовых поля мастера (рамка H1 и зелёная плашка) — ОДИН отступ 32px со всех
+   сторон и выравнивание по верхне-левому краю: их левые кромки текста совпадают
+   (60+1border+32 == 61+32 == 93). Правило проекта: контент во фреймах — top-left. */
 .statement-box{position:absolute;left:60px;top:300px;width:1800px;height:300px;
-  border:1px solid var(--line-frame);padding:0 20px 20px;
-  display:flex;flex-direction:column;justify-content:center;align-items:flex-start;}
-.statement-title{white-space:nowrap;}   /* типографика — роль .t-hero-156 */
-.statement-subtitle{color:var(--fg);}   /* типографика — роль .t-sub-36 */
+  border:1px solid var(--line-frame);padding:32px;
+  display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;}
+.statement-title{font-size:80px;line-height:1.1;white-space:normal;}   /* меньше базового hero (120→80) + перенос: свободно вмещает 2 строки; вес/капс/цвет — от роли .t-hero-156 */
 .statement-plate{position:absolute;left:61px;top:630px;width:959px;height:180px;
-  background:var(--accent);padding:24px 0 0 24px;}
+  background:var(--accent);padding:32px;}
 .statement-plate-text{color:var(--cl-graphite);}   /* типографика — роль .t-sub-36 */
 .statement-tiles{position:absolute;left:1050px;top:630px;display:flex;gap:30px;color:var(--line);}
 .statement-tile{width:180px;height:180px;overflow:visible;}
@@ -213,14 +235,15 @@ html[data-theme="dark"] .contacts-arrows{color:var(--accent);}
 
 /* ---- cover-image (figma 3393:11191/3393:10932) ---- */
 .cover-image-art{position:absolute;left:900px;top:0;width:1020px;height:1080px;overflow:visible;}
-.cover-image-title{position:absolute;left:60px;top:289px;width:960px;
+.cover-image-title{position:absolute;left:60px;top:289px;width:860px;
   font-size:80px;font-weight:600;line-height:1.125;letter-spacing:-1.6px;color:var(--fg);}
-.cover-image-lead{position:absolute;left:60px;top:860px;width:442px;color:var(--fg);}   /* типографика — роль .t-sub-36 */
+.cover-image-lead{position:absolute;left:60px;bottom:90px;width:442px;height:180px;
+  display:flex;flex-direction:column;justify-content:flex-end;color:var(--accent);}   /* зелёный лид (макет D 3393:11191): выравнивание текста по НИЖНЕМУ краю фрейма (bottom-anchored, растёт вверх); типографика — роль .t-sub-36 */
 
 /* ---- шапка контентных слайдов (общая: kpi/service-table/timeline и далее партии C/D) ----
    figma-map §Chrome: блок left=60, центр по y=122, width 780, column-gap 10. */
-.content-head{position:absolute;left:60px;top:72px;width:780px;
-  display:flex;flex-direction:column;gap:10px;}
+.content-head{position:absolute;left:60px;top:72px;width:1570px;
+  display:flex;flex-direction:column;gap:10px;}   /* ширина до 50 px не доходя до лого top-right (1680−50=1630 → 1630−60=1570): длинные заголовки/подзаголовки помещаются */
 .content-head-title{color:var(--fg);}   /* типографика — роль .t-head-42 */
 .content-head-sub{color:var(--fg);}      /* типографика — роль .t-sub-36 */
 
@@ -244,7 +267,7 @@ html[data-theme="light"] .kpi-value{color:var(--fg-body);}
   display:flex;gap:40px;align-items:flex-start;}
 .sr-cell{flex:1;min-width:0;display:flex;flex-direction:column;
   border-top:1px solid var(--line);padding-top:28px;}
-.sr-value{font-size:104px;font-weight:500;line-height:1.0;letter-spacing:-2px;
+.sr-value{font-size:104px;font-weight:400;line-height:1.0;letter-spacing:-2px;
   white-space:nowrap;color:var(--accent);}
 html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .sr-label{margin-top:30px;}   /* типографика — роль .t-body-30 (var(--fg-body)) */
@@ -306,7 +329,7 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
   display:flex;align-items:stretch;gap:0;}
 .ba-panel{flex:1;min-width:0;min-height:300px;background:var(--bg-card);
   display:flex;flex-direction:column;justify-content:flex-start;
-  padding:60px;box-sizing:border-box;}
+  padding:40px;box-sizing:border-box;}   /* было 60px (перебор) → 40px: в ряд с др. карточками (30–36px), крупным панелям чуть просторнее */
 .ba-label{margin:0 0 28px;}                         /* роль .t-head-36 */
 .ba-label--before{color:var(--fg-muted);}
 .ba-label--after{color:var(--accent);}

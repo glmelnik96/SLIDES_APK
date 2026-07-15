@@ -1,16 +1,19 @@
 {#- Акцентное заявление (figma D 3393:11145 / L 3393:10882): H1 в контурной рамке,
-    зелёная плашка с тезисом, 4 контурные плитки со стрелками, поле точек понизу. -#}
-<section class="slide{% if content.accent %} statement--accent{% endif %}" data-template="statement">
+    зелёная плашка с тезисом, 4 контурные плитки со стрелками, поле точек понизу.
+    База для ДВУХ мастеров: statement (тёмный фон) и statement-green (зелёный фон,
+    брендовый инверт). Зелёный включается переменной force_accent через include —
+    разметка не дублируется. -#}
+{% set is_green = force_accent | default(false) %}
+<section class="slide{% if is_green %} statement--accent{% endif %}" data-template="statement{% if is_green %}-green{% endif %}">
   {% include "_chrome.html" %}
   <div class="statement-box">
     <h1 class="statement-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
-    {% if content.subtitle %}<p class="statement-subtitle t-sub-36 m-enter">{{ content.subtitle }}</p>{% endif %}
   </div>
-  {% if content.highlight %}
+  {#- Плашка-вывод — часть дизайна мастера: рендерим ВСЕГДА (дефолт-текст если слот
+      пуст), чтобы поле было видно и заполнялось в обоих вариантах. -#}
   <div class="statement-plate m-enter">
-    <p class="statement-plate-text t-sub-36">{{ content.highlight }}</p>
+    <p class="statement-plate-text t-sub-36">{{ content.highlight or 'Главный вывод секции' }}</p>
   </div>
-  {% endif %}
   <div class="statement-tiles" aria-hidden="true">
     {% for _ in range(4) %}
     <svg class="statement-tile" viewBox="0 0 180.854 180.854" fill="none" xmlns="http://www.w3.org/2000/svg">

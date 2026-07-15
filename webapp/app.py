@@ -310,6 +310,10 @@ async def add_draft_slide(session_id: str, request: Request,
     if not template_id or template_id not in {t["id"] for t in templates_api.catalog()}:
         raise HTTPException(400, "valid template_id required")
     at = data.get("at")
+    # Fields start EMPTY (plan.json keeps the user's raw content); the representative
+    # filler ("рыба-текст") is supplied at render time by draft_render, so a fresh
+    # master shows example text in the slide while its input stays empty. A layout
+    # swap still carries over the caller's overlapping slots.
     plan = draft.add_slide(plan, draft.DraftSlide(
         template_id=template_id, content=data.get("content") or {}), at=at)
     _persist_draft(session_id, plan)
