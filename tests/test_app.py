@@ -610,3 +610,113 @@ def test_chat_without_usage_does_not_break():
     c.chat([{"role": "user", "content": "x"}])
     assert c.usage_total == {
         "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "calls": 1}
+
+
+def _poll_export(c, sid, fmt, uid="u1", tries=50):
+    """Drive the app's event loop until the async export leaves 'running'."""
+    import time
+    for _ in range(tries):
+        st = c.get(f"/api/jobs/{sid}/export/{fmt}", headers=H(uid)).json()
+        if st["state"] != "running":
+            return st
+        time.sleep(0.02)
+    return st
+
+
+def _job_with_deck(c, de, uid="u1"):
+    sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                 files={"file": ("a.md", b"# a", "text/markdown")},
+                 headers=H(uid)).json()["session_id"]
+    de.save_deck(sid, '<section class="slide">A</section>')
+    return sid
+
+
+def test_export_pptx_async_flow(monkeypatch, tmp_path):
+    """POST starts the render, GET polls to ready, GET .../file returns the deck."""
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    import webapp.render_pptx as rp
+
+    def fake_export(deck, out):
+        out.write_bytes(b"PPTX-BYTES")
+        return out
+
+    monkeypatch.setattr(rp, "export_pptx", fake_export)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        r = c.post(f"/api/jobs/{sid}/export/pptx", headers=H("u1"))
+        assert r.status_code == 200 and r.json()["state"] == "running"
+        st = _poll_export(c, sid, "pptx")
+        assert st["state"] == "ready", st
+        f = c.get(f"/api/jobs/{sid}/export/pptx/file", headers=H("u1"))
+        assert f.status_code == 200
+        assert f.content == b"PPTX-BYTES"
+        assert "presentationml" in f.headers["content-type"]
+
+
+def test_export_png_async_flow(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    import webapp.render_png as rpng
+
+    def fake_zip(deck, out):
+        out.write_bytes(b"PK-ZIP")
+        return out
+
+    monkeypatch.setattr(rpng, "export_zip", fake_zip)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        assert c.post(f"/api/jobs/{sid}/export/png", headers=H("u1")).status_code == 200
+        st = _poll_export(c, sid, "png")
+        assert st["state"] == "ready", st
+        f = c.get(f"/api/jobs/{sid}/export/png/file", headers=H("u1"))
+        assert f.status_code == 200 and f.content == b"PK-ZIP"
+        assert "zip" in f.headers["content-type"]
+
+
+def test_export_unknown_format_404(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        assert c.post(f"/api/jobs/{sid}/export/gif", headers=H("u1")).status_code == 404
+        assert c.get(f"/api/jobs/{sid}/export/gif", headers=H("u1")).status_code == 404
+
+
+def test_export_owner_only(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        # a non-owner can neither start nor poll nor download (404, no leak)
+        assert c.post(f"/api/jobs/{sid}/export/pptx", headers=H("u2")).status_code == 404
+        assert c.get(f"/api/jobs/{sid}/export/pptx", headers=H("u2")).status_code == 404
+        assert c.get(f"/api/jobs/{sid}/export/pptx/file", headers=H("u2")).status_code == 404
+
+
+def test_export_download_before_ready_409(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        # never started → idle → download is a clean 409, not a 500/leak
+        assert c.get(f"/api/jobs/{sid}/export/pptx/file", headers=H("u1")).status_code == 409
+        assert c.get(f"/api/jobs/{sid}/export/pptx", headers=H("u1")).json()["state"] == "idle"
+
+
+def test_export_error_state_surfaced(monkeypatch, tmp_path):
+    """A renderer failure becomes state=error (not a hung 'running')."""
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    import webapp.render_pptx as rp
+
+    def boom(deck, out):
+        raise RuntimeError("chromium missing")
+
+    monkeypatch.setattr(rp, "export_pptx", boom)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _job_with_deck(c, de)
+        c.post(f"/api/jobs/{sid}/export/pptx", headers=H("u1"))
+        st = _poll_export(c, sid, "pptx")
+        assert st["state"] == "error"
+        assert "chromium" in st["error"]

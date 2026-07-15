@@ -16,6 +16,10 @@ let pendingGoTo = 0; // slide to show after the next iframe load
 function loadDeck() {
   // cache-bust so edits/chat rewrites are reflected on reload
   frame.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}`);
+  // A reload means the deck content changed (chat/agent/rebuild/field edit), so any
+  // finished export is now stale — reset the controls. Contenteditable saves don't
+  // reload the iframe, so saveDeck() handles that path separately.
+  markExportsStale?.();
 }
 
 const STAGE_LABEL = {
@@ -235,10 +239,13 @@ function currentDeckHtml() {
   return "<!DOCTYPE html>" + clone.outerHTML;
 }
 
-async function saveDeck() {
+async function saveDeck(silent) {
   const r = await fetch(U(`/api/jobs/${sessionId}/deck`), {
     method: "POST", body: currentDeckHtml(),
   });
+  // A user edit invalidates any finished export; the export flow saves silently
+  // (silent=true) because it renders exactly this state — no need to reset itself.
+  if (!silent) markExportsStale();
   return r.ok;
 }
 
@@ -247,10 +254,75 @@ document.getElementById("save").onclick = async () => {
   flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
 
-document.getElementById("png").onclick = async () => {
-  await saveDeck(); // persist in-place edits before render
-  location.href = U(`/api/jobs/${sessionId}/png.zip`);
+// Export (PNG-ZIP / PPTX) is async: screenshotting every slide via Chromium takes
+// seconds, so we don't block on it. Click "Экспорт" → start the render and show a
+// "Готовлю…" pill → poll until ready → the control becomes an active "Скачать…"
+// button that downloads the finished file. No blind wait, download only when ready.
+const EXPORT_LABEL = {
+  png: { idle: "Экспорт в PNG (ZIP)", busy: "Готовлю PNG…", ready: "Скачать PNG (ZIP)" },
+  pptx: { idle: "Экспорт в PPTX", busy: "Готовлю PPTX…", ready: "Скачать PPTX" },
 };
+
+// Any deck edit invalidates a finished (or in-flight) export — a "Скачать" pill
+// would otherwise hand back the pre-edit file. Edit funnels call this to reset the
+// controls back to "Экспорт", forcing a fresh render on the next click.
+const _exportResets = [];
+function markExportsStale() { _exportResets.forEach((fn) => fn()); }
+
+function setupExport(btn) {
+  const fmt = btn.dataset.fmt;
+  const L = EXPORT_LABEL[fmt];
+  let poller = null;
+
+  const toIdle = (text) => {
+    clearInterval(poller); poller = null;
+    btn.disabled = false;
+    btn.classList.remove("is-busy", "is-ready");
+    btn.textContent = text || L.idle;
+  };
+  const toReady = () => {
+    clearInterval(poller); poller = null;
+    btn.disabled = false;
+    btn.classList.remove("is-busy");
+    btn.classList.add("is-ready");
+    btn.textContent = L.ready;
+  };
+  const toBusy = () => {
+    btn.disabled = true;
+    btn.classList.remove("is-ready");
+    btn.classList.add("is-busy");
+    btn.textContent = L.busy;
+  };
+
+  async function poll() {
+    let r;
+    try {
+      r = await fetch(U(`/api/jobs/${sessionId}/export/${fmt}`));
+    } catch { return; }               // transient network blip — keep polling
+    if (!r.ok) { toIdle("Ошибка — повторить"); return; }
+    const { state } = await r.json();
+    if (state === "ready") toReady();
+    else if (state === "error") toIdle("Ошибка — повторить");
+  }
+
+  btn.onclick = async () => {
+    // A ready control downloads; anything else (re)starts an export.
+    if (btn.classList.contains("is-ready")) {
+      location.href = U(`/api/jobs/${sessionId}/export/${fmt}/file`);
+      return;
+    }
+    toBusy();
+    await saveDeck(true);              // persist in-place edits (no stale-reset: this IS the export)
+    const r = await fetch(U(`/api/jobs/${sessionId}/export/${fmt}`), { method: "POST" });
+    if (!r.ok) { toIdle("Ошибка — повторить"); return; }
+    poller = setInterval(poll, 1500);
+    poll();
+  };
+
+  _exportResets.push(() => toIdle());
+}
+
+document.querySelectorAll("[data-fmt]").forEach(setupExport);
 
 function flash(btn, text) {
   const orig = btn.textContent;

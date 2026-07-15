@@ -17,7 +17,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from webapp import chat_edit, deck_edit, draft, draft_render, jobs_repo, render_png
+from webapp import (
+    chat_edit, deck_edit, draft, draft_render, exports, jobs_repo, render_png,
+    render_pptx,
+)
 from webapp.auth import get_current_user
 from webapp.paths import session_dir
 from webapp.runner import CapacityError, JobRunner
@@ -628,20 +631,58 @@ async def post_chat(session_id: str, request: Request,
     return JSONResponse({"ok": True})
 
 
-@app.get("/api/jobs/{session_id}/png.zip")
-async def get_png_zip(session_id: str, request: Request,
-                      user=Depends(get_current_user)) -> FileResponse:
+# PNG-ZIP and PPTX both screenshot every slide via Chromium — seconds of work.
+# Serving that synchronously froze the editor (looked like a hang), so exports are
+# async: POST starts the render, GET polls state, GET .../file downloads the result.
+# Renderers are resolved at call time (module attribute) so they stay monkeypatchable.
+_EXPORT_META = {
+    "png": {"out": "deck.zip", "download": "slides.zip",
+            "mime": "application/zip",
+            "render": lambda deck, out: render_png.export_zip(deck, out)},
+    "pptx": {"out": "deck.pptx", "download": "slides.pptx",
+             "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+             "render": lambda deck, out: render_pptx.export_pptx(deck, out)},
+}
+
+
+@app.post("/api/jobs/{session_id}/export/{fmt}")
+async def start_export(session_id: str, fmt: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
     await _owned_or_404(request, session_id, user)
+    meta = _EXPORT_META.get(fmt)
+    if meta is None:
+        raise HTTPException(404, "unknown export format")
     deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if deck is None:
         raise HTTPException(404, "deck not found")
-    out = session_dir(session_id) / "deck.zip"
-    try:
-        await run_in_threadpool(render_png.export_zip, deck, out)
-    except Exception as exc:  # noqa: BLE001 — surface a clear hint
-        raise HTTPException(500, f"PNG export failed: {exc}. "
-                                 f"Try: playwright install chromium") from exc
-    return FileResponse(out, filename="slides.zip", media_type="application/zip")
+    out = session_dir(session_id) / meta["out"]
+
+    async def worker() -> Path:
+        return await run_in_threadpool(meta["render"], deck, out)
+
+    return JSONResponse(exports.registry.start(session_id, fmt, worker))
+
+
+@app.get("/api/jobs/{session_id}/export/{fmt}")
+async def poll_export(session_id: str, fmt: str, request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    await _owned_or_404(request, session_id, user)
+    if fmt not in _EXPORT_META:
+        raise HTTPException(404, "unknown export format")
+    return JSONResponse(exports.registry.status(session_id, fmt))
+
+
+@app.get("/api/jobs/{session_id}/export/{fmt}/file")
+async def download_export(session_id: str, fmt: str, request: Request,
+                          user=Depends(get_current_user)) -> FileResponse:
+    await _owned_or_404(request, session_id, user)
+    meta = _EXPORT_META.get(fmt)
+    if meta is None:
+        raise HTTPException(404, "unknown export format")
+    path = exports.registry.path(session_id, fmt)
+    if path is None or not path.is_file():
+        raise HTTPException(409, "export not ready")
+    return FileResponse(path, filename=meta["download"], media_type=meta["mime"])
 
 
 @app.get("/api/history")
@@ -666,6 +707,7 @@ async def clear_history(request: Request,
         session_ids = await jobs_repo.delete_for_user(s, user.id)
         await s.commit()
     for sid in session_ids:
+        exports.registry.drop(sid)
         d = session_dir(sid)
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)

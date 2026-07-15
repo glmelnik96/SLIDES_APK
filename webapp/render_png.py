@@ -17,6 +17,16 @@ def _screenshot_slides(html_path, indices, out_dir, viewport=(1920, 1080)):
     return screenshot_slides(html_path, indices, out_dir, viewport=viewport)
 
 
+def render_slides(deck_html: Path) -> dict[int, Path]:
+    """Render every slide of the deck to a 1920x1080 PNG. Shared expensive step —
+    PNG-ZIP and PPTX exports both reuse it (screenshotting drives Chromium)."""
+    n = count_slides(deck_html.read_text("utf-8"))
+    indices: Iterable[int] = range(1, n + 1)
+    out_dir = deck_html.parent / "png"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return _screenshot_slides(deck_html, indices, out_dir, viewport=(1920, 1080))
+
+
 def zip_pngs(pngs: dict[int, Path], out_zip: Path) -> Path:
     with zipfile.ZipFile(out_zip, "w", zipfile.ZIP_DEFLATED) as zf:
         for index in sorted(pngs):
@@ -25,9 +35,4 @@ def zip_pngs(pngs: dict[int, Path], out_zip: Path) -> Path:
 
 
 def export_zip(deck_html: Path, out_zip: Path) -> Path:
-    n = count_slides(deck_html.read_text("utf-8"))
-    indices: Iterable[int] = range(1, n + 1)
-    out_dir = deck_html.parent / "png"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    pngs = _screenshot_slides(deck_html, indices, out_dir, viewport=(1920, 1080))
-    return zip_pngs(pngs, out_zip)
+    return zip_pngs(render_slides(deck_html), out_zip)
