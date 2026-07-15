@@ -192,6 +192,9 @@ def _section_to_text(section: Section) -> str:
         rendered = _block_to_text(block)
         if rendered:
             lines.append(rendered)
+    if section.notes:
+        # Заметки докладчика — контекст для дизайна (не видимый текст слайда).
+        lines.append(f"Заметки докладчика: {section.notes}")
     return "\n\n".join(lines)
 
 
@@ -225,6 +228,26 @@ class _SectionPlan(BaseModel):
 
 def _has_content(section: Section) -> bool:
     return bool(section.heading or section.blocks)
+
+
+def _block_has_text(block: Block) -> bool:
+    """Есть ли в блоке осмысленный контент (не пустой абзац/список)."""
+    if isinstance(block, TextBlock):
+        return bool(block.text.strip())
+    if isinstance(block, ListBlock):
+        return any(i.strip() for i in block.items)
+    if isinstance(block, TableBlock):
+        return any(c.strip() for row in block.rows for c in row)
+    return isinstance(block, (ImageBlock, CodeBlock))  # картинка/код — это контент
+
+
+def _is_part_title(section: Section) -> bool:
+    """Раздел-«шапка части»: есть заголовок, но нет собственного контента.
+
+    Это классический разделитель («Раздел 1», «Часть N», «Блок услуг») — раньше
+    он молча превращался в титул/statement. Теперь распознаём его как дивайдер."""
+    return bool(section.heading) and not any(
+        _block_has_text(b) for b in section.blocks)
 
 
 def _list_item_count(section: Section) -> int:
@@ -330,6 +353,59 @@ def _contacts_slide(library: TemplateLibrary) -> SlidePlan:
                      content={"brief": "Контакты Cloud.ru: cloud.ru"})
 
 
+# Два макета-разделителя чередуем для разнообразия (точки → рамка → точки …).
+_SECTION_TEMPLATES = ("section-dots", "section-frame")
+
+
+def _divider_label(heading: str, max_chars: int) -> str:
+    """Заголовок раздела -> короткая метка дивайдера КАПСОМ в пределах лимита
+    (режем по границе слова, чтобы не было «БЕЗОПАСН…»)."""
+    label = " ".join((heading or "Раздел").split()).strip().upper()
+    if max_chars and len(label) > max_chars:
+        cut = label[:max_chars]
+        if " " in cut:
+            cut = cut[:cut.rfind(" ")]
+        label = cut or label[:max_chars]
+    return label
+
+
+def _divider_slide(section: Section, library: TemplateLibrary,
+                   number: int) -> SlidePlan:
+    """Детерминированный слайд-разделитель: слоты заполнены сразу (label/number),
+    без LLM-филлера — нумерация предсказуема (01, 02, …), а филлер его пропускает."""
+    tid = _SECTION_TEMPLATES[(number - 1) % len(_SECTION_TEMPLATES)]
+    spec = library.get(tid)
+    label_spec = spec.slots.get("label")
+    max_chars = label_spec.max_chars if label_spec else 0
+    return SlidePlan(index=1, type=spec.type, template_id=tid, freeform=False,
+                     content={"label": _divider_label(section.heading, max_chars),
+                              "number": f"{number:02d}"})
+
+
+def _divider_flags(sections: Sequence[Section]) -> list[bool]:
+    """Для каждого раздела: открывает ли он новую ЧАСТЬ деки (нужен разделитель)?
+
+    Распределение — по структуре контента, а не по фиксированному шагу:
+    · раздел-«шапка части» (заголовок без тела) — всегда разделитель;
+    · раздел верхнего уровня — разделитель, только если СЛЕДУЮЩИЙ раздел вложен
+      глубже (то есть это реально родительская глава, а не рядовой слайд).
+    Меньше двух разделителей на деку — не главим вовсе (одинокий дивайдер бессмыслен)."""
+    n = len(sections)
+    levels = [s.level for s in sections if s.level >= 1]
+    top = min(levels) if levels else 0
+    flags = [False] * n
+    for i, section in enumerate(sections):
+        if _is_part_title(section):
+            flags[i] = True
+        elif top and section.level == top:
+            nxt = sections[i + 1].level if i + 1 < n else 0
+            if nxt > top:
+                flags[i] = True
+    if sum(flags) < 2:
+        return [False] * n
+    return flags
+
+
 def _enforce_variety(slides: list[SlidePlan], library: TemplateLibrary) -> None:
     """Правило бренда: текстовый шаблон не чаще 2 раз и не подряд. Свап на
     совместимый из семейства (чарты/спец-шаблоны не трогаем). In-place."""
@@ -365,23 +441,36 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
                     freeform_ok: bool, workers: int = _MAP_WORKERS) -> DeckPlan:
     menu = library_menu(library)
     sections = [s for s in doc.sections if _has_content(s)]
+    dividers = _divider_flags(sections)
 
-    # MAP: разделы параллельно (RPS держит гейт клиента; фолбэк внутри _plan_section).
-    if sections:
+    # MAP: LLM-ом планируем всё, кроме разделов-«шапок частей», ставших дивайдерами
+    # (у них нет своего тела — LLM не зовём, «титул вместо дивайдера» уходит). Глава
+    # верхнего уровня с вводным абзацем тоже получает дивайдер, но её контент
+    # остаётся в body (не теряем текст). Подавленный дивайдер → раздел уходит в body.
+    body_idx = [i for i, s in enumerate(sections)
+                if not (dividers[i] and _is_part_title(s))]
+    if body_idx:
         pool = ThreadPoolExecutor(max_workers=workers)
         try:
-            futures = [pool.submit(_plan_section, client, library, menu, s,
-                                   freeform_ok=freeform_ok) for s in sections]
-            per_section = [f.result() for f in futures]
+            futures = {i: pool.submit(_plan_section, client, library, menu,
+                                      sections[i], freeform_ok=freeform_ok)
+                       for i in body_idx}
+            body_plans = {i: f.result() for i, f in futures.items()}
         finally:
             pool.shutdown()
     else:
-        per_section = []
+        body_plans = {}
 
-    # REDUCE: cover + слайды разделов + contacts; разнообразие и accent — в коде.
+    # REDUCE: cover + [разделитель части?] + слайды разделов (в порядке документа) +
+    # contacts; разнообразие и accent — в коде.
     slides: list[SlidePlan] = [_cover_slide(doc, library)]
-    for group in per_section:
-        slides.extend(group)
+    divider_no = 0
+    for i, section in enumerate(sections):
+        if dividers[i]:
+            divider_no += 1
+            slides.append(_divider_slide(section, library, divider_no))
+        if i in body_plans:
+            slides.extend(body_plans[i])
     slides.append(_contacts_slide(library))
     _enforce_variety(slides, library)
     _pick_accent(slides)

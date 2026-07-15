@@ -116,12 +116,75 @@
     return m ? parseInt(m[1], 10) - 1 : 0;
   }
 
+  /* Точный перенос: вписать блок .exact-fit в .exact-zone. Текст НЕ сокращаем —
+     масштабируем весь блок (transform:scale) и центрируем по вертикали, чтобы
+     контент не «прилипал» к верху с пустотой снизу. Разрежённый (короткий) контент
+     можно УВЕЛИЧИТЬ до _EXACT_MAX_UP (заполняет зону, но не раздувается), длинный —
+     ужать (нижний предел 0.35: ниже нечитаемо — оставляем как есть, текст цел, но
+     может подрезаться зоной). */
+  var _EXACT_MAX_UP = 1.8;
+  function autofitExact() {
+    var zones = document.querySelectorAll(".exact-zone");
+    for (var i = 0; i < zones.length; i++) {
+      var zone = zones[i];
+      var fit = zone.querySelector(".exact-fit");
+      if (!fit) continue;
+      fit.style.transform = "none";
+      var needH = fit.scrollHeight, needW = fit.scrollWidth;
+      if (!needH || !needW) continue;
+      var zh = zone.clientHeight, zw = zone.clientWidth;
+      var scale = Math.min(zh / needH, zw / needW);
+      if (scale > _EXACT_MAX_UP) scale = _EXACT_MAX_UP;
+      if (scale < 0.35) scale = 0.35;
+      var ty = (zh - needH * scale) / 2;             // центр по вертикали
+      if (ty < 0) ty = 0;
+      fit.style.transform = "translateY(" + ty + "px) scale(" + scale + ")";
+    }
+  }
+
+  /* stats-row: «цифры-герои» в ряду (.sr-value) при длинных значениях-диапазонах
+     («−30–45%», «15→65%») вылезали за свою ячейку и наезжали на соседнюю. Считаем,
+     во сколько раз надо ужать, чтобы КАЖДОЕ значение влезло в свою ячейку, берём
+     самый жёсткий коэффициент и применяем его КО ВСЕМ значениям ряда — так все
+     цифры одного размера (как у дизайнера), без коллизий, при любом ответе модели.
+     Пол читаемости — 42% базового кегля; короткие значения не трогаем. */
+  function autofitStats() {
+    var rows = document.querySelectorAll(".sr-row");
+    for (var r = 0; r < rows.length; r++) {
+      var vals = rows[r].querySelectorAll(".sr-value");
+      var ratio = 1, i;
+      for (i = 0; i < vals.length; i++) vals[i].style.fontSize = "";  // сброс к базе
+      for (i = 0; i < vals.length; i++) {
+        var cell = vals[i].parentElement;                             // .sr-cell
+        if (!cell || !cell.clientWidth || !vals[i].scrollWidth) continue;
+        ratio = Math.min(ratio, cell.clientWidth / vals[i].scrollWidth);
+      }
+      if (ratio < 1) {
+        ratio = Math.max(ratio * 0.97, 0.42);
+        for (i = 0; i < vals.length; i++) {
+          var base = parseFloat(getComputedStyle(vals[i]).fontSize) || 104;
+          vals[i].style.fontSize = (base * ratio) + "px";
+        }
+      }
+    }
+  }
+
   function init() {
     slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
     if (!slides.length) return;
     progressEl = document.querySelector(".deck-progress");
 
+    /* Инвариант: активен РОВНО один слайд. goTo() снимает .is-active только с
+       предыдущего current, поэтому любой «застрявший» маркер в исходном HTML
+       (редактор сохраняет живой DOM вместе с .is-active того слайда, что был на
+       экране) остался бы виден поверх остальных — тот слайд «дублировался» бы на
+       все. Сбрасываем маркер со всех слайдов ДО первого goTo. */
+    for (var s = 0; s < slides.length; s++) slides[s].classList.remove("is-active");
+
     rescale();
+    autofitExact();
+    autofitStats();
+    window.addEventListener("load", function () { autofitExact(); autofitStats(); });   // пересчёт после подгрузки шрифтов/картинок
     window.addEventListener("resize", rescale);
     document.addEventListener("visibilitychange", rescale);
 

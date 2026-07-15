@@ -16,7 +16,7 @@ from htmlslides.assembler import assemble
 from htmlslides.library import SlotSpec, TemplateLibrary
 from htmlslides.models import DeckPlan, SlidePlan
 
-from webapp import deck_edit, slide_types
+from webapp import deck_edit, slide_types, templates_api
 from webapp.draft import DraftPlan
 
 _PLACEHOLDER = "…"
@@ -62,16 +62,24 @@ def _to_deck_plan(plan: DraftPlan) -> DeckPlan:
 def _safe_content(library: TemplateLibrary, template_id: str,
                   content: dict) -> dict:
     """Coerce content so it passes the slot contract (so assemble won't raise).
-    Only the template's known slots are kept; required-empty slots get a
-    placeholder; over-limit text/lists are clamped."""
+    Only the template's known slots are kept; empty slots get representative filler
+    (so a freshly applied master shows example text, not «…»); over-limit
+    text/lists are clamped."""
     slots = library.get(template_id).slots
-    return {name: _coerce_slot(spec, content.get(name))
+    return {name: _coerce_slot(spec, content.get(name), name)
             for name, spec in slots.items()}
 
 
-def _coerce_slot(spec: SlotSpec, value):
+def _coerce_slot(spec: SlotSpec, value, name: str, idx: int = 0):
     if spec.kind == "text":
         if value in (None, "", []):
+            # Empty slot → representative filler from the SAME source the picker
+            # preview uses, so the input field can stay empty while the slide still
+            # shows an example. Template-owned slots (image/lead) sample to "" and
+            # let the template's own `content.x or default` supply the visual.
+            s = templates_api.sample_slot(name, spec, idx)
+            if s:
+                return s[:spec.max_chars] if spec.max_chars else s
             return _PLACEHOLDER if spec.required else ""
         text = str(value)
         if spec.max_chars and len(text) > spec.max_chars:
@@ -80,18 +88,21 @@ def _coerce_slot(spec: SlotSpec, value):
     if spec.kind == "list":
         items = list(value) if isinstance(value, (list, tuple)) else []
         if not items and spec.required:
-            items = [{}]
+            # Whole list empty → rich multi-item sample (descending values), so an
+            # untouched chart/list master previews like the picker, not one bar.
+            sample = templates_api.sample_slot(name, spec)
+            items = list(sample) if isinstance(sample, list) else [{}]
         if spec.max_items:
             items = items[:spec.max_items]
-        return [_coerce_group(spec, it if isinstance(it, dict) else {})
-                for it in items]
+        return [_coerce_group(spec, it if isinstance(it, dict) else {}, i)
+                for i, it in enumerate(items)]
     if spec.kind == "group":
         return _coerce_group(spec, value if isinstance(value, dict) else {})
     return value if value is not None else ""
 
 
-def _coerce_group(spec: SlotSpec, item: dict) -> dict:
-    out = {name: _coerce_slot(sub, item.get(name))
+def _coerce_group(spec: SlotSpec, item: dict, idx: int = 0) -> dict:
+    out = {name: _coerce_slot(sub, item.get(name), name, idx)
            for name, sub in spec.item_slots.items()}
     # Keep the whole group within item_max_chars (validator sums all field
     # lengths): trim text fields from the end until it fits.

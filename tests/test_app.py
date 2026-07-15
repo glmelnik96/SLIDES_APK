@@ -528,3 +528,85 @@ def test_cloudru_model_env_overrides_default(monkeypatch):
 
     c = clientmod.KimiClient(rps=1000, transport=_Dummy())
     assert c.model == "moonshotai/Kimi-K2.6"
+
+
+def test_create_job_forwards_exact_transfer(monkeypatch, tmp_path):
+    started = {}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs",
+                   data={"mode": "htmlnew", "exact_transfer": "true"},
+                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert r.status_code == 200
+        assert started["exact"] is True
+
+
+def test_create_job_exact_defaults_false(monkeypatch, tmp_path):
+    started = {}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert r.status_code == 200
+        assert started["exact"] is False
+
+
+def test_chat_accumulates_usage():
+    """chat() должен собирать resp.usage в client.usage_total (для замера экономии)."""
+    import htmlslides.pipeline.client as clientmod
+
+    class _Usage:
+        prompt_tokens = 100
+        completion_tokens = 20
+        class prompt_tokens_details:      # noqa: N801  (мок SDK-структуры)
+            cached_tokens = 40
+
+    class _Resp:
+        class _C:
+            class _M:
+                content = "hi"
+            message = _M()
+        choices = [_C()]
+        usage = _Usage()
+
+    class _Transport:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    return _Resp()
+
+    c = clientmod.KimiClient(rps=1000, transport=_Transport())
+    c.chat([{"role": "user", "content": "x"}])
+    c.chat([{"role": "user", "content": "y"}])
+    assert c.usage_total == {
+        "prompt_tokens": 200, "completion_tokens": 40,
+        "cached_tokens": 80, "calls": 2}
+
+
+def test_chat_without_usage_does_not_break():
+    """Транспорт без .usage (старые моки) не должен падать; счётчики остаются нулевыми."""
+    import htmlslides.pipeline.client as clientmod
+
+    class _Resp:
+        class _C:
+            class _M:
+                content = "ok"
+            message = _M()
+        choices = [_C()]
+
+    class _Transport:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    return _Resp()
+
+    c = clientmod.KimiClient(rps=1000, transport=_Transport())
+    c.chat([{"role": "user", "content": "x"}])
+    assert c.usage_total == {
+        "prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "calls": 1}

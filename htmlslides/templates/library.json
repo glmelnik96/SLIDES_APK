@@ -26,12 +26,20 @@
       "id": "statement",
       "type": "content",
       "file": "statement.html",
-      "intent": "Акцентное заявление: один сильный тезис в рамке и вывод на зелёной плашке, для ключевой мысли секции. Опциональный slot accent (любой непустой текст) делает слайд «зелёным» — зелёный фон + графитовый текст (брендовый инверт-вариант для разнообразия).",
+      "intent": "Акцентное заявление на ТЁМНОМ фоне: сильный тезис (H1 до 2 строк) в контурной рамке и зелёная плашка-вывод + контурные плитки. Два текстовых поля: заголовок и вывод. Для ключевой мысли секции. Зелёный фон — отдельный мастер statement-green.",
       "slots": {
-        "title":     {"kind": "text", "required": true,  "max_chars": 20},
-        "subtitle":  {"kind": "text", "required": false, "max_chars": 88},
-        "highlight": {"kind": "text", "required": false, "max_chars": 90},
-        "accent":    {"kind": "text", "required": false, "max_chars": 8}
+        "title":     {"kind": "text", "required": true,  "max_chars": 40},
+        "highlight": {"kind": "text", "required": false, "max_chars": 90}
+      }
+    },
+    {
+      "id": "statement-green",
+      "type": "content",
+      "file": "statement-green.html",
+      "intent": "Акцентное заявление на ЗЕЛЁНОМ фирменном полотне (брендовый инверт: графитовый текст): тот же макет, что statement, но зелёный фон — для разнообразия и сильного акцента. Два текстовых поля: заголовок и вывод.",
+      "slots": {
+        "title":     {"kind": "text", "required": true,  "max_chars": 40},
+        "highlight": {"kind": "text", "required": false, "max_chars": 90}
       }
     },
     {

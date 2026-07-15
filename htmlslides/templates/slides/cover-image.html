@@ -4,12 +4,12 @@
   {% include "_chrome.html" %}
   <svg class="cover-image-art" viewBox="0 0 1020 1080" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M1020 722H960V1080H0V360H60V0H1020V722Z" fill="var(--accent)"/>
-    {% if content.image %}
-    <clipPath id="cover-image-clip"><path d="M1020 722H960V1080H0V360H60V0H1020V722Z"/></clipPath>
-    <image href="{{ content.image }}" x="-324" y="-30" width="1668" height="1145"
-           preserveAspectRatio="xMidYMid slice" clip-path="url(#cover-image-clip)"/>
-    {% endif %}
+    <clipPath id="cover-image-clip-{{ index }}"><path d="M1020 722H960V1080H0V360H60V0H1020V722Z"/></clipPath>
+    <image href="{{ content.image or asset('cover-image-sample.jpg') }}" x="0" y="0" width="1020" height="1080"
+           preserveAspectRatio="xMidYMid slice" clip-path="url(#cover-image-clip-{{ index }})"/>
   </svg>
   <h1 class="cover-image-title m-enter m-enter--hero">{{ content.title }}</h1>
-  {% if content.lead %}<p class="cover-image-lead t-sub-36 m-enter">{{ content.lead }}</p>{% endif %}
+  {#- Зелёное поле внизу — часть дизайна мастера: рендерим всегда, дефолт-текст
+      если слот пуст (реальный слайд без lead всё равно показывает зелёный текст). -#}
+  <p class="cover-image-lead t-sub-36 m-enter">{{ content.lead or 'Масштабируйте возможности бизнеса в облаке' }}</p>
 </section>

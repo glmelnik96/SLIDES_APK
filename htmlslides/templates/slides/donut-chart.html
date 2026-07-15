@@ -33,6 +33,7 @@
 {% set cx = 310 %}
 {% set cy = 310 %}
 {% set ladder = [1.0, 0.78, 0.56, 0.38, 0.24] %}
+{% set gap = 8 %}
 {% set leg_x = 700 %}
 {% set leg_pitch = 84 %}
 {% set leg_h = n * leg_pitch %}
@@ -54,14 +55,20 @@
       {% set share = (s.value | num) / total %}
       {% set seg_len = share * C %}
       {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.24 %}
+      {#- Тонкий зазор между дугами: рисуем не всю долю, а seg_len минус gap — «хвост»
+          дуги открывает трек (var(--bg-card)) как разделитель, чтобы соседние
+          приглушённые доли не сливались. offset копится по ПОЛНОЙ доле (позиции не
+          плывут); для крошечной доли (< gap+12) зазор молча пропускаем, иначе она
+          исчезнет. -#}
+      {% set vis = seg_len - gap if seg_len > gap + 12 else seg_len %}
       {#- E2: дуга прорисовывается по кругу. Финальный offset = -ns.offset; старт
-          спрятан, сдвинут ещё на seg_len назад (по ходу группы), так дуга «въезжает»
+          спрятан, сдвинут ещё на vis назад (по ходу группы), так дуга «въезжает»
           в своё место. CSS-переменные читает keyframe m-draw-arc; покой = финал. -#}
       <circle class="arc-draw" cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
               stroke="var(--accent)" stroke-opacity="{{ op }}" stroke-width="70"
-              stroke-dasharray="{{ seg_len }} {{ C - seg_len }}"
+              stroke-dasharray="{{ vis }} {{ C - vis }}"
               stroke-dashoffset="{{ -ns.offset }}"
-              style="--draw-from:{{ -ns.offset - seg_len }};--draw-to:{{ -ns.offset }}"/>
+              style="--draw-from:{{ -ns.offset - vis }};--draw-to:{{ -ns.offset }}"/>
       {% set ns.offset = ns.offset + seg_len %}
       {% endfor %}
     </g>

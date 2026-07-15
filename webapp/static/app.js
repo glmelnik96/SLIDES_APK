@@ -212,6 +212,8 @@ $("#create").onclick = async () => {
   const fd = new FormData();
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
+  const ex = document.getElementById("exactTransfer");
+  if (ex && ex.checked) fd.append("exact_transfer", "true");
   $("#create").disabled = true;
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {

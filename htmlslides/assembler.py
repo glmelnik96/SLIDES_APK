@@ -1,7 +1,9 @@
 """Сборка self-contained HTML-деки из DeckPlan: рендер слайдов + инлайн движка."""
 from __future__ import annotations
 
+import base64
 import re
+from functools import lru_cache
 from html import escape as html_escape
 from importlib import resources
 
@@ -52,6 +54,25 @@ def _load_slide_template(name: str) -> str:
     return _read_pkg(f"templates/slides/{name}")
 
 
+_ASSET_MIME = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml", ".webp": "image/webp",
+}
+
+
+@lru_cache(maxsize=None)
+def _asset_data_uri(name: str) -> str:
+    """Inline a packaged asset (htmlslides/assets/<name>) as a data: URI so the
+    self-contained deck stays offline-safe. Used for default template artwork."""
+    node = resources.files("htmlslides") / "assets"
+    for part in name.split("/"):
+        node = node / part
+    data = node.read_bytes()
+    ext = name[name.rfind("."):].lower() if "." in name else ""
+    mime = _ASSET_MIME.get(ext, "application/octet-stream")
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
+
+
 def _num(value) -> float:
     """Безопасно привести строку слота к float для геометрии графиков.
 
@@ -81,18 +102,67 @@ def _num(value) -> float:
         return 0.0
 
 
+# Короткие единицы измерения, которые нельзя отрывать от числа переносом строки.
+# Только однозначные многобуквенные токены (+ «ч», «%»): единичные «м/г/т/с» не
+# берём — рискуют ложно склеиться. Судья ловил «18 | мес.» и «12 | ВМ», разбитые
+# переносом, — читается как ошибка вёрстки.
+_GLUE_UNITS = (r"мес|ч|сут|сек|мин|мс|млрд|млн|тыс|руб|₽|чел|шт|раз|км|кг|"
+               r"ГБ|ТБ|МБ|КБ|ВМ|%|TB|GB|MB|KB|ms")
+_GLUE_RE = re.compile(r"(\d)[ ]+(" + _GLUE_UNITS + r")(?!\w)")
+
+
+_NBSP = chr(0x00A0)  # неразрывный пробел U+00A0
+
+# Короткие предлоги/союзы (1–2 буквы): по правилу рус. типографики их нельзя
+# оставлять «висеть» в конце строки — приклеиваем к следующему слову неразрывным
+# пробелом (как «в облаке» на титуле). Совпадаем только с ОТДЕЛЬНЫМ словом: перед
+# ним начало строки / пробел / открывающая кавычка-скобка, после — пробел и текст.
+# Нулевая ширина lookbehind позволяет склеивать подряд идущие («и в облаке»); NBSP
+# ( ) тоже \s, поэтому вторая итерация видит границу слова.
+_SHORT_WORDS = (r"а|и|о|у|в|к|с|я|на|по|за|из|от|до|со|во|об|не|ни|но|да|же|ли|бы|то")
+_PREP_RE = re.compile(r"(?:(?<=[\s(\[«\"„])|^)(" + _SHORT_WORDS + r")[ ]+",
+                      re.IGNORECASE)
+
+
+def _glue_nbsp(value):
+    """Jinja-finalize: расставить неразрывные пробелы по правилам рус. типографики —
+    (1) число+единица («180 млн», «18 мес.», «12 ВМ») и (2) короткий предлог/союз +
+    слово («в облаке») — чтобы вёрстка не рвала их переносом строки. Трогаем ТОЛЬКО
+    чистые строки (type is str): int/float геометрии графиков, Markup и Undefined
+    проходят как есть; inline-ассеты (data:-URI) пропускаем — там нет прозы, да и не
+    гоняем регэксп по мегабайтам base64. Меняется лишь ПРОБЕЛ на неразрывный —
+    видимый текст идентичен (важно — авто-режим; дословный «точный перенос»
+    рендерится f-строкой в обход Jinja и остаётся нетронутым)."""
+    if type(value) is not str or value[:5] == "data:":
+        return value
+    value = _GLUE_RE.sub("\\1" + _NBSP + "\\2", value)
+    value = _PREP_RE.sub("\\1" + _NBSP, value)
+    return value
+
+
 def _jinja_env() -> Environment:
     env = Environment(
         loader=FunctionLoader(_load_slide_template),
         autoescape=select_autoescape(["html"]),
+        finalize=_glue_nbsp,
     )
     env.filters["num"] = _num
+    env.globals["asset"] = _asset_data_uri
     return env
 
 
 def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) -> str:
     if slide.freeform:
         fragment = str(slide.content.get("html", "")).strip()
+        # Полностью собранный слайд-<section> (снимок из inline/чат-правки в
+        # редакторе) уже несёт свой chrome и модификаторы класса (напр.
+        # statement--accent — это и есть «зелёный» statement). Разворачивать его
+        # нельзя: теряется класс секции и удваивается chrome — после перезагрузки
+        # два слайда с разными мастерами схлопывались в один. Отдаём как есть.
+        if (not slide.content.get("exact")
+                and re.match(r'(?is)^<section\b[^>]*\bclass="[^"]*\bslide\b', fragment)
+                and "chrome-logo" in fragment):
+            return fragment
         if fragment.startswith("<section"):
             match = re.match(r"^<section[^>]*>(.*)</section>\s*$", fragment, re.DOTALL)
             inner = match.group(1) if match else fragment
@@ -109,6 +179,12 @@ def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) 
         if m:
             head, inner = m.group(1), m.group(2)
         chrome = env.get_template("_chrome.html").render()
+        if slide.content.get("exact"):
+            # exact-слайд: контент в .exact-fit (JS ужимает масштаб под .exact-zone),
+            # отдельный маркер data-template="exact" — для QA/отладки.
+            return ('<section class="slide slide--chrome-sm" data-template="exact">'
+                    f'{chrome}{head}<div class="exact-zone">'
+                    f'<div class="exact-fit">{inner}</div></div></section>')
         return ('<section class="slide slide--chrome-sm" data-template="freeform">'
                 f'{chrome}{head}<div class="freeform-zone">{inner}</div></section>')
 
@@ -122,7 +198,11 @@ def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) 
         details = "; ".join(f"{e.code}:{e.slot}" for e in errors)
         raise AssembleError(f"slide {slide.index}: {details}")
 
-    return env.get_template(template.file).render(content=slide.content)
+    # index — уникальный порядковый номер слайда в деке: шаблоны используют его,
+    # чтобы делать SVG-id инстанс-уникальными (иначе два одинаковых мастера на
+    # странице дают дубли id, и clip/gradient «схлопываются» — см. cover-image).
+    return env.get_template(template.file).render(
+        content=slide.content, index=slide.index)
 
 
 def assemble(plan: DeckPlan, *, theme: str = "dark") -> str:

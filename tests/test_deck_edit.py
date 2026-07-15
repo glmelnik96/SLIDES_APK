@@ -41,6 +41,41 @@ def test_save_deck_strips_editor_contenteditable(monkeypatch, tmp_path):
     assert "Hi" in saved
 
 
+def test_strip_is_active_removes_from_section():
+    html = '<section class="slide is-active slide--chrome-sm">A</section>'
+    out = deck_edit.strip_is_active(html)
+    assert 'class="slide slide--chrome-sm"' in out
+    assert "is-active" not in out
+    assert ">A<" in out  # content intact
+
+
+def test_strip_is_active_preserves_css_selectors():
+    # The runtime marker lives in a section's class; the SAME token names CSS
+    # animation selectors in the embedded <style>. Stripping must touch only the
+    # section attribute — never the stylesheet (else all motion breaks).
+    html = ('<style>.is-active .m-enter{opacity:1}</style>'
+            '<section class="slide is-active">A</section>')
+    out = deck_edit.strip_is_active(html)
+    assert ".is-active .m-enter{opacity:1}" in out  # CSS untouched
+    assert '<section class="slide">A</section>' in out  # section cleaned
+
+
+def test_save_deck_strips_stale_is_active(monkeypatch, tmp_path):
+    # Reproduces the "all slides became contacts after refresh" bug: the editor
+    # persisted .is-active on whichever slide was showing (here the last), so on
+    # reload deck.js left two slides active and the last overlaid every slide.
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    path = deck_edit.save_deck(
+        "sess1",
+        '<style>.is-active .m{width:1px}</style>'
+        '<section class="slide">one</section>'
+        '<section class="slide is-active">two</section>')
+    saved = path.read_text("utf-8")
+    assert ".is-active .m{width:1px}" in saved          # CSS intact
+    assert saved.count("is-active") == 1                # only the CSS one remains
+    assert '<section class="slide">two</section>' in saved
+
+
 def test_ensure_deck_seeds_from_source(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
     src = tmp_path / "report.html"
