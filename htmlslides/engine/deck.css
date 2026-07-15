@@ -8,22 +8,22 @@
   --cl-grey3:#434343;
   --cl-text-gray:#5C5C5C;
   --cl-copyright:#BFBFBF;
-  /* Дополнительная палитра — эталон Cloud.ru_Template_2026.pptx (theme accent2..6) +
-     palette.json (единый источник истины). Green — ГЛАВНЫЙ акцент; эти цвета
-     ДОПОЛНИТЕЛЬНЫЕ: по «иерархии масс» каждый ≤ green, применять редко/точечно.
-     Графики остаются одноцветными (зелёный + opacity-лесенка) — «без радуги» инвариант. */
+  /* Резерв «живых» доп-цветов (vivid) — ТОЛЬКО обводки/точечные акценты, НЕ заливка
+     графиков. Заливку композиционных графиков делают семантические --chart-* (ниже),
+     по правилу «≤3 хроматических цвета на слайд + оттенки серого». Green — цвет-герой,
+     всегда доминирует по массе; vivid применять редко/точечно. */
   --cl-yellow:#CFF500;        /* base.Yellow — лаймовый акцент */
   --cl-purple:#A068FF;        /* base.Purple */
-  --cl-aqua:#18F4CF;          /* extended.Aquamarine */
   --cl-ultramarine:#0063FF;   /* extended.Ultramarine — насыщенный синий (= pptx accent2) */
-  --cl-blue-lt:#C0E0FC;       /* base.Blue — светлый (фон изображений) */
-  --cl-magenta:#FF00FF;       /* extended.Magenta */
   --cl-carrot:#FF4517;        /* extended.Carrot */
   --cl-coral:#FF0642;         /* extended.Coral */
-  --cl-dk2:#4E4E4E;           /* pptx dk2 — средний графит */
-  /* Пастельные тинты — ТОЛЬКО для доп. серий графиков (palette.chart_extension) */
-  --cl-pastel-mint:#C9F2EA; --cl-pastel-yellow:#E8F5C7; --cl-pastel-green:#A8E5C9;
-  --cl-mid-gray:#BDBDBD; --cl-dark-gray:#666666;
+  --cl-blue-lt:#C0E0FC;       /* base.Blue — светлый (фон изображений) */
+  /* Серия графиков --chart-1..6 (композиционные: donut/stacked-bar/bar-chart).
+     Правило: зелёный-герой + до 2 приглушённых доп-цветов (ultramarine/purple),
+     дальше только серая шкала gray3–5. --chart-1 = зелёный в обеих темах;
+     --chart-2..6 резолвятся темой (см. блоки html[data-theme]). Метрики/тренды
+     (kpi/stats-row/kpi-rings/line-chart) остаются зелёными — цвет там не нёс бы смысла. */
+  --chart-1:var(--cl-green);
   --font:"SB Sans Display",Verdana,sans-serif;
   --font-display:"SB Sans Display",Verdana,sans-serif;
   --font-text:"SB Sans Text",Verdana,sans-serif;
@@ -36,12 +36,16 @@ html[data-theme="dark"]{
   --fg-slide-num:#D3D3D3; --bg-card:#383838; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#D3D3D3; --card-label:var(--cl-green);
   --image-bg:var(--cl-blue-lt);
+  --chart-2:#5D779F; --chart-3:#8372A1;   /* ultramarine/purple приглушённые */
+  --chart-4:#989898; --chart-5:#737373; --chart-6:#525252;   /* серые gray3–5 */
 }
 html[data-theme="light"]{
   --bg:#FFFFFF; --fg:#222222; --fg-body:#000000; --fg-muted:#595959;
   --fg-slide-num:#000000; --bg-card:#F2F2F2; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#222222; --card-label:#000000;
   --image-bg:var(--cl-blue-lt);
+  --chart-2:#9CADCE; --chart-3:#BDB0D2;   /* ultramarine/purple пастельные */
+  --chart-4:#A6A6A6; --chart-5:#8C8C8C; --chart-6:#737373;   /* серые gray3–5 (рецессивные) */
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:var(--radius);}
 html,body{height:100%;}
