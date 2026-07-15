@@ -127,8 +127,9 @@ a{color:inherit;}
   display:flex;flex-direction:column;justify-content:flex-start;gap:24px;overflow:hidden;}  /* контент от верха зоны (не уезжает вниз/не обрезается) */
 
 /* ---- exact (точный перенос 1-в-1): safe-зона + JS-подгонка масштаба блока ---- */
-.exact-zone{position:absolute;left:60px;top:300px;width:1800px;height:720px;overflow:hidden;}
+.exact-zone{position:absolute;left:60px;top:250px;width:1800px;height:770px;overflow:hidden;}
 .exact-fit{transform-origin:top left;width:1800px;}   /* JS ставит transform:scale(k) */
+.exact-fit>*+*{margin-top:36px;}   /* зазор между сегментами: таблица/проза ↔ ряд KPI-карточек */
 .exact-text>*+*{margin-top:18px;}
 .exact-cols{display:flex;gap:36px;align-items:flex-start;}
 .exact-cols .exact-text{flex:1;min-width:0;}
@@ -136,6 +137,17 @@ a{color:inherit;}
 .exact-img{display:block;max-width:760px;max-height:680px;width:auto;height:auto;}
 .exact-list{padding-left:1.2em;}
 .exact-list li+li{margin-top:12px;}
+/* Длинный список (7+ коротких пунктов) — в две колонки. Один <ul>/<ol>: нумерация
+   сквозная, пункт не рвётся между колонками (break-inside). Маркер — ВНУТРИ колонки
+   (list-style-position:inside) с висячим отступом: outside-маркер первой колонки
+   уходил левее left:60px и обрезался overflow:hidden у .exact-zone. */
+.exact-list--2col,.exact-list--3col,.exact-list--4col{column-gap:64px;padding-left:0;
+  list-style-position:inside;}
+.exact-list--2col li,.exact-list--3col li,.exact-list--4col li{
+  break-inside:avoid;padding-left:1.4em;text-indent:-1.4em;}
+.exact-list--2col{column-count:2;}
+.exact-list--3col{column-count:3;}
+.exact-list--4col{column-count:4;}
 .exact-table{border-collapse:collapse;}
 .exact-table td{border:1px solid var(--line-frame);padding:12px 18px;}
 .exact-code{font-family:var(--font-text);white-space:pre-wrap;}

@@ -116,9 +116,13 @@
     return m ? parseInt(m[1], 10) - 1 : 0;
   }
 
-  /* Точный перенос: ужать блок .exact-fit, пока не влезет в .exact-zone. Текст НЕ
-     сокращаем — масштабируем весь блок (transform:scale). Нижний предел 0.35: ниже
-     нечитаемо — оставляем как есть (текст цел, но может подрезаться зоной). */
+  /* Точный перенос: вписать блок .exact-fit в .exact-zone. Текст НЕ сокращаем —
+     масштабируем весь блок (transform:scale) и центрируем по вертикали, чтобы
+     контент не «прилипал» к верху с пустотой снизу. Разрежённый (короткий) контент
+     можно УВЕЛИЧИТЬ до _EXACT_MAX_UP (заполняет зону, но не раздувается), длинный —
+     ужать (нижний предел 0.35: ниже нечитаемо — оставляем как есть, текст цел, но
+     может подрезаться зоной). */
+  var _EXACT_MAX_UP = 1.8;
   function autofitExact() {
     var zones = document.querySelectorAll(".exact-zone");
     for (var i = 0; i < zones.length; i++) {
@@ -128,9 +132,13 @@
       fit.style.transform = "none";
       var needH = fit.scrollHeight, needW = fit.scrollWidth;
       if (!needH || !needW) continue;
-      var scale = Math.min(zone.clientHeight / needH, zone.clientWidth / needW, 1);
+      var zh = zone.clientHeight, zw = zone.clientWidth;
+      var scale = Math.min(zh / needH, zw / needW);
+      if (scale > _EXACT_MAX_UP) scale = _EXACT_MAX_UP;
       if (scale < 0.35) scale = 0.35;
-      if (scale < 1) fit.style.transform = "scale(" + scale + ")";
+      var ty = (zh - needH * scale) / 2;             // центр по вертикали
+      if (ty < 0) ty = 0;
+      fit.style.transform = "translateY(" + ty + "px) scale(" + scale + ")";
     }
   }
 
