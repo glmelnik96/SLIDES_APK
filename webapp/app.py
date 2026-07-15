@@ -52,7 +52,11 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
     # Canon topbar shows the gateway-supplied email; no email = standalone dev.
     from html import escape as _esc
     html = html.replace("{{ email }}", _esc(email))
-    return HTMLResponse(html)
+    # The shell HTML itself carries no version token (only its .js/.css refs do),
+    # so a browser that cached an older document keeps showing stale markup after
+    # a ship (e.g. a hidden entry card reappears). Force revalidation of the shell
+    # so HTML-level fixes reach clients immediately; assets stay cache-busted by ?v=.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 # App2 is HTML-only: the sole mode is htmlnew (document → editable HTML deck).
 # PPTX rebrand/design modes are out of scope for this deployment.
