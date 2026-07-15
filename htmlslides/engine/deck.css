@@ -301,7 +301,7 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 /* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 620): кольцо cx=310 cy=310 r=225 толщина 70 (дырка → донат),
-   сегменты var(--accent) с разной stroke-opacity (один акцент, без радуги),
+   сегменты --chart-1..5 по индексу (≤3 хроматических цвета), полная непрозрач.,
    трек var(--bg-card); легенда-текст var(--fg-body) — перекрашивается темой,
    без per-theme переопределений. */
 .donut-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
@@ -309,8 +309,8 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 /* ---- line-chart (не из Figma; бренд-производный SVG-график динамики) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 600): origin x=80, plotW 1640, baselineY 530, plotH 470.
-   Ломаная-тренд var(--accent), area-заливка тем же акцентом с малой fill-opacity
-   (зелёный wash, не градиент), маркеры var(--accent)+кольцо var(--bg), базовая
+   Ломаная-тренд var(--accent), area-заливка тем же акцентом (зелёный wash,
+   не градиент; прозрачность задана opacity в SVG), маркеры var(--accent)+кольцо var(--bg), базовая
    линия/подписи нейтральные (var(--bg-card)/var(--fg-muted)/var(--fg-body)) —
    перекрашиваются темой, без per-theme переопределений. */
 .line-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
@@ -319,7 +319,7 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 620): легенда сверху (свотчи opacity-ladder), бары ниже —
    геттер подписей 360, бар от x=400, трек на остаток ширины. Сегменты var(--accent) с
-   разной fill-opacity (один акцент, без радуги; каждый бар = 100% состава),
+   разной прозрачностью opacity (один акцент, без радуги; каждый бар = 100% состава),
    трек var(--bg-card); подписи var(--fg-body), %-метки в сегменте var(--bg) —
    перекрашиваются темой, без per-theme переопределений. */
 .sb-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
