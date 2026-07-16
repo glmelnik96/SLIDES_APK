@@ -597,9 +597,9 @@ function renderSlot(name, spec, value) {
     el.value = value == null ? "" : String(value);
     el.dataset.slot = name;
     el.dataset.kind = "text";
-    el.oninput = scheduleSave;
+    el.addEventListener("input", scheduleSave);
     wrap.appendChild(el);
-    if (spec.max_chars) wrap.appendChild(hint(`до ${spec.max_chars} символов`));
+    if (spec.max_chars) wrap.appendChild(charCounter(el, spec.max_chars));
   } else if (spec.kind === "list") {
     const list = document.createElement("div");
     list.className = "field-list";
@@ -656,6 +656,21 @@ function hint(text) {
   s.className = "field-hint"; s.textContent = text; return s;
 }
 
+// Живой счётчик «M/N» для текстового поля: тот же узел, что hint(), но обновляется
+// на ввод и краснеет (.field-hint--over) при переполнении M > max. maxLength обычно
+// не даёт превысить руками — красный нужен для значений, пришедших из плана.
+function charCounter(el, max) {
+  const h = hint("");
+  const upd = () => {
+    const n = (el.value || "").length;
+    h.textContent = `${n}/${max}`;
+    h.classList.toggle("field-hint--over", n > max);
+  };
+  el.addEventListener("input", upd);
+  upd();
+  return h;
+}
+
 function collectContent() {
   const form = byId("builderForm");
   const content = {};
@@ -709,6 +724,7 @@ async function saveCurrentSlide() {
   if (!slide || slide.freeform) return;
   const content = collectContent();
   slide.content = content; // optimistic local update
+  setSaveStatus("saving");
   let r;
   try {
     r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}`), {
@@ -721,21 +737,60 @@ async function saveCurrentSlide() {
   if (r && r.ok) {
     const { errors } = await r.json();
     if (current === idx) markFieldErrors(errors || []); // only if still shown
+    setSaveStatus("saved");
     loadDeck(); // refresh preview
   } else {
-    // Save failed (network/server): the optimistic local copy now diverges from
-    // the server. Resync from the server so we never silently write stale state
-    // back on the next edit, and tell the user.
+    // Save failed (network/server): resync from the server so we never write stale
+    // state back on the next edit, and say so in words (persistent red status)
+    // instead of an alert() on every failure.
     await reloadDraft(idx);
-    alert("Не удалось сохранить слайд — изменения сброшены к последней сохранённой версии. Попробуйте ещё раз.");
+    setSaveStatus("error");
+  }
+}
+
+// Индикатор автосейва в шапке формы: «Сохранение…» → «Сохранено ✓» → «Не сохранено».
+// Успех мягко гаснет через 1.6с; процесс/ошибка висят до следующего сейва. Узел
+// #saveStatus живёт в .builder-head, который не перестраивается renderBuilderForm,
+// поэтому статус переживает пересборку формы.
+let saveStatusTimer = null;
+function setSaveStatus(state) {
+  const el = byId("saveStatus");
+  if (!el) return;
+  clearTimeout(saveStatusTimer);
+  el.textContent = SAVE_STATUS[state] || "";
+  el.className = "save-status save-status--" + state;
+  if (state === "saved") {
+    saveStatusTimer = setTimeout(() => {
+      el.textContent = "";
+      el.className = "save-status";
+    }, 1600);
   }
 }
 
 function markFieldErrors(errors) {
-  const bad = new Set(errors.map((e) => e.slot.split(/[.[]/)[0]));
+  // Первую ошибку на каждый слот верхнего уровня печатаем под соответствующим
+  // полем (узел .field-hint--error). Рамку красит существующий .field-error.
+  const bySlot = new Map();
+  errors.forEach((e) => {
+    const top = e.slot.split(/[.[]/)[0];
+    if (!bySlot.has(top)) bySlot.set(top, e);
+  });
   byId("builderForm").querySelectorAll(".field").forEach((f) => {
     const slot = f.querySelector("[data-slot]")?.dataset.slot;
-    f.classList.toggle("field-error", slot && bad.has(slot));
+    const err = slot ? bySlot.get(slot) : null;
+    f.classList.toggle("field-error", !!err);
+    const text = err ? errText(err.code, err.detail) : "";
+    let msg = f.querySelector(".field-hint--error");
+    if (text) {
+      if (!msg) {
+        msg = document.createElement("div");
+        msg.className = "field-hint field-hint--error";
+        f.appendChild(msg);
+      }
+      msg.textContent = text;
+    } else if (msg) {
+      msg.remove();
+    }
   });
 }
 

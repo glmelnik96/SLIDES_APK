@@ -312,6 +312,15 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: #000; }
 .field-file-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .field-file { display: inline-flex; align-items: center; text-align: center; }
 .field-error input, .field-error textarea { border-color: var(--danger); }
+/* Индикатор автосейва в шапке формы (слева от кнопок; острые углы, токены) */
+.save-status { margin-left: 10px; margin-right: auto; font-size: 11px;
+  color: var(--muted-2); transition: opacity .3s; }
+.save-status--saving { color: var(--muted-2); }
+.save-status--saved { color: var(--accent); }
+.save-status--error { color: var(--danger); }
+/* Текст ошибки под полем и красный счётчик при переполнении */
+.field-hint--error { color: var(--danger); }
+.field-hint--over { color: var(--danger); }
 .field-list { display: flex; flex-direction: column; gap: 8px; }
 .field-item { display: flex; gap: 6px; align-items: center; }
 .field-item input { flex: 1; }
