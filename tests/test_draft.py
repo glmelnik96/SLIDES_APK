@@ -237,7 +237,13 @@ def test_old_draft_is_purged_by_retention(monkeypatch, tmp_path):
                 gone = (await s.execute(select(models.Job).where(
                     models.Job.session_id == sid))).scalar_one_or_none()
             return kept, removed, gone
-        kept, removed, gone = _aio.get_event_loop().run_until_complete(_run())
+        # Own loop, not get_event_loop(): under a full-suite run a prior async
+        # test leaves the policy's loop closed/None, so get_event_loop() raises.
+        loop = _aio.new_event_loop()
+        try:
+            kept, removed, gone = loop.run_until_complete(_run())
+        finally:
+            loop.close()
         assert removed >= 1 and gone is None
 
 
