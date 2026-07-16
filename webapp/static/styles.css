@@ -128,6 +128,20 @@ html, body { overflow-x: clip; }
 .entry-cta { margin-top: auto; color: var(--accent); font-size: 12px;
   letter-spacing: .04em; text-transform: uppercase; }
 @media (max-width: 720px) { .entry-cards { grid-template-columns: 1fr; } }
+/* Главная точка входа: акцентный фон/рамка (приём как у .is-active) + крупнее
+   заголовок. Острые углы, цвета из токенов — в общем стиле карточек. */
+.entry-card--primary { padding: 22px 18px 18px; border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-dim); }
+.entry-card--primary:hover { background: var(--accent-dim); }
+.entry-card--primary .entry-title { font-size: 20px; }
+/* Раскрывашка «Подробнее» под интро */
+.intro-more { margin-top: 6px; }
+.intro-more > summary { cursor: pointer; color: var(--accent); font-size: 13px;
+  list-style: none; display: inline-block; }
+.intro-more > summary::-webkit-details-marker { display: none; }
+.intro-more > summary::after { content: " ↓"; }
+.intro-more[open] > summary::after { content: " ↑"; }
+.intro-more .intro-lead { margin-top: 12px; }
 
 /* ===== Шаги ===== */
 .step { margin-bottom: 32px; }
