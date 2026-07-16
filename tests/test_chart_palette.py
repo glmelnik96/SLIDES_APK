@@ -78,3 +78,16 @@ def test_stacked_colors_by_index_and_label_contrast():
     # (трек остаётся var(--bg-card) — это другая строка, её не задеваем)
     assert 'fill="var(--cl-graphite)"' in html
     assert 'fill="var(--bg)"' not in html
+
+
+def test_bar_colors_by_index():
+    content = {"title": "T", "bars": [
+        {"label": f"B{i}", "value": str(v)}
+        for i, v in enumerate([86, 72, 54, 40, 28, 16])]}
+    html = _assemble_one("bar-chart", content)
+    # 6 баров → chart-1..6 (по разу на бар)
+    for n in range(1, 7):
+        assert f"var(--chart-{n})" in html
+    # заливка бара больше не var(--accent) (трек остаётся var(--bg-card));
+    # логотип _chrome.html держит ровно 1 var(--accent) в каждом слайде (было 7: 6 + логотип)
+    assert html.count('fill="var(--accent)"') == 1

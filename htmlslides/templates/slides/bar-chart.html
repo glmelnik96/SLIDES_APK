@@ -12,7 +12,8 @@
       Длина бара = value|num / maxv * 1100 (maxv защищён от нуля → ||1).
       Шаг строки pitch = 620 / N (N=bars|length, 3..6) → робастно к 3 барам;
       бар высотой 56px вертикально центрируется в полосе (cy = i*pitch + pitch/2).
-      Бар — var(--accent) (зелёный на обеих темах); тонкая дорожка-трек
+      Бар — var(--chart-{index+1}) по индексу (зелёный-герой + 2 доп + 3 серых,
+      правило «≤3 хроматических цвета»); тонкая дорожка-трек
       var(--bg-card) на всю trackWidth; подписи/значения var(--fg-body).
       Без gradient/shadow/rounding, без inline style — только SVG-атрибуты. -#}
 {% set bars = content.bars %}
@@ -36,12 +37,27 @@
     {% set cy = loop.index0 * pitch + pitch / 2 %}
     {% set bw = (b.value | num) / maxv * track_w %}
     {% set y = cy - bar_h / 2 %}
+    {#- Подпись слева в геттере (520px). SVG <text> не переносится сам, а трек бара
+        рисуется ПОСЛЕ и перекрывает длинную подпись (уходила под бар и исчезала).
+        Длинные (>26 симв.) переносим вручную на ДВЕ строки по границе слова у
+        середины — как в kpi-rings — и центрируем пару по вертикали относительно
+        бара (y=cy∓17, dy=34). Короткие остаются одной строкой (обычный случай). -#}
+    {% set lbl = b.label | string | trim %}
+    {% if lbl | length > 26 %}
+    {% set words = lbl.split(" ") %}
+    {% set half = (lbl | length) / 2 %}
+    {% set ns = namespace(l1="", l2="", acc=0) %}
+    {% for w in words %}{% if ns.acc < half or not ns.l1 %}{% set ns.l1 = (ns.l1 ~ " " ~ w) | trim %}{% set ns.acc = ns.acc + (w | length) + 1 %}{% else %}{% set ns.l2 = (ns.l2 ~ " " ~ w) | trim %}{% endif %}{% endfor %}
+    <text x="0" y="{{ cy - 17 if ns.l2 else cy }}" dominant-baseline="middle"
+          font-size="30" font-weight="400" fill="var(--fg-body)">{{ ns.l1 }}{% if ns.l2 %}<tspan x="0" dy="34">{{ ns.l2 }}</tspan>{% endif %}</text>
+    {% else %}
     <text x="0" y="{{ cy }}" dominant-baseline="middle"
-          font-size="30" font-weight="400" fill="var(--fg-body)">{{ b.label }}</text>
+          font-size="30" font-weight="400" fill="var(--fg-body)">{{ lbl }}</text>
+    {% endif %}
     <rect x="{{ bar_x }}" y="{{ y }}" width="{{ track_w }}" height="{{ bar_h }}"
           fill="var(--bg-card)"/>
     <rect class="bar-fill" x="{{ bar_x }}" y="{{ y }}" width="{{ bw if bw > 1 else 1 }}" height="{{ bar_h }}"
-          fill="var(--accent)"/>
+          fill="var(--chart-{{ loop.index0 + 1 }})"/>
     <text x="{{ bar_x + bw + 24 }}" y="{{ cy }}" dominant-baseline="middle"
           font-size="30" font-weight="500" fill="var(--fg-body)">{{ b.display or b.value }}</text>
     {% endfor %}
