@@ -993,14 +993,65 @@ function fieldInput(value, onInput) {
   return el;
 }
 
-// Append a hint line into a typed-slide field card. Named distinctly from the
-// manual builder's hint(text)->node (below) so the two never collide — a prior
-// duplicate `hint` shadowed that one and crashed the whole builder form render.
-function appendHint(card, text) {
-  const h = document.createElement("div");
-  h.className = "field-hint";
-  h.textContent = text;
-  card.appendChild(h);
+// Построчный редактор списка для типизированных полей чата. `cols` описывает
+// ячейки одной строки: одна ячейка без key → значение-строка (bullets/колонки),
+// две ячейки с key value/label → объект (stats). Визуально повторяет список
+// конструктора (.field-list/.field-item/+ пункт/✕). onChange(values) зовём после
+// любой правки/добавления/удаления — там вызывается saveFields.
+function lineListEditor(items, cols, onChange) {
+  const list = document.createElement("div");
+  list.className = "field-list";
+  const single = cols.length === 1;
+
+  const collect = () => {
+    const out = [];
+    list.querySelectorAll(".field-item").forEach((row) => {
+      const inputs = row.querySelectorAll("input");
+      if (single) {
+        const v = inputs[0].value.trim();
+        if (v) out.push(v);
+      } else {
+        const obj = {};
+        cols.forEach((c, i) => { obj[c.key] = inputs[i].value.trim(); });
+        if (Object.values(obj).some(Boolean)) out.push(obj);
+      }
+    });
+    onChange(out);
+  };
+
+  const makeRow = (item) => {
+    const row = document.createElement("div");
+    row.className = "field-item";
+    cols.forEach((c, i) => {
+      const inp = document.createElement("input");
+      inp.className = "field-input";
+      inp.placeholder = c.placeholder;
+      inp.value = single ? (item || "") : ((item && item[c.key]) || "");
+      inp.addEventListener("input", collect);
+      row.appendChild(inp);
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn-ghost btn-sm item-del";
+    del.textContent = "✕";
+    del.onclick = () => { row.remove(); collect(); };
+    row.appendChild(del);
+    list.appendChild(row);
+    return row;
+  };
+
+  (items.length ? items : [single ? "" : {}]).forEach(makeRow);
+
+  const wrap = document.createElement("div");
+  wrap.className = "field-lines";
+  wrap.appendChild(list);
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "btn btn-ghost btn-sm";
+  add.textContent = "+ пункт";
+  add.onclick = () => { makeRow(single ? "" : {}).querySelector("input")?.focus(); };
+  wrap.appendChild(add);
+  return wrap;
 }
 
 // Build the editable card for a typed slide. Reads current values from s.fields,
@@ -1032,33 +1083,19 @@ function renderFieldCard(s, idx) {
     }));
   } else if (s.slide_type === "bullets") {
     f.bullets = f.bullets || [];
-    addRow("Тезисы", fieldInput(f.bullets.join(" | "), (e) => {
-      f.bullets = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    appendHint(card, "Пункты через | (вертикальная черта)");
+    addRow("Тезисы", lineListEditor(f.bullets, [{ placeholder: "пункт" }],
+      (vals) => { f.bullets = vals; commit(); }));
   } else if (s.slide_type === "stats") {
     f.stats = f.stats || [];
-    addRow("Цифры", fieldInput(
-      f.stats.map((x) => `${x.value}=${x.label}`).join(" | "), (e) => {
-        f.stats = e.target.value.split("|").map((p) => {
-          const [value, label] = p.split("=");
-          return { value: (value || "").trim(), label: (label || "").trim() };
-        }).filter((x) => x.value || x.label);
-        commit();
-      }));
-    appendHint(card, "value=label, пары через |  (напр. 99%=аптайм | 3=региона)");
+    addRow("Цифры", lineListEditor(f.stats,
+      [{ key: "value", placeholder: "значение" }, { key: "label", placeholder: "подпись" }],
+      (vals) => { f.stats = vals; commit(); }));
   } else if (s.slide_type === "two_col") {
     f.left = f.left || []; f.right = f.right || [];
-    addRow("Левая колонка", fieldInput(f.left.join(" | "), (e) => {
-      f.left = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    addRow("Правая колонка", fieldInput(f.right.join(" | "), (e) => {
-      f.right = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    appendHint(card, "Пункты через | в каждой колонке");
+    addRow("Левая колонка", lineListEditor(f.left, [{ placeholder: "пункт" }],
+      (vals) => { f.left = vals; commit(); }));
+    addRow("Правая колонка", lineListEditor(f.right, [{ placeholder: "пункт" }],
+      (vals) => { f.right = vals; commit(); }));
   }
   return card;
 }
