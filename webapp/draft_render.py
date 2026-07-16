@@ -102,8 +102,20 @@ def _coerce_slot(spec: SlotSpec, value, name: str, idx: int = 0):
 
 
 def _coerce_group(spec: SlotSpec, item: dict, idx: int = 0) -> dict:
-    out = {name: _coerce_slot(sub, item.get(name), name, idx)
-           for name, sub in spec.item_slots.items()}
+    # Respect intentionally-empty OPTIONAL fields: once the user has started
+    # filling this item (any field non-empty), a blank optional sub-slot renders
+    # as "" (dropped by the template's `{% if s.x %}`) instead of getting example
+    # filler. A wholly-untouched item still samples filler so a freshly applied
+    # master previews populated (picker parity). Required-empty always coerces via
+    # _coerce_slot (placeholder / sample), so the slide never shows a broken slot.
+    touched = any(v not in (None, "", []) for v in item.values())
+    out = {}
+    for name, sub in spec.item_slots.items():
+        raw = item.get(name)
+        if touched and not sub.required and raw in (None, "", []):
+            out[name] = ""
+        else:
+            out[name] = _coerce_slot(sub, raw, name, idx)
     # Keep the whole group within item_max_chars (validator sums all field
     # lengths): trim text fields from the end until it fits.
     if spec.item_max_chars:

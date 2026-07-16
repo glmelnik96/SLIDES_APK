@@ -89,6 +89,10 @@ def _sample_value(name: str, spec: SlotSpec, idx: int = 0):
         s = _SAMPLE.get(name, "Текст")
         return s[: spec.max_chars] if spec.max_chars else s
     if spec.kind == "list":
+        # stats2 — второй ряд stats-row, необязательный: в превью пикера показываем
+        # только первый ряд, чтобы карточка мастера читалась как классический один ряд.
+        if name == "stats2":
+            return []
         n = min(spec.max_items or 3, 4) or 3
         return [_sample_group(spec, i) for i in range(n)]
     if spec.kind == "group":

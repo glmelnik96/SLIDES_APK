@@ -276,20 +276,26 @@ html[data-theme="light"] .kpi-value{color:var(--fg-body);}
 .kpi-desc{margin-top:41px;color:var(--fg);}  /* desc @ y=503; white(D)/black(L) */
 
 /* ---- stats-row (не из Figma; бренд-производный «в цифрах») ----
-   контент-зона x 60..1860=1800px; 4 ячейки flex:1 + gap 40 (3×40=120) → ~420px/ячейка.
-   Число 104px Medium (крупнее — цифра-герой доминирует), фактор глифа ~0.55
-   (с letter-spacing -2) → ~57px/глиф → «99,982%» (7 глифов) ≈ 400px < 420px, без
-   overflow в nowrap для типичных значений (≤7 глифов; max_chars слота = 8). */
-.sr-row{position:absolute;left:60px;top:328px;width:1800px;
-  display:flex;gap:40px;align-items:flex-start;}
-.sr-cell{flex:1;min-width:0;display:flex;flex-direction:column;
+   До 2 НЕЗАВИСИМЫХ рядов (.sr-row внутри .sr-rows): ряд 1 — content.stats, ряд 2 —
+   content.stats2. У каждого ряда своя grid c --sr-cols = min(кол-во, 4) из шаблона →
+   меньше метрик = шире ячейка (1 метрика = вся ширина, место под длинный текст).
+   контент-зона x 60..1860=1800px; до 4 колонок (1fr) + column-gap 40 (3×40=120)
+   → ~420px/ячейка. .sr-rows позиционирует блок (top 328), row-gap 56 между рядами;
+   верт. бюджет 328..~1014 = 686px вмещает 2 ряда. Число 104px Medium (цифра-герой),
+   фактор глифа ~0.55 (с letter-spacing -2) → ~57px/глиф → «99,982%» (7 глифов)
+   ≈ 400px < 420px, без overflow в nowrap для типичных значений (≤7 глифов; max_chars=8). */
+.sr-rows{position:absolute;left:60px;top:328px;width:1800px;
+  display:flex;flex-direction:column;row-gap:56px;}
+.sr-row{display:grid;grid-template-columns:repeat(var(--sr-cols,4),1fr);
+  column-gap:40px;align-items:start;}
+.sr-cell{min-width:0;display:flex;flex-direction:column;
   border-top:1px solid var(--line);padding-top:28px;}
 .sr-value{font-size:104px;font-weight:400;line-height:1.0;letter-spacing:-2px;
   white-space:nowrap;color:var(--accent);}
 html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .sr-label{margin-top:30px;}   /* типографика — роль .t-body-30 (var(--fg-body)) */
-.sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.2;
-  letter-spacing:-.22px;color:var(--fg-muted);}
+.sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.3;
+  letter-spacing:-.22px;color:var(--fg-muted);max-width:680px;}
 .kpi-dots{position:absolute;left:60px;top:600px;width:1800px;height:414px;color:var(--line);}
 
 /* ---- bar-chart (не из Figma; бренд-производная SVG-гистограмма) ----
