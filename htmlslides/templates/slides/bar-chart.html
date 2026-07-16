@@ -11,7 +11,7 @@
       под подпись значения (display|value), font 30px Medium.
       Длина бара = value|num / maxv * 1100 (maxv защищён от нуля → ||1).
       Шаг строки pitch = 620 / N (N=bars|length, 3..6) → робастно к 3 барам;
-      бар высотой 56px вертикально центрируется в полосе (cy = i*pitch + pitch/2).
+      бар высотой 40px вертикально центрируется в полосе (cy = i*pitch + pitch/2).
       Бар — var(--chart-{index+1}) по индексу (зелёный-герой + 2 доп + 3 серых,
       правило «≤3 хроматических цвета»); тонкая дорожка-трек
       var(--bg-card) на всю trackWidth; подписи/значения var(--fg-body).
@@ -20,7 +20,7 @@
 {% set n = bars | length %}
 {% set maxv = (bars | map(attribute='value') | map('num') | max) or 1 %}
 {% set pitch = 620.0 / n %}
-{% set bar_h = 56 %}
+{% set bar_h = 40 %}
 {% set gutter = 520 %}
 {% set bar_x = 560 %}
 {% set track_w = 1100 %}
