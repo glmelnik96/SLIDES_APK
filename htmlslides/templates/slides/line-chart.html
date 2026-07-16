@@ -50,10 +50,10 @@
 <section class="slide slide--chrome-sm" data-template="line-chart">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <svg class="line-svg m-enter" viewBox="0 0 1800 600" fill="none"
+  <svg class="line-svg m-enter" data-slot="points" viewBox="0 0 1800 600" fill="none"
        xmlns="http://www.w3.org/2000/svg" role="img"
        aria-label="{{ content.title }}">
     <line x1="{{ origin_x }}" y1="{{ baseline_y }}" x2="{{ origin_x + plot_w }}" y2="{{ baseline_y }}"

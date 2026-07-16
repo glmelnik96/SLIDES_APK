@@ -17,13 +17,13 @@
 <section class="slide slide--chrome-sm" data-template="before-after">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
   <div class="ba-stage m-enter">
     <div class="ba-panel ba-panel--before">
-      <p class="ba-label ba-label--before t-head-36">{{ content.before_label }}</p>
-      <p class="ba-text t-body-30">{{ content.before_text }}</p>
+      <p class="ba-label ba-label--before t-head-36" data-slot="before_label">{{ content.before_label }}</p>
+      <p class="ba-text t-body-30" data-slot="before_text">{{ content.before_text }}</p>
     </div>
     <div class="ba-mid" aria-hidden="true">
       <svg class="ba-arrow" viewBox="0 0 96 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -31,11 +31,11 @@
         <path d="M62 8L88 32L62 56" stroke="var(--accent)" stroke-width="6"
               stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
-      {% if content.delta %}<p class="ba-delta">{{ content.delta }}</p>{% endif %}
+      {% if content.delta %}<p class="ba-delta" data-slot="delta">{{ content.delta }}</p>{% endif %}
     </div>
     <div class="ba-panel ba-panel--after">
-      <p class="ba-label ba-label--after t-head-36">{{ content.after_label }}</p>
-      <p class="ba-text t-body-30">{{ content.after_text }}</p>
+      <p class="ba-label ba-label--after t-head-36" data-slot="after_label">{{ content.after_label }}</p>
+      <p class="ba-text t-body-30" data-slot="after_text">{{ content.after_text }}</p>
     </div>
   </div>
 </section>

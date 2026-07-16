@@ -7,12 +7,12 @@
 <section class="slide{% if is_green %} statement--accent{% endif %}" data-template="statement{% if is_green %}-green{% endif %}">
   {% include "_chrome.html" %}
   <div class="statement-box">
-    <h1 class="statement-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
+    <h1 class="statement-title t-hero-156 m-enter m-enter--hero" data-slot="title">{{ content.title }}</h1>
   </div>
   {#- Плашка-вывод — часть дизайна мастера: рендерим ВСЕГДА (дефолт-текст если слот
       пуст), чтобы поле было видно и заполнялось в обоих вариантах. -#}
   <div class="statement-plate m-enter">
-    <p class="statement-plate-text t-sub-36">{{ content.highlight or 'Главный вывод секции' }}</p>
+    <p class="statement-plate-text t-sub-36" data-slot="highlight">{{ content.highlight or 'Главный вывод секции' }}</p>
   </div>
   <div class="statement-tiles" aria-hidden="true">
     {% for _ in range(4) %}

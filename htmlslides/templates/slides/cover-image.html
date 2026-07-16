@@ -2,14 +2,14 @@
     лид внизу, справа зелёная фигура Union 1020×1080 с маскированным рендером. -#}
 <section class="slide" data-template="cover-image">
   {% include "_chrome.html" %}
-  <svg class="cover-image-art" viewBox="0 0 1020 1080" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <svg class="cover-image-art" viewBox="0 0 1020 1080" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" data-slot="image">
     <path d="M1020 722H960V1080H0V360H60V0H1020V722Z" fill="var(--accent)"/>
     <clipPath id="cover-image-clip-{{ index }}"><path d="M1020 722H960V1080H0V360H60V0H1020V722Z"/></clipPath>
     <image href="{{ content.image or asset('cover-image-sample.jpg') }}" x="0" y="0" width="1020" height="1080"
            preserveAspectRatio="xMidYMid slice" clip-path="url(#cover-image-clip-{{ index }})"/>
   </svg>
-  <h1 class="cover-image-title m-enter m-enter--hero">{{ content.title }}</h1>
+  <h1 class="cover-image-title m-enter m-enter--hero" data-slot="title">{{ content.title }}</h1>
   {#- Зелёное поле внизу — часть дизайна мастера: рендерим всегда, дефолт-текст
       если слот пуст (реальный слайд без lead всё равно показывает зелёный текст). -#}
-  <p class="cover-image-lead t-sub-36 m-enter">{{ content.lead or 'Масштабируйте возможности бизнеса в облаке' }}</p>
+  <p class="cover-image-lead t-sub-36 m-enter" data-slot="lead">{{ content.lead or 'Масштабируйте возможности бизнеса в облаке' }}</p>
 </section>

@@ -41,13 +41,14 @@
 <section class="slide slide--chrome-sm" data-template="stacked-bar">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <svg class="sb-svg m-enter" viewBox="0 0 1800 620" fill="none"
+  <svg class="sb-svg m-enter" data-slot="bars" viewBox="0 0 1800 620" fill="none"
        xmlns="http://www.w3.org/2000/svg" role="img"
        aria-label="{{ content.title }}">
     {# легенда сверху: свотч opacity-ladder → label сегмента #}
+    <g data-slot="legend">
     {% for lg in legend %}
     {% set lx = loop.index0 * leg_pitch %}
     {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
@@ -56,6 +57,7 @@
     <text x="{{ lx + 40 }}" y="27" dominant-baseline="middle"
           font-size="28" font-weight="400" fill="var(--fg-body)">{{ lg.label }}</text>
     {% endfor %}
+    </g>
     {# составные бары #}
     {% for b in bars %}
     {% set cy = bars_top + loop.index0 * pitch + pitch / 2 %}
