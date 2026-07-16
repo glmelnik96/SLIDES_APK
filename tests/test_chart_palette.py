@@ -58,3 +58,23 @@ def test_donut_colors_by_index_no_opacity():
     assert "fill-opacity" not in html
     # accent больше не красит сегменты donut
     assert 'stroke="var(--accent)"' not in html
+
+
+def test_stacked_colors_by_index_and_label_contrast():
+    content = {
+        "title": "T",
+        "legend": [{"label": f"L{i}"} for i in range(4)],
+        "bars": [{"label": "B1", "v1": "50", "v2": "30", "v3": "15", "v4": "5"},
+                 {"label": "B2", "v1": "40", "v2": "35", "v3": "20", "v4": "5"}]}
+    html = _assemble_one("stacked-bar", content)
+    # свотчи легенды (4) + сегменты в 2 барах (4×2=8) → chart-1..4
+    for n in range(1, 5):
+        assert f"var(--chart-{n})" in html
+    assert "fill-opacity" not in html
+    # логотип _chrome.html красится var(--accent) в КАЖДОМ слайде → остаётся ровно 1;
+    # важно, что сегменты/свотчи бара им больше не красятся (было 13: 12 + логотип)
+    assert html.count('fill="var(--accent)"') == 1
+    # %-метка фиксированно-графитовая (контраст в обеих темах); старый var(--bg) ушёл
+    # (трек остаётся var(--bg-card) — это другая строка, её не задеваем)
+    assert 'fill="var(--cl-graphite)"' in html
+    assert 'fill="var(--bg)"' not in html
