@@ -401,8 +401,11 @@ function renderBuilderForm() {
     return;
   }
   const tpl = tplOf(slide.template_id);
+  const tplIdx = catalog.findIndex((t) => t.id === slide.template_id);
+  const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
   tplBox.innerHTML =
-    `<span class="tpl-name">Макет: ${slide.template_id}</span>` +
+    `<span class="tpl-head"><span class="tpl-num">${tplNo}</span>` +
+    `<span class="tpl-name">Макет: ${slide.template_id}</span></span>` +
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
   byId("changeTpl").onclick = () => openPicker((tid) => changeTemplate(tid));
 
@@ -724,7 +727,7 @@ function openPicker(onPick) {
   const picker = byId("picker");
   const grid = byId("pickerGrid");
   grid.innerHTML = "";
-  catalog.forEach((t) => {
+  catalog.forEach((t, i) => {
     const card = document.createElement("button");
     card.type = "button"; card.className = "picker-item";
     // visual preview: a scaled iframe of the real one-slide render (lazy src)
@@ -735,6 +738,10 @@ function openPicker(onPick) {
     ifr.tabIndex = -1;
     ifr.src = U(`/api/templates/${t.id}/preview`);
     prev.appendChild(ifr);
+    const num = document.createElement("span");
+    num.className = "picker-num";
+    num.textContent = String(i + 1).padStart(2, "0");
+    prev.appendChild(num);
     const meta = document.createElement("div");
     meta.className = "picker-meta";
     meta.innerHTML = `<span class="picker-id">${t.id}</span>` +
