@@ -826,6 +826,30 @@ byId("addSlide")?.addEventListener("click", () =>
     await reloadDraft(draftPlan.slides.length); // jump to the new last slide
   }));
 
+// Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
+// дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
+// находим в деке элемент [data-slot=<слот>] и обводим его. На exact/freeform-слайдах
+// data-slot нет — подсветка просто не срабатывает.
+function highlightSlot(slot, on) {
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  doc.querySelectorAll(".slot-highlight").forEach((n) =>
+    n.classList.remove("slot-highlight"));
+  if (on && slot) {
+    const el = doc.querySelector(`[data-slot="${slot}"]`);
+    if (el) el.classList.add("slot-highlight");
+  }
+}
+
+byId("builderForm")?.addEventListener("focusin", (e) => {
+  const holder = e.target.closest("[data-slot]");
+  if (holder) highlightSlot(holder.dataset.slot, true);
+});
+byId("builderForm")?.addEventListener("focusout", (e) => {
+  const holder = e.target.closest("[data-slot]");
+  if (holder) highlightSlot(holder.dataset.slot, false);
+});
+
 byId("slideDelete")?.addEventListener("click", async () => {
   if (!draftPlan.slides[current]) return;
   clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
