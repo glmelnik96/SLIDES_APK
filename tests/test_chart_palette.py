@@ -16,9 +16,9 @@ def test_chart_tokens_defined_root_and_themes():
     assert "--chart-1:var(--cl-green)" in css
     # --chart-2..6 объявлены литералами (по разу в dark и по разу в light → 2)
     for n, dark, light in [
-        (2, "#5D779F", "#9CADCE"), (3, "#8372A1", "#BDB0D2"),
-        (4, "#989898", "#A6A6A6"), (5, "#737373", "#8C8C8C"),
-        (6, "#525252", "#737373"),
+        (2, "#989898", "#A6A6A6"), (3, "#737373", "#8C8C8C"),
+        (4, "#525252", "#737373"), (5, "#5D779F", "#9CADCE"),
+        (6, "#8372A1", "#BDB0D2"),
     ]:
         assert f"--chart-{n}:{dark}" in css, f"dark --chart-{n} missing"
         assert f"--chart-{n}:{light}" in css, f"light --chart-{n} missing"
