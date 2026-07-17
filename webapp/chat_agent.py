@@ -24,6 +24,7 @@ it by the caller.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -91,6 +92,27 @@ _INTENT_SYSTEM = (
 )
 
 
+# Консервативный rule-based фолбэк на случай, когда LLM-классификатор не вернул
+# валидный JSON: раньше явное «удали слайд» молча превращалось в болтовню (chat),
+# т.е. команда пользователя терялась без объяснений. Паттерны нарочно узкие —
+# только однозначные формулировки; всё сомнительное по-прежнему уходит в chat.
+_RULE_INTENTS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"^\s*(удали|убери)\b.{0,20}\bслайд", re.IGNORECASE), "delete"),
+    (re.compile(r"^\s*добавь\b.{0,20}\bслайд", re.IGNORECASE), "add"),
+    (re.compile(r"^\s*(предложи|составь|набросай)\b.{0,20}\bплан", re.IGNORECASE),
+     "plan"),
+    (re.compile(r"^\s*(собери|запусти)\b.{0,20}\b(деку|сборку|презентацию)",
+                re.IGNORECASE), "build_now"),
+]
+
+
+def _rule_intent(message: str) -> Intent | None:
+    for pattern, action in _RULE_INTENTS:
+        if pattern.search(message):
+            return Intent(action=action, topic=message.strip())
+    return None
+
+
 def classify(client: Any, message: str, *, ctx: str) -> Intent:
     messages = [
         {"role": "system", "content": _INTENT_SYSTEM},
@@ -99,8 +121,8 @@ def classify(client: Any, message: str, *, ctx: str) -> Intent:
     try:
         return client.chat_json(messages, Intent, max_tokens=256, retries=1,
                                 extra_body={"thinking": {"type": "disabled"}})
-    except Exception:  # noqa: BLE001 — on any parse failure, treat as plain chat
-        return Intent(action="chat")
+    except Exception:  # noqa: BLE001 — on parse failure fall back to rules/chat
+        return _rule_intent(message) or Intent(action="chat")
 
 
 # ── context digest ───────────────────────────────────────────────────────────
@@ -144,6 +166,10 @@ class OutlineItem(BaseModel):
 
 class OutlineDraft(BaseModel):
     slides: list[OutlineItem] = Field(default_factory=list)
+
+
+# Потолок слайдов аутлайна (промпт просит 3-12; +запас на разумное превышение).
+_OUTLINE_MAX_SLIDES = 15
 
 
 class EnrichedItem(BaseModel):
@@ -342,6 +368,9 @@ def _generate_outline(client: Any, session_id: str, plan: draft.DraftPlan,
     except Exception:  # noqa: BLE001
         outline = None
     if outline and outline.slides:
+        # Промпт просит 3-12 слайдов, но JSON модели никто не ограничивал —
+        # разошедшаяся модель могла вывалить десятки слайдов в план. Жёсткий cap.
+        outline.slides = outline.slides[:_OUTLINE_MAX_SLIDES]
         for item in outline.slides:
             plan = draft.add_slide(plan, draft.DraftSlide(
                 brief=item.brief or item.title, filled=False,

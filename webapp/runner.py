@@ -256,6 +256,11 @@ class JobRunner:
                             self._terminal_hook(session_id, ev), self._loop)
                     asyncio.run_coroutine_threadsafe(queue.put(ev), self._loop)
             finally:
+                # Страховка от утечки слота очереди: обычно _active освобождает
+                # sink (терминальное событие) или except-ветка выше, но
+                # BaseException (напр. останов интерпретатора) минует обе —
+                # тогда session_id навсегда занимал бы слот _active. Идемпотентно.
+                self._active.discard(session_id)
                 self._disarm_watchdog(session_id)
                 self._cancel.discard(session_id)
                 self._timed_out.discard(session_id)

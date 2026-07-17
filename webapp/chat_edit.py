@@ -44,11 +44,16 @@ def _replace_nth_section(deck_html: str, index: int, new_section: str) -> str:
 def _extract_section(reply: str) -> str:
     fence = _FENCE_RE.search(reply)
     text = fence.group(1) if fence else reply
-    m = _SECTION_RE.search(text)
-    if not m:
+    matches = _SECTION_RE.findall(text)
+    if not matches:
         raise ValueError("model reply contained no complete <section> "
                          "(likely truncated — increase token budget)")
-    return m.group(0)
+    if len(matches) > 1:
+        # Модель вернула несколько секций (обычно всю деку целиком). Раньше молча
+        # бралась ПЕРВАЯ — слайд N подменялся слайдом 1. Лучше явный отказ + ретрай.
+        raise ValueError(f"model reply contained {len(matches)} <section> blocks "
+                         "— expected exactly one (the edited slide)")
+    return matches[0]
 
 
 def _kimi():
@@ -92,7 +97,19 @@ def rewrite_slide(deck_html: str, slide_index: int, instruction: str,
             "Верни ТОЛЬКО исправленный <section>...</section>."},
     ]
     reply = client.chat(messages, max_tokens=_MAX_TOKENS)
-    new_section = _extract_section(reply)
+    try:
+        new_section = _extract_section(reply)
+    except ValueError:
+        # Нет секции (обрыв) или их несколько (модель вернула всю деку) —
+        # один корректирующий ретрай вместо молчаливой подмены слайда.
+        retry = messages + [
+            {"role": "assistant", "content": reply},
+            {"role": "user", "content":
+                "В ответе должен быть РОВНО ОДИН завершённый <section> — только "
+                "редактируемый слайд, не вся дека. Верни ТОЛЬКО его."},
+        ]
+        reply = client.chat(retry, max_tokens=_MAX_TOKENS)
+        new_section = _extract_section(reply)
     if _FORBIDDEN.search(new_section):
         retry = messages + [
             {"role": "assistant", "content": reply},

@@ -276,20 +276,36 @@ def _fill_freeform(client: KimiClient, slide: SlidePlan, *,
     reply = client.chat(messages, max_tokens=_FILL_MAX_TOKENS,
                         extra_body=_FILL_NO_THINK)
     html = _extract_html(reply)
-    if _FORBIDDEN_FRAGMENT.search(html):
+    problem = _freeform_problem(html)
+    if problem:
         retry = messages + [
             {"role": "assistant", "content": reply},
             {"role": "user",
-             "content": "Во фрагменте запрещённые приёмы (style= / i / em / u / "
-                        "script / тени / градиенты / скругления). Перепиши без них, "
-                        "верни ТОЛЬКО ```html-блок."}]
+             "content": f"Во фрагменте проблема: {problem}"}]
         reply = client.chat(retry, max_tokens=_FILL_MAX_TOKENS,
                             extra_body=_FILL_NO_THINK)
         html = _extract_html(reply)
-        if _FORBIDDEN_FRAGMENT.search(html):
-            raise FillError(f"slide {slide.index}: freeform содержит запрещённые "
-                            "приёмы после ретрая")
+        problem = _freeform_problem(html)
+        if problem:
+            raise FillError(f"slide {slide.index}: freeform невалиден после "
+                            f"ретрая: {problem}")
     return slide.model_copy(update={"content": {"html": html}})
+
+
+def _freeform_problem(html: str) -> str | None:
+    """Замечание к freeform-фрагменту или None, если фрагмент пригоден.
+
+    Без проверки на завершённый <section> обрезанный/прозаический ответ модели
+    (у _extract_html фолбэк — сырой reply) молча уезжал в деку как «HTML»."""
+    if not _SECTION.search(html):
+        return ("нет завершённого <section>…</section> (ответ обрезан или не "
+                "HTML). Верни ТОЛЬКО ```html-блок с корнем "
+                '<section class="slide" data-template="freeform">.')
+    if _FORBIDDEN_FRAGMENT.search(html):
+        return ("запрещённые приёмы (style= / i / em / u / script / тени / "
+                "градиенты / скругления). Перепиши без них, верни ТОЛЬКО "
+                "```html-блок.")
+    return None
 
 
 def _extract_html(reply: str) -> str:

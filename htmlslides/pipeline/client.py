@@ -35,6 +35,9 @@ T = TypeVar("T", bound=BaseModel)
 _MAX_INFLIGHT = max(1, int(os.environ.get("CLOUDRU_MAX_INFLIGHT", "18")))
 _INFLIGHT = threading.BoundedSemaphore(_MAX_INFLIGHT)
 
+# Потолок эскалации max_tokens при обрыве ответа по длине (finish_reason=length).
+_TOKEN_CAP = 32768
+
 
 class LLMFormatError(RuntimeError):
     """Модель не вернула валидный JSON после ретрая (или JSON не найден)."""
@@ -144,24 +147,44 @@ class KimiClient:
     def chat(self, messages: list[dict], *, max_tokens: int = 4096,
              temperature: float = 0.3,
              extra_body: Optional[dict] = None) -> str:
+        return self.chat_ex(messages, max_tokens=max_tokens,
+                            temperature=temperature, extra_body=extra_body)[0]
+
+    def chat_ex(self, messages: list[dict], *, max_tokens: int = 4096,
+                temperature: float = 0.3,
+                extra_body: Optional[dict] = None) -> tuple[str, Optional[str]]:
+        """chat + finish_reason. Обрыв по длине (finish_reason="length") раньше был
+        НЕВИДИМ: обрезанный JSON/HTML неотличим от полного, а ретраи с тем же
+        бюджетом гарантированно повторяли обрыв. Теперь при "length" бюджет
+        удваивается (до 2 эскалаций, потолок _TOKEN_CAP), а вызывающий код видит
+        финальный finish_reason и может обработать остаточный обрыв явно."""
         # Per-call extra_body overrides the instance default. Lets one client run
         # reasoning ON for hard calls (planner/vision-QA) yet OFF for cheap
         # text-only calls (filler/autofix) — reasoning-heavy models otherwise add
         # 1-4 min per call. None here = fall back to the instance default.
         body = extra_body if extra_body is not None else self._extra_body
-        self._gate.acquire()
-        # Bound process-wide simultaneous Cloud.ru calls (shared across all builds).
-        # Acquire around ONLY the network call and always release (context manager),
-        # so a slow/failing call can't leak a slot. Each task does one call then
-        # frees the slot — no task holds a slot while awaiting another, so the
-        # semaphore can't deadlock even with many parallel filler/planner threads.
-        with _INFLIGHT:
-            resp = self._client.chat.completions.create(
-                model=self.model, messages=messages,
-                max_tokens=max_tokens, temperature=temperature,
-                extra_body=body or None)
-        self._record_usage(resp)
-        return resp.choices[0].message.content or ""
+        content, finish = "", None
+        for _ in range(3):  # первый вызов + до 2 эскалаций бюджета
+            self._gate.acquire()
+            # Bound process-wide simultaneous Cloud.ru calls (shared across all
+            # builds). Acquire around ONLY the network call and always release
+            # (context manager), so a slow/failing call can't leak a slot. Each
+            # task does one call then frees the slot — no task holds a slot while
+            # awaiting another, so the semaphore can't deadlock even with many
+            # parallel filler/planner threads.
+            with _INFLIGHT:
+                resp = self._client.chat.completions.create(
+                    model=self.model, messages=messages,
+                    max_tokens=max_tokens, temperature=temperature,
+                    extra_body=body or None)
+            self._record_usage(resp)
+            choice = resp.choices[0]
+            content = choice.message.content or ""
+            finish = getattr(choice, "finish_reason", None)
+            if finish != "length" or max_tokens >= _TOKEN_CAP:
+                break
+            max_tokens = min(_TOKEN_CAP, max_tokens * 2)
+        return content, finish
 
     def chat_json(self, messages: list[dict], model_cls: Type[T], *,
                   max_tokens: int = 4096, retries: int = 2,
@@ -174,7 +197,14 @@ class KimiClient:
         convo = messages
         last_exc: Exception | None = None
         for _ in range(retries + 1):
-            reply = self.chat(convo, max_tokens=max_tokens, extra_body=extra_body)
+            reply, finish = self.chat_ex(convo, max_tokens=max_tokens,
+                                         extra_body=extra_body)
+            if finish == "length":
+                # Обрезанный JSON бесполезно «чинить» диалогом с тем же бюджетом
+                # (chat_ex уже эскалировал до потолка) — падаем с внятной причиной.
+                raise LLMFormatError(
+                    "ответ модели обрезан по лимиту токенов (finish_reason=length) "
+                    "даже после эскалации бюджета — упростите запрос")
             try:
                 return model_cls.model_validate_json(extract_json(reply))
             except (LLMFormatError, ValidationError) as exc:
