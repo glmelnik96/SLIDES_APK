@@ -129,18 +129,11 @@ a { color: var(--accent); }
   transition: border-color var(--dur-fast) var(--ease-productive), color var(--dur-fast) var(--ease-productive); }
 .logout-form button:hover { border-color: var(--muted); color: var(--text); }
 
-/* Канон v4: main 1240px (как /images) + декоративные свечения на тёмной плоскости */
-.wrap { max-width: 1240px; margin: 0 auto; padding: 40px 28px 64px; position: relative; }
-.wrap::before { content: ""; position: absolute; top: -120px; right: -140px;
-  width: 560px; height: 560px; pointer-events: none;
-  background: radial-gradient(circle, rgba(38, 208, 124, .09), transparent 65%); }
-.wrap::after { content: ""; position: absolute; bottom: -160px; left: -200px;
-  width: 480px; height: 480px; pointer-events: none;
-  background: radial-gradient(circle, rgba(38, 208, 124, .05), transparent 65%); }
-.wrap > * { position: relative; }
-/* свечения с отрицательными отступами не должны давать горизонтальный скролл;
-   clip (не hidden) — чтобы не сломать position: sticky в workspace__controls */
-html, body { overflow-x: clip; }
+/* Канон v4: main 1240px (как /images) на плоской тёмной плоскости.
+   Г§2 — радиальные зелёные свечения по углам .wrap удалены (бренд-запрет теней и
+   градиентов); вместе с ними снят их костыль overflow-x:clip (был нужен только под
+   отрицательные отступы свечений) — возвращён нативный overflow. */
+.wrap { max-width: 1240px; margin: 0 auto; padding: 40px 28px 64px; }
 
 /* ===== Интро-блок: что делает раздел + как готовить исходник ===== */
 .intro { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
@@ -176,7 +169,12 @@ html, body { overflow-x: clip; }
 .entry-desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
 /* К§12 — CTA-подпись карточки: прямой язык, без капса/трекинга; акцент сохраняем */
 .entry-cta { margin-top: auto; color: var(--accent); font-size: var(--fs-xs); }
-@media (max-width: 720px) { .entry-cards { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .entry-cards { grid-template-columns: 1fr; }
+  /* Г§2 — компактная шапка на узких экранах: без overflow-x:clip топбар обязан
+     помещаться сам, иначе клип сменился бы горизонтальным скроллом страницы. */
+  .topbar { padding: 0 16px; gap: 16px; }
+}
 /* Главная точка входа: акцентный фон/рамка (приём как у .is-active) + крупнее
    заголовок. Острые углы, цвета из токенов — в общем стиле карточек. */
 .entry-card--primary { padding: 22px 18px 18px; border-color: var(--accent);
@@ -561,13 +559,10 @@ html, body { overflow-x: clip; }
 .workspace__output > * { margin-top: 0; }
 .workspace__output .history { margin-top: 0; }
 
-/* Empty-state первой загрузки: прозрачная панель на хайрлайне, капс-заголовок,
-   лёгкое радиальное свечение в правом верхнем углу (как .empty эталона) */
+/* Empty-state первой загрузки: панель на 1px-хайрлайне, капс-заголовок.
+   Г§2 — радиальное свечение убрано; остаётся только плоская светлая плёнка. */
 .empty { padding: 30px 34px; border: 1px solid var(--line); border-radius: var(--r-lg);
-  color: var(--muted);
-  background:
-    radial-gradient(560px 300px at 85% -10%, rgba(38, 208, 124, .07), transparent 70%),
-    rgba(255, 255, 255, .015); }
+  color: var(--muted); background: rgba(255, 255, 255, .015); }
 .empty h2 { margin: 0 0 14px; font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase;
   color: var(--muted-2); font-family: var(--font-text); font-weight: 600; }
 .empty ul { margin: 0; padding-left: 18px; line-height: 1.9; font-size: 14px; }
