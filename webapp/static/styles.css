@@ -338,7 +338,7 @@ a { color: var(--accent); }
 .queue-cap { color: var(--muted-2); font-size: 13px; font-weight: 400; }
 
 /* ===== Редактор ===== */
-.editor { display: flex; height: 100vh; height: 100dvh; }  /* К§8 — высота от видимого вьюпорта */
+.editor { display: flex; height: calc(100vh - 60px); height: calc(100dvh - 60px); }  /* К§8 — высота от видимого вьюпорта; Р§3 — минус 60px топбара */
 .thumbs { width: 176px; flex-shrink: 0; overflow-y: auto; padding: 12px; border-right: 1px solid var(--line); background: var(--bg-soft); }  /* К§11 — рейл под превью-миниатюры */
 .thumbs-title { font-size: var(--fs-cap); text-transform: uppercase; letter-spacing: var(--track-caps-2); color: var(--muted-2); margin-bottom: 10px; }
 .thumb { border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; background: transparent; overflow: hidden;

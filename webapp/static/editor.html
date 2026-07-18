@@ -7,6 +7,18 @@
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
+<header class="topbar">
+  <a class="brand" href="/">Cloud.ru <span>Design</span></a>
+  <nav class="topnav">
+    <a href="/images"    class="topnav__link">Картинки</a>
+    <a href="/slides"    class="topnav__link is-active">Слайды</a>
+    <a href="/creatives" class="topnav__link">Креативы</a>
+  </nav>
+  <div class="topbar__auth">
+    <span class="topbar__user">{{ email }}</span>
+    <form action="/logout" method="post" class="logout-form"><button type="submit">Выйти</button></form>
+  </div>
+</header>
 <div class="editor">
   <!-- Thumbnail rail -->
   <aside class="thumbs">
