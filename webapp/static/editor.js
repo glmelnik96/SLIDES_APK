@@ -479,6 +479,18 @@ function setupExport(btn) {
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
 
+// Р§1 — overflow-меню «Скачать»: закрытие по клику вне и по Esc. Клик по пункту
+// ВНУТРИ меню его НЕ закрывает — пользователь видит смену «Готовлю…» → «Скачать».
+const exportMenu = document.getElementById("exportMenu");
+if (exportMenu) {
+  document.addEventListener("click", (e) => {
+    if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.removeAttribute("open");
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && exportMenu.open) exportMenu.removeAttribute("open");
+  });
+}
+
 // К§3 — «Скачать HTML» для драфта: та же предэкспортная проверка на пример-текст.
 const htmlLink = document.getElementById("html");
 htmlLink?.addEventListener("click", async (e) => {
