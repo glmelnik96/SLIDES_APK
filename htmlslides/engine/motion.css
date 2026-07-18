@@ -171,6 +171,18 @@
   .line-fade{opacity:1;}
 }
 
+/* К§6 — режим покоя превью редактора (?editor=1 → body.no-motion): статичный финал,
+   без входных анимаций и бесконечных лупов. Правила зеркалят print-блок ниже, но
+   применяются в любом медиа: превью в редакторе показывает результат, а не спектакль. */
+.no-motion .m-enter,.no-motion .m-enter-left,.no-motion .m-enter-right,.no-motion .m-enter-scale,
+.no-motion .m-fade,.no-motion .m-stagger>*{opacity:1 !important;animation:none !important;}
+.no-motion .m-loop-pulse,.no-motion .m-loop-drift,.no-motion .m-loop-draw,.no-motion .m-loop-float{
+  animation:none !important;opacity:1 !important;transform:none !important;}
+.no-motion .bar-fill,.no-motion .sb-seg{animation:none !important;transform:scaleX(1) !important;}
+.no-motion .arc-draw{animation:none !important;stroke-dashoffset:var(--draw-to,0) !important;}
+.no-motion .line-draw{animation:none !important;stroke-dashoffset:0 !important;}
+.no-motion .line-fade{animation:none !important;opacity:1 !important;}
+
 /* Печать: всё видимо без анимаций (входы и лупы — в видимом покое). */
 @media print{
   .m-enter,.m-enter-left,.m-enter-right,.m-enter-scale,

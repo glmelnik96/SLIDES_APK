@@ -352,7 +352,10 @@ html, body { overflow-x: clip; }
   color: var(--accent-ink); }
 @keyframes expspin { to { transform: rotate(360deg); } }
 #frameWrap { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; background: var(--stage); overflow: hidden; }
-iframe#deck { width: 100%; height: 100%; border: 0; background: var(--stage); }
+/* К§6 — двойная буферизация: два iframe'а (#deck / #deck2) стоят на одном месте,
+   видимый показывается, второй грузит следующий кадр и подменяется классом .hidden
+   (никакого чёрного кадра между сейвами). Стиль общий для обоих буферов. */
+#frameWrap iframe { width: 100%; height: 100%; border: 0; background: var(--stage); }
 .build-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12,12,12,.88); z-index: 5;
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1); }
 @starting-style { .build-overlay { opacity: 0; } }
@@ -393,7 +396,11 @@ iframe#deck { width: 100%; height: 100%; border: 0; background: var(--stage); }
   color: var(--muted-2); transition: opacity var(--dur-slow) var(--ease-productive); }
 .save-status--saving { color: var(--muted-2); opacity: 1; }
 .save-status--saved { color: var(--accent); opacity: 1; }
+.save-status--retrying { color: var(--muted-2); opacity: 1; }
 .save-status--error { color: var(--danger); opacity: 1; }
+/* К§5 — кликабельное «Повторить» в статусе автосейва после исчерпания ретраев */
+.save-status .btn-link { font-size: 11px; color: var(--danger); }
+.save-status .btn-link:hover { color: var(--danger); text-decoration: underline; }
 /* Текст ошибки под полем и красный счётчик при переполнении */
 .field-hint--error { color: var(--danger); }
 .field-hint--over { color: var(--danger); }
