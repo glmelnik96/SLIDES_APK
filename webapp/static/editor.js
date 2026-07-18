@@ -410,6 +410,36 @@ function addMsg(cls, text) {
   return div;
 }
 
+// Ч§7 — последняя инструкция чата: «Повторить» после ошибки возвращает её в поле,
+// поэтому запоминаем ДО очистки textarea (иначе ретраить нечем).
+let lastInstruction = "";
+
+// Ч§7 — продуктовый текст ошибки чата вместо сырого JSON/Python-трассы. Сырьё —
+// только в console.error. 409 — русский detail сервера как есть; 429 — очередь;
+// остальное — нейтральный конструктивный текст.
+async function chatErrText(r) {
+  let raw = "";
+  try { raw = await r.text(); } catch (_) { raw = ""; }
+  let detail = raw;
+  try { const j = JSON.parse(raw); if (j && j.detail) detail = j.detail; } catch (_) { /* не JSON */ }
+  console.error("chat error", r.status, raw);
+  if (r.status === 409) return detail || "Не получилось применить правку — попробуйте переформулировать.";
+  if (r.status === 429) return "Очередь занята — попробуйте через минуту.";
+  return "Не получилось применить правку. Попробуйте переформулировать или повторить.";
+}
+
+// Ч§7 — кнопка «Повторить» под сообщением об ошибке: возвращает инструкцию в поле.
+function appendRetry(node) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-ghost btn-sm";
+  btn.style.display = "block";
+  btn.style.marginTop = "8px";
+  btn.textContent = "Повторить";
+  btn.onclick = () => { chatText.value = lastInstruction; chatText.focus(); };
+  node.appendChild(btn);
+}
+
 // A chat edit calls Kimi (a reasoning model) and can legitimately take a couple
 // of minutes (server budget: one ~210s pass). Auto-abort backstop sits above
 // that so a real hang can't lock the page forever; the user can also cancel any
@@ -439,6 +469,7 @@ async function sendChat() {
   const instruction = chatText.value.trim();
   if (!instruction) return;
   const slideIndex = current + 1;
+  lastInstruction = instruction;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
   addMsg("user", `Слайд ${slideIndex}: ${instruction}`);
   chatText.value = "";
 
@@ -464,8 +495,10 @@ async function sendChat() {
     });
     if (!r.ok) {
       thinking.className = "msg err";
-      thinking.textContent = "Ошибка: " + (await r.text());
+      thinking.textContent = await chatErrText(r);   // Ч§7 — продуктовый текст + «Повторить»
+      appendRetry(thinking);
     } else {
+      lastInstruction = "";
       thinking.textContent = `Слайд ${slideIndex} обновлён.`;
       pendingGoTo = slideIndex - 1; // show the edited slide, even if user navigated away
       loadDeck(); // reload iframe with the rewritten slide
@@ -1312,6 +1345,7 @@ byId("buildDeck")?.addEventListener("click", doBuild);
 async function sendAgent() {
   const message = chatText.value.trim();
   if (!message) return;
+  lastInstruction = message;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
   addMsg("user", message);
   chatText.value = "";
   const thinking = addMsg("bot", "Думаю…");
@@ -1331,8 +1365,10 @@ async function sendAgent() {
     });
     if (!r.ok) {
       thinking.className = "msg err";
-      thinking.textContent = "Ошибка: " + (await r.text());
+      thinking.textContent = await chatErrText(r);   // Ч§7 — продуктовый текст + «Повторить»
+      appendRetry(thinking);
     } else {
+      lastInstruction = "";
       const res = await r.json();
       thinking.textContent = res.reply || "Готово.";
       if (res.changed) {
