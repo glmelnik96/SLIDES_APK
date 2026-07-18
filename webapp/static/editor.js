@@ -824,9 +824,14 @@ function collectContent() {
   return content;
 }
 
+// К§5 — бэкофф ретраев автосейва (1с/3с/7с) на сетевой/5xx-ошибке.
+const SAVE_RETRY_MS = [1000, 3000, 7000];
+let saveRetryTimer = null;
+
 function scheduleSave() {
   clearTimeout(putTimer);
-  putTimer = setTimeout(saveCurrentSlide, 600);
+  clearTimeout(saveRetryTimer); // свежий ввод отменяет незавершённую цепочку ретраев
+  putTimer = setTimeout(() => saveCurrentSlide(0), 600);
 }
 
 // Run any pending debounced save NOW. Must be called before leaving the current
@@ -841,7 +846,7 @@ function flushPendingSave() {
   return saveCurrentSlide();
 }
 
-async function saveCurrentSlide() {
+async function saveCurrentSlide(attempt = 0) {
   // Capture the slide index up front: `current` can change (navigation) during
   // the awaited PUT, and the URL/marking must stay bound to the edited slide.
   const idx = current;
@@ -850,7 +855,7 @@ async function saveCurrentSlide() {
   if (!slide || slide.freeform) return;
   const content = collectContent();
   slide.content = content; // optimistic local update
-  setSaveStatus("saving");
+  setSaveStatus(attempt ? "retrying" : "saving");
   let r;
   try {
     r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}`), {
@@ -865,13 +870,27 @@ async function saveCurrentSlide() {
     if (current === idx) markFieldErrors(errors || []); // only if still shown
     setSaveStatus("saved");
     loadDeck(); // refresh preview
-  } else {
-    // Save failed (network/server): resync from the server so we never write stale
-    // state back on the next edit, and say so in words (persistent red status)
-    // instead of an alert() on every failure.
-    await reloadDraft(idx);
-    setSaveStatus("error");
+    return;
   }
+  // К§5 — 409: серверное состояние действительно главнее (дека уже собрана / идёт
+  // пересборка), только тут ресинкаем форму. try/catch — чтобы офлайн-исключение
+  // reloadDraft всё равно оставило видимый error-статус.
+  if (r && r.status === 409) {
+    try { await reloadDraft(idx); } catch (_) { /* оставить локальный ввод виден */ }
+    setSaveStatus("error");
+    return;
+  }
+  // К§5 — сеть/5xx: НЕ трогаем форму и draftPlan (локальное новее серверного), не
+  // стираем набранный текст. Ретраим сам PUT с бэкоффом; свежий ввод пользователя
+  // (scheduleSave) отменяет эту цепочку.
+  if (attempt < SAVE_RETRY_MS.length) {
+    setSaveStatus("retrying");
+    clearTimeout(saveRetryTimer);
+    saveRetryTimer = setTimeout(() => saveCurrentSlide(attempt + 1), SAVE_RETRY_MS[attempt]);
+    return;
+  }
+  // Исчерпали ретраи — красный статус с кликабельным «Повторить» (запускает цепочку заново).
+  setSaveStatusRetry();
 }
 
 // Индикатор автосейва в шапке формы: «Сохранение…» → «Сохранено ✓» → «Не сохранено».
@@ -891,6 +910,22 @@ function setSaveStatus(state) {
       el.className = "save-status";
     }, 1600);
   }
+}
+
+// К§5 — терминальный статус после исчерпания ретраев: красный текст + кликабельное
+// «Повторить» (btn-link), которое запускает цепочку сейва заново.
+function setSaveStatusRetry() {
+  const el = byId("saveStatus");
+  if (!el) return;
+  clearTimeout(saveStatusTimer);
+  el.className = "save-status save-status--error";
+  el.textContent = (SAVE_STATUS.error || "") + " · ";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-link";
+  btn.textContent = "Повторить";
+  btn.onclick = () => saveCurrentSlide(0);
+  el.appendChild(btn);
 }
 
 function markFieldErrors(errors) {
