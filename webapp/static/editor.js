@@ -144,6 +144,7 @@ frame.onload = () => {
   suppressDeckNavOnEdit(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
+  markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
 };
 
 // Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
@@ -160,6 +161,10 @@ async function syncDraftSlideHtml(i) {
   clone.classList.remove("is-active");
   clone.querySelectorAll("[contenteditable]").forEach(
     (el) => el.removeAttribute("contenteditable"));
+  // К§3 — гигиена: редакторская метка рыбы-плейсхолдера не должна запекаться в план.
+  clone.classList.remove("is-placeholder");
+  clone.querySelectorAll(".is-placeholder").forEach(
+    (el) => el.classList.remove("is-placeholder"));
   clone.querySelectorAll("[data-count-final]").forEach((el) => {
     el.textContent = el.getAttribute("data-count-final");
     el.removeAttribute("data-count-final");
@@ -217,6 +222,34 @@ function buildThumbs() {
   });
 }
 
+// К§3 — на превью помечаем пустые текст-слоты (и пустые ОБЯЗАТЕЛЬНЫЕ list-слоты)
+// классом .is-placeholder: пример-рыба должна быть визуально отличима и не уйти
+// молча в экспорт. Источник истины «слот пуст» — draftPlan + каталог; на
+// freeform/exact-слайдах (каталог не покрывает шаблон) просто не срабатывает.
+function markPlaceholders() {
+  if (!isDraft) return;
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  const sections = doc.querySelectorAll(".slide");
+  (draftPlan.slides || []).forEach((slide, i) => {
+    const section = sections[i];
+    if (!section || !slide || slide.freeform) return;
+    const tpl = tplOf(slide.template_id);
+    if (!tpl) return;
+    const content = slide.content || {};
+    for (const [name, spec] of Object.entries(tpl.slots)) {
+      const val = content[name];
+      let empty;
+      if (spec.kind === "text") empty = (val == null || String(val).trim() === "");
+      else if (spec.kind === "list") empty = spec.required && (!Array.isArray(val) || val.length === 0);
+      else empty = false;
+      if (!empty) continue;
+      const node = section.querySelector(`[data-slot="${name}"]`) || section;
+      node.classList.add("is-placeholder");
+    }
+  });
+}
+
 function goTo(i) {
   if (!slides.length) return;
   // Persist any pending edit to the slide we're leaving BEFORE switching, so the
@@ -255,6 +288,9 @@ function currentDeckHtml() {
   const clone = doc.documentElement.cloneNode(true);
   clone.querySelectorAll("[contenteditable]").forEach(
     (el) => el.removeAttribute("contenteditable"));
+  // К§3 — снять редакторскую метку рыбы-плейсхолдера перед сохранением/скачиванием/экспортом.
+  clone.querySelectorAll(".is-placeholder").forEach(
+    (el) => el.classList.remove("is-placeholder"));
   return "<!DOCTYPE html>" + clone.outerHTML;
 }
 
@@ -288,6 +324,43 @@ const EXPORT_LABEL = {
 // controls back to "Экспорт", forcing a fresh render on the next click.
 const _exportResets = [];
 function markExportsStale() { _exportResets.forEach((fn) => fn()); }
+
+// К§3 — предэкспортная проверка: не выпустить пример-текст молча. В chat-режиме
+// каталог не загружен — дозапрашиваем лениво. Возвращает true, если можно экспортировать.
+async function ensureCatalog() {
+  if (catalog.length) return;
+  try {
+    const r = await fetch(U("/api/templates"));
+    if (r.ok) catalog = await r.json();
+  } catch (_) { /* сеть — не блокируем экспорт */ }
+}
+function countPlaceholderSlides() {
+  let n = 0;
+  (draftPlan.slides || []).forEach((slide) => {
+    if (!slide || slide.freeform) return;
+    const tpl = tplOf(slide.template_id);
+    if (!tpl) return;
+    const content = slide.content || {};
+    const hasEmptyRequired = Object.entries(tpl.slots).some(([name, spec]) => {
+      if (!spec.required) return false;
+      const val = content[name];
+      if (spec.kind === "list") return !Array.isArray(val) || val.length === 0;
+      return val == null || String(val).trim() === "";
+    });
+    if (hasEmptyRequired) n++;
+  });
+  return n;
+}
+async function confirmExportWithPlaceholders() {
+  if (!isDraft) return true;
+  await ensureCatalog();
+  const n = countPlaceholderSlides();
+  if (!n) return true;
+  return confirmDialog(
+    `На ${n} ${plural(n, "слайде", "слайдах", "слайдах")} остался пример-текст — ` +
+    `он попадёт в файл. Экспортировать?`,
+    "Экспортировать", "Вернуться к заполнению");
+}
 
 function setupExport(btn) {
   const fmt = btn.dataset.fmt;
@@ -331,6 +404,7 @@ function setupExport(btn) {
       location.href = U(`/api/jobs/${sessionId}/export/${fmt}/file`);
       return;
     }
+    if (!(await confirmExportWithPlaceholders())) return; // К§3 — пример-текст в экспорт?
     toBusy();
     await saveDeck(true);              // persist in-place edits (no stale-reset: this IS the export)
     const r = await fetch(U(`/api/jobs/${sessionId}/export/${fmt}`), { method: "POST" });
@@ -343,6 +417,14 @@ function setupExport(btn) {
 }
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
+
+// К§3 — «Скачать HTML» для драфта: та же предэкспортная проверка на пример-текст.
+const htmlLink = document.getElementById("html");
+htmlLink?.addEventListener("click", async (e) => {
+  if (!isDraft) return;
+  e.preventDefault();
+  if (await confirmExportWithPlaceholders()) location.href = htmlLink.href;
+});
 
 function flash(btn, text) {
   const orig = btn.textContent;
