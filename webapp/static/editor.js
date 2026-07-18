@@ -246,7 +246,7 @@ function currentDeckHtml() {
   const doc = frame.contentDocument;
   if (!doc || !doc.documentElement) {
     // iframe is mid-reload or not ready — caller must handle this.
-    throw new Error("дека ещё не загрузилась, подождите секунду");
+    throw new Error("презентация ещё не загрузилась — подождите секунду");
   }
   // Strip the editor-only contenteditable attributes we inject at load time so
   // the persisted/downloaded/exported deck stays clean (otherwise a downloaded
@@ -1281,10 +1281,10 @@ function renderOutline() {
 let building = false;
 async function doBuild() {
   if (building) return;
-  if (!hasBuildTargets()) { addMsg("bot", "Аутлайн пуст — нечего собирать."); return; }
+  if (!hasBuildTargets()) { addMsg("bot", "В плане пока нет слайдов — опишите презентацию в чате."); return; }
   building = true;
   showOverlay(true);
-  buildTitle.textContent = "Собираю деку…";
+  buildTitle.textContent = "Собираю презентацию…";
   buildSub.textContent = "Заполняю сырые слайды…";
   try {
     const r = await fetch(U(`/api/drafts/${sessionId}/build`), { method: "POST" });
