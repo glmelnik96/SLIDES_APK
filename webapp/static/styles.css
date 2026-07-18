@@ -179,8 +179,12 @@ a { color: var(--accent); }
    заголовок. Острые углы, цвета из токенов — в общем стиле карточек. */
 .entry-card--primary { padding: 22px 18px 18px; border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-dim); }
-.entry-card--primary:hover { background: var(--accent-dim); }
+/* Г§6 — hover главной карточки теперь отвечает (плотнее фон), а не повторяет покой */
+.entry-card--primary:hover { background: var(--accent-dim-2); }
 .entry-card--primary .entry-title { font-size: 20px; }
+/* Г§6 — ошибка старта черновика: CTA-строка в цвете danger, не в зелёном (акцент =
+   действие/успех). Автовозврат к исходному CTA снимает класс через 4 с и на pageshow. */
+.entry-card.is-error .entry-cta { color: var(--danger); text-transform: none; letter-spacing: 0; }
 /* Раскрывашка «Подробнее» под интро */
 .intro-more { margin-top: 6px; }
 .intro-more > summary { cursor: pointer; color: var(--accent); font-size: 13px;

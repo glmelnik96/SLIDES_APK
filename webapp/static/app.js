@@ -480,7 +480,13 @@ async function startDraft(mode, btn) {
     location.href = U(`/editor?session=${session_id}&mode=${mode}`);
   } catch (e) {
     btn.disabled = false;
+    btn.classList.add("is-error");  // Г§6 — ошибка одета в danger, не в акцент
     btn.querySelector(".entry-cta").textContent = "Ошибка, попробуйте ещё раз";
+    setTimeout(() => {
+      btn.classList.remove("is-error");
+      const cta = btn.querySelector(".entry-cta");
+      if (cta) cta.textContent = ENTRY_CTA[btn.dataset.entry] || "";
+    }, 4000);
   }
 }
 
@@ -506,6 +512,7 @@ document.querySelectorAll(".entry-card").forEach((card) => {
 window.addEventListener("pageshow", () => {
   document.querySelectorAll(".entry-card").forEach((c) => {
     c.disabled = false;
+    c.classList.remove("is-error");  // Г§6 — снять залипшую ошибку при возврате из bfcache
     const cta = c.querySelector(".entry-cta");
     if (cta) cta.textContent = ENTRY_CTA[c.dataset.entry] || "";
   });
