@@ -32,6 +32,8 @@
     </div>
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
+      <!-- К§6 — второй буфер двойной буферизации превью (скрыт, грузит следующий кадр) -->
+      <iframe id="deck2" title="Презентация" class="hidden" aria-hidden="true" tabindex="-1"></iframe>
       <div id="buildOverlay" class="build-overlay hidden">
         <div class="build-overlay__card">
           <div class="build-overlay__title" id="buildTitle">Собираю презентацию…</div>

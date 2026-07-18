@@ -6,7 +6,14 @@ const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
 const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built deck)
 const isDraft = mode === "manual" || mode === "chat";
-const frame = document.getElementById("deck");
+// К§6 — двойная буферизация превью: два iframe'а на одном месте. loadDeck() грузит
+// следующий кадр в СКРЫТЫЙ буфер, по load меняет их местами классом .hidden и
+// переключает указатель frame — между сейвами нет чёрного кадра. deckT — единый
+// cache-bust одного кадра (сцена + миниатюры К§11).
+const frameA = document.getElementById("deck");
+const frameB = document.getElementById("deck2");
+let frame = frameA;
+let deckT = 0;
 document.getElementById("html").href = U(`/api/jobs/${sessionId}/deck?download=1`);
 
 let slides = [];
@@ -15,8 +22,11 @@ let pendingGoTo = 0; // slide to show after the next iframe load
 let freeformConfirmed = false; // К§1: once the user OKs inline->freeform, don't re-ask this tab-session
 
 function loadDeck() {
-  // cache-bust so edits/chat rewrites are reflected on reload
-  frame.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}`);
+  // cache-bust so edits/chat rewrites are reflected on reload; один deckT на кадр.
+  // &editor=1 — режим покоя деки (К§6): без входных анимаций/лупов в превью.
+  deckT = Date.now();
+  const target = (frame === frameA) ? frameB : frameA; // грузим в скрытый буфер
+  target.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1`);
   // A reload means the deck content changed (chat/agent/rebuild/field edit), so any
   // finished export is now stale — reset the controls. Contenteditable saves don't
   // reload the iframe, so saveDeck() handles that path separately.
@@ -99,9 +109,12 @@ function waitForBuild() {
   };
 }
 
-frame.onload = () => {
-  const doc = frame.contentDocument;
-  if (!doc) return;
+// К§6 — общий обработчик load обоих буферов: свопим на только что загруженный кадр.
+function handleFrameLoad(loaded) {
+  const doc = loaded.contentDocument;
+  // Игнорируем about:blank / пустой (ошибочный 404) кадр: не свопим на него.
+  if (!doc || !doc.querySelector(".slide")) return;
+  frame = loaded; // указатель — на только что загруженный буфер
   slides = [...doc.querySelectorAll(".slide")];
   const emptyDraft = isDraft && !draftPlan.slides.length; // К§4 — синтетическая заглушка
   if (emptyDraft) {
@@ -155,7 +168,17 @@ frame.onload = () => {
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
-};
+  // К§6 — показать подготовленный буфер, спрятать прежний (без чёрного кадра).
+  loaded.classList.remove("hidden");
+  (loaded === frameA ? frameB : frameA).classList.add("hidden");
+  // Буфер грузился скрытым (display:none → окно 0×0), поэтому deck.js rescale() при
+  // init бросил масштаб. После показа форсим resize, чтобы дека вписалась в сцену.
+  requestAnimationFrame(() => {
+    try { loaded.contentWindow && loaded.contentWindow.dispatchEvent(new Event("resize")); } catch (_) {}
+  });
+}
+frameA.addEventListener("load", () => handleFrameLoad(frameA));
+frameB.addEventListener("load", () => handleFrameLoad(frameB));
 
 // Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
 let draftHtmlSaving = false;
@@ -942,6 +965,33 @@ function flushPendingSave() {
   return saveCurrentSlide();
 }
 
+// К§6 — точечный патч ТЕКСТ-слотов текущего слайда прямо в DOM превью (без полного
+// релоада: нет вспышки, не перезапускаются входы/count-up, живёт .slot-highlight).
+// Возвращает true, если патч применим и выполнен; false — если нужен полный loadDeck
+// (list/group/image-слоты, опустевший слот → сервер вернёт рыбу, .js-count/.sr-value
+// пересчитывает приватный autofitStats движка, или узел не найден).
+function patchPreviewText(idx) {
+  const doc = frame.contentDocument;
+  const section = doc && doc.querySelectorAll(".slide")[idx];
+  const slide = draftPlan.slides[idx];
+  if (!section || !slide) return false;
+  const tpl = tplOf(slide.template_id);
+  if (!tpl) return false;
+  // Любой не-текстовый слот (или загруженное изображение) — превью не гарантируем → релоад.
+  if (Object.entries(tpl.slots).some(([n, s]) => s.kind !== "text" || n === "image")) return false;
+  const content = slide.content || {};
+  for (const [name, spec] of Object.entries(tpl.slots)) {
+    if (spec.kind !== "text") continue;
+    const val = content[name];
+    if (val == null || String(val).trim() === "") return false; // опустел → сервер подставит рыбу
+    const el = section.querySelector(`[data-slot="${name}"]`);
+    if (!el || el.classList.contains("js-count") || el.classList.contains("sr-value")) return false;
+    el.textContent = String(val);
+    el.classList.remove("is-placeholder"); // слот заполнен — снять метку рыбы (К§3)
+  }
+  return true;
+}
+
 async function saveCurrentSlide(attempt = 0) {
   // Capture the slide index up front: `current` can change (navigation) during
   // the awaited PUT, and the URL/marking must stay bound to the edited slide.
@@ -965,7 +1015,9 @@ async function saveCurrentSlide(attempt = 0) {
     const { errors } = await r.json();
     if (current === idx) markFieldErrors(errors || []); // only if still shown
     setSaveStatus("saved");
-    loadDeck(); // refresh preview
+    // К§6 — точечный патч, если слайд ещё показан и правка чисто текстовая; иначе релоад.
+    if (current === idx && patchPreviewText(idx)) markExportsStale?.();
+    else loadDeck();
     return;
   }
   // К§5 — 409: серверное состояние действительно главнее (дека уже собрана / идёт
