@@ -982,10 +982,16 @@ function patchPreviewText(idx) {
   const content = slide.content || {};
   for (const [name, spec] of Object.entries(tpl.slots)) {
     if (spec.kind !== "text") continue;
-    const val = content[name];
-    if (val == null || String(val).trim() === "") return false; // опустел → сервер подставит рыбу
     const el = section.querySelector(`[data-slot="${name}"]`);
-    if (!el || el.classList.contains("js-count") || el.classList.contains("sr-value")) return false;
+    if (!el) return false; // узел не найден — надёжнее полный релоад
+    const val = content[name];
+    if (val == null || String(val).trim() === "") {
+      // Пустой слот: если сейчас показана рыба (.is-placeholder) — так и оставляем.
+      // Если реальный контент опустошили — сервер подставит рыбу-пример → нужен релоад.
+      if (!el.classList.contains("is-placeholder")) return false;
+      continue;
+    }
+    if (el.classList.contains("js-count") || el.classList.contains("sr-value")) return false;
     el.textContent = String(val);
     el.classList.remove("is-placeholder"); // слот заполнен — снять метку рыбы (К§3)
   }
