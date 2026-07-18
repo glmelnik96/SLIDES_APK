@@ -134,9 +134,10 @@ async function loadHistory() {
     const action = ok
       ? `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`
       : `<span class="hist-status hist-status--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>`;
-    const meta = ok || !it.error
-      ? `${it.source_filename || ""} &middot; ${when}`
-      : `${it.source_filename || ""} &middot; ${when} &middot; ${esc(it.error)}`;
+    const name = it.display_name || it.source_filename || "Без названия";
+    const parts = [name, when];
+    if (!ok && it.error) parts.push(esc(it.error));
+    const meta = parts.filter(Boolean).join(" · ");
     li.innerHTML =
       `<div><div class="hist-mode">${label}</div>` +
       `<div class="hist-meta">${meta}</div></div>` +
@@ -217,7 +218,25 @@ $("#create").onclick = async () => {
   $("#create").disabled = true;
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {
-    alert("Ошибка: " + (await res.text()));
+    // Surface the failure in the #result panel (own visual system, SB Sans),
+    // not a native alert. 429 = queue full; 400 already carries a Russian
+    // detail; anything else falls back to raw text in a collapsed <details>.
+    const text = await res.text();
+    const box = $("#result");
+    box.classList.remove("hidden");
+    box.classList.add("error");
+    let body;
+    if (res.status === 429) {
+      body = "<p>Очередь занята — дождитесь завершения текущих сборок.</p>";
+    } else {
+      let detail = "";
+      try { detail = JSON.parse(text).detail; } catch (e) { detail = ""; }
+      body = detail
+        ? `<p>${esc(detail)}</p>`
+        : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`;
+    }
+    box.innerHTML = `<h3>Не удалось запустить сборку</h3>${body}`;
+    updateEmptyState();
     $("#create").disabled = false;
     return;
   }
@@ -232,6 +251,10 @@ let lastEventAt = 0;
 let heartbeatTimer = null;
 let currentSession = null;
 let currentStage = null;
+// Consecutive SSE reconnect attempts (Ч§1): incremented on each es.onerror,
+// reset on any es.onmessage. Module-scoped so it survives the streamProgress
+// re-invocation used to re-attach after a transient drop.
+let reconnects = 0;
 
 function logLine(stage, detail) {
   const log = $("#progressLog");
@@ -273,6 +296,9 @@ function streamProgress(sessionId, kind, initial) {
   prog.classList.remove("hidden");
   $("#result").classList.add("hidden");
   updateEmptyState();
+  // A fresh stream starts the reconnect counter clean; a resumed reconnect
+  // (initial.resumed) keeps the running count so 5 failures in a row still bail.
+  if (!(initial && initial.resumed)) reconnects = 0;
   const seedPct = initial && initial.progress_pct ? initial.progress_pct : 0;
   const seedStage = initial && initial.stage ? initial.stage : null;
   $("#barfill").style.width = seedPct + "%";
@@ -296,6 +322,7 @@ function streamProgress(sessionId, kind, initial) {
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     lastEventAt = Date.now();
+    reconnects = 0;  // a live event arrived — the stream is healthy again
     tickHeartbeat();
     const pct = ev.progress_pct || 0;
     currentStage = ev.stage || currentStage;
@@ -317,13 +344,53 @@ function streamProgress(sessionId, kind, initial) {
       loadHistory();
     }
   };
+  // Ч§1 — an SSE drop is NOT a build failure: the job keeps running on the
+  // server. Keep the progress panel, mark the heartbeat stale, and try to
+  // re-attach; only a real terminal `failed` event (handled in onmessage) draws
+  // the "Не удалось собрать презентацию" screen.
   es.onerror = () => {
     if (finished) return; // normal stream close after the terminal event
     es.close();
     stopHeartbeat();
-    currentSession = null;
-    prog.classList.add("hidden");
-    showResult(sessionId, kind, { stage: "failed", error: "Потеряно соединение с сервером" });
+    reconnects++;
+    const hb = $("#heartbeat");
+    if (reconnects > 5) {
+      // Five reconnect attempts failed in a row. Stop retrying, but the build
+      // may still be alive server-side — keep the panel, be honest, no false
+      // "failed" screen.
+      if (hb) hb.classList.add("stale");
+      $("#stageDetail").textContent =
+        "Связь с сервером потеряна. Обновите страницу — если сборка продолжается, прогресс подхватится автоматически.";
+      return;
+    }
+    if (hb) {
+      hb.classList.add("stale");
+      hb.textContent = `Связь прервалась — переподключаюсь… (попытка ${reconnects} из 5)`;
+    }
+    setTimeout(async () => {
+      if (currentSession !== sessionId) return;  // superseded by another stream
+      let items = [];
+      try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) {}
+      const job = items.find((it) => it.session_id === sessionId);
+      if (job) {
+        // Still building — re-attach, seeding the panel from its known state.
+        streamProgress(sessionId, kind,
+          { stage: job.stage, progress_pct: job.progress_pct, resumed: true });
+        return;
+      }
+      // No longer active — it finished (or failed) while we were disconnected.
+      let hist = [];
+      try { hist = await (await fetch(U("/api/history"))).json(); } catch (e) {}
+      const rec = hist.find((it) => it.id === sessionId);
+      if (rec) {
+        stopHeartbeat();
+        currentSession = null;
+        prog.classList.add("hidden");
+        showResult(sessionId, kind, { stage: rec.status, error: rec.error });
+      }
+      // Neither active nor in history yet: leave the panel as-is (no false
+      // failure); a refresh or the next poll will resolve it.
+    }, 3000);
   };
 }
 
@@ -379,7 +446,7 @@ async function startDraft(mode, btn) {
   }
 }
 
-const ENTRY_CTA = { upload: "Выбрано ↓", manual: "Открыть конструктор →",
+const ENTRY_CTA = { upload: "Выбрано — загрузите файл ниже ↓", manual: "Открыть конструктор →",
                     chat: "Открыть чат →" };
 
 document.querySelectorAll(".entry-card").forEach((card) => {
