@@ -996,7 +996,7 @@ byId("pickerClose")?.addEventListener("click", () =>
   byId("picker").classList.add("hidden"));
 
 async function initDraftBuilder() {
-  byId("rebuild")?.classList.remove("hidden");   // «Собрать через движок» — в обоих режимах
+  byId("rebuild")?.classList.remove("hidden");   // «Проверить и улучшить слайды» — в обоих режимах
   if (mode === "manual") {
     byId("addSlide")?.classList.remove("hidden");
     byId("builder")?.classList.remove("hidden");
@@ -1031,8 +1031,9 @@ byId("rebuild")?.addEventListener("click", async () => {
     if (!r.ok) throw new Error(await r.text());
     watchRebuild();
   } catch (e) {
-    rebuilding = false; btn.disabled = false; btn.textContent = "Собрать через движок";
-    alert("Не удалось запустить пересборку: " + (e && e.message ? e.message : e));
+    rebuilding = false; btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
+    // Ч§3/К§17 — продуктовый текст + бренд-диалог вместо нативного alert.
+    alertDialog("Не удалось запустить улучшение: " + (e && e.message ? e.message : e));
   }
 });
 
@@ -1040,7 +1041,7 @@ byId("rebuild")?.addEventListener("click", async () => {
 // deck (drop the draft mode so the editor switches to HTML-as-truth editing).
 function watchRebuild() {
   showOverlay(true);
-  buildTitle.textContent = "Пересобираю через движок…";
+  buildTitle.textContent = "Улучшаю слайды…";
   let done = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
   es.onmessage = (e) => {
@@ -1054,11 +1055,11 @@ function watchRebuild() {
         location.href = U(`/editor?session=${sessionId}`); // reload as built deck
       } else {
         buildTitle.textContent =
-          ev.stage === "cancelled" ? "Пересборка остановлена" : "Не удалось пересобрать";
+          ev.stage === "cancelled" ? "Улучшение остановлено" : "Не удалось улучшить слайды";
         buildSub.textContent = ev.error || "";
         rebuilding = false;
         const btn = byId("rebuild");
-        btn.disabled = false; btn.textContent = "Собрать через движок";
+        btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
       }
     }
   };
