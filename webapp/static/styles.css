@@ -144,7 +144,8 @@ a { color: var(--accent); }
 .intro-title::before { content: ""; position: absolute; left: 0; top: 4px; width: 9px; height: 24px;
   background: var(--accent);
   clip-path: polygon(0 0, 100% 0, 100% 30%, 42% 30%, 42% 100%, 0 100%); }
-.intro-lead { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 12px; max-width: 760px; }
+/* Г§11 — мера строки 62ch (~45–75 знаков) вместо 760px≈100+ знаков */
+.intro-lead { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 12px; max-width: 62ch; }
 .intro-lead:last-child { margin-bottom: 0; }
 .intro-lead b { color: var(--text); font-weight: 600; }
 .intro-lead code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -276,6 +277,9 @@ a { color: var(--accent); }
 .progress-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .stage-label { font-weight: 600; }
 .stage-pct { margin-left: auto; color: var(--accent); font-variant-numeric: tabular-nums; }
+/* Г§10 — табличные цифры для всех живых индикаторов: счётчик, очередь, стадия·%,
+   heartbeat, таймер правки — чтобы цифры не прыгали по ширине при каждом тике. */
+.field-hint, .queue-cap, .hist-meta, .heartbeat, .msg { font-variant-numeric: tabular-nums; }
 .bar { height: 3px; background: var(--line-soft); border-radius: 0; overflow: hidden; }
 #barfill { height: 100%; width: 0; background: var(--accent); transition: width var(--dur-bar) var(--ease-productive); }
 .stage-detail { margin-top: 10px; color: var(--muted); font-size: 13px; min-height: 18px; word-break: break-word; }
