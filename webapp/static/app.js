@@ -109,6 +109,7 @@ function updateEmptyState() {
     !$("#progress").classList.contains("hidden") ||
     !$("#result").classList.contains("hidden") ||
     !$("#activeWrap").hidden ||
+    !$("#draftsWrap").hidden ||
     $("#histlist").children.length > 0;
   el.hidden = hasContent;
   // Пока показан empty-state, секция истории с «Пока пусто» дублирует его — прячем
@@ -205,6 +206,43 @@ async function autoResumeActive() {
   const it = items[0];
   streamProgress(it.session_id, "html",
                  { stage: it.stage, progress_pct: it.progress_pct, resumed: true });
+}
+
+/* ---- drafts (незавершённая работа: конструктор/чат) ---- */
+async function loadDrafts() {
+  let items = [];
+  try { items = await (await fetch(U("/api/drafts"))).json(); } catch (e) { return; }
+  const wrap = $("#draftsWrap");
+  const ul = $("#draftsList");
+  wrap.hidden = items.length === 0;
+  ul.innerHTML = "";
+  for (const it of items) {
+    const li = document.createElement("li");
+    const label = MODE_LABEL[it.mode] || it.mode;
+    const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
+    const meta = ["Без названия", when].filter(Boolean).join(" · ");
+    // mode в URL обязателен — иначе редактор откроет сессию как built-деку.
+    li.innerHTML =
+      `<div><div class="hist-mode">${label}</div>` +
+      `<div class="hist-meta">${meta}</div></div>` +
+      `<div class="hist-spacer"></div>` +
+      `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
+      `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
+    ul.appendChild(li);
+  }
+  ul.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Удалить черновик? Это действие необратимо.")) return;
+      b.disabled = true;  // deleting — «Удалить» неактивна до ответа
+      try {
+        const r = await fetch(U(`/api/drafts/${b.dataset.del}`), { method: "DELETE" });
+        if (!r.ok) throw new Error("draft delete failed");
+        loadDrafts();
+      } catch (e) {
+        b.disabled = false;  // при ошибке вернуть кнопку активной
+      }
+    }));
+  updateEmptyState();
 }
 
 /* ---- create job ---- */
@@ -471,10 +509,12 @@ window.addEventListener("pageshow", () => {
     const cta = c.querySelector(".entry-cta");
     if (cta) cta.textContent = ENTRY_CTA[c.dataset.entry] || "";
   });
+  loadDrafts();  // возврат по Back мог оставить/удалить черновик — обновляем список
 });
 
 /* init */
 resetFile();
 loadHistory();
 loadActive();
+loadDrafts();
 autoResumeActive();
