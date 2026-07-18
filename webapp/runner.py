@@ -15,11 +15,14 @@ latest status snapshot, and captures result_path on terminal `done`.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 MAX_ACTIVE = 60  # total jobs in the system (running + waiting) before 429
 MAX_PER_USER = 15  # how many jobs one user may have in the system at once
@@ -246,9 +249,13 @@ class JobRunner:
                     ev = {"session_id": session_id, "stage": "cancelled",
                           "terminal": True, "progress_pct": 0, "result_path": None}
                 else:
+                    # Г§8 — the raw class/text is an English internal dump; keep it
+                    # in the server log and show the user one calm Russian line.
+                    logger.exception(
+                        "build failed (session %s)", session_id)
                     ev = {"session_id": session_id, "stage": "failed",
                           "terminal": True, "result_path": None,
-                          "error": f"{type(exc).__name__}: {exc}"}
+                          "error": "Внутренняя ошибка сборки — попробуйте ещё раз"}
                 self._status[session_id] = ev
                 if self._loop is not None:
                     if self._terminal_hook:

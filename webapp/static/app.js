@@ -250,7 +250,10 @@ async function loadDrafts() {
 }
 
 /* ---- create job ---- */
-$("#create").onclick = async () => {
+// Г§8 — extracted so the result panel's "Повторить с тем же файлом" can re-run the
+// build directly (after streamProgress, #create stays disabled, so a synthetic click
+// wouldn't fire — we call the function).
+async function createJob() {
   if (!selectedFile) return;
   const fd = new FormData();
   fd.append("mode", MODE);
@@ -284,7 +287,8 @@ $("#create").onclick = async () => {
   }
   const { session_id, kind } = await res.json();
   streamProgress(session_id, kind);
-};
+}
+$("#create").onclick = createJob;
 
 /* If no progress event arrives for this many seconds, warn that the step is
    taking long (helps tell a slow model call apart from a real hang). */
@@ -450,19 +454,37 @@ $("#stopBtn").onclick = async () => {
 function showResult(sessionId, kind, ev) {
   const box = $("#result");
   box.classList.remove("hidden");
-  box.classList.toggle("error", ev.stage === "failed");
-  if (ev.stage === "cancelled") {
+  const failed = ev.stage === "failed";
+  box.classList.toggle("error", failed);
+  if (failed || ev.stage === "cancelled") {
+    // Г§8 — recovery that keeps the user's context: retry with the SAME file
+    // (and «Точный перенос» choice), or pick another. ev.error is escaped —
+    // it can carry engine text. If the file is gone (e.g. a build resumed after
+    // reload), only «Выбрать другой файл» is offered.
+    const title = failed ? "Не удалось собрать презентацию" : "Сборка остановлена";
+    const msg = failed
+      ? esc(ev.error || "Произошла ошибка.")
+      : "Генерация прервана по запросу.";
+    const retry = selectedFile
+      ? `<button class="btn" data-res="retry">Повторить с тем же файлом</button>`
+      : "";
     box.innerHTML =
-      `<h3>Сборка остановлена</h3>` +
-      `<p>Генерация прервана по запросу.</p>` +
-      `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
-    return;
-  }
-  if (ev.stage === "failed") {
-    box.innerHTML =
-      `<h3>Не удалось собрать презентацию</h3>` +
-      `<p>${ev.error || "Произошла ошибка."}</p>` +
-      `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
+      `<h3>${title}</h3><p>${msg}</p>` +
+      `<div class="res-actions">${retry}` +
+      `<button class="btn btn-ghost" data-res="other">Выбрать другой файл</button></div>`;
+    const retryBtn = box.querySelector('[data-res="retry"]');
+    if (retryBtn) retryBtn.addEventListener("click", () => {
+      box.classList.add("hidden");
+      updateEmptyState();
+      createJob();
+    });
+    box.querySelector('[data-res="other"]').addEventListener("click", () => {
+      resetFile();
+      box.classList.add("hidden");
+      updateEmptyState();
+      $("#drop").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    });
+    updateEmptyState();
     return;
   }
   // HTML deck — go straight to the editor.

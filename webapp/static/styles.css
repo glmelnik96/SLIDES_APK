@@ -301,7 +301,9 @@ a { color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== Результат ===== */
-.result h3 { margin: 0 0 6px; }
+/* Г§8 — единая типо-шкала и для панели сбоя (не браузерные дефолты ~18.7/16px) */
+.result h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+.result p { font-size: 14px; color: var(--muted); max-width: 62ch; }
 .result .res-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .result.error { border-color: #4a2222; }
 .result.error h3 { color: var(--danger); }
