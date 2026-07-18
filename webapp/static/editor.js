@@ -1078,6 +1078,9 @@ function setupChatMode() {
   if (target) target.textContent = "Ассистент";
   chatText.placeholder = "Например: сделай презентацию про наш продукт для инвесторов";
   chatSend.textContent = "Отправить";
+  // Ч§6 — примеры пустого чата про СБОРКУ, а не про точечные правки.
+  const empty = byId("chatEmpty");
+  if (empty) empty.textContent = CHAT_BUILD_EMPTY;
   byId("outline")?.classList.remove("hidden");   // показать живую панель аутлайна
 }
 
