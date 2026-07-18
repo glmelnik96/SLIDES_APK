@@ -227,6 +227,20 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     return JSONResponse({"session_id": session_id, "kind": "draft", "mode": mode})
 
 
+@app.get("/api/drafts")
+async def list_drafts(request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Черновики пользователя (status="draft") — незавершённая работа, снова
+    достижимая с главной («Продолжить» ведёт обратно в редактор)."""
+    async with request.app.state.sessionmaker() as s:
+        jobs = await jobs_repo.list_drafts_for_user(s, user.id)
+    return JSONResponse([
+        {"id": j.session_id, "mode": j.mode,
+         "created_at": j.created_at.isoformat() if j.created_at else None}
+        for j in jobs
+    ])
+
+
 @app.get("/api/templates")
 def list_templates(user=Depends(get_current_user)) -> JSONResponse:
     """Slide-template catalog with slot contracts (drives the manual builder)."""
@@ -324,6 +338,26 @@ async def get_draft(session_id: str, request: Request,
                     user=Depends(get_current_user)) -> JSONResponse:
     plan = await _draft_or_404(request, session_id, user)
     return JSONResponse(plan.model_dump())
+
+
+@app.delete("/api/drafts/{session_id}")
+async def delete_draft(session_id: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
+    """Delete a draft session (owner only). 404 if it doesn't exist or is not a
+    draft (a real build must go through history/clear, never here). Cleanup mirrors
+    clear_history: drop the Job row, drop any export state, remove the session dir."""
+    import shutil
+    async with request.app.state.sessionmaker() as s:
+        job = await jobs_repo.get_owned(s, session_id, user.id)
+        if job is None or job.status != "draft":
+            raise HTTPException(404, "not found")
+        await s.delete(job)
+        await s.commit()
+    exports.registry.drop(session_id)
+    d = session_dir(session_id)
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
+    return JSONResponse({"ok": True})
 
 
 def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:

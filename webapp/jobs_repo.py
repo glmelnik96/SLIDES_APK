@@ -49,6 +49,20 @@ async def list_for_user(session: AsyncSession, user_id: int,
     return list(res.scalars().all())
 
 
+async def list_drafts_for_user(session: AsyncSession, user_id: int,
+                               limit: int = 10) -> list[models.Job]:
+    """Черновики пользователя = только сессии со status="draft" (незавершённая
+    работа конструктора/чата). Держатся отдельно и от истории (терминальные), и от
+    активной очереди (queued/running), поэтому имеют свой список — по образцу
+    list_for_user, но по статусу "draft"."""
+    res = await session.execute(
+        select(models.Job).where(
+            models.Job.user_id == user_id,
+            models.Job.status == "draft")
+        .order_by(models.Job.created_at.desc()).limit(limit))
+    return list(res.scalars().all())
+
+
 async def mark_terminal(session: AsyncSession, session_id: str, *, status: str,
                         result_path: str | None, error: str | None) -> None:
     job = (await session.execute(
