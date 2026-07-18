@@ -44,6 +44,12 @@
     </div>
   </div>
 
+  <!-- К§8 — одна правая панель с табами «Поля | Чат» (id панелей #builder/.chat неизменны) -->
+  <aside class="rpanel" id="rpanel">
+    <div class="rpanel-tabs hidden" id="rpanelTabs">
+      <button class="rpanel-tab" id="tabFields" type="button">Поля</button>
+      <button class="rpanel-tab" id="tabChat" type="button">Чат</button>
+    </div>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
     <div class="builder-head">
@@ -87,6 +93,7 @@
       <button class="btn" id="chatSend">Применить к слайду</button>
     </div>
   </aside>
+  </aside><!-- /.rpanel -->
 </div>
 
 <!-- Template picker (manual mode) -->

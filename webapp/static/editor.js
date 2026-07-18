@@ -1615,6 +1615,30 @@ async function sendAgent() {
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
 
+// К§8 — одна правая панель с табами «Поля | Чат» (только manual: там обе панели живут
+// вместе). Переключение — класс .hidden на #builder/.chat (id/DOM не трогаем — JS завязан).
+// В chat-режиме и на готовой деке панель одна → табов нет.
+function setupPanelTabs() {
+  const tabs = byId("rpanelTabs");
+  if (!tabs) return;
+  if (mode !== "manual") { tabs.classList.add("hidden"); return; }
+  const builder = byId("builder");
+  const chat = document.querySelector(".chat");
+  const tabF = byId("tabFields");
+  const tabC = byId("tabChat");
+  if (!builder || !chat || !tabF || !tabC) return;
+  tabs.classList.remove("hidden");
+  const show = (fields) => {
+    builder.classList.toggle("hidden", !fields);
+    chat.classList.toggle("hidden", fields);
+    tabF.classList.toggle("is-active", fields);
+    tabC.classList.toggle("is-active", !fields);
+  };
+  tabF.onclick = () => show(true);
+  tabC.onclick = () => show(false);
+  show(true); // дефолт в manual — «Поля»
+}
+
 // Ч§5 — бейдж режима в тулбаре + одноразовое пояснение после улучшения (rebuild-редирект).
 const MODE_BADGE = { "": "Готовая презентация", manual: "Конструктор", chat: "Сборка в чате" };
 (function initModeBadge() {
@@ -1628,5 +1652,7 @@ const MODE_BADGE = { "": "Готовая презентация", manual: "Ко�
     history.replaceState(null, "", url);
   }
 })();
+
+setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode, нужны ли табы)
 
 if (isDraft) { initDraftBuilder().then(initEditor); } else { initEditor(); }
