@@ -550,6 +550,12 @@ window.addEventListener("pageshow", () => {
 // lazy + скрытый родитель → грузится только когда empty-state показан.
 const _emptyPrev = $("#emptyPrev");
 if (_emptyPrev) _emptyPrev.src = U("/api/templates/cover/preview");
+// Г§9 — объявляем окно ретеншена (истории и черновиков) прямо в заголовках секций.
+const _retHours = window.__RETENTION_HOURS__ || 24;
+const _retCap = $("#retentionCap");
+if (_retCap) _retCap.textContent = "хранится " + _retHours + " ч";
+const _draftsCap = $("#draftsCap");
+if (_draftsCap) _draftsCap.textContent = "хранится " + _retHours + " ч";
 resetFile();
 loadHistory();
 loadActive();

@@ -128,7 +128,7 @@
 
   <!-- DRAFTS: незавершённая работа снова достижима -->
   <section class="history" id="draftsWrap" hidden>
-    <div class="hist-head"><h2>Черновики</h2></div>
+    <div class="hist-head"><h2>Черновики <span class="queue-cap" id="draftsCap"></span></h2></div>
     <ul id="draftsList" class="histlist"></ul>
   </section>
 
@@ -143,11 +143,11 @@
   <!-- HISTORY -->
   <section class="history">
     <div class="hist-head">
-      <h2>История сборок</h2>
+      <h2>История сборок <span class="queue-cap" id="retentionCap"></span></h2>
       <button id="clear" class="btn-link">Очистить</button>
     </div>
     <ul id="histlist" class="histlist"></ul>
-    <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию.</div>
+    <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию. Готовые сборки хранятся 24 часа.</div>
   </section>
 
   </div><!-- /.workspace__output -->

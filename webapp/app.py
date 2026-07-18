@@ -52,7 +52,10 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
     mtimes += [p.stat().st_mtime for p in _STATIC.glob("*.css")]
     token = str(int(max(mtimes))) if mtimes else "0"
     html = re.sub(r'(/static/[\w./-]+\.(?:js|css))"', rf'{prefix}\1?v={token}"', html)
-    inject = f"<script>window.__APP_PREFIX__={json.dumps(prefix)};</script>"
+    # Г§9 — expose the data-retention window so the UI can announce it (silent
+    # deletion of history/drafts is a least-astonishment violation otherwise).
+    inject = (f"<script>window.__APP_PREFIX__={json.dumps(prefix)};"
+              f"window.__RETENTION_HOURS__={int(settings.retention_hours)};</script>")
     html = html.replace("<head>", "<head>\n" + inject, 1)
     # Canon topbar shows the gateway-supplied email; no email = standalone dev.
     from html import escape as _esc
