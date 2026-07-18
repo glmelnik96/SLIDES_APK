@@ -1592,6 +1592,9 @@ function renderOutline() {
     list.appendChild(li);
   });
   byId("buildDeck")?.classList.toggle("hidden", !hasBuildTargets());
+  // Р§4 — ровно одна залитая primary в панели чата: пока есть незаполненные слайды,
+  // primary — #buildDeck (залит в разметке), иначе — #chatSend.
+  byId("chatSend")?.classList.toggle("btn-accent", !hasBuildTargets());
 }
 
 // Fill the whole outline in one shot via POST /api/drafts/{id}/build. Synchronous

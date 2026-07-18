@@ -246,24 +246,28 @@ a { color: var(--accent); }
 
 /* ===== Кнопки ===== */
 .btn {
-  background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: var(--r);
+  /* Р§4 — дефолт инвертирован в нейтральную обводку; зелёная заливка = одна primary на группу (.btn-accent) */
+  background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: var(--r);
   padding: 10px 20px; cursor: pointer; font-size: 15px; font-weight: 600; line-height: var(--lh-tight);  /* Г§12 — 4px-шкала (было 11px 22px) */
-  transition: background var(--dur-med) var(--ease-productive), border-color var(--dur-med) var(--ease-productive), opacity var(--dur-med) var(--ease-productive);
+  transition: background var(--dur-med) var(--ease-productive), border-color var(--dur-med) var(--ease-productive), color var(--dur-med) var(--ease-productive), transform var(--dur-fast) var(--ease-productive), opacity var(--dur-med) var(--ease-productive);
 }
-.btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.btn:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
 /* Г§7 — disabled как явное состояние (видимая, но очевидно неактивная кнопка ~4.5:1),
    не почти-невидимая opacity:.4. Общее правило — чинит и #rebuild в тулбаре. */
 .btn:disabled { opacity: 1; background: var(--panel-2); border-color: var(--line);
   color: var(--muted); cursor: not-allowed; }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
 #createHint { margin-top: 8px; }  /* Г§7 — отступ хинта от полноширинной CTA */
-.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }  /* Р§4 — совместимый алиас нового дефолта */
 .btn-ghost:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
+/* Р§4 — единственный носитель заливки акцентом */
 .btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.btn-accent:hover { background: var(--accent-2); border-color: var(--accent-2); color: var(--accent-ink); }
 .btn-link { background: none; color: var(--muted); border: 0; cursor: pointer; font-size: 13px; }
 .btn-link:hover { color: var(--text); }
-/* С§5 — слой :active (пресс): на шаг темнее hover / заливка --panel-2 */
-.btn:active:not(:disabled) { background: var(--accent-3); border-color: var(--accent-3); }
+/* С§5/Р§4 — слой :active (пресс): универсальный тактильный push + цвет прижатия по варианту */
+.btn:active:not(:disabled) { background: var(--panel-2); transform: translateY(1px); }
+.btn-accent:active:not(:disabled) { background: var(--accent-3); border-color: var(--accent-3); }
 .btn-ghost:active { background: var(--panel-2); }
 .entry-card:active, .thumb:active, .picker-item:active { background: var(--panel-2); }
 
@@ -371,6 +375,9 @@ a { color: var(--accent); }
 .toolbar .btn, .toolbar .home { white-space: nowrap; }
 /* Р§1 — стрелки навигации: стабильные цели одного размера (закон Фиттса) */
 .toolbar #prev, .toolbar #next { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+/* Р§4 — #rebuild: акцент-обводка вместо заливки (единственная залитая в тулбаре — #save) */
+#rebuild { color: var(--accent); border-color: var(--accent-line); }
+#rebuild:hover { color: var(--accent); border-color: var(--accent); }
 /* Р§1 — overflow-меню «Скачать»: нативный <details>, прямые углы, без теней */
 .toolbar-menu { position: relative; }
 .toolbar-menu > summary { list-style: none; cursor: pointer; }

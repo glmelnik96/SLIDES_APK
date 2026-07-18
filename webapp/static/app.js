@@ -466,7 +466,7 @@ function showResult(sessionId, kind, ev) {
       ? esc(ev.error || "Произошла ошибка.")
       : "Генерация прервана по запросу.";
     const retry = selectedFile
-      ? `<button class="btn" data-res="retry">Повторить с тем же файлом</button>`
+      ? `<button class="btn btn-accent" data-res="retry">Повторить с тем же файлом</button>`
       : "";
     box.innerHTML =
       `<h3>${title}</h3><p>${msg}</p>` +
