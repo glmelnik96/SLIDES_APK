@@ -98,8 +98,9 @@ a { color: var(--accent); }
 :where(button, a, summary, [tabindex], input, textarea, select):focus-visible {
   outline: var(--focus-ring); outline-offset: var(--focus-offset); }
 
-/* Капс-микролейбл — повторяющийся бренд-приём */
-.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+/* К§12 — капс-микролейблы в ДВУХ ролях: секционный маяк 12px/--track-caps и
+   микроподпись 11px/--track-caps-2 (вместо пяти кеглей и пяти трекингов). */
+.eyebrow { font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
 /* Ч§5 — бейдж режима редактора (капс-микролейбл на хайрлайне) */
 .mode-badge { font-size: 11px; letter-spacing: var(--track-caps); text-transform: uppercase;
   color: var(--muted); border: 1px solid var(--line); padding: 3px 8px; }
@@ -173,8 +174,8 @@ html, body { overflow-x: clip; }
 .entry-card:hover .entry-num, .entry-card.is-active .entry-num { color: var(--accent); }
 .entry-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; }
 .entry-desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.entry-cta { margin-top: auto; color: var(--accent); font-size: 12px;
-  letter-spacing: .04em; text-transform: uppercase; }
+/* К§12 — CTA-подпись карточки: прямой язык, без капса/трекинга; акцент сохраняем */
+.entry-cta { margin-top: auto; color: var(--accent); font-size: var(--fs-xs); }
 @media (max-width: 720px) { .entry-cards { grid-template-columns: 1fr; } }
 /* Главная точка входа: акцентный фон/рамка (приём как у .is-active) + крупнее
    заголовок. Острые углы, цвета из токенов — в общем стиле карточек. */
@@ -197,8 +198,8 @@ html, body { overflow-x: clip; }
 /* v4: номер шага — капс-микролейбл с нумерацией «01 · …» */
 .step-num { font-size: var(--fs-xs); letter-spacing: var(--track-caps); color: var(--muted-2); font-weight: 600; }
 .step-num::after { content: "·"; margin-left: 10px; color: var(--muted-2); }
-.step-head h2 { font-size: 13px; margin: 0; font-weight: 600; font-family: var(--font-text);
-  letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+.step-head h2 { font-size: var(--fs-xs); margin: 0; font-weight: 600; font-family: var(--font-text);
+  letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
 
 /* ===== Зона загрузки ===== */
 .drop {
@@ -304,7 +305,7 @@ html, body { overflow-x: clip; }
 .history { margin-top: 44px; }
 .hist-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
   padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.hist-head h2 { font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2);
+.hist-head h2 { font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2);
   margin: 0; font-family: var(--font-text); font-weight: 600; }
 .histlist { list-style: none; padding: 0; margin: 0; }
 .histlist li {
@@ -317,7 +318,7 @@ html, body { overflow-x: clip; }
 .hist-meta { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 .hist-spacer { flex: 1; }
 /* Исход незавершённой сборки в истории (вместо «Открыть») — капс-микролейбл */
-.hist-status { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+.hist-status { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
 .hist-status--failed { color: var(--danger); }
 .hist-status--cancelled { color: var(--warn-ink); }
 .hist-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
@@ -326,7 +327,7 @@ html, body { overflow-x: clip; }
 /* ===== Редактор ===== */
 .editor { display: flex; height: 100vh; }
 .thumbs { width: 132px; flex-shrink: 0; overflow-y: auto; padding: 12px; border-right: 1px solid var(--line); background: var(--bg-soft); }
-.thumbs-title { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted-2); margin-bottom: 10px; }
+.thumbs-title { font-size: var(--fs-cap); text-transform: uppercase; letter-spacing: var(--track-caps-2); color: var(--muted-2); margin-bottom: 10px; }
 .thumb { padding: 11px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; font-size: 12px; text-align: center; background: transparent; transition: border-color var(--dur-med) var(--ease-productive), color var(--dur-med) var(--ease-productive); }
 .thumb:hover { border-color: var(--muted-2); }
 .thumb.active { border-color: var(--accent); color: var(--accent); }
@@ -380,7 +381,8 @@ html, body { overflow-x: clip; }
 .builder-note { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
 .builder-empty { padding: 18px 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .field { display: flex; flex-direction: column; gap: 5px; }
-.field > label { font-size: var(--fs-cap); text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--muted-2); }
+/* К§12 — форм-лейблы: рабочий текст, не декор → нижний регистр, 12px, muted */
+.field > label { font-size: var(--fs-xs); text-transform: none; letter-spacing: 0; color: var(--muted); }
 .field input, .field textarea { width: 100%; background: var(--field-bg); color: var(--text);
   border: 1px solid var(--muted-2); border-radius: 0; padding: 8px 10px; font: inherit; font-size: 13px; }
 .field textarea { min-height: 60px; resize: vertical; }
@@ -392,8 +394,10 @@ html, body { overflow-x: clip; }
 .field-file { display: inline-flex; align-items: center; text-align: center; }
 .field-error input, .field-error textarea { border-color: var(--danger); }
 /* Индикатор автосейва в шапке формы (слева от кнопок; острые углы, токены) */
-.save-status { margin-left: 10px; margin-right: auto; font-size: 11px; opacity: 0;
-  color: var(--muted-2); transition: opacity var(--dur-slow) var(--ease-productive); }
+/* К§12 — микроподпись-семья (11px/--track-caps-2). Регистр НЕ поднимаем: К§5 положил
+   сюда читаемую фразу ошибки + «Повторить», а верхний регистр бьёт по читаемости. */
+.save-status { margin-left: 10px; margin-right: auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps-2);
+  opacity: 0; color: var(--muted-2); transition: opacity var(--dur-slow) var(--ease-productive); }
 .save-status--saving { color: var(--muted-2); opacity: 1; }
 .save-status--saved { color: var(--accent); opacity: 1; }
 .save-status--retrying { color: var(--muted-2); opacity: 1; }
@@ -478,16 +482,16 @@ html, body { overflow-x: clip; }
 }
 .chat-input textarea:focus { border-color: var(--accent); }
 .chat-input textarea:focus:not(:focus-visible) { outline: none; }
-.chat-target { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+.chat-target { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
 
 /* ===== Живой аутлайн (chat mode) ===== */
 .outline { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
-.outline-head { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted-2); }
+.outline-head { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
 .outline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
 .outline-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 .outline-num { flex: 0 0 auto; min-width: 16px; text-align: right; font-size: 12px; color: var(--muted-2); }
 .outline-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.outline-badge { flex: 0 0 auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
+.outline-badge { flex: 0 0 auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase;
   padding: 2px 7px; border-radius: var(--r); border: 1px solid var(--line); }
 .outline-badge.is-plan { color: var(--muted); }
 .outline-badge.is-ready { color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim); }
@@ -502,7 +506,7 @@ html, body { overflow-x: clip; }
   font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text); }
 .field-card { display: flex; flex-direction: column; gap: 6px; }
 .field-row { display: flex; flex-direction: column; gap: 3px; }
-.field-cap { font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
+.field-cap { font-size: var(--fs-xs); letter-spacing: 0; text-transform: none; color: var(--muted); }
 .field-input { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: 13px;
   color: var(--text); background: var(--field-bg); border: 1px solid var(--muted-2); border-radius: var(--r); }
 .field-input:focus { border-color: var(--accent); }
@@ -539,7 +543,7 @@ html, body { overflow-x: clip; }
   background:
     radial-gradient(560px 300px at 85% -10%, rgba(38, 208, 124, .07), transparent 70%),
     rgba(255, 255, 255, .015); }
-.empty h2 { margin: 0 0 14px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+.empty h2 { margin: 0 0 14px; font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase;
   color: var(--muted-2); font-family: var(--font-text); font-weight: 600; }
 .empty ul { margin: 0; padding-left: 18px; line-height: 1.9; font-size: 14px; }
 .empty ul b { color: var(--text); font-weight: 600; }
