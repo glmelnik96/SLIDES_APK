@@ -513,6 +513,10 @@ window.addEventListener("pageshow", () => {
 });
 
 /* init */
+// Г§4 — empty-state превью настоящего слайда: src через U() (несёт gateway-префикс);
+// lazy + скрытый родитель → грузится только когда empty-state показан.
+const _emptyPrev = $("#emptyPrev");
+if (_emptyPrev) _emptyPrev.src = U("/api/templates/cover/preview");
 resetFile();
 loadHistory();
 loadActive();

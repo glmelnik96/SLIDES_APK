@@ -567,8 +567,15 @@ a { color: var(--accent); }
   color: var(--muted); background: rgba(255, 255, 255, .015); }
 .empty h2 { margin: 0 0 14px; font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase;
   color: var(--muted-2); font-family: var(--font-text); font-weight: 600; }
-.empty ul { margin: 0; padding-left: 18px; line-height: 1.9; font-size: 14px; }
-.empty ul b { color: var(--text); font-weight: 600; }
+/* Г§4 — мини-превью настоящего слайда (фикс-высота + scale, как в пикере: aspect-ratio
+   тут сознательно не работает). iframe грузится lazy, без интеракции. */
+.empty-prev { position: relative; width: min(100%, 480px); height: 270px; overflow: hidden;
+  border: 1px solid var(--line); background: #222; pointer-events: none; }
+.empty-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+  border: 0; transform: scale(0.25); transform-origin: top left; }
+.empty-cap { margin-top: 10px; }
+.empty-note { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 12px 0 0; max-width: 62ch; }
+.empty-note b { color: var(--text); font-weight: 600; }
 
 @media (max-width: 1023px) {
   .workspace { grid-template-columns: 1fr; gap: 8px; }
