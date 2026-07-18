@@ -193,9 +193,8 @@ a { color: var(--accent); }
 /* ===== Шаги ===== */
 .step { margin-bottom: 32px; }
 .step-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-/* v4: номер шага — капс-микролейбл с нумерацией «01 · …» */
-.step-num { font-size: var(--fs-xs); letter-spacing: var(--track-caps); color: var(--muted-2); font-weight: 600; }
-.step-num::after { content: "·"; margin-left: 10px; color: var(--muted-2); }
+/* Г§5 — одна система нумерации: цифры 01/02 у шагов сняты (единственная нумерация
+   01–03 остаётся у карточек-сценариев); капс-заголовок h2 сам служит лейблом шага. */
 .step-head h2 { font-size: var(--fs-xs); margin: 0; font-weight: 600; font-family: var(--font-text);
   letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
 
