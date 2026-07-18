@@ -1052,7 +1052,8 @@ function watchRebuild() {
     if (ev.terminal) {
       done = true; es.close();
       if (ev.stage === "done") {
-        location.href = U(`/editor?session=${sessionId}`); // reload as built deck
+        // Ч§5 — &rebuilt=1: на готовой деке один раз показать пояснение после улучшения.
+        location.href = U(`/editor?session=${sessionId}&rebuilt=1`); // reload as built deck
       } else {
         buildTitle.textContent =
           ev.stage === "cancelled" ? "Улучшение остановлено" : "Не удалось улучшить слайды";
@@ -1356,4 +1357,19 @@ async function sendAgent() {
 /* init */
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
+
+// Ч§5 — бейдж режима в тулбаре + одноразовое пояснение после улучшения (rebuild-редирект).
+const MODE_BADGE = { "": "Готовая презентация", manual: "Конструктор", chat: "Сборка в чате" };
+(function initModeBadge() {
+  const badge = byId("modeBadge");
+  if (badge) badge.textContent = MODE_BADGE[mode] != null ? MODE_BADGE[mode] : MODE_BADGE[""];
+  if (params.get("rebuilt")) {
+    addMsg("bot", "Презентация собрана и проверена. Теперь правки — прямо на слайде и через чат.");
+    // Убрать параметр, чтобы сообщение не повторялось по F5.
+    const url = new URL(location.href);
+    url.searchParams.delete("rebuilt");
+    history.replaceState(null, "", url);
+  }
+})();
+
 if (isDraft) { initDraftBuilder().then(initEditor); } else { initEditor(); }
