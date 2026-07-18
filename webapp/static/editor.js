@@ -103,6 +103,15 @@ frame.onload = () => {
   const doc = frame.contentDocument;
   if (!doc) return;
   slides = [...doc.querySelectorAll(".slide")];
+  const emptyDraft = isDraft && !draftPlan.slides.length; // К§4 — синтетическая заглушка
+  if (emptyDraft) {
+    // Заглушка нередактируема: в плане 0 слайдов, blur-синк улетел бы в 404 и молча
+    // терял бы первый ввод новичка. Клик по ней ведёт к действию — пикер / фокус чата.
+    doc.addEventListener("click", () => {
+      if (mode === "manual") addSlideViaPicker();
+      else chatText?.focus();
+    });
+  } else {
   // In-place text editing works everywhere. Built decks are HTML-as-truth, so
   // edits persist via saveDeck(). Drafts are DeckPlan-as-truth, so an inline edit
   // converts that slide to a freeform slide in the plan (synced on blur).
@@ -141,6 +150,7 @@ frame.onload = () => {
       }
     }
   }));
+  }
   suppressDeckNavOnEdit(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
@@ -180,10 +190,11 @@ async function syncDraftSlideHtml(i) {
           JSON.stringify({ template_id: slide.template_id, content: slide.content }));
       } catch (_) { /* sessionStorage может быть недоступен — не критично */ }
     }
-    await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
+    const r = await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html: clone.outerHTML }),
     });
+    if (!r.ok) { setSaveStatus("error"); return; } // К§4 — неуспех (404/гонка): не терять молча
     await fetchPlan();
     if (mode === "manual") renderBuilderForm(); // slide is now freeform
   } finally {
@@ -213,6 +224,7 @@ function suppressDeckNavOnEdit(doc) {
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
+  if (isDraft && !draftPlan.slides.length) return; // К§4 — пустой драфт: тумб нет, только «+ Добавить слайд»
   slides.forEach((_, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
@@ -262,7 +274,9 @@ function goTo(i) {
   pendingGoTo = current;
   const win = frame.contentWindow;
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
-  document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
+  const emptyDraft = isDraft && !draftPlan.slides.length; // К§4 — «0 / 0» вместо ложного «1 / 1»
+  document.getElementById("counter").textContent =
+    emptyDraft ? "0 / 0" : `${current + 1} / ${slides.length}`;
   document.getElementById("chatTarget").textContent =
     mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
   [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
@@ -1059,7 +1073,9 @@ async function changeTemplate(templateId) {
   await reloadDraft(current);
 }
 
-byId("addSlide")?.addEventListener("click", () =>
+// К§4 — общий обработчик добавления слайда: кнопка рейла (#addSlide), кнопка пустой
+// панели (#builderAdd) и клик по заглушке пустого драфта ведут в один пикер.
+function addSlideViaPicker() {
   openPicker(async (tid) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
     await fetch(U(`/api/drafts/${sessionId}/slides`), {
@@ -1067,7 +1083,10 @@ byId("addSlide")?.addEventListener("click", () =>
       body: JSON.stringify({ template_id: tid }),
     });
     await reloadDraft(draftPlan.slides.length); // jump to the new last slide
-  }));
+  });
+}
+byId("addSlide")?.addEventListener("click", addSlideViaPicker);
+byId("builderAdd")?.addEventListener("click", addSlideViaPicker);
 
 // Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
 // дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
