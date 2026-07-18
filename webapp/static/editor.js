@@ -248,10 +248,34 @@ function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
   if (isDraft && !draftPlan.slides.length) return; // К§4 — пустой драфт: тумб нет, только «+ Добавить слайд»
-  slides.forEach((_, i) => {
+  slides.forEach((s, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
-    t.textContent = "Слайд " + (i + 1);
+    // К§11 — масштабированное превью деки (тот же приём, что в пикере) + подпись.
+    const prev = document.createElement("div");
+    prev.className = "thumb-prev";
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.tabIndex = -1;
+    ifr.setAttribute("aria-hidden", "true");
+    // Единый cache-bust deckT (К§6) — превью синхронны с канвой; #n — нужный слайд; &editor=1 — покой.
+    ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1#${i + 1}`);
+    prev.appendChild(ifr);
+    const cap = document.createElement("div");
+    cap.className = "thumb-cap";
+    const num = document.createElement("span");
+    num.className = "thumb-num";
+    num.textContent = i + 1;
+    cap.appendChild(num);
+    const titleText = (s.querySelector("h1,h2,h3,[data-slot=title]")?.textContent || "").trim();
+    if (titleText) {
+      const ttl = document.createElement("span");
+      ttl.className = "thumb-title";
+      ttl.textContent = titleText;
+      cap.appendChild(ttl);
+    }
+    t.appendChild(prev);
+    t.appendChild(cap);
     t.onclick = () => goTo(i);
     box.appendChild(t);
   });

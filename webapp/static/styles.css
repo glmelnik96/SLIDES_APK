@@ -326,11 +326,26 @@ html, body { overflow-x: clip; }
 
 /* ===== Редактор ===== */
 .editor { display: flex; height: 100vh; }
-.thumbs { width: 132px; flex-shrink: 0; overflow-y: auto; padding: 12px; border-right: 1px solid var(--line); background: var(--bg-soft); }
+.thumbs { width: 176px; flex-shrink: 0; overflow-y: auto; padding: 12px; border-right: 1px solid var(--line); background: var(--bg-soft); }  /* К§11 — рейл под превью-миниатюры */
 .thumbs-title { font-size: var(--fs-cap); text-transform: uppercase; letter-spacing: var(--track-caps-2); color: var(--muted-2); margin-bottom: 10px; }
-.thumb { padding: 11px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; font-size: 12px; text-align: center; background: transparent; transition: border-color var(--dur-med) var(--ease-productive), color var(--dur-med) var(--ease-productive); }
+.thumb { border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; background: transparent; overflow: hidden;
+  transition: border-color var(--dur-med) var(--ease-productive); }
 .thumb:hover { border-color: var(--muted-2); }
-.thumb.active { border-color: var(--accent); color: var(--accent); }
+.thumb.active { border-color: var(--accent); }
+.thumb.active .thumb-num { color: var(--accent); }
+/* К§11 — масштабированное превью деки (144×81, 16:9; scale 144/1920 = .075) + подпись.
+   Тот же приём, что в пикере. Полный документ деки в lazy-iframe: pointer-events:none,
+   tabindex=-1, &editor=1 (режим покоя) — рейл скан-абелен, без мельтешения лупов. */
+.thumb-prev { position: relative; width: 144px; height: 81px; margin: 0 auto; overflow: hidden; pointer-events: none; background: var(--stage); }
+.thumb-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform: scale(0.075); transform-origin: top left; }
+.thumb-cap { display: flex; gap: 6px; align-items: baseline; padding: 6px 8px; font-size: var(--fs-cap); }
+.thumb-num { flex: 0 0 auto; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.thumb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+/* К§11 — на узком рейле (координация с правкой 8) превью и заголовок прячем: остаётся номер */
+@media (max-width: 1024px) {
+  .thumb-prev, .thumb-title { display: none; }
+  .thumb-cap { justify-content: center; }
+}
 .addslide { width: 100%; margin-top: 6px; font-size: 12px; padding: 9px 8px; }
 .stage-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .toolbar { display: flex; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); align-items: center; background: var(--bg-soft); }
