@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import logging
 import os
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from webapp.paths import session_dir
 from webapp.runner import CapacityError, JobRunner
 
 _STATIC = Path(__file__).parent / "static"
+logger = logging.getLogger(__name__)
 
 
 def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
@@ -232,11 +234,31 @@ def list_templates(user=Depends(get_current_user)) -> JSONResponse:
     return JSONResponse(templates_api.catalog())
 
 
+# Правила покоя для статичного превью пикера: копия print-блока
+# htmlslides/engine/motion.css:175–186 БЕЗ обёртки @media print — входы, лупы и
+# графики в финальном видимом состоянии, чтобы ~20 превью не мельтешили.
+# motion.css не редактируется; при правках блока печати синхронизировать вручную.
+_PREVIEW_QUIET_STYLE = (
+    "<style>"
+    ".m-enter,.m-enter-left,.m-enter-right,.m-enter-scale,"
+    ".m-fade,.m-stagger>*{opacity:1 !important;animation:none !important;}"
+    ".m-loop-pulse,.m-loop-drift,.m-loop-draw,.m-loop-float{"
+    "animation:none !important;opacity:1 !important;transform:none !important;}"
+    ".bar-fill,.sb-seg{animation:none !important;transform:scaleX(1) !important;}"
+    ".arc-draw{animation:none !important;stroke-dashoffset:var(--draw-to,0) !important;}"
+    ".line-draw{animation:none !important;stroke-dashoffset:0 !important;}"
+    ".line-fade{animation:none !important;opacity:1 !important;}"
+    "</style>"
+)
+
+
 @app.get("/api/templates/{template_id}/preview", response_class=HTMLResponse)
-def template_preview(template_id: str, user=Depends(get_current_user)):
+def template_preview(template_id: str, static: bool = False,
+                     user=Depends(get_current_user)):
     """A one-slide deck with representative sample content — the visual preview
     shown in the template picker. Reuses the real engine so the preview matches
-    the actual output."""
+    the actual output. ``static=1`` injects quiet motion rules so the picker
+    shows still final frames instead of ~20 looping decks."""
     from htmlslides.assembler import assemble
     from htmlslides.library import TemplateLibrary
     from htmlslides.models import DeckPlan, SlidePlan
@@ -248,7 +270,10 @@ def template_preview(template_id: str, user=Depends(get_current_user)):
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type=spec.type, template_id=template_id,
         content=templates_api.sample_content(template_id))])
-    return HTMLResponse(assemble(plan))
+    html = assemble(plan)
+    if static:
+        html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return HTMLResponse(html)
 
 
 def _validation_errors(template_id: str, content: dict) -> list[dict]:
@@ -459,8 +484,12 @@ async def draft_agent(session_id: str, request: Request,
     try:
         res = await run_in_threadpool(
             chat_agent.run_turn, session_id, message, current_index)
-    except Exception as exc:  # noqa: BLE001 — surface a clear message
-        raise HTTPException(500, f"agent failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — logged; neutral message to user
+        logger.exception("chat agent run_turn failed (session %s)", session_id)
+        raise HTTPException(
+            500,
+            "Ассистент не смог обработать запрос — попробуйте переформулировать",
+        ) from exc
     if res.changed:
         _persist_draft(session_id, draft.load_plan(session_id))
     return JSONResponse(res.model_dump())
@@ -478,7 +507,8 @@ async def build_draft(session_id: str, request: Request,
     targets = [s for s in plan.slides if s.brief and not s.filled
                and not s.freeform and not s.slide_type]
     if not targets:
-        raise HTTPException(400, "нечего собирать — аутлайн пуст")
+        raise HTTPException(
+            400, "в плане пока нет слайдов — добавьте их в чате")
     await run_in_threadpool(chat_agent.build_outline, session_id)
     return JSONResponse(draft.load_plan(session_id).model_dump())
 
@@ -601,8 +631,12 @@ async def post_chat(session_id: str, request: Request,
             chat_edit.rewrite_slide, html, slide_index, instruction)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    except Exception as exc:  # noqa: BLE001 — surface a clear message
-        raise HTTPException(500, f"chat edit failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — logged; neutral message to user
+        logger.exception("chat edit failed (session %s)", session_id)
+        raise HTTPException(
+            500,
+            "Не получилось применить правку — попробуйте переформулировать",
+        ) from exc
     section = chat_edit.nth_section(new_html, slide_index)
     # The LLM call above takes seconds-to-minutes and runs UNLOCKED; the deck may
     # have been saved meanwhile (another tab, contenteditable autosave). Splice
@@ -616,7 +650,8 @@ async def post_chat(session_id: str, request: Request,
                     fresh, slide_index, section)
             except ValueError:
                 raise HTTPException(
-                    409, "дека изменилась во время правки — повторите запрос")
+                    409,
+                    "презентация изменилась во время правки — повторите запрос")
         deck_edit.save_deck(session_id, new_html)
     # For a draft (DeckPlan-as-truth), persist the rewrite into plan.json as a
     # freeform slide, so a later form edit / re-render doesn't clobber it.
@@ -690,10 +725,22 @@ async def get_history(request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:
     async with request.app.state.sessionmaker() as s:
         jobs = await jobs_repo.list_for_user(s, user.id)
+
+    def _draft_title(j) -> str | None:
+        """Deck name for constructor/chat drafts (plan.title); None for uploads
+        so the client falls back to the source filename. Best-effort I/O."""
+        if j.kind != "draft":
+            return None
+        try:
+            return draft.load_plan(j.session_id).title or None
+        except Exception:  # noqa: BLE001 — missing/corrupt plan → no name
+            return None
+
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode, "kind": j.kind,
          "source_filename": j.source_filename, "status": j.status,
          "error": j.error,
+         "display_name": _draft_title(j),
          "created_at": j.created_at.isoformat() if j.created_at else None}
         for j in jobs
     ])
