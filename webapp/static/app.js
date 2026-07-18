@@ -389,7 +389,7 @@ document.querySelectorAll(".entry-card").forEach((card) => {
       document.querySelectorAll(".entry-card").forEach((c) =>
         c.classList.toggle("is-active", c === card));
       $("#uploadFlow").classList.remove("hidden");
-      $("#uploadFlow").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#uploadFlow").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     } else {
       startDraft(entry, card);
     }
