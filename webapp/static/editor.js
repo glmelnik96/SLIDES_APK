@@ -12,6 +12,7 @@ document.getElementById("html").href = U(`/api/jobs/${sessionId}/deck?download=1
 let slides = [];
 let current = 0;
 let pendingGoTo = 0; // slide to show after the next iframe load
+let freeformConfirmed = false; // К§1: once the user OKs inline->freeform, don't re-ask this tab-session
 
 function loadDeck() {
   // cache-bust so edits/chat rewrites are reflected on reload
@@ -113,20 +114,29 @@ frame.onload = () => {
       el.setAttribute("contenteditable", "true");
       if (isDraft) {
         el.addEventListener("focus", () => { el.__origHtml = el.innerHTML; });
-        el.addEventListener("blur", () => {
-          const changed = el.__origHtml !== undefined && el.innerHTML !== el.__origHtml;
+        el.addEventListener("blur", async () => {
+          const orig = el.__origHtml;
+          const changed = orig !== undefined && el.innerHTML !== orig;
           el.__origHtml = undefined;
-          if (changed) {
-            // A green count-up number (.js-count) carries a persistent
-            // data-count-final (set once by deck.js, never refreshed). An inline
-            // edit changes textContent but NOT that attribute, so syncDraftSlideHtml
-            // would bake the stale final value and silently revert the edit on the
-            // next navigation. Refresh it to the edited text first.
-            if (el.hasAttribute("data-count-final")) {
-              el.setAttribute("data-count-final", el.textContent);
-            }
-            syncDraftSlideHtml(i);
+          if (!changed) return;
+          // К§1: перед ПЕРВОЙ конвертацией не-freeform слайда в свободный режим —
+          // подтверждение. Отказ восстанавливает исходный HTML и НЕ синкает.
+          if (!draftPlan.slides[i]?.freeform && !freeformConfirmed) {
+            const ok = await confirmDialog(
+              "Правка прямо на слайде переведёт его в свободный режим: поля формы станут недоступны. Продолжить?",
+              "Продолжить", "Отмена");
+            if (!ok) { el.innerHTML = orig; return; }
+            freeformConfirmed = true;
           }
+          // A green count-up number (.js-count) carries a persistent
+          // data-count-final (set once by deck.js, never refreshed). An inline
+          // edit changes textContent but NOT that attribute, so syncDraftSlideHtml
+          // would bake the stale final value and silently revert the edit on the
+          // next navigation. Refresh it to the edited text first.
+          if (el.hasAttribute("data-count-final")) {
+            el.setAttribute("data-count-final", el.textContent);
+          }
+          syncDraftSlideHtml(i);
         });
       }
     }
@@ -156,6 +166,15 @@ async function syncDraftSlideHtml(i) {
   });
   draftHtmlSaving = true;
   try {
+    // К§1: снапшот {template_id, content} ДО перевода слайда в freeform — переживает
+    // reload вкладки (sessionStorage), питает кнопку «Вернуть макет».
+    const slide = draftPlan.slides[i];
+    if (slide && !slide.freeform) {
+      try {
+        sessionStorage.setItem(`freeform-snap:${sessionId}:${i + 1}`,
+          JSON.stringify({ template_id: slide.template_id, content: slide.content }));
+      } catch (_) { /* sessionStorage может быть недоступен — не критично */ }
+    }
     await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html: clone.outerHTML }),
@@ -258,9 +277,10 @@ document.getElementById("save").onclick = async () => {
 // seconds, so we don't block on it. Click "Экспорт" → start the render and show a
 // "Готовлю…" pill → poll until ready → the control becomes an active "Скачать…"
 // button that downloads the finished file. No blind wait, download only when ready.
+// Ч§9 — один глагол «Скачать» на все три формата; busy честно объясняет задержку.
 const EXPORT_LABEL = {
-  png: { idle: "Экспорт в PNG (ZIP)", busy: "Готовлю PNG…", ready: "Скачать PNG (ZIP)" },
-  pptx: { idle: "Экспорт в PPTX", busy: "Готовлю PPTX…", ready: "Скачать PPTX" },
+  png: { idle: "Скачать PNG (ZIP)", busy: "Готовлю PNG… ~10–20 сек", ready: "Скачать PNG (ZIP)" },
+  pptx: { idle: "Скачать PPTX", busy: "Готовлю PPTX… ~10–20 сек", ready: "Скачать PPTX" },
 };
 
 // Any deck edit invalidates a finished (or in-flight) export — a "Скачать" pill
@@ -328,6 +348,51 @@ function flash(btn, text) {
   const orig = btn.textContent;
   btn.textContent = text;
   setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+// К§17 — бренд-диалоги вместо нативных alert/confirm (стиль .picker, прямые углы,
+// SB Sans). Фокус на первую кнопку, Esc = отмена. Возвращают Promise.
+function _dialog(text, buttons) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "dialog";
+    const card = document.createElement("div");
+    card.className = "dialog-card";
+    const p = document.createElement("p");
+    p.className = "dialog-text";
+    p.textContent = text;
+    const row = document.createElement("div");
+    row.className = "dialog-actions";
+    const cancelVal = (buttons.find((b) => b.cancel) || {}).value;
+    function close(val) {
+      document.removeEventListener("keydown", onKey);
+      ov.remove();
+      resolve(val);
+    }
+    function onKey(e) { if (e.key === "Escape") close(cancelVal); }
+    buttons.forEach((b, idx) => {
+      const btn = document.createElement("button");
+      btn.className = b.className;
+      btn.textContent = b.label;
+      btn.onclick = () => close(b.value);
+      row.appendChild(btn);
+      if (idx === 0) setTimeout(() => btn.focus(), 0);
+    });
+    card.appendChild(p);
+    card.appendChild(row);
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    document.addEventListener("keydown", onKey);
+  });
+}
+function confirmDialog(text, okLabel, cancelLabel) {
+  return _dialog(text, [
+    { label: okLabel || "OK", className: "btn", value: true },
+    { label: cancelLabel || "Отмена", className: "btn btn-ghost", value: false, cancel: true },
+  ]);
+}
+function alertDialog(text) {
+  return _dialog(text, [{ label: "Понятно", className: "btn", value: true }]);
 }
 
 /* ---- chat ---- */
@@ -468,13 +533,35 @@ function renderBuilderForm() {
 
   if (slide.freeform) {
     tplBox.innerHTML = `<span class="tpl-name">Свободный слайд</span>`;
-    form.innerHTML = `<p class="builder-note">Этот слайд отредактирован через чат. ` +
-      `Дальнейшие правки — через чат справа.</p>`;
+    // К§1: честная записка (без выдуманной истории про чат) + возврат к макету.
+    form.innerHTML = `<p class="builder-note">Свободный слайд — он больше не привязан к макету, ` +
+      `поэтому полей здесь нет. Правьте текст прямо на слайде или опишите изменение в чате справа.</p>`;
+    const snapKey = `freeform-snap:${sessionId}:${current + 1}`;
+    const snapRaw = sessionStorage.getItem(snapKey);
+    if (snapRaw) {
+      const revert = document.createElement("button");
+      revert.type = "button";
+      revert.className = "btn btn-ghost btn-sm";
+      revert.style.marginTop = "8px";
+      revert.textContent = "Вернуть макет";
+      revert.onclick = async () => {
+        let snap; try { snap = JSON.parse(snapRaw); } catch (_) { return; }
+        const n = current + 1;
+        await fetch(U(`/api/drafts/${sessionId}/slides/${n}`), { method: "DELETE" });
+        await fetch(U(`/api/drafts/${sessionId}/slides`), {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template_id: snap.template_id, at: n, content: snap.content }),
+        });
+        sessionStorage.removeItem(snapKey);
+        await reloadDraft(current);
+      };
+      form.appendChild(revert);
+    }
     return;
   }
   const tpl = tplOf(slide.template_id);
   tplBox.innerHTML =
-    `<span class="tpl-name">Макет: ${slide.template_id}</span>` +
+    `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
   byId("changeTpl").onclick = () => openPicker((tid) => changeTemplate(tid));
 
@@ -518,8 +605,14 @@ function renderSlot(name, spec, value) {
   const wrap = document.createElement("div");
   wrap.className = "field";
   const label = document.createElement("label");
-  label.textContent = name + (spec.required ? " *" : "");
+  label.textContent = (spec.label || name) + (spec.required ? " *" : "");  // К§2: рус. лейбл, фолбэк на id
   wrap.appendChild(label);
+  if (spec.hint) {
+    const hint = document.createElement("div");
+    hint.className = "field-hint";
+    hint.textContent = spec.hint;
+    wrap.appendChild(hint);
+  }
 
   if (spec.kind === "text") {
     const long = (spec.max_chars || 0) > 40;
@@ -884,12 +977,14 @@ function openPicker(onPick) {
     const ifr = document.createElement("iframe");
     ifr.loading = "lazy";
     ifr.tabIndex = -1;
-    ifr.src = U(`/api/templates/${t.id}/preview`);
+    ifr.src = U(`/api/templates/${t.id}/preview?static=1`);  // К§16: покойные превью, без лупов
     prev.appendChild(ifr);
     const meta = document.createElement("div");
     meta.className = "picker-meta";
-    meta.innerHTML = `<span class="picker-id">${t.id}</span>` +
-      `<span class="picker-intent">${t.intent || ""}</span>`;
+    // К§2: человекочитаемое имя макета крупно; сырой id — приглушённой третьей строкой (фолбэк на id).
+    meta.innerHTML = `<span class="picker-id">${t.display_name || t.id}</span>` +
+      `<span class="picker-intent">${t.intent || ""}</span>` +
+      (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
     card.appendChild(prev);
     card.appendChild(meta);
     card.onclick = () => { picker.classList.add("hidden"); onPick(t.id); };
@@ -917,16 +1012,17 @@ async function initDraftBuilder() {
 let rebuilding = false;
 byId("rebuild")?.addEventListener("click", async () => {
   if (rebuilding) return;
-  if (!draftPlan.slides || !draftPlan.slides.length) {
-    alert("Черновик пуст — добавьте хотя бы один слайд."); return;
-  }
+  if (!draftPlan.slides || !draftPlan.slides.length) return;  // К§17: кнопка дизейблится при пустом плане
   const n = draftPlan.slides.length;
-  if (!confirm(`Прогнать черновик через движок? Каждый из ${n} слайд(ов) пройдёт ` +
-               "вёрстку, визуальную проверку качества и автоисправление; после этого " +
-               "дека станет обычной (правки прямо на слайде). Это ~1–2 мин на слайд.")) return;
+  // Ч§3: единый копирайт, «вы», без «движка»; продуктовая формулировка + русская плюрализация.
+  const ok = await confirmDialog(
+    `Улучшить ${n} ${plural(n, "слайд", "слайда", "слайдов")}? Проверим вёрстку и внешний вид ` +
+    `каждого и исправим ошибки — примерно ${n}–${2 * n} мин.`,
+    "Улучшить", "Отмена");
+  if (!ok) return;
   rebuilding = true;
   const btn = byId("rebuild");
-  btn.disabled = true; btn.textContent = "Запускаю…";
+  btn.disabled = true; btn.textContent = REBUILD_LABEL.busy;
   try {
     // Make sure the last form edit reached the server's plan.json before rebuild
     // reads it — otherwise a quick type→rebuild rebuilds a stale deck.
