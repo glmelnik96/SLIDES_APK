@@ -416,6 +416,8 @@ a { color: var(--accent); }
 .build-overlay__title { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
 .build-overlay__sub { color: var(--muted); font-size: 14px; }
 .build-overlay__note { color: var(--muted-2); font-size: 13px; max-width: 420px; line-height: 1.5; }
+/* Р§2 — терминальные состояния (дека удалена / сервер молчит): выход из ошибки */
+.build-overlay__actions { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
 
 /* ===== К§8 — единая правая панель с табами «Поля | Чат» (canvas-first) ===== */
 .rpanel { width: 360px; flex-shrink: 0; display: flex; flex-direction: column;

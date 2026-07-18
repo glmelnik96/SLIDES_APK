@@ -63,26 +63,63 @@ function friendlyDetail(detail) {
 const overlay = document.getElementById("buildOverlay");
 const buildSub = document.getElementById("buildSub");
 const buildTitle = document.getElementById("buildTitle");
+const buildNote = document.getElementById("buildNote");
+const buildActions = document.getElementById("buildActions");
 
 function showOverlay(show) { overlay && overlay.classList.toggle("hidden", !show); }
+
+// Р§2 — терминальная карточка с выходом из ошибки (Nielsen #9): гасим «ждите»-note
+// и показываем действия («На главную» / «Повторить»). Никакого вечного спиннера.
+const HOME_LINK = '<a class="btn btn-ghost" href="/">На главную</a>';
+function showTerminal(title, sub, actionsHtml) {
+  showOverlay(true);
+  if (buildTitle) buildTitle.textContent = title;
+  if (buildSub) buildSub.textContent = sub;
+  if (buildNote) buildNote.textContent = "";
+  if (buildActions) {
+    buildActions.innerHTML = actionsHtml;
+    buildActions.classList.remove("hidden");
+  }
+}
+// Р§2 — бюджет ретраев SSE: после 5 неудач — терминальная карточка вместо цикла.
+let buildRetries = 0;
 
 // Opening the editor for a run whose deck isn't built yet would otherwise show a
 // blank 404 iframe. Instead, gate on readiness: if the deck exists, load it; if
 // the run is still building, show progress (SSE) and load the deck when done.
+// Р§2: a 404 deck is ambiguous — the run may be building, OR the session is gone
+// (expired / foreign). Probe /status to tell them apart: 404 there = terminal card.
 async function initEditor() {
+  if (buildActions) buildActions.classList.add("hidden");
   let head;
   try {
     head = await fetch(U(`/api/jobs/${sessionId}/deck?probe=${Date.now()}`),
                        { method: "GET", headers: { Range: "bytes=0-0" } });
   } catch (e) { head = null; }
-  if (head && head.ok) { showOverlay(false); loadDeck(); return; }
-  if (head && head.status === 404) { waitForBuild(); return; }
+  if (head && head.ok) { buildRetries = 0; showOverlay(false); loadDeck(); return; }
+  if (head && head.status === 404) {
+    let st;
+    try {
+      st = await fetch(U(`/api/jobs/${sessionId}/status?probe=${Date.now()}`));
+    } catch (e) { st = null; }
+    if (st && st.status === 404) {
+      showTerminal("Презентация не найдена",
+        "Возможно, истёк срок хранения (24 часа) или ссылка устарела.", HOME_LINK);
+      return;
+    }
+    buildRetries = 0;              // successful probe resets the retry budget
+    waitForBuild();
+    return;
+  }
   // any other status (e.g. 401) — fall back to a plain load attempt
   showOverlay(false); loadDeck();
 }
 
 function waitForBuild() {
   showOverlay(true);
+  if (buildActions) buildActions.classList.add("hidden");
+  if (buildNote) buildNote.textContent =
+    "Это занимает несколько секунд — не закрывайте страницу.";
   buildTitle.textContent = "Презентация ещё собирается…";
   let done = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
@@ -98,12 +135,26 @@ function waitForBuild() {
         buildTitle.textContent =
           ev.stage === "cancelled" ? "Сборка остановлена" : "Не удалось собрать";
         buildSub.textContent = ev.error || "";
+        if (buildNote) buildNote.textContent = "";
       }
     }
   };
   es.onerror = () => {
     if (done) return;
     es.close();
+    // Р§2 — не крутить бесконечно: после 5 неудачных ретраев — выход из ошибки.
+    if (++buildRetries >= 5) {
+      showTerminal("Не удалось получить статус сборки",
+        "Сервер не отвечает. Обновите страницу или вернитесь на главную.",
+        '<button class="btn btn-ghost" id="buildRetry">Повторить</button>' + HOME_LINK);
+      const rb = document.getElementById("buildRetry");
+      if (rb) rb.addEventListener("click", () => {
+        buildRetries = 0;
+        if (buildActions) buildActions.classList.add("hidden");
+        initEditor();
+      });
+      return;
+    }
     // Stream dropped but run may still be alive — retry readiness shortly.
     setTimeout(initEditor, 3000);
   };

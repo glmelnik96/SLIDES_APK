@@ -573,7 +573,8 @@ async def job_status(session_id: str, request: Request,
     await _owned_or_404(request, session_id, user)
     st = runner.status(session_id)
     if st is None:
-        raise HTTPException(404, "unknown session")
+        raise HTTPException(
+            404, "Сессия не найдена — возможно, удалена по сроку хранения (24 часа)")
     return JSONResponse(st)
 
 
@@ -594,7 +595,8 @@ async def job_events(session_id: str, request: Request,
     async def gen():
         if status is None and queue is None:
             yield {"data": _json.dumps({"stage": "failed", "terminal": True,
-                                        "error": "unknown session"})}
+                                        "error": "Сессия не найдена — возможно, "
+                                                 "удалена по сроку хранения (24 часа)"})}
             return
         if status is not None:
             yield {"data": _json.dumps(status)}
