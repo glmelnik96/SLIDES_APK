@@ -250,8 +250,12 @@ a { color: var(--accent); }
   transition: background var(--dur-med) var(--ease-productive), border-color var(--dur-med) var(--ease-productive), opacity var(--dur-med) var(--ease-productive);
 }
 .btn:hover { background: var(--accent-2); border-color: var(--accent-2); }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
+/* Г§7 — disabled как явное состояние (видимая, но очевидно неактивная кнопка ~4.5:1),
+   не почти-невидимая opacity:.4. Общее правило — чинит и #rebuild в тулбаре. */
+.btn:disabled { opacity: 1; background: var(--panel-2); border-color: var(--line);
+  color: var(--muted); cursor: not-allowed; }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
+#createHint { margin-top: 8px; }  /* Г§7 — отступ хинта от полноширинной CTA */
 .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
 .btn-ghost:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
 .btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }

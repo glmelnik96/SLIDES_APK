@@ -80,6 +80,8 @@ function resetFile() {
   drop.classList.remove("has-file");
   $("#dropText").textContent = "Перетащите файл сюда или нажмите, чтобы выбрать";
   $("#create").disabled = true;
+  const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
+  if (hint) hint.hidden = false;
 }
 
 function setFile(file) {
@@ -87,6 +89,8 @@ function setFile(file) {
   drop.classList.add("has-file");
   $("#dropText").textContent = "Файл: " + file.name;
   $("#create").disabled = false;
+  const hint = $("#createHint");        // Г§7 — файл выбран → причина исчезла
+  if (hint) hint.hidden = true;
 }
 
 fileInput.addEventListener("change", () => {
