@@ -43,8 +43,8 @@
         <span class="entry-num">01</span>
         <h2 class="entry-zone__title">Загрузить документ</h2>
         <p class="entry-zone__desc">Готовый md / txt / docx / pptx &mdash; модель сама соберёт презентацию со структурой и графиками.</p>
-        <!-- UPLOAD FLOW: dropzone → опция → кнопка -->
-        <div id="uploadFlow">
+        <!-- UPLOAD FLOW: dropzone слева, опция + кнопка справа -->
+        <div id="uploadFlow" class="upload-grid">
           <label class="drop" id="drop">
             <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
             <div class="drop-inner">
@@ -53,16 +53,18 @@
               <div class="drop-hint" id="dropHint">.md · .txt · .docx · .pptx</div>
             </div>
           </label>
-          <label class="opt-row">
-            <input type="checkbox" id="exactTransfer" class="opt-check">
-            <span class="opt-box" aria-hidden="true"></span>
-            <span class="opt-text">
-              <span class="opt-title">Точный перенос (1 в 1)</span>
-              <span class="opt-desc">Весь текст переносится дословно &mdash; меняется только оформление.</span>
-            </span>
-          </label>
-          <button id="create" class="btn btn-lg btn-accent" aria-describedby="createHint" disabled>Создать презентацию</button>
-          <div class="field-hint" id="createHint">Сначала выберите файл</div>
+          <div class="upload-side">
+            <label class="opt-row">
+              <input type="checkbox" id="exactTransfer" class="opt-check">
+              <span class="opt-box" aria-hidden="true"></span>
+              <span class="opt-text">
+                <span class="opt-title">Точный перенос (1 в 1)</span>
+                <span class="opt-desc">Весь текст переносится дословно &mdash; меняется только оформление.</span>
+              </span>
+            </label>
+            <button id="create" class="btn btn-lg btn-accent" aria-describedby="createHint" disabled>Создать презентацию</button>
+            <div class="field-hint" id="createHint">Сначала выберите файл</div>
+          </div>
         </div>
       </div>
 

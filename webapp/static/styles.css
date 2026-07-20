@@ -158,8 +158,14 @@ a { color: var(--accent); }
 /* Вариант 1 — вертикальные зоны по приоритету; чат/шаблон — компактные строки */
 .entry-stack { display: flex; flex-direction: column; gap: 12px; }
 .entry-zone { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border: 1px solid var(--line); }
-.entry-zone--primary { border-color: var(--accent); background: var(--accent-dim); padding: 20px; }
+.entry-zone--primary { border-color: var(--accent); padding: 20px; }  /* без зелёного фона — только акцентная рамка */
 .entry-zone--primary .entry-num { color: var(--accent); }
+/* Композиция блока загрузки: dropzone слева, опция + кнопка справа */
+.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; align-items: stretch; }
+.upload-grid .drop { height: 100%; display: grid; place-items: center; }
+.upload-side { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.upload-side .btn { align-self: stretch; }
+@media (max-width: 640px) { .upload-grid { grid-template-columns: 1fr; } }
 .entry-zone--row { flex-direction: row; align-items: center; gap: 20px; }
 .entry-zone--row .zone-text { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
