@@ -33,11 +33,7 @@
     </details>
   </section>
 
-  <!-- Канон v4: двухколоночный workspace — слева управление (sticky), справа выдача -->
-  <div class="workspace">
-  <div class="workspace__controls">
-
-  <!-- ENTRY: три способа начать -->
+  <!-- ENTRY: три способа начать — карточки в ряд на всю ширину -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
     <div class="entry-cards">
@@ -47,8 +43,26 @@
         <span class="entry-desc">Готовый md / txt / docx / pptx &rarr; модель сама соберёт презентацию со структурой и графиками.</span>
         <span class="entry-cta">Выбрано — загрузите файл ниже &darr;</span>
       </button>
+      <button type="button" class="entry-card" id="entryChat" data-entry="chat">
+        <span class="entry-num">02</span>
+        <span class="entry-title">Собрать в чате</span>
+        <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
+        <span class="entry-cta">Открыть чат &rarr;</span>
+      </button>
+      <button type="button" class="entry-card" id="entryManual" data-entry="manual">
+        <span class="entry-num">03</span>
+        <span class="entry-title">Заполнить шаблон</span>
+        <span class="entry-desc">Соберите презентацию из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
+        <span class="entry-cta">Открыть конструктор &rarr;</span>
+      </button>
+    </div>
+  </section>
 
-      <!-- UPLOAD FLOW (точка входа 1) — сразу под карточкой 01 -->
+  <!-- Канон v4: двухколоночный workspace — слева форма загрузки, справа выдача -->
+  <div class="workspace">
+  <div class="workspace__controls">
+
+      <!-- UPLOAD FLOW (точка входа «Загрузить документ») -->
       <div id="uploadFlow">
 
         <!-- STEP 1 -->
@@ -79,23 +93,6 @@
           <div class="field-hint" id="createHint">Сначала выберите файл</div>
         </section>
       </div>
-
-      <div class="eyebrow">Другие способы</div>
-
-      <button type="button" class="entry-card" id="entryManual" data-entry="manual">
-        <span class="entry-num">02</span>
-        <span class="entry-title">Заполнить шаблон</span>
-        <span class="entry-desc">Соберите презентацию из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
-        <span class="entry-cta">Открыть конструктор &rarr;</span>
-      </button>
-      <button type="button" class="entry-card" id="entryChat" data-entry="chat">
-        <span class="entry-num">03</span>
-        <span class="entry-title">Собрать в чате</span>
-        <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
-        <span class="entry-cta">Открыть чат &rarr;</span>
-      </button>
-    </div>
-  </section>
 
   </div><!-- /.workspace__controls -->
   <div class="workspace__output">
