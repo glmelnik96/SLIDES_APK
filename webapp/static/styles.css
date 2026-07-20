@@ -253,7 +253,13 @@ a { color: var(--accent); }
 .intro-more > summary::-webkit-details-marker { display: none; }
 .intro-more > summary::after { content: " ↓"; }
 .intro-more[open] > summary::after { content: " ↑"; }
-.intro-more .intro-lead { margin-top: 12px; }
+/* Описание — в две колонки во всю ширину (по абзацу в колонке) */
+.intro-cols { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px;
+  align-items: start; margin-top: 14px; }
+.intro-cols .intro-lead { max-width: none; margin: 0; }
+@media (max-width: 760px) {
+  .intro-cols { grid-template-columns: 1fr; row-gap: 12px; }
+}
 
 /* ===== Шаги ===== */
 .step { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 32) */
