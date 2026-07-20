@@ -36,7 +36,7 @@
   <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
-    <div class="entry-hero">
+    <div class="entry-stack">
 
       <!-- Зона 1 · Загрузить документ (герой) -->
       <div class="entry-zone entry-zone--primary">
@@ -66,20 +66,22 @@
         </div>
       </div>
 
-      <!-- Зоны 2 и 3 стеком справа -->
-      <div class="entry-side">
-        <div class="entry-zone">
+      <!-- Зоны 2 и 3 — компактные строки со сдержанной ссылкой-действием -->
+      <div class="entry-zone entry-zone--row">
+        <div class="zone-text">
           <span class="entry-num">02</span>
           <h2 class="entry-zone__title">Собрать в чате</h2>
           <p class="entry-zone__desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</p>
-          <button type="button" class="btn btn-accent entry-zone__btn" id="openChat">Открыть чат</button>
         </div>
-        <div class="entry-zone">
+        <button type="button" class="entry-open" id="openChat">Открыть чат &rarr;</button>
+      </div>
+      <div class="entry-zone entry-zone--row">
+        <div class="zone-text">
           <span class="entry-num">03</span>
           <h2 class="entry-zone__title">Заполнить шаблон</h2>
           <p class="entry-zone__desc">Соберите из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</p>
-          <button type="button" class="btn btn-accent entry-zone__btn" id="openManual">Открыть конструктор</button>
         </div>
+        <button type="button" class="entry-open" id="openManual">Открыть конструктор &rarr;</button>
       </div>
 
     </div>

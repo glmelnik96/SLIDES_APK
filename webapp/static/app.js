@@ -517,7 +517,7 @@ $("#openChat")?.addEventListener("click", (e) => startDraft("chat", e.currentTar
 $("#openManual")?.addEventListener("click", (e) => startDraft("manual", e.currentTarget));
 
 // Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
-const _OPEN_LABEL = { openChat: "Открыть чат", openManual: "Открыть конструктор" };
+const _OPEN_LABEL = { openChat: "Открыть чат →", openManual: "Открыть конструктор →" };
 window.addEventListener("pageshow", () => {
   Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
     const b = $("#" + id);
