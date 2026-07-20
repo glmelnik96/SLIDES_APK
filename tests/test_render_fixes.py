@@ -72,6 +72,39 @@ def test_stats_row_structure_matches_autofit_selectors():
     assert "−30–45%" in html and "15→65%" in html
 
 
+# --- Слайд 7: два независимых ряда (stats + необязательный stats2) -------------
+
+def _stats_row_two() -> str:
+    """Ряд 1 (stats) = 3 метрики, ряд 2 (stats2) = 1 метрика с длинной подписью."""
+    plan = DeckPlan(title="T", slides=[
+        SlidePlan(index=1, type="content", template_id="stats-row",
+                  content={"title": "Итоги", "stats": [
+                      {"value": "47%", "label": "Рост"},
+                      {"value": "1200", "label": "Клиентов"},
+                      {"value": "3,5×", "label": "ROI"},
+                  ], "stats2": [
+                      {"value": "98%", "label": "Удержание",
+                       "caption": "после перехода на единую платформу"},
+                  ]})])
+    return assemble(plan, theme="dark")
+
+
+def test_stats_row_two_rows_render_independently():
+    """stats → ряд 1, stats2 → ряд 2: два .sr-row, свои --sr-cols, всего 4 ячейки."""
+    html = _stats_row_two()
+    assert html.count('class="sr-row m-stagger"') == 2   # два независимых ряда
+    assert html.count('class="sr-cell"') == 4            # 3 + 1
+    assert "--sr-cols:3" in html                         # ряд 1 = 3 колонки
+    assert "--sr-cols:1" in html                         # ряд 2 = 1 колонка (широкая)
+
+
+def test_stats_row_empty_second_row_not_rendered():
+    """Без stats2 второй ряд не создаётся — только один .sr-row (пустой ряд не мозолит)."""
+    html = _stats_row()
+    assert html.count('class="sr-row m-stagger"') == 1
+    assert "--sr-cols:4" in html                         # 4 метрики → 4 колонки
+
+
 # --- Fix 3: число не отрывается от единицы (неразрывный пробел) ----------------
 
 _NBSP = " "

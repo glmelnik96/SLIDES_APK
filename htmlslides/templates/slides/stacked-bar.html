@@ -4,9 +4,10 @@
     Self-contained: только инлайн-SVG, без внешних JS/чарт-библиотек, токены темы,
     обе темы. Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
 
-    Один бренд-акцент, без радуги: сегменты залиты var(--accent), различаются
-    ступенями прозрачности (opacity ladder, как в donut): 1.0 / 0.78 / 0.56 / 0.38
-    (по порядку сегментов v1..v4). Легенда сверху сопоставляет свотч → label.
+    Раскраска по индексу сегмента v1..v4 → var(--chart-1..4) (правило «≤3
+    хроматических цвета на слайд»): зелёный-герой + 2 приглушённых доп-цвета +
+    серый. Полная непрозрачность у всех — различие даёт цвет, без opacity-лесенки.
+    Легенда сверху сопоставляет свотч (те же --chart-*) → label.
     Трек var(--bg-card) под баром. Подписи var(--fg-body)/var(--fg-muted).
 
     НОРМИРОВКА: каждый бар = 100% СОСТАВА своей категории. Ширина сегмента i =
@@ -20,20 +21,19 @@
       базлайн y=26, ячейки идут слева направо с шагом по тексту (фикс. колонки 420px).
       Бары ниже: зона y 80..620 (h=540). gutter подписей 360px (текст x=0..340, 30px).
       Бар стартует от bar_x=400; track_w=1280 → конец @ x=1680; справа 120px зазор.
-      pitch = 540 / N (N=bars|length, 2..5); бар высотой 56px центрирован в полосе
+      pitch = 540 / N (N=bars|length, 2..5); бар высотой 40px центрирован в полосе
       (cy = 80 + i*pitch + pitch/2). Сегменты рисуются слева направо как <rect>,
       ширина wi пропорциональна vi/sum; offset аккумулируется вдоль бара.
-      Сегмент i — var(--accent) с fill-opacity ladder[i]. Под баром — трек var(--bg-card).
+      Сегмент i — var(--chart-{i+1}) (полная непрозрачность). Под баром — трек var(--bg-card).
       Без gradient/shadow/rounding, без inline style — только SVG-атрибуты/токены. -#}
 {% set bars = content.bars %}
 {% set legend = content.legend %}
 {% set n = bars | length %}
-{% set ladder = [1.0, 0.78, 0.56, 0.38] %}
 {% set gap = 8 %}
 {% set bars_top = 80 %}
 {% set bars_h = 540 %}
 {% set pitch = bars_h / n %}
-{% set bar_h = 56 %}
+{% set bar_h = 40 %}
 {% set gutter = 360 %}
 {% set bar_x = 400 %}
 {% set track_w = 1280 %}
@@ -47,12 +47,11 @@
   <svg class="sb-svg m-enter" viewBox="0 0 1800 620" fill="none"
        xmlns="http://www.w3.org/2000/svg" role="img"
        aria-label="{{ content.title }}">
-    {# легенда сверху: свотч opacity-ladder → label сегмента #}
+    {# легенда сверху: свотч --chart-* → label сегмента #}
     {% for lg in legend %}
     {% set lx = loop.index0 * leg_pitch %}
-    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
     <rect x="{{ lx }}" y="14" width="26" height="26" rx="0"
-          fill="var(--accent)" fill-opacity="{{ op }}"/>
+          fill="var(--chart-{{ loop.index0 + 1 }})"/>
     <text x="{{ lx + 40 }}" y="27" dominant-baseline="middle"
           font-size="28" font-weight="400" fill="var(--fg-body)">{{ lg.label }}</text>
     {% endfor %}
@@ -73,7 +72,6 @@
     {% if v %}
     {% set seg.seen = seg.seen + 1 %}
     {% set sw = (v | num) / total * track_w %}
-    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.38 %}
     {% set pct = ((v | num) / total * 100) | round | int %}
     {#- Тонкий зазор-разделитель между сегментами: рисуем sw минус gap, «хвост»
         открывает трек (var(--bg-card)), чтобы соседние приглушённые сегменты не
@@ -81,7 +79,7 @@
         трека останется щель); крошечные сегменты (< gap+12) не режем. -#}
     {% set draww = sw - gap if (seg.seen < sm.nz and sw > gap + 12) else sw %}
     <rect class="sb-seg" x="{{ bar_x + seg.offset }}" y="{{ y }}" width="{{ draww }}" height="{{ bar_h }}"
-          fill="var(--accent)" fill-opacity="{{ op }}"/>
+          fill="var(--chart-{{ loop.index0 + 1 }})"/>
     {#- %-метка внутри сегмента. Раньше порог sw>90 прятал узкий 3-й сегмент (~7% от
         1280px ≈ 90px) — выглядело как пропущенные данные. Снижаем порог до 60px и
         для узких сегментов (60..90px) берём шрифт поменьше (20px вместо 26px);
@@ -90,7 +88,7 @@
     {% if sw >= 60 %}
     <text x="{{ bar_x + seg.offset + draww / 2 }}" y="{{ cy }}" text-anchor="middle"
           dominant-baseline="middle" font-size="{{ 26 if sw >= 90 else 20 }}" font-weight="500"
-          fill="var(--bg)">{{ pct }}%</text>
+          fill="var(--cl-graphite)">{{ pct }}%</text>
     {% endif %}
     {% set seg.offset = seg.offset + sw %}
     {% endif %}

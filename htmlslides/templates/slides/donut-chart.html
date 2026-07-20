@@ -4,14 +4,14 @@
     инлайн-SVG, без внешних JS/чарт-библиотек, токены темы, обе темы.
     Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
 
-    Один бренд-акцент, без радуги: все сегменты залиты var(--accent), но
-    различаются ступенями прозрачности (stroke-opacity ladder) — крупнейшая доля
-    получает полную непрозрачность. Ladder: 1.0 / 0.78 / 0.56 / 0.38 / 0.24
-    (по порядку сегментов; первым ставь самый крупный). Трек/дырка var(--bg-card).
+    Раскраска по индексу сегмента (правило «≤3 хроматических цвета на слайд»):
+    крупнейшая доля первой → var(--chart-1) (зелёный-герой), далее --chart-2..5
+    (2 приглушённых доп-цвета + 2 серых). Полная непрозрачность у всех — различие
+    даёт сам цвет/оттенок, без opacity-лесенки. Трек/дырка var(--bg-card).
 
     Геометрия (контейнер .donut-svg @ left60/top328/width1800; viewBox 0 0 1800 620):
       Кольцо — стек <circle> с stroke-dasharray на окружности центральной линии
-      r=225, толщина кольца stroke-width=70 (внешний 260, внутренний 190 — ДЫРКА).
+      r=225, толщина кольца stroke-width=40 (внешний 245, внутренний 205 — ДЫРКА).
       Центр cx=310, cy=310. Окружность C = 2*PI*225 = 1413.7165 (PI=3.14159265).
       Доли нормируются по сумме value (фильтр num): share = value/total. Длина
       дуги seg_len = share*C; для каждого сегмента dasharray="seg_len (C-seg_len)",
@@ -20,7 +20,7 @@
       Трек var(--bg-card) — полная окружность под дугами. fill="none".
 
       Легенда справа (x 700..1790): на каждый сегмент строка — квадратный свотч
-      24px (var(--accent) с тем же stroke-opacity сегмента → fill-opacity),
+      24px (fill=var(--chart-N) того же сегмента, N = индекс+1),
       подпись label (30px var(--fg-body)) слева, доля display|% справа (30px
       Medium var(--fg-body)). Строки вертикально центрированы по высоте 620.
       Без gradient/shadow/inline style — только SVG-атрибуты и токены. -#}
@@ -32,7 +32,6 @@
 {% set total = (segs | map(attribute='value') | map('num') | sum) or 1 %}
 {% set cx = 310 %}
 {% set cy = 310 %}
-{% set ladder = [1.0, 0.78, 0.56, 0.38, 0.24] %}
 {% set gap = 8 %}
 {% set leg_x = 700 %}
 {% set leg_pitch = 84 %}
@@ -48,13 +47,12 @@
        xmlns="http://www.w3.org/2000/svg" role="img"
        aria-label="{{ content.title }}">
     <circle cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
-            stroke="var(--bg-card)" stroke-width="70"/>
+            stroke="var(--bg-card)" stroke-width="40"/>
     <g transform="rotate(-90 {{ cx }} {{ cy }})">
       {% set ns = namespace(offset=0.0) %}
       {% for s in segs %}
       {% set share = (s.value | num) / total %}
       {% set seg_len = share * C %}
-      {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.24 %}
       {#- Тонкий зазор между дугами: рисуем не всю долю, а seg_len минус gap — «хвост»
           дуги открывает трек (var(--bg-card)) как разделитель, чтобы соседние
           приглушённые доли не сливались. offset копится по ПОЛНОЙ доле (позиции не
@@ -65,7 +63,7 @@
           спрятан, сдвинут ещё на vis назад (по ходу группы), так дуга «въезжает»
           в своё место. CSS-переменные читает keyframe m-draw-arc; покой = финал. -#}
       <circle class="arc-draw" cx="{{ cx }}" cy="{{ cy }}" r="{{ R }}" fill="none"
-              stroke="var(--accent)" stroke-opacity="{{ op }}" stroke-width="70"
+              stroke="var(--chart-{{ loop.index0 + 1 }})" stroke-width="40"
               stroke-dasharray="{{ vis }} {{ C - vis }}"
               stroke-dashoffset="{{ -ns.offset }}"
               style="--draw-from:{{ -ns.offset - vis }};--draw-to:{{ -ns.offset }}"/>
@@ -75,10 +73,9 @@
     {% for s in segs %}
     {% set share = (s.value | num) / total %}
     {% set pct = (share * 100) | round | int %}
-    {% set op = ladder[loop.index0] if loop.index0 < ladder|length else 0.24 %}
     {% set ry = leg_top + loop.index0 * leg_pitch + leg_pitch / 2 %}
-    <rect x="{{ leg_x }}" y="{{ ry - 12 }}" width="24" height="24" rx="4"
-          fill="var(--accent)" fill-opacity="{{ op }}"/>
+    <rect x="{{ leg_x }}" y="{{ ry - 12 }}" width="24" height="24" rx="0"
+          fill="var(--chart-{{ loop.index0 + 1 }})"/>
     <text x="{{ leg_x + 44 }}" y="{{ ry }}" dominant-baseline="middle"
           font-size="30" font-weight="400" fill="var(--fg-body)">{{ s.label }}</text>
     <text x="1790" y="{{ ry }}" text-anchor="end" dominant-baseline="middle"

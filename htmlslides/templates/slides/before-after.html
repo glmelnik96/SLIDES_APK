@@ -1,19 +1,15 @@
 {#- before-after: НЕ из Figma — бренд-производное сравнение «было → стало».
-    Шестой визуальный шаблон: ОДНА трансформация в двух состояниях. Левая панель —
-    before (нейтральный тон), правая — after (зелёный акцент-ярлык), между ними
-    стрелка вправо var(--accent); опциональная дельта-чип у стрелки. Контентный
-    макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
-
-    Раскладка — HTML+CSS с id-префиксными классами .ba-* (не SVG: текст до 200
-    символов переносится сеткой надёжнее, чем в SVG <text>). Стрелка-коннектор —
-    инлайн-SVG со stroke=var(--accent). Панели var(--bg-card) side-by-side в контент-
-    зоне; текст вертикально центрирован (flex column center) — нет пустых боксов
-    при коротком тексте (урок grid-2x2/cards-6). Ярлыки — роли .t-*, тело .t-body-30.
-
-    Геометрия (.ba-stage @ left60/top320/width1800/height700): две панели flex:1,
-    зазор 120px под стрелку; стрелка абсолютным центром поверх. before-ярлык
-    var(--fg-muted), after-ярлык var(--accent) (зелёный D / чёрный L через CSS).
-    Дельта-чип — зелёный текст/обводка у стрелки. Токены только, без hex/инлайн-style. -#}
+    Композиция «ВЕРТИКАЛЬНЫЙ ПОТОК»: два полноширинных состояния друг над другом
+    (before сверху var(--bg-card), after снизу — зелёная полоса), между ними
+    коннектор .ba-flow — стрелка ВНИЗ + опц. дельта-чип. Каждая полоса — ряд:
+    .ba-body (ярлык+текст, верх-лево) слева и .ba-dots (брендовая точка) справа:
+    точки заполняют горизонтальную пустоту при коротком тексте, полоса читается
+    собранно при любой длине (до 200 симв.). Занимает весь слайд (top300 → низ).
+    Контентный макет — малый логотип (.slide--chrome-sm), шапка H3+подзаголовок.
+    Раскладка HTML+CSS с id-префиксом .ba-* (не SVG: длинный текст переносится
+    сеткой надёжнее). Стрелка-коннектор — инлайн-SVG stroke=var(--accent).
+    before-ярлык var(--fg-muted); after-полоса зелёная — текст/ярлык графит.
+    Токены только, без hex/инлайн-style. -#}
 <section class="slide slide--chrome-sm" data-template="before-after">
   {% include "_chrome.html" %}
   <div class="content-head">
@@ -21,21 +17,26 @@
     {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
   </div>
   <div class="ba-stage m-enter">
-    <div class="ba-panel ba-panel--before">
-      <p class="ba-label ba-label--before t-head-36">{{ content.before_label }}</p>
-      <p class="ba-text t-body-30">{{ content.before_text }}</p>
+    <div class="ba-band ba-band--before">
+      <div class="ba-body">
+        <p class="ba-label ba-label--before t-head-36">{{ content.before_label }}</p>
+        <p class="ba-text t-body-30">{{ content.before_text }}</p>
+      </div>
+      <span class="ba-dots pattern-dots" aria-hidden="true"></span>
     </div>
-    <div class="ba-mid" aria-hidden="true">
-      <svg class="ba-arrow" viewBox="0 0 96 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M0 32H88" stroke="var(--accent)" stroke-width="6"/>
-        <path d="M62 8L88 32L62 56" stroke="var(--accent)" stroke-width="6"
-              stroke-linejoin="round" stroke-linecap="round"/>
+    <div class="ba-flow">
+      <svg class="ba-arrow" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M32 4V54" stroke="var(--accent)" stroke-width="6"/>
+        <path d="M12 34L32 54L52 34" stroke="var(--accent)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
       {% if content.delta %}<p class="ba-delta">{{ content.delta }}</p>{% endif %}
     </div>
-    <div class="ba-panel ba-panel--after">
-      <p class="ba-label ba-label--after t-head-36">{{ content.after_label }}</p>
-      <p class="ba-text t-body-30">{{ content.after_text }}</p>
+    <div class="ba-band ba-band--after">
+      <div class="ba-body">
+        <p class="ba-label ba-label--after t-head-36">{{ content.after_label }}</p>
+        <p class="ba-text t-body-30">{{ content.after_text }}</p>
+      </div>
+      <span class="ba-dots pattern-dots" aria-hidden="true"></span>
     </div>
   </div>
 </section>

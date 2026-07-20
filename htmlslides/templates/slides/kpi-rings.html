@@ -16,7 +16,7 @@
       Окружность C = 2*PI*R (PI=3.14159265). КЛАМП value в 0..100:
         v = min(max(value|num, 0), 100). Дуга arc = v/100 * C;
         прогресс-circle stroke-dasharray="arc (C-arc)", повёрнут rotate(-90 cx cy)
-        (старт с 12 часов, по часовой), stroke-linecap="round".
+        (старт с 12 часов, по часовой), stroke-linecap="butt" — плоские торцы, без скругления.
         Проверка: 85% → 0.85*360 = 306° дуги.
       Центр: display (или value+"%") ~56px var(--fg-body), text-anchor middle,
         dominant-baseline middle. Подпись label под кольцом (y = cy+R+58), ~28px
@@ -53,7 +53,7 @@
             stroke-dasharray="{{ arc }} {{ C - arc }}"
             stroke-dashoffset="0"
             style="--draw-from:{{ arc }};--draw-to:0"
-            stroke-linecap="round" transform="rotate(-90 {{ cx }} {{ cy }})"/>
+            stroke-linecap="butt" transform="rotate(-90 {{ cx }} {{ cy }})"/>
     <text class="js-count" x="{{ cx }}" y="{{ cy }}" text-anchor="middle" dominant-baseline="middle"
           font-size="56" font-weight="500" fill="var(--fg-body)">{% if r.display and (r.display | num) %}{{ r.display }}{% else %}{{ r.value | replace("%", "") | replace(".", ",") }}%{% endif %}</text>
     {#- Подпись под кольцом. SVG <text> не переносится сам и не клипуется по колонке

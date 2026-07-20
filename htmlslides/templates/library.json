@@ -80,16 +80,23 @@
       "id": "stats-row",
       "type": "content",
       "file": "stats-row.html",
-      "intent": "Слайд «в цифрах»: 3–4 ключевые метрики крупными числами в ряд (доступность, объёмы, охват). Бери, когда нужно показать несколько показателей с акцентом на цифру.",
+      "intent": "Слайд «в цифрах»: ключевые метрики крупными числами, до 2 независимых рядов. Ряд 1 (stats) — обязательный, до 4 метрик; ряд 2 (stats2) — необязательный, до 4 метрик. Меньше метрик в ряду → шире ячейка и больше места под текст (ряд из 1 метрики занимает всю ширину). Бери, когда нужно показать несколько показателей с акцентом на цифру.",
       "slots": {
         "title":    {"kind": "text", "required": true,  "max_chars": 54},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70},
         "stats":    {"kind": "list", "required": true, "max_items": 4,
-                     "item_max_chars": 110,
+                     "item_max_chars": 210,
                      "item_slots": {
                        "value":   {"kind": "text", "required": true,  "max_chars": 8},
-                       "label":   {"kind": "text", "required": true,  "max_chars": 40},
-                       "caption": {"kind": "text", "required": false, "max_chars": 60}
+                       "label":   {"kind": "text", "required": false, "max_chars": 40},
+                       "caption": {"kind": "text", "required": false, "max_chars": 160}
+                     }},
+        "stats2":   {"kind": "list", "required": false, "max_items": 4,
+                     "item_max_chars": 210,
+                     "item_slots": {
+                       "value":   {"kind": "text", "required": true,  "max_chars": 8},
+                       "label":   {"kind": "text", "required": false, "max_chars": 40},
+                       "caption": {"kind": "text", "required": false, "max_chars": 160}
                      }}
       }
     },

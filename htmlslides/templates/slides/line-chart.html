@@ -8,8 +8,8 @@
     Один бренд-акцент: ломаная-тренд stroke=var(--accent) (зелёный на обеих темах,
     толщина 4, скруглённые стыки через SVG-атрибут stroke-linejoin — это НЕ CSS-
     border-radius), под ней лёгкая area-заливка тем же var(--accent) с малой
-    fill-opacity (~0.14) как зелёный wash, НЕ градиент. Маркеры точек — circle
-    var(--accent) с внутренним кольцом var(--bg). Базовая линия и подписи осей
+    fill-opacity (~0.14) как зелёный wash, НЕ градиент. Маркеры точек — залитый
+    мини-квадрат 16px var(--accent), острые углы (без скругления). Базовая линия и подписи осей
     нейтральные (трек var(--bg-card), подписи var(--fg-muted)/var(--fg-body)).
 
     Геометрия (контейнер .line-svg @ left60/top328/width1800; viewBox 0 0 1800 600):
@@ -66,8 +66,7 @@
     {% for p in points %}
     {% set vx = origin_x + (loop.index0 / (n - 1) * plot_w if n > 1 else plot_w / 2) %}
     {% set vy = baseline_y - (vals[loop.index0] - vmin) / span * plot_h %}
-    <circle class="line-fade" cx="{{ vx }}" cy="{{ vy }}" r="9" fill="var(--accent)"/>
-    <circle class="line-fade" cx="{{ vx }}" cy="{{ vy }}" r="4" fill="var(--bg)"/>
+    <rect class="line-fade" x="{{ vx - 8 }}" y="{{ vy - 8 }}" width="16" height="16" fill="var(--accent)"/>
     {% if n <= 5 or loop.first or loop.last %}
     <text x="{{ vx }}" y="{{ vy - 26 }}" text-anchor="middle"
           font-size="28" font-weight="500" fill="var(--fg-body)">{{ p.display or p.value }}</text>

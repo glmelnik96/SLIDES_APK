@@ -1,25 +1,37 @@
 {#- stats-row: НЕ из Figma — бренд-производный макет «в цифрах».
     Закрывает пробел между kpi (2 гигантские цифры) и текстовым grid-2x2:
-    3–4 средние метрики крупными числами в ряд (доступность, объёмы, охват).
+    средние метрики крупными числами. До 2 НЕЗАВИСИМЫХ рядов, у каждого своё число
+    метрик: ряд 1 — content.stats (обязательный, до 4), ряд 2 — content.stats2
+    (необязательный, до 4). Пустой ряд 2 не рендерится.
+    Колонок в ряду = min(кол-во, 4) через инлайн --sr-cols → меньше метрик = шире
+    ячейка (ряд из 1 метрики занимает всю ширину, есть место под длинный текст).
     Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок сверху слева.
-    Геометрия ячейки: safe-зона x 60..1860 = 1800px; 4 ячейки flex:1 + gap 40px
-      (3 промежутка = 120) → ~420px на ячейку. Число 110px Medium, фактор глифа ~0.6
-      → ~66px/глиф → ~6–7 глифов в ряд при nowrap; max_chars value = 8 (с запасом
-      под "99,982%" = 7 глифов, цифры/«,»/«%» уже среднего 0.6). Над каждой ячейкой —
-      тонкая верхняя линия var(--line) (как разделители timeline/kpi). -#}
+    Геометрия ячейки: safe-зона x 60..1860 = 1800px; до 4 колонок (1fr) + column-gap 40px
+      (3 промежутка = 120) → ~420px на ячейку. Число 104px Medium, фактор глифа ~0.55
+      → ~57px/глиф → ~7 глифов в ряд при nowrap; max_chars value = 8 (с запасом
+      под "99,982%" = 7 глифов). Верт. бюджет 328..1014 = 686px на 2 ряда. Над каждой
+      ячейкой — тонкая верхняя линия var(--line) (как разделители timeline/kpi). -#}
+{%- macro sr_cell(s) -%}
+    <div class="sr-cell">
+      <div class="sr-value js-count">{{ s.value }}</div>
+      {% if s.label %}<div class="sr-label t-body-30">{{ s.label }}</div>{% endif %}
+      {% if s.caption %}<div class="sr-caption">{{ s.caption }}</div>{% endif %}
+    </div>
+{%- endmacro -%}
 <section class="slide slide--chrome-sm" data-template="stats-row">
   {% include "_chrome.html" %}
   <div class="content-head">
     <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
     {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="sr-row m-stagger">
-    {% for s in content.stats %}
-    <div class="sr-cell">
-      <div class="sr-value js-count">{{ s.value }}</div>
-      <div class="sr-label t-body-30">{{ s.label }}</div>
-      {% if s.caption %}<div class="sr-caption">{{ s.caption }}</div>{% endif %}
+  <div class="sr-rows">
+    <div class="sr-row m-stagger" style="--sr-cols:{{ [content.stats|length, 4]|min }}">
+      {% for s in content.stats %}{{ sr_cell(s) }}{% endfor %}
     </div>
-    {% endfor %}
+    {% if content.stats2 %}
+    <div class="sr-row m-stagger" style="--sr-cols:{{ [content.stats2|length, 4]|min }}">
+      {% for s in content.stats2 %}{{ sr_cell(s) }}{% endfor %}
+    </div>
+    {% endif %}
   </div>
 </section>

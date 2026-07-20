@@ -8,22 +8,23 @@
   --cl-grey3:#434343;
   --cl-text-gray:#5C5C5C;
   --cl-copyright:#BFBFBF;
-  /* Дополнительная палитра — эталон Cloud.ru_Template_2026.pptx (theme accent2..6) +
-     palette.json (единый источник истины). Green — ГЛАВНЫЙ акцент; эти цвета
-     ДОПОЛНИТЕЛЬНЫЕ: по «иерархии масс» каждый ≤ green, применять редко/точечно.
-     Графики остаются одноцветными (зелёный + opacity-лесенка) — «без радуги» инвариант. */
+  /* Резерв «живых» доп-цветов (vivid) — ТОЛЬКО обводки/точечные акценты, НЕ заливка
+     графиков. Заливку композиционных графиков делают семантические --chart-* (ниже),
+     по правилу «≤3 хроматических цвета на слайд + оттенки серого». Green — цвет-герой,
+     всегда доминирует по массе; vivid применять редко/точечно. */
   --cl-yellow:#CFF500;        /* base.Yellow — лаймовый акцент */
   --cl-purple:#A068FF;        /* base.Purple */
-  --cl-aqua:#18F4CF;          /* extended.Aquamarine */
   --cl-ultramarine:#0063FF;   /* extended.Ultramarine — насыщенный синий (= pptx accent2) */
-  --cl-blue-lt:#C0E0FC;       /* base.Blue — светлый (фон изображений) */
-  --cl-magenta:#FF00FF;       /* extended.Magenta */
   --cl-carrot:#FF4517;        /* extended.Carrot */
   --cl-coral:#FF0642;         /* extended.Coral */
-  --cl-dk2:#4E4E4E;           /* pptx dk2 — средний графит */
-  /* Пастельные тинты — ТОЛЬКО для доп. серий графиков (palette.chart_extension) */
-  --cl-pastel-mint:#C9F2EA; --cl-pastel-yellow:#E8F5C7; --cl-pastel-green:#A8E5C9;
-  --cl-mid-gray:#BDBDBD; --cl-dark-gray:#666666;
+  --cl-blue-lt:#C0E0FC;       /* base.Blue — светлый (фон изображений) */
+  /* Серия графиков --chart-1..6 (композиционные: donut/stacked-bar/bar-chart).
+     Приоритет цветов: зелёный-герой → серая шкала gray3–5 → приглушённые доп-цвета
+     (ultramarine/purple) в хвосте. По умолчанию график зелёно-серый; хроматические
+     доп-цвета подключаются только на 5–6-м сегменте. --chart-1 = зелёный в обеих
+     темах; --chart-2..6 резолвятся темой (см. блоки html[data-theme]). Метрики/тренды
+     (kpi/stats-row/kpi-rings/line-chart) остаются зелёными — цвет там не нёс бы смысла. */
+  --chart-1:var(--cl-green);
   --font:"SB Sans Display",Verdana,sans-serif;
   --font-display:"SB Sans Display",Verdana,sans-serif;
   --font-text:"SB Sans Text",Verdana,sans-serif;
@@ -36,12 +37,16 @@ html[data-theme="dark"]{
   --fg-slide-num:#D3D3D3; --bg-card:#383838; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#D3D3D3; --card-label:var(--cl-green);
   --image-bg:var(--cl-blue-lt);
+  --chart-2:#989898; --chart-3:#737373; --chart-4:#525252;   /* серые gray3–5 */
+  --chart-5:#5D779F; --chart-6:#8372A1;   /* ultramarine/purple приглушённые (хвост) */
 }
 html[data-theme="light"]{
   --bg:#FFFFFF; --fg:#222222; --fg-body:#000000; --fg-muted:#595959;
   --fg-slide-num:#000000; --bg-card:#F2F2F2; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#222222; --card-label:#000000;
   --image-bg:var(--cl-blue-lt);
+  --chart-2:#A6A6A6; --chart-3:#8C8C8C; --chart-4:#737373;   /* серые gray3–5 */
+  --chart-5:#9CADCE; --chart-6:#BDB0D2;   /* ultramarine/purple пастельные (хвост) */
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:var(--radius);}
 html,body{height:100%;}
@@ -271,33 +276,39 @@ html[data-theme="light"] .kpi-value{color:var(--fg-body);}
 .kpi-desc{margin-top:41px;color:var(--fg);}  /* desc @ y=503; white(D)/black(L) */
 
 /* ---- stats-row (не из Figma; бренд-производный «в цифрах») ----
-   контент-зона x 60..1860=1800px; 4 ячейки flex:1 + gap 40 (3×40=120) → ~420px/ячейка.
-   Число 104px Medium (крупнее — цифра-герой доминирует), фактор глифа ~0.55
-   (с letter-spacing -2) → ~57px/глиф → «99,982%» (7 глифов) ≈ 400px < 420px, без
-   overflow в nowrap для типичных значений (≤7 глифов; max_chars слота = 8). */
-.sr-row{position:absolute;left:60px;top:328px;width:1800px;
-  display:flex;gap:40px;align-items:flex-start;}
-.sr-cell{flex:1;min-width:0;display:flex;flex-direction:column;
+   До 2 НЕЗАВИСИМЫХ рядов (.sr-row внутри .sr-rows): ряд 1 — content.stats, ряд 2 —
+   content.stats2. У каждого ряда своя grid c --sr-cols = min(кол-во, 4) из шаблона →
+   меньше метрик = шире ячейка (1 метрика = вся ширина, место под длинный текст).
+   контент-зона x 60..1860=1800px; до 4 колонок (1fr) + column-gap 40 (3×40=120)
+   → ~420px/ячейка. .sr-rows позиционирует блок (top 328), row-gap 56 между рядами;
+   верт. бюджет 328..~1014 = 686px вмещает 2 ряда. Число 104px Medium (цифра-герой),
+   фактор глифа ~0.55 (с letter-spacing -2) → ~57px/глиф → «99,982%» (7 глифов)
+   ≈ 400px < 420px, без overflow в nowrap для типичных значений (≤7 глифов; max_chars=8). */
+.sr-rows{position:absolute;left:60px;top:328px;width:1800px;
+  display:flex;flex-direction:column;row-gap:56px;}
+.sr-row{display:grid;grid-template-columns:repeat(var(--sr-cols,4),1fr);
+  column-gap:40px;align-items:start;}
+.sr-cell{min-width:0;display:flex;flex-direction:column;
   border-top:1px solid var(--line);padding-top:28px;}
 .sr-value{font-size:104px;font-weight:400;line-height:1.0;letter-spacing:-2px;
   white-space:nowrap;color:var(--accent);}
 html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .sr-label{margin-top:30px;}   /* типографика — роль .t-body-30 (var(--fg-body)) */
-.sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.2;
-  letter-spacing:-.22px;color:var(--fg-muted);}
+.sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.3;
+  letter-spacing:-.22px;color:var(--fg-muted);max-width:680px;}
 .kpi-dots{position:absolute;left:60px;top:600px;width:1800px;height:414px;color:var(--line);}
 
 /* ---- bar-chart (не из Figma; бренд-производная SVG-гистограмма) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 620): геттер 520, бары от x=560, trackWidth 1100, значения
-   справа. Бар var(--accent) на обеих темах, трек var(--bg-card), подписи
-   var(--fg-body) — перекрашиваются темой, без per-theme переопределений. */
+   справа. Бар var(--chart-{index+1}) по индексу (зелёный-герой + 3 серых + 2 доп
+   в хвосте, правило ≤3 хроматических цвета), трек var(--bg-card), подписи var(--fg-body). */
 .bar-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
 /* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 620): кольцо cx=310 cy=310 r=225 толщина 70 (дырка → донат),
-   сегменты var(--accent) с разной stroke-opacity (один акцент, без радуги),
+   сегменты var(--chart-1..5) по индексу (зелёный + 3 серых + 1 доп в хвосте, ≤3 хром. цвета),
    трек var(--bg-card); легенда-текст var(--fg-body) — перекрашивается темой,
    без per-theme переопределений. */
 .donut-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
@@ -305,18 +316,18 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 /* ---- line-chart (не из Figma; бренд-производный SVG-график динамики) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 600): origin x=80, plotW 1640, baselineY 530, plotH 470.
-   Ломаная-тренд var(--accent), area-заливка тем же акцентом с малой fill-opacity
-   (зелёный wash, не градиент), маркеры var(--accent)+кольцо var(--bg), базовая
+   Ломаная-тренд var(--accent), area-заливка тем же акцентом (зелёный wash,
+   не градиент; прозрачность задана opacity в SVG), маркеры var(--accent)+кольцо var(--bg), базовая
    линия/подписи нейтральные (var(--bg-card)/var(--fg-muted)/var(--fg-body)) —
    перекрашиваются темой, без per-theme переопределений. */
 .line-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
 /* ---- stacked-bar (не из Figma; бренд-производные SVG составные бары) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
-   (viewBox 0 0 1800 620): легенда сверху (свотчи opacity-ladder), бары ниже —
-   геттер подписей 360, бар от x=400, трек на остаток ширины. Сегменты var(--accent) с
-   разной fill-opacity (один акцент, без радуги; каждый бар = 100% состава),
-   трек var(--bg-card); подписи var(--fg-body), %-метки в сегменте var(--bg) —
+   (viewBox 0 0 1800 620): легенда сверху (свотчи --chart-1..4), бары ниже —
+   геттер подписей 360, бар от x=400, трек на остаток ширины. Сегменты
+   var(--chart-1..4) по индексу (зелёный + 3 серых, без хром. доп-цветов; каждый бар = 100% состава),
+   трек var(--bg-card); подписи var(--fg-body), %-метки var(--cl-graphite) —
    перекрашиваются темой, без per-theme переопределений. */
 .sb-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
@@ -329,32 +340,36 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .kr-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
 /* ---- before-after (не из Figma; бренд-производное «было → стало») ----
-   HTML+CSS-раскладка (id-префикс .ba-*) в контент-зоне; стрелка-коннектор —
-   инлайн-SVG var(--accent). Две панели var(--bg-card) side-by-side, текст
-   выровнен по ВЕРХУ и левому краю (flex column flex-start — единый верхне-левый
-   угол), between — стрелка вправо и опц. дельта-чип (зелёный). before-ярлык
-   var(--fg-muted), after-ярлык var(--accent) (зелёный D / чёрный L). Токены только. */
-/* Сцена сайзится ПО КОНТЕНТУ (min/max), а не фикс. 700px: короткий текст
-   больше не висит в огромной пустоте (урок two-col-cards F7). align-items:stretch
-   уравнивает высоту панелей по более высокой. */
-.ba-stage{position:absolute;left:60px;top:320px;width:1800px;min-height:300px;max-height:700px;
-  display:flex;align-items:stretch;gap:0;}
-.ba-panel{flex:1;min-width:0;min-height:300px;background:var(--bg-card);
-  display:flex;flex-direction:column;justify-content:flex-start;
-  padding:40px;box-sizing:border-box;}   /* было 60px (перебор) → 40px: в ряд с др. карточками (30–36px), крупным панелям чуть просторнее */
-.ba-label{margin:0 0 28px;}                         /* роль .t-head-36 */
+   Композиция «ВЕРТИКАЛЬНЫЙ ПОТОК»: две полноширинные полосы-состояния друг над
+   другом (before — var(--bg-card), after — зелёная), между ними коннектор
+   .ba-flow: стрелка ВНИЗ + опц. дельта-чип. Полоса — ряд: .ba-body (ярлык+текст,
+   верх-лево, flex:1) слева + .ba-dots (брендовая точка, фикс-460) справа: точки
+   заполняют горизонтальную пустоту при коротком тексте — полоса не «куце» и
+   читается собранно при любой длине. Занимает весь слайд (top320, h700).
+   before-ярлык var(--fg-muted); after-полоса зелёная — текст/ярлык графит.
+   Токены только, без hex/инлайн-style. */
+.ba-stage{position:absolute;left:60px;top:320px;width:1800px;height:700px;
+  display:flex;flex-direction:column;}
+.ba-band{position:relative;flex:1;min-height:0;display:flex;align-items:stretch;overflow:hidden;}
+.ba-band--before{background:var(--bg-card);}
+.ba-band--after{background:var(--accent);}
+.ba-body{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;
+  justify-content:flex-start;gap:20px;padding:44px 56px;box-sizing:border-box;}   /* верх-лево; роли .t-head-36 / .t-body-30 */
+.ba-label{margin:0;}
 .ba-label--before{color:var(--fg-muted);}
-.ba-label--after{color:var(--accent);}
-html[data-theme="light"] .ba-label--after{color:var(--fg-body);}
-.ba-text{margin:0;}                                 /* роль .t-body-30 (var(--fg-body)) */
-/* Средняя колонка шире (260px) под дельту-чип: длинная дельта
-   («+65% к доходу в среднем») укладывается в ≤2 строки, а не в 3-4 тесные. */
-.ba-mid{flex:0 0 260px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:28px;}
-.ba-arrow{width:96px;height:64px;display:block;}
-.ba-delta{margin:0;max-width:248px;font-size:20px;font-weight:500;line-height:1.25;
-  letter-spacing:-.3px;text-align:center;color:var(--accent);overflow-wrap:break-word;
-  border:1px solid var(--accent);padding:10px 16px;}  /* 20px: длинное слово (Масштабирование ~15 букв) влезает целиком в чип; break-word — перенос по словам, без разрыва внутри слова */
+.ba-label--after{color:var(--cl-graphite);}          /* графит на зелёном (оба тайла темы) */
+.ba-text{margin:0;}                                  /* .t-body-30 → var(--fg-body) */
+.ba-band--after .ba-text{color:var(--cl-graphite);}  /* графит на зелёной полосе */
+/* Точечное поле справа заполняет пустоту: before — зелёные точки .5,
+   after — графит .16 (мягко на зелёном). Фикс-ширина, чтобы текст не наезжал. */
+.ba-dots{flex:0 0 460px;--dot-step:32px;}
+.ba-band--before .ba-dots{color:var(--line);opacity:.5;}
+.ba-band--after .ba-dots{color:var(--cl-graphite);opacity:.16;}
+/* Коннектор-шов: стрелка вниз + дельта-чип, выровнены по левому контент-краю. */
+.ba-flow{flex:0 0 96px;display:flex;align-items:center;gap:28px;padding:0 56px;background:var(--bg);}
+.ba-arrow{flex:none;width:56px;height:56px;display:block;}
+.ba-delta{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;
+  letter-spacing:-.2px;color:var(--accent);border:1px solid var(--accent);padding:10px 16px;}
 html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-body);}
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
