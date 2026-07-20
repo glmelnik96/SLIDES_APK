@@ -231,6 +231,20 @@ a{color:inherit;}
 .statement--accent .statement-plate-text{color:var(--cl-green);}
 .statement--accent .chrome-note{opacity:.65;}   /* графит на зелёном держит контраст */
 
+/* ---- quote (новый мастер L1119): «цитата / важная фраза» ----
+   Тёмный акцентный слайд без рамок: одна крупная мысль по центру (до 3 строк),
+   зелёный line-art по двум углам (точные пути из quote-*-green.svg). Фраза — НЕ капс
+   (в отличие от hero), центр по обеим осям. Графика — currentColor(=--accent), лежит
+   ПОД текстом (в DOM раньше), поэтому текст свободно перекрывает стрелки как в референсе. */
+.quote-box{position:absolute;left:150px;top:0;width:1620px;height:1080px;
+  display:flex;align-items:center;justify-content:center;text-align:center;}
+.quote-text{font-size:104px;font-weight:600;line-height:1.16;letter-spacing:-2px;
+  color:var(--fg);}
+.quote-art{position:absolute;color:var(--accent);}   /* line-art наследует зелёный акцент */
+.quote-art svg{display:block;width:100%;height:100%;}
+.quote-art--arrows{left:0;top:56px;width:1040px;height:730px;}     /* стрелки сверху-слева (1442×1012) */
+.quote-art--clouds{right:0;bottom:26px;width:940px;height:379px;}  /* облака снизу-справа (1154×465) */
+
 /* ---- contacts (figma 3393:11169/3393:10907): light — зелёное полотно с белыми
    плашками; dark — зелёный контур с вырезом под логотип и зелёным заголовком ---- */
 .contacts-canvas{position:absolute;left:60px;top:60px;width:1802px;height:960px;background:var(--accent);}
