@@ -8,27 +8,36 @@
 </head>
 <body>
 <div class="editor">
+  <!-- Full-width navigation bar: left edge → right edge -->
+  <div class="toolbar">
+    <a class="home" href="/">&larr; На главную</a>
+    <button class="btn btn-ghost" id="prev">&#9664;</button>
+    <span class="counter" id="counter">1 / 1</span>
+    <button class="btn btn-ghost" id="next">&#9654;</button>
+    <span class="sp"></span>
+    <button class="btn btn-accent hidden" id="rebuild" title="Пересобрать ГОТОВУЮ деку через движок с проверкой качества и автоисправлением — для полировки, не для первичной сборки.">Улучшить через движок</button>
+    <button class="btn" id="save">Сохранить</button>
+    <!-- Единая кнопка экспорта с выпадающим списком форматов -->
+    <div class="export-menu">
+      <button class="btn btn-ghost" id="exportToggle" aria-haspopup="true" aria-expanded="false">Экспорт &#9662;</button>
+      <div class="export-dropdown hidden" id="exportDropdown" role="menu">
+        <button class="btn btn-ghost dropdown-item" id="exportPptx" data-fmt="pptx" role="menuitem">Экспорт в PPTX</button>
+        <button class="btn btn-ghost dropdown-item" id="exportPng" data-fmt="png" role="menuitem">Экспорт в PNG (ZIP)</button>
+        <a class="btn btn-ghost dropdown-item" id="html" role="menuitem">Скачать HTML</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="editor-body">
   <!-- Thumbnail rail -->
   <aside class="thumbs">
     <div class="thumbs-title">Слайды</div>
-    <div id="thumbs"></div>
     <button class="btn btn-ghost addslide hidden" id="addSlide">+ Добавить слайд</button>
+    <div id="thumbs"></div>
   </aside>
 
   <!-- Stage: one big slide -->
   <div class="stage-col">
-    <div class="toolbar">
-      <a class="home" href="/">&larr; На главную</a>
-      <button class="btn btn-ghost" id="prev">&#9664;</button>
-      <span class="counter" id="counter">1 / 1</span>
-      <button class="btn btn-ghost" id="next">&#9654;</button>
-      <span class="sp"></span>
-      <button class="btn btn-accent hidden" id="rebuild" title="Пересобрать ГОТОВУЮ деку через движок с проверкой качества и автоисправлением — для полировки, не для первичной сборки.">Улучшить через движок</button>
-      <button class="btn" id="save">Сохранить</button>
-      <button class="btn btn-ghost" id="exportPptx" data-fmt="pptx">Экспорт в PPTX</button>
-      <button class="btn btn-ghost" id="exportPng" data-fmt="png">Экспорт в PNG (ZIP)</button>
-      <a class="btn btn-ghost" id="html">Скачать HTML</a>
-    </div>
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
       <div id="buildOverlay" class="build-overlay hidden">
@@ -46,11 +55,6 @@
     <div class="builder-head">
       <h3>Заполнение слайда</h3>
       <span class="save-status" id="saveStatus" aria-live="polite"></span>
-      <div class="builder-actions">
-        <button class="btn btn-ghost btn-sm" id="slideUp" title="Выше">&#9650;</button>
-        <button class="btn btn-ghost btn-sm" id="slideDown" title="Ниже">&#9660;</button>
-        <button class="btn btn-ghost btn-sm btn-danger" id="slideDelete" title="Удалить">&#10005;</button>
-      </div>
     </div>
     <div class="builder-tpl" id="builderTpl"></div>
     <form class="builder-form" id="builderForm"></form>
@@ -83,6 +87,7 @@
       <button class="btn" id="chatSend">Применить к слайду</button>
     </div>
   </aside>
+  </div>
 </div>
 
 <!-- Template picker (manual mode) -->

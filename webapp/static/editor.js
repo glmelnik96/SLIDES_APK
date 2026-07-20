@@ -189,11 +189,31 @@ function suppressDeckNavOnEdit(doc) {
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
+  // Управление слайдами (удаление/перетаскивание) — только в ручном режиме сборки.
+  const editable = mode === "manual";
   slides.forEach((_, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
+    t.dataset.index = i;
     t.textContent = "Слайд " + (i + 1);
     t.onclick = () => goTo(i);
+    if (editable) {
+      // Крестик удаления — виден по наведению (CSS .thumb:hover .thumb-del)
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "thumb-del";
+      del.title = "Удалить слайд";
+      del.innerHTML = "&#10005;";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteSlideAt(i); });
+      t.appendChild(del);
+      // Перетаскивание миниатюры меняет порядок слайдов
+      t.draggable = true;
+      t.addEventListener("dragstart", onThumbDragStart);
+      t.addEventListener("dragover", onThumbDragOver);
+      t.addEventListener("dragleave", onThumbDragLeave);
+      t.addEventListener("drop", onThumbDrop);
+      t.addEventListener("dragend", onThumbDragEnd);
+    }
     box.appendChild(t);
   });
 }
@@ -323,6 +343,29 @@ function setupExport(btn) {
 }
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
+
+// Единая кнопка «Экспорт ▾» раскрывает выпадающий список форматов. Пункты внутри
+// (PPTX/PNG/HTML) работают как прежде через setupExport / #html.href. Использует
+// document.getElementById напрямую: этот IIFE выполняется раньше объявления byId.
+(function setupExportMenu() {
+  const toggle = document.getElementById("exportToggle");
+  const menu = document.getElementById("exportDropdown");
+  if (!toggle || !menu) return;
+  const close = () => { menu.classList.add("hidden"); toggle.setAttribute("aria-expanded", "false"); };
+  const open = () => { menu.classList.remove("hidden"); toggle.setAttribute("aria-expanded", "true"); };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.classList.contains("hidden") ? open() : close();
+  });
+  // Скачивание HTML — обычная ссылка, после клика меню закрываем
+  document.getElementById("html")?.addEventListener("click", close);
+  // Клик вне меню закрывает его
+  document.addEventListener("click", (e) => {
+    if (menu.contains(e.target) || e.target === toggle) return;
+    close();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
 
 function flash(btn, text) {
   const orig = btn.textContent;
@@ -798,6 +841,7 @@ function markFieldErrors(errors) {
 async function changeTemplate(templateId) {
   // Drop any pending debounced save — we take the freshest form values directly.
   clearTimeout(putTimer); putTimer = null;
+  pushUndo();
   const slide = draftPlan.slides[current];
   // Merge: plan content keeps slots the current form doesn't render (so a swap
   // A→B→A restores A's slots), form values win for the slots the user can see.
@@ -819,11 +863,14 @@ async function changeTemplate(templateId) {
 byId("addSlide")?.addEventListener("click", () =>
   openPicker(async (tid) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
+    pushUndo();
+    // Вставляем новый слайд сразу после активного (1-based позиция at).
+    const at = Math.min(current + 2, draftPlan.slides.length + 1);
     await fetch(U(`/api/drafts/${sessionId}/slides`), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template_id: tid }),
+      body: JSON.stringify({ template_id: tid, at }),
     });
-    await reloadDraft(draftPlan.slides.length); // jump to the new last slide
+    await reloadDraft(at - 1); // переходим на только что добавленный слайд
   }));
 
 // Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
@@ -850,25 +897,154 @@ byId("builderForm")?.addEventListener("focusout", (e) => {
   if (holder) highlightSlot(holder.dataset.slot, false);
 });
 
-byId("slideDelete")?.addEventListener("click", async () => {
-  if (!draftPlan.slides[current]) return;
+// Удаление слайда по индексу (0-based) — вызывается крестиком на миниатюре.
+async function deleteSlideAt(i) {
+  if (!draftPlan.slides[i]) return;
   clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
-  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
-  await reloadDraft(Math.max(0, current - 1));
-});
+  pushUndo();
+  await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`), { method: "DELETE" });
+  await reloadDraft(Math.max(0, i - 1));
+}
 
-byId("slideUp")?.addEventListener("click", () => moveSlide(current, current));     // to 1-based current = up
-byId("slideDown")?.addEventListener("click", () => moveSlide(current, current + 2));
+/* ---- перетаскивание миниатюр для смены порядка ---- */
+let dragFromIndex = null;
+
+function onThumbDragStart(e) {
+  dragFromIndex = Number(this.dataset.index);
+  this.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  // Firefox требует установить данные, иначе перетаскивание не стартует
+  try { e.dataTransfer.setData("text/plain", String(dragFromIndex)); } catch {}
+}
+
+function onThumbDragOver(e) {
+  if (dragFromIndex === null) return;
+  e.preventDefault(); // разрешаем drop
+  e.dataTransfer.dropEffect = "move";
+  const rect = this.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  this.classList.toggle("drop-after", after);
+  this.classList.toggle("drop-before", !after);
+}
+
+function onThumbDragLeave() {
+  this.classList.remove("drop-before", "drop-after");
+}
+
+async function onThumbDrop(e) {
+  e.preventDefault();
+  const from = dragFromIndex;
+  const over = Number(this.dataset.index);
+  const rect = this.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  this.classList.remove("drop-before", "drop-after");
+  if (from === null) return;
+  // Позиция вставки в исходной нумерации (0-based, «перед элементом insertBefore»).
+  const insertBefore = over + (after ? 1 : 0);
+  // No-op: бросили на то же место.
+  if (insertBefore === from || insertBefore === from + 1) return;
+  // Бэкенд reorder = pop(from), затем insert(target). После удаления исходного
+  // слайда индексы правее сдвигаются на 1 — корректируем цель.
+  const target0 = insertBefore > from ? insertBefore - 1 : insertBefore;
+  await moveSlide(from, target0 + 1); // moveSlide ждёт 1-based позицию
+}
+
+function onThumbDragEnd() {
+  this.classList.remove("dragging");
+  document.querySelectorAll(".thumb.drop-before, .thumb.drop-after")
+    .forEach((t) => t.classList.remove("drop-before", "drop-after"));
+  dragFromIndex = null;
+}
 
 async function moveSlide(idx, to1) {
   if (to1 < 1 || to1 > draftPlan.slides.length) return;
   await flushPendingSave(); // preserve the moving slide's edit before reordering
+  pushUndo();
   await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: to1 }),
   });
   await reloadDraft(to1 - 1);
 }
+
+/* ---- отмена/повтор структурных действий (Cmd/Ctrl+Z, Shift+Z / Ctrl+Y) ----
+   Снимок всего плана кладётся в стек ПЕРЕД каждым структурным изменением
+   (добавить / удалить / переместить / сменить макет). Отмена восстанавливает
+   снимок целиком через PUT /api/drafts/{sid}. Набор текста в полях сюда не
+   входит — там работает встроенная отмена браузера, поэтому обработчик
+   пропускает нажатия, когда фокус в поле ввода. История живёт в открытой
+   вкладке (перезагрузку страницы не переживает). */
+const HISTORY_CAP = 50;
+let undoStack = [];
+let redoStack = [];
+let historyBusy = false;
+
+function snapshotPlan() { return JSON.parse(JSON.stringify(draftPlan)); }
+
+function pushUndo() {
+  undoStack.push(snapshotPlan());
+  if (undoStack.length > HISTORY_CAP) undoStack.shift();
+  redoStack = []; // новое действие обнуляет ветку повтора
+}
+
+async function applyPlan(snapshot) {
+  clearTimeout(putTimer); putTimer = null; // снимок заменяет план целиком
+  let r;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snapshot),
+    });
+  } catch (_) { r = null; }
+  if (!r || !r.ok) return false; // 409/оффлайн — оставляем состояние как есть
+  draftPlan = await r.json();
+  const focus = Math.max(0, Math.min(current, draftPlan.slides.length - 1));
+  await reloadDraft(focus);
+  return true;
+}
+
+async function undo() {
+  if (historyBusy || !undoStack.length) return;
+  historyBusy = true;
+  try {
+    const prev = undoStack[undoStack.length - 1];
+    const cur = snapshotPlan();
+    if (await applyPlan(prev)) {
+      undoStack.pop();
+      redoStack.push(cur);
+      if (redoStack.length > HISTORY_CAP) redoStack.shift();
+    }
+  } finally { historyBusy = false; }
+}
+
+async function redo() {
+  if (historyBusy || !redoStack.length) return;
+  historyBusy = true;
+  try {
+    const next = redoStack[redoStack.length - 1];
+    const cur = snapshotPlan();
+    if (await applyPlan(next)) {
+      redoStack.pop();
+      undoStack.push(cur);
+      if (undoStack.length > HISTORY_CAP) undoStack.shift();
+    }
+  } finally { historyBusy = false; }
+}
+
+// Горячие клавиши только в черновике (ручной/чат‑режим); в собранной деке плана
+// нет. Берём e.code, а не e.key — он не зависит от раскладки, поэтому русские
+// «я»/«н» на тех же физических клавишах Z/Y тоже сработают.
+document.addEventListener("keydown", (e) => {
+  if (!(mode === "manual" || mode === "chat")) return;
+  if (!(e.metaKey || e.ctrlKey)) return;
+  if (e.code !== "KeyZ" && e.code !== "KeyY") return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))
+    return; // в поле ввода — отдаём отмену браузеру
+  e.preventDefault();
+  if (e.code === "KeyY" || (e.code === "KeyZ" && e.shiftKey)) redo();
+  else undo();
+});
 
 /* ---- template picker ---- */
 function openPicker(onPick) {

@@ -307,6 +307,23 @@ def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
     draft_render.render_draft(session_id, plan)
 
 
+@app.put("/api/drafts/{session_id}")
+async def replace_draft(session_id: str, request: Request,
+                        user=Depends(get_current_user)) -> JSONResponse:
+    """Replace the whole draft plan in one call. The editor's undo/redo restores
+    a previously-captured snapshot this way; the derived deck re-renders from it.
+    Same ownership / lifecycle guards as the slide endpoints."""
+    from pydantic import ValidationError
+    await _draft_or_404(request, session_id, user, mutate=True)
+    data = await _json_body(request)
+    try:
+        plan = draft.DraftPlan.model_validate(data)
+    except ValidationError:
+        raise HTTPException(400, "invalid plan")
+    _persist_draft(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
 @app.post("/api/drafts/{session_id}/slides")
 async def add_draft_slide(session_id: str, request: Request,
                           user=Depends(get_current_user)) -> JSONResponse:
