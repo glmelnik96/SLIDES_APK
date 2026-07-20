@@ -4,10 +4,10 @@
 <section class="slide slide--chrome-sm" data-template="grid-2x2">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="g22-grid m-stagger">
+  <div class="g22-grid m-stagger" data-slot="cells">
     {% for cell in content.cells %}
     <div class="g22-cell">
       {% if cell.heading %}<p class="g22-name">{{ cell.heading }}</p>{% endif %}

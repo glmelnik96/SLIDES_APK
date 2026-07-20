@@ -12,11 +12,11 @@
   <div class="contacts-logo-plate" aria-hidden="true"></div>
   {% include "_chrome.html" %}
   <div class="contacts-title-wrap m-enter m-enter--hero">
-    <h1 class="contacts-title t-hero-156">{{ content.title }}</h1>
+    <h1 class="contacts-title t-hero-156" data-slot="title">{{ content.title }}</h1>
   </div>
   {% if content.subtitle %}
   <div class="contacts-subtitle-wrap m-enter">
-    <p class="contacts-subtitle t-sub-36">{{ content.subtitle }}</p>
+    <p class="contacts-subtitle t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>
   </div>
   {% endif %}
   <div class="contacts-arrows m-loop-pulse" aria-hidden="true">

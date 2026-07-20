@@ -212,6 +212,37 @@ def test_slide_crud_endpoints(monkeypatch, tmp_path):
         assert [s["template_id"] for s in r.json()["slides"]] == ["cover"]
 
 
+def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
+    """PUT /api/drafts/{sid} replaces the entire plan in one shot — the editor's
+    undo/redo restores a previously-captured snapshot this way, and the derived
+    deck re-renders from it."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cards-6"}, headers=H())
+        # replace the whole plan with a swapped-order, retitled snapshot
+        snap = {"title": "Снимок",
+                "slides": [{"template_id": "cards-6", "content": {}},
+                           {"template_id": "cover", "content": {"title": "Привет"}}]}
+        r = c.put(f"/api/drafts/{sid}", json=snap, headers=H())
+        assert r.status_code == 200
+        body = r.json()
+        assert body["title"] == "Снимок"
+        assert [s["template_id"] for s in body["slides"]] == ["cards-6", "cover"]
+        # the derived deck re-rendered from the replacement (two slides)
+        assert c.get(f"/api/jobs/{sid}/deck", headers=H()).text.count("<section") == 2
+        # persisted: a fresh GET round-trips the same order
+        assert [s["template_id"] for s in
+                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] \
+            == ["cards-6", "cover"]
+        # invalid body (slides must be a list of slide objects) → 400, not 500
+        assert c.put(f"/api/drafts/{sid}", json={"slides": "nope"},
+                     headers=H()).status_code == 400
+        # cross-user → 404 (ownership)
+        assert c.put(f"/api/drafts/{sid}", json=snap,
+                     headers=H("intruder")).status_code == 404
+
+
 def test_old_draft_is_purged_by_retention(monkeypatch, tmp_path):
     """Abandoned drafts don't accumulate forever — retention purges them on TTL."""
     import asyncio as _aio
@@ -237,7 +268,13 @@ def test_old_draft_is_purged_by_retention(monkeypatch, tmp_path):
                 gone = (await s.execute(select(models.Job).where(
                     models.Job.session_id == sid))).scalar_one_or_none()
             return kept, removed, gone
-        kept, removed, gone = _aio.get_event_loop().run_until_complete(_run())
+        # Own loop, not get_event_loop(): under a full-suite run a prior async
+        # test leaves the policy's loop closed/None, so get_event_loop() raises.
+        loop = _aio.new_event_loop()
+        try:
+            kept, removed, gone = loop.run_until_complete(_run())
+        finally:
+            loop.close()
         assert removed >= 1 and gone is None
 
 

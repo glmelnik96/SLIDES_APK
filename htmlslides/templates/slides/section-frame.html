@@ -9,9 +9,9 @@
   <svg class="sf-frame" viewBox="0 0 1800 780" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <path d="M0.5 0.5H600.67V60H1799.5V779.5H240.87V720H0.5V0.5Z" stroke="currentColor"/>
   </svg>
-  <h1 class="sf-title m-enter m-enter--hero">{{ content.label }}</h1>
+  <h1 class="sf-title m-enter m-enter--hero" data-slot="label">{{ content.label }}</h1>
   {#- Номер секции: голое целое дополняем ведущим нулём до NN (1→01, 2→02); «02» оставляем; нечисловое — как есть; пусто — ничего. -#}
-  {% if content.number %}{% set num = content.number | string | trim %}<p class="sf-number t-sub-36 m-enter">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</p>{% endif %}
+  {% if content.number %}{% set num = content.number | string | trim %}<p class="sf-number t-sub-36 m-enter" data-slot="number">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</p>{% endif %}
   <div class="sf-arrows m-loop-draw" aria-hidden="true">
     {% for _ in range(3) %}{% include "_arrow.html" %}{% endfor %}
   </div>

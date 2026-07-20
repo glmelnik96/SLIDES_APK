@@ -4,19 +4,19 @@
 <section class="slide slide--chrome-sm" data-template="service-table">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
   <div class="svc-dots pattern-dots" aria-hidden="true"></div>
   {% if content.image %}
-  <div class="svc-image" aria-hidden="true">
+  <div class="svc-image" aria-hidden="true" data-slot="image">
     <img src="{{ content.image }}" alt="">
   </div>
   {% endif %}
   <div class="svc-panel m-enter-right">
-    <h2 class="svc-name t-head-54">{{ content.service_name }}</h2>
-    {% if content.service_desc %}<p class="svc-desc t-body-30">{{ content.service_desc }}</p>{% endif %}
-    <div class="svc-rows m-stagger">
+    <h2 class="svc-name t-head-54" data-slot="service_name">{{ content.service_name }}</h2>
+    {% if content.service_desc %}<p class="svc-desc t-body-30" data-slot="service_desc">{{ content.service_desc }}</p>{% endif %}
+    <div class="svc-rows m-stagger" data-slot="rows">
       {% for row in content.rows %}
       <div class="svc-row">
         <div class="svc-num t-head-36">{{ row.num }}</div>

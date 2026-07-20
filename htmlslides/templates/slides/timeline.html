@@ -4,17 +4,17 @@
 <section class="slide slide--chrome-sm" data-template="timeline">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="tl-list m-stagger">
+  <div class="tl-list m-stagger" data-slot="items">
     {% for item in content['items'] %}
     <div class="tl-row">
       <p class="tl-text t-body-30">{{ item.text }}</p>
     </div>
     {% endfor %}
   </div>
-  <div class="tl-art m-enter-right" aria-hidden="true">
+  <div class="tl-art m-enter-right" aria-hidden="true" data-slot="image">
     {% if content.image %}
     {#- есть иллюстрация — ступенчатые голубые подложки + картинка (как в Figma) -#}
     <div class="tl-art-panel tl-art-panel--a"></div>

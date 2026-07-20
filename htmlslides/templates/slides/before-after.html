@@ -13,14 +13,14 @@
 <section class="slide slide--chrome-sm" data-template="before-after">
   {% include "_chrome.html" %}
   <div class="content-head">
-    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
-    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
   <div class="ba-stage m-enter">
     <div class="ba-band ba-band--before">
       <div class="ba-body">
-        <p class="ba-label ba-label--before t-head-36">{{ content.before_label }}</p>
-        <p class="ba-text t-body-30">{{ content.before_text }}</p>
+        <p class="ba-label ba-label--before t-head-36" data-slot="before_label">{{ content.before_label }}</p>
+        <p class="ba-text t-body-30" data-slot="before_text">{{ content.before_text }}</p>
       </div>
       <span class="ba-dots pattern-dots" aria-hidden="true"></span>
     </div>
@@ -29,12 +29,12 @@
         <path d="M32 4V54" stroke="var(--accent)" stroke-width="6"/>
         <path d="M12 34L32 54L52 34" stroke="var(--accent)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
       </svg>
-      {% if content.delta %}<p class="ba-delta">{{ content.delta }}</p>{% endif %}
+      {% if content.delta %}<p class="ba-delta" data-slot="delta">{{ content.delta }}</p>{% endif %}
     </div>
     <div class="ba-band ba-band--after">
       <div class="ba-body">
-        <p class="ba-label ba-label--after t-head-36">{{ content.after_label }}</p>
-        <p class="ba-text t-body-30">{{ content.after_text }}</p>
+        <p class="ba-label ba-label--after t-head-36" data-slot="after_label">{{ content.after_label }}</p>
+        <p class="ba-text t-body-30" data-slot="after_text">{{ content.after_text }}</p>
       </div>
       <span class="ba-dots pattern-dots" aria-hidden="true"></span>
     </div>

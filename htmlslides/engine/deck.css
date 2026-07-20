@@ -516,3 +516,7 @@ html[data-theme="dark"] .sd-number{color:var(--accent);}
   .slide{position:relative;inset:auto;visibility:visible;page-break-after:always;margin:0 auto;}
   .deck-progress{display:none;}
 }
+
+/* Хук панельного редактора: обводит редактируемый блок при фокусе поля слева.
+   Острые углы; --accent определён в теме (см. выше). */
+.slot-highlight { outline: 2px solid var(--accent); outline-offset: 3px; }

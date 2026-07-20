@@ -189,11 +189,31 @@ function suppressDeckNavOnEdit(doc) {
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
+  // Управление слайдами (удаление/перетаскивание) — только в ручном режиме сборки.
+  const editable = mode === "manual";
   slides.forEach((_, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
+    t.dataset.index = i;
     t.textContent = "Слайд " + (i + 1);
     t.onclick = () => goTo(i);
+    if (editable) {
+      // Крестик удаления — виден по наведению (CSS .thumb:hover .thumb-del)
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "thumb-del";
+      del.title = "Удалить слайд";
+      del.innerHTML = "&#10005;";
+      del.addEventListener("click", (e) => { e.stopPropagation(); deleteSlideAt(i); });
+      t.appendChild(del);
+      // Перетаскивание миниатюры меняет порядок слайдов
+      t.draggable = true;
+      t.addEventListener("dragstart", onThumbDragStart);
+      t.addEventListener("dragover", onThumbDragOver);
+      t.addEventListener("dragleave", onThumbDragLeave);
+      t.addEventListener("drop", onThumbDrop);
+      t.addEventListener("dragend", onThumbDragEnd);
+    }
     box.appendChild(t);
   });
 }
@@ -222,6 +242,24 @@ function goTo(i) {
 
 document.getElementById("prev").onclick = () => goTo(current - 1);
 document.getElementById("next").onclick = () => goTo(current + 1);
+
+// Листание слайдов стрелками с самой страницы редактора: ↑/← — предыдущий,
+// ↓/→ — следующий. У превью (iframe) свой обработчик — он срабатывает, когда
+// фокус внутри картинки слайда; этот нужен для случая, когда фокус на редакторе
+// (миниатюры, панель). В поле ввода или чате стрелки отдаём тексту — они двигают
+// курсор, а не листают. Модификаторы (Cmd/Ctrl/Alt) не трогаем — это чужие
+// сочетания. goTo сам ограничивает края (без зацикливания), как кнопки «‹ ›».
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const prev = e.key === "ArrowUp" || e.key === "ArrowLeft";
+  const next = e.key === "ArrowDown" || e.key === "ArrowRight";
+  if (!prev && !next) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))
+    return;
+  e.preventDefault();
+  goTo(current + (next ? 1 : -1));
+});
 
 function currentDeckHtml() {
   const doc = frame.contentDocument;
@@ -323,6 +361,29 @@ function setupExport(btn) {
 }
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
+
+// Единая кнопка «Экспорт ▾» раскрывает выпадающий список форматов. Пункты внутри
+// (PPTX/PNG/HTML) работают как прежде через setupExport / #html.href. Использует
+// document.getElementById напрямую: этот IIFE выполняется раньше объявления byId.
+(function setupExportMenu() {
+  const toggle = document.getElementById("exportToggle");
+  const menu = document.getElementById("exportDropdown");
+  if (!toggle || !menu) return;
+  const close = () => { menu.classList.add("hidden"); toggle.setAttribute("aria-expanded", "false"); };
+  const open = () => { menu.classList.remove("hidden"); toggle.setAttribute("aria-expanded", "true"); };
+  toggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.classList.contains("hidden") ? open() : close();
+  });
+  // Скачивание HTML — обычная ссылка, после клика меню закрываем
+  document.getElementById("html")?.addEventListener("click", close);
+  // Клик вне меню закрывает его
+  document.addEventListener("click", (e) => {
+    if (menu.contains(e.target) || e.target === toggle) return;
+    close();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
 
 function flash(btn, text) {
   const orig = btn.textContent;
@@ -600,9 +661,9 @@ function renderSlot(name, spec, value) {
     el.value = value == null ? "" : String(value);
     el.dataset.slot = name;
     el.dataset.kind = "text";
-    el.oninput = scheduleSave;
+    el.addEventListener("input", scheduleSave);
     wrap.appendChild(el);
-    if (spec.max_chars) wrap.appendChild(hint(`до ${spec.max_chars} символов`));
+    if (spec.max_chars) wrap.appendChild(charCounter(el, spec.max_chars));
   } else if (spec.kind === "list") {
     const list = document.createElement("div");
     list.className = "field-list";
@@ -659,6 +720,21 @@ function hint(text) {
   s.className = "field-hint"; s.textContent = text; return s;
 }
 
+// Живой счётчик «M/N» для текстового поля: тот же узел, что hint(), но обновляется
+// на ввод и краснеет (.field-hint--over) при переполнении M > max. maxLength обычно
+// не даёт превысить руками — красный нужен для значений, пришедших из плана.
+function charCounter(el, max) {
+  const h = hint("");
+  const upd = () => {
+    const n = (el.value || "").length;
+    h.textContent = `${n}/${max}`;
+    h.classList.toggle("field-hint--over", n > max);
+  };
+  el.addEventListener("input", upd);
+  upd();
+  return h;
+}
+
 function collectContent() {
   const form = byId("builderForm");
   const content = {};
@@ -712,6 +788,7 @@ async function saveCurrentSlide() {
   if (!slide || slide.freeform) return;
   const content = collectContent();
   slide.content = content; // optimistic local update
+  setSaveStatus("saving");
   let r;
   try {
     r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}`), {
@@ -724,21 +801,60 @@ async function saveCurrentSlide() {
   if (r && r.ok) {
     const { errors } = await r.json();
     if (current === idx) markFieldErrors(errors || []); // only if still shown
+    setSaveStatus("saved");
     loadDeck(); // refresh preview
   } else {
-    // Save failed (network/server): the optimistic local copy now diverges from
-    // the server. Resync from the server so we never silently write stale state
-    // back on the next edit, and tell the user.
+    // Save failed (network/server): resync from the server so we never write stale
+    // state back on the next edit, and say so in words (persistent red status)
+    // instead of an alert() on every failure.
     await reloadDraft(idx);
-    alert("Не удалось сохранить слайд — изменения сброшены к последней сохранённой версии. Попробуйте ещё раз.");
+    setSaveStatus("error");
+  }
+}
+
+// Индикатор автосейва в шапке формы: «Сохранение…» → «Сохранено ✓» → «Не сохранено».
+// Успех мягко гаснет через 1.6с; процесс/ошибка висят до следующего сейва. Узел
+// #saveStatus живёт в .builder-head, который не перестраивается renderBuilderForm,
+// поэтому статус переживает пересборку формы.
+let saveStatusTimer = null;
+function setSaveStatus(state) {
+  const el = byId("saveStatus");
+  if (!el) return;
+  clearTimeout(saveStatusTimer);
+  el.textContent = SAVE_STATUS[state] || "";
+  el.className = "save-status save-status--" + state;
+  if (state === "saved") {
+    saveStatusTimer = setTimeout(() => {
+      el.textContent = "";
+      el.className = "save-status";
+    }, 1600);
   }
 }
 
 function markFieldErrors(errors) {
-  const bad = new Set(errors.map((e) => e.slot.split(/[.[]/)[0]));
+  // Первую ошибку на каждый слот верхнего уровня печатаем под соответствующим
+  // полем (узел .field-hint--error). Рамку красит существующий .field-error.
+  const bySlot = new Map();
+  errors.forEach((e) => {
+    const top = e.slot.split(/[.[]/)[0];
+    if (!bySlot.has(top)) bySlot.set(top, e);
+  });
   byId("builderForm").querySelectorAll(".field").forEach((f) => {
     const slot = f.querySelector("[data-slot]")?.dataset.slot;
-    f.classList.toggle("field-error", slot && bad.has(slot));
+    const err = slot ? bySlot.get(slot) : null;
+    f.classList.toggle("field-error", !!err);
+    const text = err ? errText(err.code, err.detail) : "";
+    let msg = f.querySelector(".field-hint--error");
+    if (text) {
+      if (!msg) {
+        msg = document.createElement("div");
+        msg.className = "field-hint field-hint--error";
+        f.appendChild(msg);
+      }
+      msg.textContent = text;
+    } else if (msg) {
+      msg.remove();
+    }
   });
 }
 
@@ -746,6 +862,7 @@ function markFieldErrors(errors) {
 async function changeTemplate(templateId) {
   // Drop any pending debounced save — we take the freshest form values directly.
   clearTimeout(putTimer); putTimer = null;
+  pushUndo();
   const slide = draftPlan.slides[current];
   // Merge: plan content keeps slots the current form doesn't render (so a swap
   // A→B→A restores A's slots), form values win for the slots the user can see.
@@ -767,32 +884,188 @@ async function changeTemplate(templateId) {
 byId("addSlide")?.addEventListener("click", () =>
   openPicker(async (tid) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
+    pushUndo();
+    // Вставляем новый слайд сразу после активного (1-based позиция at).
+    const at = Math.min(current + 2, draftPlan.slides.length + 1);
     await fetch(U(`/api/drafts/${sessionId}/slides`), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template_id: tid }),
+      body: JSON.stringify({ template_id: tid, at }),
     });
-    await reloadDraft(draftPlan.slides.length); // jump to the new last slide
+    await reloadDraft(at - 1); // переходим на только что добавленный слайд
   }));
 
-byId("slideDelete")?.addEventListener("click", async () => {
-  if (!draftPlan.slides[current]) return;
-  clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
-  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
-  await reloadDraft(Math.max(0, current - 1));
+// Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
+// дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
+// находим в деке элемент [data-slot=<слот>] и обводим его. На exact/freeform-слайдах
+// data-slot нет — подсветка просто не срабатывает.
+function highlightSlot(slot, on) {
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  doc.querySelectorAll(".slot-highlight").forEach((n) =>
+    n.classList.remove("slot-highlight"));
+  if (on && slot) {
+    const el = doc.querySelector(`[data-slot="${slot}"]`);
+    if (el) el.classList.add("slot-highlight");
+  }
+}
+
+byId("builderForm")?.addEventListener("focusin", (e) => {
+  const holder = e.target.closest("[data-slot]");
+  if (holder) highlightSlot(holder.dataset.slot, true);
+});
+byId("builderForm")?.addEventListener("focusout", (e) => {
+  const holder = e.target.closest("[data-slot]");
+  if (holder) highlightSlot(holder.dataset.slot, false);
 });
 
-byId("slideUp")?.addEventListener("click", () => moveSlide(current, current));     // to 1-based current = up
-byId("slideDown")?.addEventListener("click", () => moveSlide(current, current + 2));
+// Удаление слайда по индексу (0-based) — вызывается крестиком на миниатюре.
+async function deleteSlideAt(i) {
+  if (!draftPlan.slides[i]) return;
+  clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
+  pushUndo();
+  await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`), { method: "DELETE" });
+  await reloadDraft(Math.max(0, i - 1));
+}
+
+/* ---- перетаскивание миниатюр для смены порядка ---- */
+let dragFromIndex = null;
+
+function onThumbDragStart(e) {
+  dragFromIndex = Number(this.dataset.index);
+  this.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  // Firefox требует установить данные, иначе перетаскивание не стартует
+  try { e.dataTransfer.setData("text/plain", String(dragFromIndex)); } catch {}
+}
+
+function onThumbDragOver(e) {
+  if (dragFromIndex === null) return;
+  e.preventDefault(); // разрешаем drop
+  e.dataTransfer.dropEffect = "move";
+  const rect = this.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  this.classList.toggle("drop-after", after);
+  this.classList.toggle("drop-before", !after);
+}
+
+function onThumbDragLeave() {
+  this.classList.remove("drop-before", "drop-after");
+}
+
+async function onThumbDrop(e) {
+  e.preventDefault();
+  const from = dragFromIndex;
+  const over = Number(this.dataset.index);
+  const rect = this.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height / 2;
+  this.classList.remove("drop-before", "drop-after");
+  if (from === null) return;
+  // Позиция вставки в исходной нумерации (0-based, «перед элементом insertBefore»).
+  const insertBefore = over + (after ? 1 : 0);
+  // No-op: бросили на то же место.
+  if (insertBefore === from || insertBefore === from + 1) return;
+  // Бэкенд reorder = pop(from), затем insert(target). После удаления исходного
+  // слайда индексы правее сдвигаются на 1 — корректируем цель.
+  const target0 = insertBefore > from ? insertBefore - 1 : insertBefore;
+  await moveSlide(from, target0 + 1); // moveSlide ждёт 1-based позицию
+}
+
+function onThumbDragEnd() {
+  this.classList.remove("dragging");
+  document.querySelectorAll(".thumb.drop-before, .thumb.drop-after")
+    .forEach((t) => t.classList.remove("drop-before", "drop-after"));
+  dragFromIndex = null;
+}
 
 async function moveSlide(idx, to1) {
   if (to1 < 1 || to1 > draftPlan.slides.length) return;
   await flushPendingSave(); // preserve the moving slide's edit before reordering
+  pushUndo();
   await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: to1 }),
   });
   await reloadDraft(to1 - 1);
 }
+
+/* ---- отмена/повтор структурных действий (Cmd/Ctrl+Z, Shift+Z / Ctrl+Y) ----
+   Снимок всего плана кладётся в стек ПЕРЕД каждым структурным изменением
+   (добавить / удалить / переместить / сменить макет). Отмена восстанавливает
+   снимок целиком через PUT /api/drafts/{sid}. Набор текста в полях сюда не
+   входит — там работает встроенная отмена браузера, поэтому обработчик
+   пропускает нажатия, когда фокус в поле ввода. История живёт в открытой
+   вкладке (перезагрузку страницы не переживает). */
+const HISTORY_CAP = 50;
+let undoStack = [];
+let redoStack = [];
+let historyBusy = false;
+
+function snapshotPlan() { return JSON.parse(JSON.stringify(draftPlan)); }
+
+function pushUndo() {
+  undoStack.push(snapshotPlan());
+  if (undoStack.length > HISTORY_CAP) undoStack.shift();
+  redoStack = []; // новое действие обнуляет ветку повтора
+}
+
+async function applyPlan(snapshot) {
+  clearTimeout(putTimer); putTimer = null; // снимок заменяет план целиком
+  let r;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(snapshot),
+    });
+  } catch (_) { r = null; }
+  if (!r || !r.ok) return false; // 409/оффлайн — оставляем состояние как есть
+  draftPlan = await r.json();
+  const focus = Math.max(0, Math.min(current, draftPlan.slides.length - 1));
+  await reloadDraft(focus);
+  return true;
+}
+
+async function undo() {
+  if (historyBusy || !undoStack.length) return;
+  historyBusy = true;
+  try {
+    const prev = undoStack[undoStack.length - 1];
+    const cur = snapshotPlan();
+    if (await applyPlan(prev)) {
+      undoStack.pop();
+      redoStack.push(cur);
+      if (redoStack.length > HISTORY_CAP) redoStack.shift();
+    }
+  } finally { historyBusy = false; }
+}
+
+async function redo() {
+  if (historyBusy || !redoStack.length) return;
+  historyBusy = true;
+  try {
+    const next = redoStack[redoStack.length - 1];
+    const cur = snapshotPlan();
+    if (await applyPlan(next)) {
+      redoStack.pop();
+      undoStack.push(cur);
+      if (undoStack.length > HISTORY_CAP) undoStack.shift();
+    }
+  } finally { historyBusy = false; }
+}
+
+// Горячие клавиши только в черновике (ручной/чат‑режим); в собранной деке плана
+// нет. Берём e.code, а не e.key — он не зависит от раскладки, поэтому русские
+// «я»/«н» на тех же физических клавишах Z/Y тоже сработают.
+document.addEventListener("keydown", (e) => {
+  if (!(mode === "manual" || mode === "chat")) return;
+  if (!(e.metaKey || e.ctrlKey)) return;
+  if (e.code !== "KeyZ" && e.code !== "KeyY") return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))
+    return; // в поле ввода — отдаём отмену браузеру
+  e.preventDefault();
+  if (e.code === "KeyY" || (e.code === "KeyZ" && e.shiftKey)) redo();
+  else undo();
+});
 
 /* ---- template picker ---- */
 function openPicker(onPick) {
@@ -945,14 +1218,65 @@ function fieldInput(value, onInput) {
   return el;
 }
 
-// Append a hint line into a typed-slide field card. Named distinctly from the
-// manual builder's hint(text)->node (below) so the two never collide — a prior
-// duplicate `hint` shadowed that one and crashed the whole builder form render.
-function appendHint(card, text) {
-  const h = document.createElement("div");
-  h.className = "field-hint";
-  h.textContent = text;
-  card.appendChild(h);
+// Построчный редактор списка для типизированных полей чата. `cols` описывает
+// ячейки одной строки: одна ячейка без key → значение-строка (bullets/колонки),
+// две ячейки с key value/label → объект (stats). Визуально повторяет список
+// конструктора (.field-list/.field-item/+ пункт/✕). onChange(values) зовём после
+// любой правки/добавления/удаления — там вызывается saveFields.
+function lineListEditor(items, cols, onChange) {
+  const list = document.createElement("div");
+  list.className = "field-list";
+  const single = cols.length === 1;
+
+  const collect = () => {
+    const out = [];
+    list.querySelectorAll(".field-item").forEach((row) => {
+      const inputs = row.querySelectorAll("input");
+      if (single) {
+        const v = inputs[0].value.trim();
+        if (v) out.push(v);
+      } else {
+        const obj = {};
+        cols.forEach((c, i) => { obj[c.key] = inputs[i].value.trim(); });
+        if (Object.values(obj).some(Boolean)) out.push(obj);
+      }
+    });
+    onChange(out);
+  };
+
+  const makeRow = (item) => {
+    const row = document.createElement("div");
+    row.className = "field-item";
+    cols.forEach((c, i) => {
+      const inp = document.createElement("input");
+      inp.className = "field-input";
+      inp.placeholder = c.placeholder;
+      inp.value = single ? (item || "") : ((item && item[c.key]) || "");
+      inp.addEventListener("input", collect);
+      row.appendChild(inp);
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn-ghost btn-sm item-del";
+    del.textContent = "✕";
+    del.onclick = () => { row.remove(); collect(); };
+    row.appendChild(del);
+    list.appendChild(row);
+    return row;
+  };
+
+  (items.length ? items : [single ? "" : {}]).forEach(makeRow);
+
+  const wrap = document.createElement("div");
+  wrap.className = "field-lines";
+  wrap.appendChild(list);
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "btn btn-ghost btn-sm";
+  add.textContent = "+ пункт";
+  add.onclick = () => { makeRow(single ? "" : {}).querySelector("input")?.focus(); };
+  wrap.appendChild(add);
+  return wrap;
 }
 
 // Build the editable card for a typed slide. Reads current values from s.fields,
@@ -984,33 +1308,19 @@ function renderFieldCard(s, idx) {
     }));
   } else if (s.slide_type === "bullets") {
     f.bullets = f.bullets || [];
-    addRow("Тезисы", fieldInput(f.bullets.join(" | "), (e) => {
-      f.bullets = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    appendHint(card, "Пункты через | (вертикальная черта)");
+    addRow("Тезисы", lineListEditor(f.bullets, [{ placeholder: "пункт" }],
+      (vals) => { f.bullets = vals; commit(); }));
   } else if (s.slide_type === "stats") {
     f.stats = f.stats || [];
-    addRow("Цифры", fieldInput(
-      f.stats.map((x) => `${x.value}=${x.label}`).join(" | "), (e) => {
-        f.stats = e.target.value.split("|").map((p) => {
-          const [value, label] = p.split("=");
-          return { value: (value || "").trim(), label: (label || "").trim() };
-        }).filter((x) => x.value || x.label);
-        commit();
-      }));
-    appendHint(card, "value=label, пары через |  (напр. 99%=аптайм | 3=региона)");
+    addRow("Цифры", lineListEditor(f.stats,
+      [{ key: "value", placeholder: "значение" }, { key: "label", placeholder: "подпись" }],
+      (vals) => { f.stats = vals; commit(); }));
   } else if (s.slide_type === "two_col") {
     f.left = f.left || []; f.right = f.right || [];
-    addRow("Левая колонка", fieldInput(f.left.join(" | "), (e) => {
-      f.left = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    addRow("Правая колонка", fieldInput(f.right.join(" | "), (e) => {
-      f.right = e.target.value.split("|").map((x) => x.trim()).filter(Boolean);
-      commit();
-    }));
-    appendHint(card, "Пункты через | в каждой колонке");
+    addRow("Левая колонка", lineListEditor(f.left, [{ placeholder: "пункт" }],
+      (vals) => { f.left = vals; commit(); }));
+    addRow("Правая колонка", lineListEditor(f.right, [{ placeholder: "пункт" }],
+      (vals) => { f.right = vals; commit(); }));
   }
   return card;
 }

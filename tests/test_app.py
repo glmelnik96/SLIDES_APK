@@ -131,7 +131,13 @@ def test_concurrent_first_touch_same_user_no_500(monkeypatch, tmp_path):
                 n = await s.execute(select(func.count()).select_from(models.User)
                                     .where(models.User.gateway_user_id == "brandnew"))
                 return n.scalar_one()
-        assert _aio.get_event_loop().run_until_complete(_count()) == 1
+        # Own loop: a prior async test can leave get_event_loop() with no current loop.
+        loop = _aio.new_event_loop()
+        try:
+            n = loop.run_until_complete(_count())
+        finally:
+            loop.close()
+        assert n == 1
 
 
 def test_usage_event_logged_and_survives_retention(monkeypatch, tmp_path):
@@ -165,7 +171,12 @@ def test_usage_event_logged_and_survives_retention(monkeypatch, tmp_path):
                     select(models.UsageEvent))).scalars().all()
             return rows, rows_after
 
-        rows, rows_after = _aio.get_event_loop().run_until_complete(_run())
+        # Own loop: a prior async test can leave get_event_loop() with no current loop.
+        loop = _aio.new_event_loop()
+        try:
+            rows, rows_after = loop.run_until_complete(_run())
+        finally:
+            loop.close()
         assert len(rows) == 1
         ev = rows[0]
         assert ev.app == "slides" and ev.event == "render"
@@ -205,7 +216,12 @@ def test_history_includes_error_for_failed(monkeypatch, tmp_path):
                 await _jr.mark_terminal(s, sid, status="failed",
                                         result_path=None, error="boom 42")
                 await s.commit()
-        _aio.get_event_loop().run_until_complete(_fail())
+        # Own loop: a prior async test can leave get_event_loop() with no current loop.
+        loop = _aio.new_event_loop()
+        try:
+            loop.run_until_complete(_fail())
+        finally:
+            loop.close()
         item = c.get("/api/history", headers=H()).json()[0]
         assert item["status"] == "failed"
         assert item["error"] == "boom 42"
@@ -232,7 +248,12 @@ def _mark_done(session_id):
             await _jr.mark_terminal(s, session_id, status="done",
                                     result_path=None, error=None)
             await s.commit()
-    _aio.get_event_loop().run_until_complete(_finish())
+    # Own loop: a prior async test can leave get_event_loop() with no current loop.
+    loop = _aio.new_event_loop()
+    try:
+        loop.run_until_complete(_finish())
+    finally:
+        loop.close()
 
 
 def test_history_scoped_to_user(monkeypatch, tmp_path):
