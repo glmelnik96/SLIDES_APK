@@ -243,6 +243,24 @@ function goTo(i) {
 document.getElementById("prev").onclick = () => goTo(current - 1);
 document.getElementById("next").onclick = () => goTo(current + 1);
 
+// Листание слайдов стрелками с самой страницы редактора: ↑/← — предыдущий,
+// ↓/→ — следующий. У превью (iframe) свой обработчик — он срабатывает, когда
+// фокус внутри картинки слайда; этот нужен для случая, когда фокус на редакторе
+// (миниатюры, панель). В поле ввода или чате стрелки отдаём тексту — они двигают
+// курсор, а не листают. Модификаторы (Cmd/Ctrl/Alt) не трогаем — это чужие
+// сочетания. goTo сам ограничивает края (без зацикливания), как кнопки «‹ ›».
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const prev = e.key === "ArrowUp" || e.key === "ArrowLeft";
+  const next = e.key === "ArrowDown" || e.key === "ArrowRight";
+  if (!prev && !next) return;
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable))
+    return;
+  e.preventDefault();
+  goTo(current + (next ? 1 : -1));
+});
+
 function currentDeckHtml() {
   const doc = frame.contentDocument;
   if (!doc || !doc.documentElement) {
