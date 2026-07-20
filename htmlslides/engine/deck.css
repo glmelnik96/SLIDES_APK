@@ -473,6 +473,20 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .c6-text{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;
   color:var(--fg-body);}                                  /* описание — основной текст */
 
+/* ---- frames-grid (правка 18-19): динамические ряды рамок ----
+   Зона контента 1800×659 @ (60,301) как у grid-2x2/cards-6. Ряды делят высоту
+   поровну (flex:1), рамки в ряду — ширину (flex:1): «ужимаются при добавлении,
+   растягиваются при удалении». min-*:0 разрешает сжатие ниже контента. */
+.fg-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
+  display:flex;flex-direction:column;gap:20px;}
+.fg-row{display:flex;flex:1 1 0;gap:20px;min-height:0;}
+.fg-frame{flex:1 1 0;min-width:0;border:1px solid var(--line);padding:30px;
+  display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;
+  overflow:hidden;}                                       /* контур-рамка; текст от ВЕРХА и левого края */
+.fg-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
+  color:var(--accent);margin-bottom:10px;}                /* имя рамки — зелёный акцент (как g22-name) */
+.fg-text{color:var(--fg-body);}                           /* типографика — роль .t-body-30 */
+
 /* ---- section-dots (figma 3393:11207/3393:10954): поле точек + SECTION + номер ---- */
 .sd-dots{position:absolute;left:60px;top:178px;width:1800px;height:602px;color:var(--line);}
 .sd-label{position:absolute;left:49px;top:864px;width:1500px;white-space:nowrap;}  /* SECTION 120px @ (49,864); width до зоны номера (x≈1620), не вылезает за число */

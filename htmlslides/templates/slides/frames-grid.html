@@ -1,0 +1,27 @@
+{#- Динамическая сетка рамок (правка 18-19): 1–3 ряда × 1–5 рамок в ряду.
+    Ряды — три независимых слота (row1 обяз., row2/row3 опц.): пустой ряд не
+    рендерится — это «убрать ряд» (тот же паттерн, что stats-row: stats/stats2).
+    Рамка — flex:1: ужимается при добавлении соседей и растягивается при удалении
+    по всей ШИРИНЕ ряда; ряд — flex:1: делит ВЫСОТУ зоны поровну.
+    Текст рамки — от верхне-левого края (правило проекта). Контентный макет. -#}
+<section class="slide slide--chrome-sm" data-template="frames-grid">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="fg-grid m-stagger">
+    {% for row in [content.row1, content.row2, content.row3] %}
+    {% if row %}
+    <div class="fg-row">
+      {% for frame in row %}
+      <div class="fg-frame">
+        {% if frame.heading %}<p class="fg-name">{{ frame.heading }}</p>{% endif %}
+        {% if frame.text %}<p class="fg-text t-body-30">{{ frame.text }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</section>
