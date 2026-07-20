@@ -194,7 +194,9 @@ a{color:inherit;}
 /* Оба текстовых поля мастера (рамка H1 и зелёная плашка) — ОДИН отступ 32px со всех
    сторон и выравнивание по верхне-левому краю: их левые кромки текста совпадают
    (60+1border+32 == 61+32 == 93). Правило проекта: контент во фреймах — top-left. */
-.statement-box{position:absolute;left:60px;top:300px;width:1800px;height:300px;
+/* Рамка H1 растянута на весь формат (правка 16): не узкая полоса посередине, а
+   крупный фрейм от подвала логотипа до плашки — слайд перестаёт быть «куцым». */
+.statement-box{position:absolute;left:60px;top:200px;width:1800px;height:400px;
   border:1px solid var(--line-frame);padding:32px;
   display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;}
 .statement-title{font-size:80px;line-height:1.1;white-space:normal;}   /* меньше базового hero (120→80) + перенос: свободно вмещает 2 строки; вес/капс/цвет — от роли .t-hero-156 */
@@ -202,7 +204,10 @@ a{color:inherit;}
   background:var(--accent);padding:32px;}
 .statement-plate-text{color:var(--cl-graphite);}   /* типографика — роль .t-sub-36 */
 .statement-tiles{position:absolute;left:1050px;top:630px;display:flex;gap:30px;color:var(--line);}
-.statement-tile{width:180px;height:180px;overflow:visible;}
+.statement-tiles .brand-arrow{width:180px;height:180px;}   /* крупный акцент (глиф со слайдов 3/5) */
+/* Правило мастера-16: текста много → стрелки убираем, плашку тянем на весь формат. */
+.statement--wide .statement-tiles{display:none;}
+.statement--wide .statement-plate{width:1800px;}
 .statement-dots{position:absolute;left:60px;top:840px;width:1800px;height:183px;color:var(--line);
   --dot-step:30px;}   /* statement плотнее: точки шагом 30 px (figma) */
 
