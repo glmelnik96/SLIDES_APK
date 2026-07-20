@@ -340,32 +340,36 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .kr-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
 /* ---- before-after (не из Figma; бренд-производное «было → стало») ----
-   HTML+CSS-раскладка (id-префикс .ba-*) в контент-зоне; стрелка-коннектор —
-   инлайн-SVG var(--accent). Две панели var(--bg-card) side-by-side, текст
-   выровнен по ВЕРХУ и левому краю (flex column flex-start — единый верхне-левый
-   угол), between — стрелка вправо и опц. дельта-чип (зелёный). before-ярлык
-   var(--fg-muted), after-ярлык var(--accent) (зелёный D / чёрный L). Токены только. */
-/* Сцена сайзится ПО КОНТЕНТУ (min/max), а не фикс. 700px: короткий текст
-   больше не висит в огромной пустоте (урок two-col-cards F7). align-items:stretch
-   уравнивает высоту панелей по более высокой. */
-.ba-stage{position:absolute;left:60px;top:320px;width:1800px;min-height:300px;max-height:700px;
-  display:flex;align-items:stretch;gap:0;}
-.ba-panel{flex:1;min-width:0;min-height:300px;background:var(--bg-card);
-  display:flex;flex-direction:column;justify-content:flex-start;
-  padding:40px;box-sizing:border-box;}   /* было 60px (перебор) → 40px: в ряд с др. карточками (30–36px), крупным панелям чуть просторнее */
-.ba-label{margin:0 0 28px;}                         /* роль .t-head-36 */
+   Композиция «ВЕРТИКАЛЬНЫЙ ПОТОК»: две полноширинные полосы-состояния друг над
+   другом (before — var(--bg-card), after — зелёная), между ними коннектор
+   .ba-flow: стрелка ВНИЗ + опц. дельта-чип. Полоса — ряд: .ba-body (ярлык+текст,
+   верх-лево, flex:1) слева + .ba-dots (брендовая точка, фикс-460) справа: точки
+   заполняют горизонтальную пустоту при коротком тексте — полоса не «куце» и
+   читается собранно при любой длине. Занимает весь слайд (top320, h700).
+   before-ярлык var(--fg-muted); after-полоса зелёная — текст/ярлык графит.
+   Токены только, без hex/инлайн-style. */
+.ba-stage{position:absolute;left:60px;top:320px;width:1800px;height:700px;
+  display:flex;flex-direction:column;}
+.ba-band{position:relative;flex:1;min-height:0;display:flex;align-items:stretch;overflow:hidden;}
+.ba-band--before{background:var(--bg-card);}
+.ba-band--after{background:var(--accent);}
+.ba-body{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;
+  justify-content:flex-start;gap:20px;padding:44px 56px;box-sizing:border-box;}   /* верх-лево; роли .t-head-36 / .t-body-30 */
+.ba-label{margin:0;}
 .ba-label--before{color:var(--fg-muted);}
-.ba-label--after{color:var(--accent);}
-html[data-theme="light"] .ba-label--after{color:var(--fg-body);}
-.ba-text{margin:0;}                                 /* роль .t-body-30 (var(--fg-body)) */
-/* Средняя колонка шире (260px) под дельту-чип: длинная дельта
-   («+65% к доходу в среднем») укладывается в ≤2 строки, а не в 3-4 тесные. */
-.ba-mid{flex:0 0 260px;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:28px;}
-.ba-arrow{width:96px;height:64px;display:block;}
-.ba-delta{margin:0;max-width:248px;font-size:20px;font-weight:500;line-height:1.25;
-  letter-spacing:-.3px;text-align:center;color:var(--accent);overflow-wrap:break-word;
-  border:1px solid var(--accent);padding:10px 16px;}  /* 20px: длинное слово (Масштабирование ~15 букв) влезает целиком в чип; break-word — перенос по словам, без разрыва внутри слова */
+.ba-label--after{color:var(--cl-graphite);}          /* графит на зелёном (оба тайла темы) */
+.ba-text{margin:0;}                                  /* .t-body-30 → var(--fg-body) */
+.ba-band--after .ba-text{color:var(--cl-graphite);}  /* графит на зелёной полосе */
+/* Точечное поле справа заполняет пустоту: before — зелёные точки .5,
+   after — графит .16 (мягко на зелёном). Фикс-ширина, чтобы текст не наезжал. */
+.ba-dots{flex:0 0 460px;--dot-step:32px;}
+.ba-band--before .ba-dots{color:var(--line);opacity:.5;}
+.ba-band--after .ba-dots{color:var(--cl-graphite);opacity:.16;}
+/* Коннектор-шов: стрелка вниз + дельта-чип, выровнены по левому контент-краю. */
+.ba-flow{flex:0 0 96px;display:flex;align-items:center;gap:28px;padding:0 56px;background:var(--bg);}
+.ba-arrow{flex:none;width:56px;height:56px;display:block;}
+.ba-delta{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;
+  letter-spacing:-.2px;color:var(--accent);border:1px solid var(--accent);padding:10px 16px;}
 html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-body);}
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
