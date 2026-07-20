@@ -155,6 +155,20 @@ a { color: var(--accent); }
 /* ===== Три точки входа: карточки выбора способа старта ===== */
 .entry { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 36) */
 .entry .eyebrow { margin-bottom: 12px; }
+/* Вариант 3 — зоны точек входа: загрузка-герой слева, чат/шаблон справа */
+.entry-hero { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: stretch; }
+.entry-side { display: flex; flex-direction: column; gap: 16px; }
+.entry-side .entry-zone { flex: 1; }
+.entry-zone { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid var(--line); }
+.entry-zone--primary { border-color: var(--accent); background: var(--accent-dim); }
+.entry-zone--primary .entry-num { color: var(--accent); }
+.entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
+.entry-zone--primary .entry-zone__title { font-size: var(--fs-h2); }
+.entry-zone__desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
+.entry-zone__btn { align-self: flex-start; margin-top: auto; }
+.entry-zone #uploadFlow { margin-top: 4px; }
+.output { margin-top: 32px; display: flex; flex-direction: column; gap: 30px; }
+@media (max-width: 860px) { .entry-hero { grid-template-columns: 1fr; } }
 .entry-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .entry-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   text-align: left; padding: 18px 18px 16px; background: transparent;

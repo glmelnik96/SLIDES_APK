@@ -33,66 +33,67 @@
     </details>
   </section>
 
-  <!-- ENTRY: три способа начать — карточки в ряд на всю ширину -->
+  <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
-    <div class="entry-cards">
-      <button type="button" class="entry-card entry-card--primary is-active" id="entryUpload" data-entry="upload">
+    <div class="entry-hero">
+
+      <!-- Зона 1 · Загрузить документ (герой) -->
+      <div class="entry-zone entry-zone--primary">
         <span class="entry-num">01</span>
-        <span class="entry-title">Загрузить документ</span>
-        <span class="entry-desc">Готовый md / txt / docx / pptx &rarr; модель сама соберёт презентацию со структурой и графиками.</span>
-        <span class="entry-cta">Выбрано — загрузите файл ниже &darr;</span>
-      </button>
-      <button type="button" class="entry-card" id="entryChat" data-entry="chat">
-        <span class="entry-num">02</span>
-        <span class="entry-title">Собрать в чате</span>
-        <span class="entry-desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</span>
-        <span class="entry-cta">Открыть чат &rarr;</span>
-      </button>
-      <button type="button" class="entry-card" id="entryManual" data-entry="manual">
-        <span class="entry-num">03</span>
-        <span class="entry-title">Заполнить шаблон</span>
-        <span class="entry-desc">Соберите презентацию из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</span>
-        <span class="entry-cta">Открыть конструктор &rarr;</span>
-      </button>
+        <h2 class="entry-zone__title">Загрузить документ</h2>
+        <p class="entry-zone__desc">Готовый md / txt / docx / pptx &mdash; модель сама соберёт презентацию со структурой и графиками.</p>
+        <!-- UPLOAD FLOW: dropzone → опция → кнопка -->
+        <div id="uploadFlow">
+          <label class="drop" id="drop">
+            <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
+            <div class="drop-inner">
+              <div class="drop-icon">&uarr;</div>
+              <div class="drop-text" id="dropText">Перетащите файл или нажмите, чтобы выбрать</div>
+              <div class="drop-hint" id="dropHint">.md · .txt · .docx · .pptx</div>
+            </div>
+          </label>
+          <label class="opt-row">
+            <input type="checkbox" id="exactTransfer" class="opt-check">
+            <span class="opt-box" aria-hidden="true"></span>
+            <span class="opt-text">
+              <span class="opt-title">Точный перенос (1 в 1)</span>
+              <span class="opt-desc">Весь текст переносится дословно &mdash; меняется только оформление.</span>
+            </span>
+          </label>
+          <button id="create" class="btn btn-lg btn-accent" aria-describedby="createHint" disabled>Создать презентацию</button>
+          <div class="field-hint" id="createHint">Сначала выберите файл</div>
+        </div>
+      </div>
+
+      <!-- Зоны 2 и 3 стеком справа -->
+      <div class="entry-side">
+        <div class="entry-zone">
+          <span class="entry-num">02</span>
+          <h2 class="entry-zone__title">Собрать в чате</h2>
+          <p class="entry-zone__desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</p>
+          <button type="button" class="btn btn-accent entry-zone__btn" id="openChat">Открыть чат</button>
+        </div>
+        <div class="entry-zone">
+          <span class="entry-num">03</span>
+          <h2 class="entry-zone__title">Заполнить шаблон</h2>
+          <p class="entry-zone__desc">Соберите из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</p>
+          <button type="button" class="btn btn-accent entry-zone__btn" id="openManual">Открыть конструктор</button>
+        </div>
+      </div>
+
     </div>
   </section>
 
-  <!-- Канон v4: двухколоночный workspace — слева форма загрузки, справа выдача -->
-  <div class="workspace">
-  <div class="workspace__controls">
+  <!-- Зона 4 · Черновики / прогресс / результат / история — во всю ширину -->
+  <section class="output">
 
-      <!-- UPLOAD FLOW (точка входа «Загрузить документ») — простой блок: dropzone → опция → кнопка -->
-      <div id="uploadFlow">
-        <label class="drop" id="drop">
-          <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
-          <div class="drop-inner">
-            <div class="drop-icon">&uarr;</div>
-            <div class="drop-text" id="dropText">Перетащите файл или нажмите, чтобы выбрать</div>
-            <div class="drop-hint" id="dropHint">.md · .txt · .docx · .pptx</div>
-          </div>
-        </label>
-        <label class="opt-row">
-          <input type="checkbox" id="exactTransfer" class="opt-check">
-          <span class="opt-box" aria-hidden="true"></span>
-          <span class="opt-text">
-            <span class="opt-title">Точный перенос (1 в 1)</span>
-            <span class="opt-desc">Весь текст переносится дословно &mdash; меняется только оформление.</span>
-          </span>
-        </label>
-        <button id="create" class="btn btn-lg btn-accent" aria-describedby="createHint" disabled>Создать презентацию</button>
-        <div class="field-hint" id="createHint">Сначала выберите файл</div>
-      </div>
-
-  </div><!-- /.workspace__controls -->
-  <div class="workspace__output">
-
-  <!-- EMPTY STATE: первый вход — превью результата вместо дубля навигации -->
+  <!-- EMPTY STATE: первый вход — превью результата -->
   <div id="workspaceEmpty" class="empty" hidden>
     <h2>Здесь появятся ваши презентации</h2>
     <div class="empty-prev"><iframe id="emptyPrev" tabindex="-1" loading="lazy" title="Пример слайда в бренде Cloud.ru"></iframe></div>
     <div class="eyebrow empty-cap">Пример слайда в бренде Cloud.ru</div>
-    <p class="empty-note">Выберите способ старта слева &mdash; прогресс сборки, очередь и история будут в этой колонке.</p>
+    <p class="empty-note">Выберите способ старта выше &mdash; прогресс сборки, очередь и история появятся здесь.</p>
     <p class="empty-note">Готовую презентацию можно править прямо в браузере и скачивать в <b>HTML или PNG</b>.</p>
   </div>
 
@@ -137,8 +138,7 @@
     <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию. Готовые сборки хранятся 24 часа.</div>
   </section>
 
-  </div><!-- /.workspace__output -->
-  </div><!-- /.workspace -->
+  </section><!-- /.output -->
 </main>
 
 <script src="/static/app.js"></script>

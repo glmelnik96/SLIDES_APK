@@ -495,7 +495,7 @@ function showResult(sessionId, kind, ev) {
 async function startDraft(mode, btn) {
   const prev = btn.textContent;
   btn.disabled = true;
-  btn.querySelector(".entry-cta").textContent = "Создаю…";
+  btn.textContent = "Создаю…";
   try {
     const r = await fetch(U("/api/drafts"), {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -507,40 +507,21 @@ async function startDraft(mode, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.classList.add("is-error");  // Г§6 — ошибка одета в danger, не в акцент
-    btn.querySelector(".entry-cta").textContent = "Ошибка, попробуйте ещё раз";
-    setTimeout(() => {
-      btn.classList.remove("is-error");
-      const cta = btn.querySelector(".entry-cta");
-      if (cta) cta.textContent = ENTRY_CTA[btn.dataset.entry] || "";
-    }, 4000);
+    btn.textContent = "Ошибка, попробуйте ещё раз";
+    setTimeout(() => { btn.classList.remove("is-error"); btn.textContent = prev; }, 4000);
   }
 }
 
-const ENTRY_CTA = { upload: "Выбрано — загрузите файл ниже ↓", manual: "Открыть конструктор →",
-                    chat: "Открыть чат →" };
+// Зоны точек входа: открытие конструктора/чата — по кнопке (черновик создаётся тогда же).
+$("#openChat")?.addEventListener("click", (e) => startDraft("chat", e.currentTarget));
+$("#openManual")?.addEventListener("click", (e) => startDraft("manual", e.currentTarget));
 
-document.querySelectorAll(".entry-card").forEach((card) => {
-  card.onclick = () => {
-    const entry = card.dataset.entry;
-    if (entry === "upload") {
-      document.querySelectorAll(".entry-card").forEach((c) =>
-        c.classList.toggle("is-active", c === card));
-      $("#uploadFlow").classList.remove("hidden");
-      $("#uploadFlow").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    } else {
-      startDraft(entry, card);
-    }
-  };
-});
-
-// Returning via browser Back restores this page from the bfcache with a draft
-// card still stuck "Создаю…"/disabled — re-enable cards so they're clickable again.
+// Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
+const _OPEN_LABEL = { openChat: "Открыть чат", openManual: "Открыть конструктор" };
 window.addEventListener("pageshow", () => {
-  document.querySelectorAll(".entry-card").forEach((c) => {
-    c.disabled = false;
-    c.classList.remove("is-error");  // Г§6 — снять залипшую ошибку при возврате из bfcache
-    const cta = c.querySelector(".entry-cta");
-    if (cta) cta.textContent = ENTRY_CTA[c.dataset.entry] || "";
+  Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
+    const b = $("#" + id);
+    if (b) { b.disabled = false; b.classList.remove("is-error"); b.textContent = label; }
   });
   loadDrafts();  // возврат по Back мог оставить/удалить черновик — обновляем список
 });
