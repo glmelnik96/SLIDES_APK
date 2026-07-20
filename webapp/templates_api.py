@@ -86,6 +86,8 @@ def _sample_value(name: str, spec: SlotSpec, idx: int = 0):
             return ""  # let the template supply its own default / computed fallback
         if name == "value":
             return str(_SERIES[idx % len(_SERIES)])  # vary per item → non-flat charts
+        if name == "num":
+            return f"{idx + 1:02d}"  # 01/02/03 — последовательная нумерация строк service-table
         s = _SAMPLE.get(name, "Текст")
         return s[: spec.max_chars] if spec.max_chars else s
     if spec.kind == "list":

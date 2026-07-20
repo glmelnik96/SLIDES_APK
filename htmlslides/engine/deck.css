@@ -374,13 +374,13 @@ html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-bo
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
 .svc-dots{position:absolute;left:60px;top:240px;width:560px;height:720px;color:var(--line);}
-.svc-image{position:absolute;left:-92px;top:240px;width:906px;height:720px;overflow:hidden;}
-.svc-image img{width:100%;height:100%;object-fit:cover;display:block;}
+.svc-image{position:absolute;left:-430px;top:250px;width:1040px;height:760px;}   /* вылет за левый край, по центру панели; contain — рендер прозрачный */
+.svc-image img{width:100%;height:100%;object-fit:contain;display:block;}
 .svc-panel{position:absolute;left:600px;top:239px;width:1262px;height:725px;
   background:var(--bg-card);padding:23px 0 0 21px;}     /* контент @ (621,262) внутри панели */
 .svc-name{width:601px;color:var(--accent);}             /* зелёный(D)/чёрный(L) */
 html[data-theme="light"] .svc-name{color:var(--fg-body);}
-.svc-desc{position:absolute;left:631px;top:23px;color:var(--fg-body);}  /* «Описание» @ (1231,262) */
+.svc-desc{position:absolute;left:631px;top:23px;color:var(--accent);}  /* «Описание» зелёный, по верхней линии названия */
 .svc-rows{position:absolute;left:21px;top:182px;width:1211px;}  /* блок строк @ (621,421) */
 .svc-row{position:relative;height:179px;border-top:1px solid var(--line);
   display:flex;align-items:flex-start;padding-top:23px;}  /* линии y=421/600/780 шаг 179 */
