@@ -1,16 +1,20 @@
-{#- Акцентное заявление (figma D 3393:11145 / L 3393:10882): H1 в контурной рамке,
-    зелёная плашка с тезисом, 4 контурные плитки со стрелками, поле точек понизу.
-    База для ДВУХ мастеров: statement (тёмный фон) и statement-green (зелёный фон,
-    брендовый инверт). Зелёный включается переменной force_accent через include —
-    разметка не дублируется. -#}
+{#- Акцентное заявление. База для ДВУХ мастеров:
+      • statement-green (force_accent=true) — КЛАССИКА: H1 в контурной рамке, зелёная
+        плашка-вывод, 4 контурные плитки со стрелками, поле точек (figma 3393:10882);
+      • statement (тёмный) — «МОНУМЕНТ»: полноформатная типографическая композиция,
+        визуально отличная от зелёного (кикер → крупный герой → плашка-вывод на всю
+        ширину + вертикальный дот-рейл). Занимает весь слайд и держит гармонию при
+        любом объёме текста (вертикальный space-between).
+    Зелёный включается переменной force_accent через include statement-green.html. -#}
 {% set is_green = force_accent | default(false) %}
-<section class="slide{% if is_green %} statement--accent{% endif %}" data-template="statement{% if is_green %}-green{% endif %}">
+{% if is_green %}
+<section class="slide statement--accent" data-template="statement-green">
   {% include "_chrome.html" %}
   <div class="statement-box">
     <h1 class="statement-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
   </div>
   {#- Плашка-вывод — часть дизайна мастера: рендерим ВСЕГДА (дефолт-текст если слот
-      пуст), чтобы поле было видно и заполнялось в обоих вариантах. -#}
+      пуст), чтобы поле было видно и заполнялось. -#}
   <div class="statement-plate m-enter">
     <p class="statement-plate-text t-sub-36">{{ content.highlight or 'Главный вывод секции' }}</p>
   </div>
@@ -24,3 +28,20 @@
   </div>
   <div class="statement-dots pattern-dots m-loop-drift" aria-hidden="true"></div>
 </section>
+{% else %}
+<section class="slide statement-hero" data-template="statement">
+  {% include "_chrome.html" %}
+  <div class="sh-main">
+    <div class="sh-lead">
+      <span class="sh-kicker" aria-hidden="true"></span>
+      <h1 class="sh-title t-hero-156 m-enter m-enter--hero">{{ content.title }}</h1>
+    </div>
+    {#- Плашка-вывод рендерится ВСЕГДА (дефолт-текст если слот пуст): якорит низ
+        композиции и держит баланс при коротком заголовке. -#}
+    <div class="sh-plate m-enter">
+      <p class="sh-plate-text t-sub-36">{{ content.highlight or 'Главный вывод секции' }}</p>
+    </div>
+  </div>
+  <div class="sh-rail pattern-dots m-loop-drift" aria-hidden="true"></div>
+</section>
+{% endif %}
