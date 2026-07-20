@@ -78,7 +78,7 @@ function resetFile() {
   selectedFile = null;
   fileInput.value = "";
   drop.classList.remove("has-file");
-  $("#dropText").textContent = "Перетащите файл сюда или нажмите, чтобы выбрать";
+  $("#dropText").textContent = "Перетащите файл или нажмите, чтобы выбрать";
   $("#create").disabled = true;
   const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
   if (hint) hint.hidden = false;
