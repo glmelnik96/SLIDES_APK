@@ -36,14 +36,16 @@
   <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
+    <p class="entry-lead">Три способа сделать презентацию — выберите один, смотря что у вас уже есть.</p>
     <div class="entry-stack">
 
-      <!-- Зона 1 · Загрузить документ (герой) -->
+      <!-- Основной способ: загрузить документ -->
       <div class="entry-zone entry-zone--primary">
-        <span class="entry-num">01</span>
-        <h2 class="entry-zone__title">Загрузить документ</h2>
-        <p class="entry-zone__desc">Готовый md / txt / docx / pptx &mdash; модель сама соберёт презентацию со структурой и графиками.</p>
-        <!-- UPLOAD FLOW: dropzone слева, опция + кнопка справа -->
+        <div class="entry-zone__head">
+          <h2 class="entry-zone__title">Загрузить документ</h2>
+          <span class="entry-when">когда есть готовый текст или документ</span>
+        </div>
+        <!-- dropzone слева, опции справа, дивайдер между -->
         <div id="uploadFlow" class="upload-grid">
           <label class="drop" id="drop">
             <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
@@ -68,22 +70,20 @@
         </div>
       </div>
 
-      <!-- Зоны 2 и 3 — компактные строки со сдержанной ссылкой-действием -->
-      <div class="entry-zone entry-zone--row">
-        <div class="zone-text">
-          <span class="entry-num">02</span>
-          <h2 class="entry-zone__title">Собрать в чате</h2>
-          <p class="entry-zone__desc">Опишите презентацию ассистенту &mdash; он спланирует структуру и создаст слайды по одному.</p>
+      <!-- Или соберите вручную — два способа рядом, колонками с дивайдерами -->
+      <div class="entry-alts">
+        <div class="entry-alt">
+          <div class="alt-name">Собрать в чате</div>
+          <p class="alt-desc">Опишите презентацию — ассистент спланирует структуру и создаст слайды.</p>
+          <div class="alt-when">когда нет готового материала</div>
+          <button type="button" class="entry-open" id="openChat">Открыть чат &rarr;</button>
         </div>
-        <button type="button" class="entry-open" id="openChat">Открыть чат &rarr;</button>
-      </div>
-      <div class="entry-zone entry-zone--row">
-        <div class="zone-text">
-          <span class="entry-num">03</span>
-          <h2 class="entry-zone__title">Заполнить шаблон</h2>
-          <p class="entry-zone__desc">Соберите из готовых макетов вручную, заполняя поля. Справа &mdash; чат для точечных правок.</p>
+        <div class="entry-alt">
+          <div class="alt-name">Заполнить шаблон</div>
+          <p class="alt-desc">Собирайте по слайду из готовых макетов, заполняя поля вручную.</p>
+          <div class="alt-when">когда нужен полный контроль</div>
+          <button type="button" class="entry-open" id="openManual">Открыть конструктор &rarr;</button>
         </div>
-        <button type="button" class="entry-open" id="openManual">Открыть конструктор &rarr;</button>
       </div>
 
     </div>

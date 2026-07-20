@@ -155,32 +155,50 @@ a { color: var(--accent); }
 /* ===== Три точки входа: карточки выбора способа старта ===== */
 .entry { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 36) */
 .entry .eyebrow { margin-bottom: 12px; }
-/* Вариант 1 — вертикальные зоны по приоритету; чат/шаблон — компактные строки */
+/* Точки входа: 3 АЛЬТЕРНАТИВЫ (не шаги). Основной — загрузка; ниже — два способа
+   вручную колонками с 1px-дивайдерами. */
+.entry-lead { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 16px; max-width: 62ch; }
 .entry-stack { display: flex; flex-direction: column; gap: 12px; }
-.entry-zone { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border: 1px solid var(--line); }
-.entry-zone--primary { border-color: var(--accent); padding: 20px; }  /* без зелёного фона — только акцентная рамка */
-.entry-zone--primary .entry-num { color: var(--accent); }
-/* Композиция блока загрузки: dropzone слева, опция + кнопка справа */
-.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; align-items: stretch; }
-.upload-grid .drop { height: 100%; display: grid; place-items: center; }
-.upload-side { display: flex; flex-direction: column; justify-content: center; gap: 14px; }
-.upload-side .btn { align-self: stretch; }
-@media (max-width: 640px) { .upload-grid { grid-template-columns: 1fr; } }
-.entry-zone--row { flex-direction: row; align-items: center; gap: 20px; }
-.entry-zone--row .zone-text { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+
+/* Основной блок — загрузка: акцентная рамка, шапка + тело через дивайдер */
+.entry-zone--primary { border: 1px solid var(--accent); }
+.entry-zone__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
+  padding: 14px 20px; border-bottom: 1px solid var(--line); }
 .entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
-.entry-zone--primary .entry-zone__title { font-size: var(--fs-h2); }
-.entry-zone--row .entry-zone__title { font-size: var(--fs-base); }
-.entry-zone__desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
-/* Сдержанное действие вместо крупной кнопки: акцентная ссылка «Открыть … →» */
+.entry-when { color: var(--muted-2); font-size: var(--fs-sm); }
+.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: stretch; padding: 20px; }
+.upload-grid .drop { height: 100%; display: grid; place-items: center; }
+.upload-side { display: flex; flex-direction: column; justify-content: center; gap: 14px;
+  padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
+.upload-side .btn { align-self: stretch; }
+
+/* Два способа вручную — строки-колонки с дивайдерами (не столбиком) */
+.entry-alts { border: 1px solid var(--line); }
+.entry-alt { display: grid; grid-template-columns: minmax(150px, 1fr) 2fr minmax(150px, 1fr) auto;
+  align-items: center; gap: 20px; padding: 16px 20px; }
+.entry-alt + .entry-alt { border-top: 1px solid var(--line); }
+.alt-name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
+.alt-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0;
+  padding-left: 20px; border-left: 1px solid var(--line-soft); }
+.alt-when { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4;
+  padding-left: 20px; border-left: 1px solid var(--line-soft); }
+.entry-alt .entry-open { justify-self: end; }
+
+/* Сдержанное действие: акцентная ссылка «Открыть … →» */
 .entry-open { flex: 0 0 auto; background: none; border: 0; padding: 4px 0; cursor: pointer;
   color: var(--accent); font-size: var(--fs-sm); white-space: nowrap;
   transition: color var(--dur-fast) var(--ease-productive); }
 .entry-open:hover { color: var(--accent-2); }
 .entry-open.is-error { color: var(--danger); }
-.entry-zone #uploadFlow { margin-top: 4px; }
+
 .output { margin-top: 32px; display: flex; flex-direction: column; gap: 30px; }
-@media (max-width: 640px) { .entry-zone--row { flex-direction: column; align-items: flex-start; gap: 8px; } }
+@media (max-width: 760px) {
+  .upload-grid { grid-template-columns: 1fr; }
+  .upload-side { padding-left: 0; margin-left: 0; border-left: 0;
+    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+  .entry-alt { grid-template-columns: 1fr; gap: 6px; }
+  .alt-desc, .alt-when { padding-left: 0; border-left: 0; }
+}
 .entry-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .entry-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   text-align: left; padding: 18px 18px 16px; background: transparent;
