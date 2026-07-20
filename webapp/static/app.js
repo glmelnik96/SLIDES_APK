@@ -219,6 +219,8 @@ async function loadDrafts() {
   const wrap = $("#draftsWrap");
   const ul = $("#draftsList");
   wrap.hidden = items.length === 0;
+  // Две колонки (Черновики │ История) — только когда черновики есть.
+  $("#historyGrid")?.classList.toggle("two-col", items.length > 0);
   ul.innerHTML = "";
   for (const it of items) {
     const li = document.createElement("li");
@@ -512,9 +514,22 @@ async function startDraft(mode, btn) {
   }
 }
 
-// Зоны точек входа: открытие конструктора/чата — по кнопке (черновик создаётся тогда же).
-$("#openChat")?.addEventListener("click", (e) => startDraft("chat", e.currentTarget));
-$("#openManual")?.addEventListener("click", (e) => startDraft("manual", e.currentTarget));
+// Зоны точек входа: кликабельна вся рамка .entry-alt (не только ссылка). Черновик
+// создаётся при клике/Enter/Space; ссылка внутри — лишь визуальная подсказка.
+document.querySelectorAll(".entry-alt").forEach((card) => {
+  const mode = card.dataset.mode;
+  const label = card.querySelector(".entry-open");
+  if (!mode || !label) return;
+  const go = () => {
+    if (card.dataset.busy) return;  // не плодим черновики по дабл-клику
+    card.dataset.busy = "1";
+    Promise.resolve(startDraft(mode, label)).finally(() => { delete card.dataset.busy; });
+  };
+  card.addEventListener("click", go);
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+  });
+});
 
 // Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
 const _OPEN_LABEL = { openChat: "Открыть чат →", openManual: "Открыть конструктор →" };

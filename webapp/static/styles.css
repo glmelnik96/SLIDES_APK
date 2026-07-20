@@ -140,10 +140,7 @@ a { color: var(--accent); }
 .intro .eyebrow { margin-bottom: 10px; }
 /* Заголовок интро с фирменным диагональным штрихом-стрелкой слева (как h1 канона) */
 .intro-title { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.14;
-  letter-spacing: -0.01em; margin: 0 0 16px; position: relative; padding-left: 20px; }
-.intro-title::before { content: ""; position: absolute; left: 0; top: 4px; width: 9px; height: 24px;
-  background: var(--accent);
-  clip-path: polygon(0 0, 100% 0, 100% 30%, 42% 30%, 42% 100%, 0 100%); }
+  letter-spacing: -0.01em; margin: 0 0 16px; }
 /* Г§11 — мера строки 62ch (~45–75 знаков) вместо 760px≈100+ знаков */
 .intro-lead { color: var(--muted); font-size: var(--fs-base); line-height: 1.6; margin: 0 0 12px; max-width: 62ch; }
 .intro-lead:last-child { margin-bottom: 0; }
@@ -157,7 +154,7 @@ a { color: var(--accent); }
 .entry .eyebrow { margin-bottom: 12px; }
 /* Точки входа: 3 АЛЬТЕРНАТИВЫ (не шаги). Основной — загрузка; ниже — два способа
    вручную колонками с 1px-дивайдерами. */
-.entry-lead { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 16px; max-width: 62ch; }
+.entry-lead { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 16px; }
 .entry-stack { display: flex; flex-direction: column; gap: 12px; }
 
 /* Основной блок — загрузка: акцентная рамка, шапка + тело через дивайдер */
@@ -165,39 +162,58 @@ a { color: var(--accent); }
 .entry-zone__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
   padding: 14px 20px; border-bottom: 1px solid var(--line); }
 .entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
-.entry-when { color: var(--muted-2); font-size: var(--fs-sm); }
+.entry-when { color: var(--muted-2); font-size: var(--fs-sm); margin-left: auto; }
 .upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: stretch; padding: 20px; }
 .upload-grid .drop { height: 100%; display: grid; place-items: center; }
-.upload-side { display: flex; flex-direction: column; justify-content: center; gap: 14px;
+.upload-side { display: flex; flex-direction: column; justify-content: flex-start; gap: 14px;
   padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
 .upload-side .btn { align-self: stretch; }
 
-/* Два способа вручную — строки-колонки с дивайдерами (не столбиком) */
+/* Два способа вручную — вся строка кликабельна; один дивайдер на 60%.
+   Сетка (1.5fr 1fr) и отступы дивайдера повторяют .upload-grid/.upload-side,
+   поэтому вертикальные дивайдеры всех трёх блоков совпадают по вертикали. */
 .entry-alts { border: 1px solid var(--line); }
-.entry-alt { display: grid; grid-template-columns: minmax(150px, 1fr) 2fr minmax(150px, 1fr) auto;
-  align-items: center; gap: 20px; padding: 16px 20px; }
+.entry-alt { display: grid; grid-template-columns: 1.5fr 1fr; align-items: start;
+  padding: 16px 20px; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-productive); }
+.entry-alt:hover { background: var(--panel-2); }
+.entry-alt:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .entry-alt + .entry-alt { border-top: 1px solid var(--line); }
+.alt-main { display: flex; flex-direction: column; gap: 6px; }
 .alt-name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
-.alt-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0;
-  padding-left: 20px; border-left: 1px solid var(--line-soft); }
-.alt-when { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4;
-  padding-left: 20px; border-left: 1px solid var(--line-soft); }
-.entry-alt .entry-open { justify-self: end; }
+.alt-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0; }
+.alt-aside { display: flex; flex-direction: column; gap: 8px;
+  padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
+.alt-when { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4; }
 
-/* Сдержанное действие: акцентная ссылка «Открыть … →» */
-.entry-open { flex: 0 0 auto; background: none; border: 0; padding: 4px 0; cursor: pointer;
+/* Сдержанная подсказка-действие: клик ловит вся рамка, поэтому ссылка pointer-events:none */
+.entry-open { align-self: start; background: none; border: 0; padding: 0; pointer-events: none;
   color: var(--accent); font-size: var(--fs-sm); white-space: nowrap;
   transition: color var(--dur-fast) var(--ease-productive); }
-.entry-open:hover { color: var(--accent-2); }
+.entry-alt:hover .entry-open { color: var(--accent-2); }
 .entry-open.is-error { color: var(--danger); }
 
 .output { margin-top: 32px; display: flex; flex-direction: column; gap: 30px; }
+
+/* Черновики и История — рядом в две колонки; только когда есть черновики
+   (иначе История во всю ширину). Класс two-col ставит loadDrafts(). */
+.history-grid { display: grid; grid-template-columns: 1fr; gap: 24px; align-items: start; }
+.history-grid.two-col { grid-template-columns: 1fr 1fr; column-gap: 0; }
+.history-grid.two-col > .history:first-child { padding-right: 24px; }
+.history-grid.two-col > .history + .history { border-left: 1px solid var(--line); padding-left: 24px; }
+.hist-sub { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4; margin: 0 0 12px; }
+
 @media (max-width: 760px) {
   .upload-grid { grid-template-columns: 1fr; }
   .upload-side { padding-left: 0; margin-left: 0; border-left: 0;
     border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
-  .entry-alt { grid-template-columns: 1fr; gap: 6px; }
-  .alt-desc, .alt-when { padding-left: 0; border-left: 0; }
+  .entry-alt { grid-template-columns: 1fr; gap: 10px; }
+  .alt-aside { padding-left: 0; margin-left: 0; border-left: 0;
+    border-top: 1px solid var(--line-soft); padding-top: 10px; }
+  .history-grid.two-col { grid-template-columns: 1fr; }
+  .history-grid.two-col > .history:first-child { padding-right: 0; }
+  .history-grid.two-col > .history + .history { border-left: 0; padding-left: 0;
+    border-top: 1px solid var(--line); padding-top: 20px; }
 }
 .entry-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .entry-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
