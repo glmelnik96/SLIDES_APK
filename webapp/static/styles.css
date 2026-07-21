@@ -68,7 +68,7 @@ a { color: var(--accent); }
 .topbar .brand span { color: var(--accent); }
 .topnav { display: flex; gap: 2px; }
 .topnav__link { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 14px;
-  border-radius: var(--r-sm); transition: color .12s, background .12s; }
+  border-radius: var(--r-sm); transition: color .12s, background .12s; white-space: nowrap; }
 .topnav__link:hover { color: var(--text); background: var(--panel-2); }
 .topnav__link.is-active { color: var(--text); background: transparent;
   box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
