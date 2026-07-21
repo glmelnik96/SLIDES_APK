@@ -4,12 +4,30 @@
 // window; в Node — экспортируется через module.exports. Меняется только текст,
 // никакой DOM-логики здесь нет.
 (function (root) {
-  // Три состояния индикатора автосейва (показываем в шапке формы).
+  // Состояния индикатора автосейва (показываем в шапке формы).
+  // К§5: retrying/error — ретрай автосейва вместо молчаливого стирания ввода.
   var SAVE_STATUS = {
     saving: "Сохранение…",
     saved: "Сохранено ✓",
-    error: "Не сохранено",
+    retrying: "Не сохранено — повторяю…",
+    error: "Не сохранилось — проверьте интернет",
   };
+
+  // Ч§3: единое имя rebuild-кнопки во всех состояниях (без «движка»).
+  var REBUILD_LABEL = { idle: "Проверить и улучшить слайды", busy: "Запускаю…" };
+
+  // Ч§6: примеры пустого чата в режиме СБОРКИ (не точечных правок).
+  var CHAT_BUILD_EMPTY =
+    "Например: «сделай презентацию о нашем продукте для инвесторов на 8 слайдов», " +
+    "«добавь слайд с ключевыми цифрами», «назови презентацию Итоги Q2».";
+
+  // Ч§3: русская плюрализация (слайд / слайда / слайдов).
+  function plural(n, one, few, many) {
+    var m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && !(m100 >= 12 && m100 <= 14)) return few;
+    return many;
+  }
 
   // Разбирает detail вида "N > max" в [N, max]; иначе [null, null].
   function parseCounts(detail) {
@@ -34,8 +52,12 @@
   }
 
   root.SAVE_STATUS = SAVE_STATUS;
+  root.REBUILD_LABEL = REBUILD_LABEL;
+  root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
+  root.plural = plural;
   root.errText = errText;
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { SAVE_STATUS: SAVE_STATUS, errText: errText };
+    module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
+      CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText };
   }
 })(typeof window !== "undefined" ? window : globalThis);

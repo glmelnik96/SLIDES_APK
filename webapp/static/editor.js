@@ -6,16 +6,27 @@ const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
 const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built deck)
 const isDraft = mode === "manual" || mode === "chat";
-const frame = document.getElementById("deck");
+// К§6 — двойная буферизация превью: два iframe'а на одном месте. loadDeck() грузит
+// следующий кадр в СКРЫТЫЙ буфер, по load меняет их местами классом .hidden и
+// переключает указатель frame — между сейвами нет чёрного кадра. deckT — единый
+// cache-bust одного кадра (сцена + миниатюры К§11).
+const frameA = document.getElementById("deck");
+const frameB = document.getElementById("deck2");
+let frame = frameA;
+let deckT = 0;
 document.getElementById("html").href = U(`/api/jobs/${sessionId}/deck?download=1`);
 
 let slides = [];
 let current = 0;
 let pendingGoTo = 0; // slide to show after the next iframe load
+let freeformConfirmed = false; // К§1: once the user OKs inline->freeform, don't re-ask this tab-session
 
 function loadDeck() {
-  // cache-bust so edits/chat rewrites are reflected on reload
-  frame.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}`);
+  // cache-bust so edits/chat rewrites are reflected on reload; один deckT на кадр.
+  // &editor=1 — режим покоя деки (К§6): без входных анимаций/лупов в превью.
+  deckT = Date.now();
+  const target = (frame === frameA) ? frameB : frameA; // грузим в скрытый буфер
+  target.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1`);
   // A reload means the deck content changed (chat/agent/rebuild/field edit), so any
   // finished export is now stale — reset the controls. Contenteditable saves don't
   // reload the iframe, so saveDeck() handles that path separately.
@@ -52,26 +63,63 @@ function friendlyDetail(detail) {
 const overlay = document.getElementById("buildOverlay");
 const buildSub = document.getElementById("buildSub");
 const buildTitle = document.getElementById("buildTitle");
+const buildNote = document.getElementById("buildNote");
+const buildActions = document.getElementById("buildActions");
 
 function showOverlay(show) { overlay && overlay.classList.toggle("hidden", !show); }
+
+// Р§2 — терминальная карточка с выходом из ошибки (Nielsen #9): гасим «ждите»-note
+// и показываем действия («На главную» / «Повторить»). Никакого вечного спиннера.
+const HOME_LINK = '<a class="btn btn-ghost" href="/">На главную</a>';
+function showTerminal(title, sub, actionsHtml) {
+  showOverlay(true);
+  if (buildTitle) buildTitle.textContent = title;
+  if (buildSub) buildSub.textContent = sub;
+  if (buildNote) buildNote.textContent = "";
+  if (buildActions) {
+    buildActions.innerHTML = actionsHtml;
+    buildActions.classList.remove("hidden");
+  }
+}
+// Р§2 — бюджет ретраев SSE: после 5 неудач — терминальная карточка вместо цикла.
+let buildRetries = 0;
 
 // Opening the editor for a run whose deck isn't built yet would otherwise show a
 // blank 404 iframe. Instead, gate on readiness: if the deck exists, load it; if
 // the run is still building, show progress (SSE) and load the deck when done.
+// Р§2: a 404 deck is ambiguous — the run may be building, OR the session is gone
+// (expired / foreign). Probe /status to tell them apart: 404 there = terminal card.
 async function initEditor() {
+  if (buildActions) buildActions.classList.add("hidden");
   let head;
   try {
     head = await fetch(U(`/api/jobs/${sessionId}/deck?probe=${Date.now()}`),
                        { method: "GET", headers: { Range: "bytes=0-0" } });
   } catch (e) { head = null; }
-  if (head && head.ok) { showOverlay(false); loadDeck(); return; }
-  if (head && head.status === 404) { waitForBuild(); return; }
+  if (head && head.ok) { buildRetries = 0; showOverlay(false); loadDeck(); return; }
+  if (head && head.status === 404) {
+    let st;
+    try {
+      st = await fetch(U(`/api/jobs/${sessionId}/status?probe=${Date.now()}`));
+    } catch (e) { st = null; }
+    if (st && st.status === 404) {
+      showTerminal("Презентация не найдена",
+        "Возможно, истёк срок хранения (24 часа) или ссылка устарела.", HOME_LINK);
+      return;
+    }
+    buildRetries = 0;              // successful probe resets the retry budget
+    waitForBuild();
+    return;
+  }
   // any other status (e.g. 401) — fall back to a plain load attempt
   showOverlay(false); loadDeck();
 }
 
 function waitForBuild() {
   showOverlay(true);
+  if (buildActions) buildActions.classList.add("hidden");
+  if (buildNote) buildNote.textContent =
+    "Это занимает несколько секунд — не закрывайте страницу.";
   buildTitle.textContent = "Презентация ещё собирается…";
   let done = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
@@ -87,21 +135,47 @@ function waitForBuild() {
         buildTitle.textContent =
           ev.stage === "cancelled" ? "Сборка остановлена" : "Не удалось собрать";
         buildSub.textContent = ev.error || "";
+        if (buildNote) buildNote.textContent = "";
       }
     }
   };
   es.onerror = () => {
     if (done) return;
     es.close();
+    // Р§2 — не крутить бесконечно: после 5 неудачных ретраев — выход из ошибки.
+    if (++buildRetries >= 5) {
+      showTerminal("Не удалось получить статус сборки",
+        "Сервер не отвечает. Обновите страницу или вернитесь на главную.",
+        '<button class="btn btn-ghost" id="buildRetry">Повторить</button>' + HOME_LINK);
+      const rb = document.getElementById("buildRetry");
+      if (rb) rb.addEventListener("click", () => {
+        buildRetries = 0;
+        if (buildActions) buildActions.classList.add("hidden");
+        initEditor();
+      });
+      return;
+    }
     // Stream dropped but run may still be alive — retry readiness shortly.
     setTimeout(initEditor, 3000);
   };
 }
 
-frame.onload = () => {
-  const doc = frame.contentDocument;
-  if (!doc) return;
+// К§6 — общий обработчик load обоих буферов: свопим на только что загруженный кадр.
+function handleFrameLoad(loaded) {
+  const doc = loaded.contentDocument;
+  // Игнорируем about:blank / пустой (ошибочный 404) кадр: не свопим на него.
+  if (!doc || !doc.querySelector(".slide")) return;
+  frame = loaded; // указатель — на только что загруженный буфер
   slides = [...doc.querySelectorAll(".slide")];
+  const emptyDraft = isDraft && !draftPlan.slides.length; // К§4 — синтетическая заглушка
+  if (emptyDraft) {
+    // Заглушка нередактируема: в плане 0 слайдов, blur-синк улетел бы в 404 и молча
+    // терял бы первый ввод новичка. Клик по ней ведёт к действию — пикер / фокус чата.
+    doc.addEventListener("click", () => {
+      if (mode === "manual") addSlideViaPicker();
+      else chatText?.focus();
+    });
+  } else {
   // In-place text editing works everywhere. Built decks are HTML-as-truth, so
   // edits persist via saveDeck(). Drafts are DeckPlan-as-truth, so an inline edit
   // converts that slide to a freeform slide in the plan (synced on blur).
@@ -113,28 +187,49 @@ frame.onload = () => {
       el.setAttribute("contenteditable", "true");
       if (isDraft) {
         el.addEventListener("focus", () => { el.__origHtml = el.innerHTML; });
-        el.addEventListener("blur", () => {
-          const changed = el.__origHtml !== undefined && el.innerHTML !== el.__origHtml;
+        el.addEventListener("blur", async () => {
+          const orig = el.__origHtml;
+          const changed = orig !== undefined && el.innerHTML !== orig;
           el.__origHtml = undefined;
-          if (changed) {
-            // A green count-up number (.js-count) carries a persistent
-            // data-count-final (set once by deck.js, never refreshed). An inline
-            // edit changes textContent but NOT that attribute, so syncDraftSlideHtml
-            // would bake the stale final value and silently revert the edit on the
-            // next navigation. Refresh it to the edited text first.
-            if (el.hasAttribute("data-count-final")) {
-              el.setAttribute("data-count-final", el.textContent);
-            }
-            syncDraftSlideHtml(i);
+          if (!changed) return;
+          // К§1: перед ПЕРВОЙ конвертацией не-freeform слайда в свободный режим —
+          // подтверждение. Отказ восстанавливает исходный HTML и НЕ синкает.
+          if (!draftPlan.slides[i]?.freeform && !freeformConfirmed) {
+            const ok = await confirmDialog(
+              "Правка прямо на слайде переведёт его в свободный режим: поля формы станут недоступны. Продолжить?",
+              "Продолжить", "Отмена");
+            if (!ok) { el.innerHTML = orig; return; }
+            freeformConfirmed = true;
           }
+          // A green count-up number (.js-count) carries a persistent
+          // data-count-final (set once by deck.js, never refreshed). An inline
+          // edit changes textContent but NOT that attribute, so syncDraftSlideHtml
+          // would bake the stale final value and silently revert the edit on the
+          // next navigation. Refresh it to the edited text first.
+          if (el.hasAttribute("data-count-final")) {
+            el.setAttribute("data-count-final", el.textContent);
+          }
+          syncDraftSlideHtml(i);
         });
       }
     }
   }));
+  }
   suppressDeckNavOnEdit(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
-};
+  markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
+  // К§6 — показать подготовленный буфер, спрятать прежний (без чёрного кадра).
+  loaded.classList.remove("hidden");
+  (loaded === frameA ? frameB : frameA).classList.add("hidden");
+  // Буфер грузился скрытым (display:none → окно 0×0), поэтому deck.js rescale() при
+  // init бросил масштаб. После показа форсим resize, чтобы дека вписалась в сцену.
+  requestAnimationFrame(() => {
+    try { loaded.contentWindow && loaded.contentWindow.dispatchEvent(new Event("resize")); } catch (_) {}
+  });
+}
+frameA.addEventListener("load", () => handleFrameLoad(frameA));
+frameB.addEventListener("load", () => handleFrameLoad(frameB));
 
 // Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
 let draftHtmlSaving = false;
@@ -150,16 +245,30 @@ async function syncDraftSlideHtml(i) {
   clone.classList.remove("is-active");
   clone.querySelectorAll("[contenteditable]").forEach(
     (el) => el.removeAttribute("contenteditable"));
+  // К§3 — гигиена: редакторская метка рыбы-плейсхолдера не должна запекаться в план.
+  clone.classList.remove("is-placeholder");
+  clone.querySelectorAll(".is-placeholder").forEach(
+    (el) => el.classList.remove("is-placeholder"));
   clone.querySelectorAll("[data-count-final]").forEach((el) => {
     el.textContent = el.getAttribute("data-count-final");
     el.removeAttribute("data-count-final");
   });
   draftHtmlSaving = true;
   try {
-    await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
+    // К§1: снапшот {template_id, content} ДО перевода слайда в freeform — переживает
+    // reload вкладки (sessionStorage), питает кнопку «Вернуть макет».
+    const slide = draftPlan.slides[i];
+    if (slide && !slide.freeform) {
+      try {
+        sessionStorage.setItem(`freeform-snap:${sessionId}:${i + 1}`,
+          JSON.stringify({ template_id: slide.template_id, content: slide.content }));
+      } catch (_) { /* sessionStorage может быть недоступен — не критично */ }
+    }
+    const r = await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html: clone.outerHTML }),
     });
+    if (!r.ok) { setSaveStatus("error"); return; } // К§4 — неуспех (404/гонка): не терять молча
     await fetchPlan();
     if (mode === "manual") renderBuilderForm(); // slide is now freeform
   } finally {
@@ -189,13 +298,38 @@ function suppressDeckNavOnEdit(doc) {
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
+  if (isDraft && !draftPlan.slides.length) return; // К§4 — пустой драфт: тумб нет, только «+ Добавить слайд»
   // Управление слайдами (удаление/перетаскивание) — только в ручном режиме сборки.
   const editable = mode === "manual";
-  slides.forEach((_, i) => {
+  slides.forEach((s, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
     t.dataset.index = i;
-    t.textContent = "Слайд " + (i + 1);
+    // К§11 — масштабированное превью деки (тот же приём, что в пикере) + подпись.
+    const prev = document.createElement("div");
+    prev.className = "thumb-prev";
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.tabIndex = -1;
+    ifr.setAttribute("aria-hidden", "true");
+    // Единый cache-bust deckT (К§6) — превью синхронны с канвой; #n — нужный слайд; &editor=1 — покой.
+    ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1#${i + 1}`);
+    prev.appendChild(ifr);
+    const cap = document.createElement("div");
+    cap.className = "thumb-cap";
+    const num = document.createElement("span");
+    num.className = "thumb-num";
+    num.textContent = i + 1;
+    cap.appendChild(num);
+    const titleText = (s.querySelector("h1,h2,h3,[data-slot=title]")?.textContent || "").trim();
+    if (titleText) {
+      const ttl = document.createElement("span");
+      ttl.className = "thumb-title";
+      ttl.textContent = titleText;
+      cap.appendChild(ttl);
+    }
+    t.appendChild(prev);
+    t.appendChild(cap);
     t.onclick = () => goTo(i);
     if (editable) {
       // Крестик удаления — виден по наведению (CSS .thumb:hover .thumb-del)
@@ -218,6 +352,34 @@ function buildThumbs() {
   });
 }
 
+// К§3 — на превью помечаем пустые текст-слоты (и пустые ОБЯЗАТЕЛЬНЫЕ list-слоты)
+// классом .is-placeholder: пример-рыба должна быть визуально отличима и не уйти
+// молча в экспорт. Источник истины «слот пуст» — draftPlan + каталог; на
+// freeform/exact-слайдах (каталог не покрывает шаблон) просто не срабатывает.
+function markPlaceholders() {
+  if (!isDraft) return;
+  const doc = frame.contentDocument;
+  if (!doc) return;
+  const sections = doc.querySelectorAll(".slide");
+  (draftPlan.slides || []).forEach((slide, i) => {
+    const section = sections[i];
+    if (!section || !slide || slide.freeform) return;
+    const tpl = tplOf(slide.template_id);
+    if (!tpl) return;
+    const content = slide.content || {};
+    for (const [name, spec] of Object.entries(tpl.slots)) {
+      const val = content[name];
+      let empty;
+      if (spec.kind === "text") empty = (val == null || String(val).trim() === "");
+      else if (spec.kind === "list") empty = spec.required && (!Array.isArray(val) || val.length === 0);
+      else empty = false;
+      if (!empty) continue;
+      const node = section.querySelector(`[data-slot="${name}"]`) || section;
+      node.classList.add("is-placeholder");
+    }
+  });
+}
+
 function goTo(i) {
   if (!slides.length) return;
   // Persist any pending edit to the slide we're leaving BEFORE switching, so the
@@ -230,7 +392,6 @@ function goTo(i) {
   pendingGoTo = current;
   const win = frame.contentWindow;
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
-  document.getElementById("counter").textContent = `${current + 1} / ${slides.length}`;
   document.getElementById("chatTarget").textContent =
     mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
   [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
@@ -239,9 +400,6 @@ function goTo(i) {
   // reloads that follow each save (those would wipe focus and in-progress rows).
   if (mode === "manual" && builtFormFor !== current) renderBuilderForm();
 }
-
-document.getElementById("prev").onclick = () => goTo(current - 1);
-document.getElementById("next").onclick = () => goTo(current + 1);
 
 // Листание слайдов стрелками с самой страницы редактора: ↑/← — предыдущий,
 // ↓/→ — следующий. У превью (iframe) свой обработчик — он срабатывает, когда
@@ -265,7 +423,7 @@ function currentDeckHtml() {
   const doc = frame.contentDocument;
   if (!doc || !doc.documentElement) {
     // iframe is mid-reload or not ready — caller must handle this.
-    throw new Error("дека ещё не загрузилась, подождите секунду");
+    throw new Error("презентация ещё не загрузилась — подождите секунду");
   }
   // Strip the editor-only contenteditable attributes we inject at load time so
   // the persisted/downloaded/exported deck stays clean (otherwise a downloaded
@@ -274,6 +432,9 @@ function currentDeckHtml() {
   const clone = doc.documentElement.cloneNode(true);
   clone.querySelectorAll("[contenteditable]").forEach(
     (el) => el.removeAttribute("contenteditable"));
+  // К§3 — снять редакторскую метку рыбы-плейсхолдера перед сохранением/скачиванием/экспортом.
+  clone.querySelectorAll(".is-placeholder").forEach(
+    (el) => el.classList.remove("is-placeholder"));
   return "<!DOCTYPE html>" + clone.outerHTML;
 }
 
@@ -296,9 +457,10 @@ document.getElementById("save").onclick = async () => {
 // seconds, so we don't block on it. Click "Экспорт" → start the render and show a
 // "Готовлю…" pill → poll until ready → the control becomes an active "Скачать…"
 // button that downloads the finished file. No blind wait, download only when ready.
+// Ч§9 — один глагол «Скачать» на все три формата; busy честно объясняет задержку.
 const EXPORT_LABEL = {
-  png: { idle: "Экспорт в PNG (ZIP)", busy: "Готовлю PNG…", ready: "Скачать PNG (ZIP)" },
-  pptx: { idle: "Экспорт в PPTX", busy: "Готовлю PPTX…", ready: "Скачать PPTX" },
+  png: { idle: "Скачать PNG (ZIP)", busy: "Готовлю PNG… ~10–20 сек", ready: "Скачать PNG (ZIP)" },
+  pptx: { idle: "Скачать PPTX", busy: "Готовлю PPTX… ~10–20 сек", ready: "Скачать PPTX" },
 };
 
 // Any deck edit invalidates a finished (or in-flight) export — a "Скачать" pill
@@ -306,6 +468,43 @@ const EXPORT_LABEL = {
 // controls back to "Экспорт", forcing a fresh render on the next click.
 const _exportResets = [];
 function markExportsStale() { _exportResets.forEach((fn) => fn()); }
+
+// К§3 — предэкспортная проверка: не выпустить пример-текст молча. В chat-режиме
+// каталог не загружен — дозапрашиваем лениво. Возвращает true, если можно экспортировать.
+async function ensureCatalog() {
+  if (catalog.length) return;
+  try {
+    const r = await fetch(U("/api/templates"));
+    if (r.ok) catalog = await r.json();
+  } catch (_) { /* сеть — не блокируем экспорт */ }
+}
+function countPlaceholderSlides() {
+  let n = 0;
+  (draftPlan.slides || []).forEach((slide) => {
+    if (!slide || slide.freeform) return;
+    const tpl = tplOf(slide.template_id);
+    if (!tpl) return;
+    const content = slide.content || {};
+    const hasEmptyRequired = Object.entries(tpl.slots).some(([name, spec]) => {
+      if (!spec.required) return false;
+      const val = content[name];
+      if (spec.kind === "list") return !Array.isArray(val) || val.length === 0;
+      return val == null || String(val).trim() === "";
+    });
+    if (hasEmptyRequired) n++;
+  });
+  return n;
+}
+async function confirmExportWithPlaceholders() {
+  if (!isDraft) return true;
+  await ensureCatalog();
+  const n = countPlaceholderSlides();
+  if (!n) return true;
+  return confirmDialog(
+    `На ${n} ${plural(n, "слайде", "слайдах", "слайдах")} остался пример-текст — ` +
+    `он попадёт в файл. Экспортировать?`,
+    "Экспортировать", "Вернуться к заполнению");
+}
 
 function setupExport(btn) {
   const fmt = btn.dataset.fmt;
@@ -349,6 +548,7 @@ function setupExport(btn) {
       location.href = U(`/api/jobs/${sessionId}/export/${fmt}/file`);
       return;
     }
+    if (!(await confirmExportWithPlaceholders())) return; // К§3 — пример-текст в экспорт?
     toBusy();
     await saveDeck(true);              // persist in-place edits (no stale-reset: this IS the export)
     const r = await fetch(U(`/api/jobs/${sessionId}/export/${fmt}`), { method: "POST" });
@@ -362,33 +562,75 @@ function setupExport(btn) {
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
 
-// Единая кнопка «Экспорт ▾» раскрывает выпадающий список форматов. Пункты внутри
-// (PPTX/PNG/HTML) работают как прежде через setupExport / #html.href. Использует
-// document.getElementById напрямую: этот IIFE выполняется раньше объявления byId.
-(function setupExportMenu() {
-  const toggle = document.getElementById("exportToggle");
-  const menu = document.getElementById("exportDropdown");
-  if (!toggle || !menu) return;
-  const close = () => { menu.classList.add("hidden"); toggle.setAttribute("aria-expanded", "false"); };
-  const open = () => { menu.classList.remove("hidden"); toggle.setAttribute("aria-expanded", "true"); };
-  toggle.addEventListener("click", (e) => {
-    e.stopPropagation();
-    menu.classList.contains("hidden") ? open() : close();
-  });
-  // Скачивание HTML — обычная ссылка, после клика меню закрываем
-  document.getElementById("html")?.addEventListener("click", close);
-  // Клик вне меню закрывает его
+// Р§1 — overflow-меню «Скачать»: закрытие по клику вне и по Esc. Клик по пункту
+// ВНУТРИ меню его НЕ закрывает — пользователь видит смену «Готовлю…» → «Скачать».
+const exportMenu = document.getElementById("exportMenu");
+if (exportMenu) {
   document.addEventListener("click", (e) => {
-    if (menu.contains(e.target) || e.target === toggle) return;
-    close();
+    if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.removeAttribute("open");
   });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
-})();
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && exportMenu.open) exportMenu.removeAttribute("open");
+  });
+}
+
+// К§3 — «Скачать HTML» для драфта: та же предэкспортная проверка на пример-текст.
+const htmlLink = document.getElementById("html");
+htmlLink?.addEventListener("click", async (e) => {
+  if (!isDraft) return;
+  e.preventDefault();
+  if (await confirmExportWithPlaceholders()) location.href = htmlLink.href;
+});
 
 function flash(btn, text) {
   const orig = btn.textContent;
   btn.textContent = text;
   setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+// К§17 — бренд-диалоги вместо нативных alert/confirm (стиль .picker, прямые углы,
+// SB Sans). Фокус на первую кнопку, Esc = отмена. Возвращают Promise.
+function _dialog(text, buttons) {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "dialog";
+    const card = document.createElement("div");
+    card.className = "dialog-card";
+    const p = document.createElement("p");
+    p.className = "dialog-text";
+    p.textContent = text;
+    const row = document.createElement("div");
+    row.className = "dialog-actions";
+    const cancelVal = (buttons.find((b) => b.cancel) || {}).value;
+    function close(val) {
+      document.removeEventListener("keydown", onKey);
+      ov.remove();
+      resolve(val);
+    }
+    function onKey(e) { if (e.key === "Escape") close(cancelVal); }
+    buttons.forEach((b, idx) => {
+      const btn = document.createElement("button");
+      btn.className = b.className;
+      btn.textContent = b.label;
+      btn.onclick = () => close(b.value);
+      row.appendChild(btn);
+      if (idx === 0) setTimeout(() => btn.focus(), 0);
+    });
+    card.appendChild(p);
+    card.appendChild(row);
+    ov.appendChild(card);
+    document.body.appendChild(ov);
+    document.addEventListener("keydown", onKey);
+  });
+}
+function confirmDialog(text, okLabel, cancelLabel) {
+  return _dialog(text, [
+    { label: okLabel || "OK", className: "btn", value: true },
+    { label: cancelLabel || "Отмена", className: "btn btn-ghost", value: false, cancel: true },
+  ]);
+}
+function alertDialog(text) {
+  return _dialog(text, [{ label: "Понятно", className: "btn", value: true }]);
 }
 
 /* ---- chat ---- */
@@ -404,6 +646,36 @@ function addMsg(cls, text) {
   chatLog.appendChild(div);
   chatLog.scrollTop = chatLog.scrollHeight;
   return div;
+}
+
+// Ч§7 — последняя инструкция чата: «Повторить» после ошибки возвращает её в поле,
+// поэтому запоминаем ДО очистки textarea (иначе ретраить нечем).
+let lastInstruction = "";
+
+// Ч§7 — продуктовый текст ошибки чата вместо сырого JSON/Python-трассы. Сырьё —
+// только в console.error. 409 — русский detail сервера как есть; 429 — очередь;
+// остальное — нейтральный конструктивный текст.
+async function chatErrText(r) {
+  let raw = "";
+  try { raw = await r.text(); } catch (_) { raw = ""; }
+  let detail = raw;
+  try { const j = JSON.parse(raw); if (j && j.detail) detail = j.detail; } catch (_) { /* не JSON */ }
+  console.error("chat error", r.status, raw);
+  if (r.status === 409) return detail || "Не получилось применить правку — попробуйте переформулировать.";
+  if (r.status === 429) return "Очередь занята — попробуйте через минуту.";
+  return "Не получилось применить правку. Попробуйте переформулировать или повторить.";
+}
+
+// Ч§7 — кнопка «Повторить» под сообщением об ошибке: возвращает инструкцию в поле.
+function appendRetry(node) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn btn-ghost btn-sm";
+  btn.style.display = "block";
+  btn.style.marginTop = "8px";
+  btn.textContent = "Повторить";
+  btn.onclick = () => { chatText.value = lastInstruction; chatText.focus(); };
+  node.appendChild(btn);
 }
 
 // A chat edit calls Kimi (a reasoning model) and can legitimately take a couple
@@ -435,6 +707,7 @@ async function sendChat() {
   const instruction = chatText.value.trim();
   if (!instruction) return;
   const slideIndex = current + 1;
+  lastInstruction = instruction;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
   addMsg("user", `Слайд ${slideIndex}: ${instruction}`);
   chatText.value = "";
 
@@ -460,8 +733,10 @@ async function sendChat() {
     });
     if (!r.ok) {
       thinking.className = "msg err";
-      thinking.textContent = "Ошибка: " + (await r.text());
+      thinking.textContent = await chatErrText(r);   // Ч§7 — продуктовый текст + «Повторить»
+      appendRetry(thinking);
     } else {
+      lastInstruction = "";
       thinking.textContent = `Слайд ${slideIndex} обновлён.`;
       pendingGoTo = slideIndex - 1; // show the edited slide, even if user navigated away
       loadDeck(); // reload iframe with the rewritten slide
@@ -529,16 +804,37 @@ function renderBuilderForm() {
 
   if (slide.freeform) {
     tplBox.innerHTML = `<span class="tpl-name">Свободный слайд</span>`;
-    form.innerHTML = `<p class="builder-note">Этот слайд отредактирован через чат. ` +
-      `Дальнейшие правки — через чат справа.</p>`;
+    // К§1: честная записка (без выдуманной истории про чат) + возврат к макету.
+    form.innerHTML = `<p class="builder-note">Свободный слайд — он больше не привязан к макету, ` +
+      `поэтому полей здесь нет. Правьте текст прямо на слайде или опишите изменение в чате справа.</p>`;
+    const snapKey = `freeform-snap:${sessionId}:${current + 1}`;
+    const snapRaw = sessionStorage.getItem(snapKey);
+    if (snapRaw) {
+      const revert = document.createElement("button");
+      revert.type = "button";
+      revert.className = "btn btn-ghost btn-sm";
+      revert.style.marginTop = "8px";
+      revert.textContent = "Вернуть макет";
+      revert.onclick = async () => {
+        let snap; try { snap = JSON.parse(snapRaw); } catch (_) { return; }
+        const n = current + 1;
+        await fetch(U(`/api/drafts/${sessionId}/slides/${n}`), { method: "DELETE" });
+        await fetch(U(`/api/drafts/${sessionId}/slides`), {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template_id: snap.template_id, at: n, content: snap.content }),
+        });
+        sessionStorage.removeItem(snapKey);
+        await reloadDraft(current);
+      };
+      form.appendChild(revert);
+    }
     return;
   }
   const tpl = tplOf(slide.template_id);
   const tplIdx = catalog.findIndex((t) => t.id === slide.template_id);
   const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
   tplBox.innerHTML =
-    `<span class="tpl-head"><span class="tpl-num">${tplNo}</span>` +
-    `<span class="tpl-name">Макет: ${slide.template_id}</span></span>` +
+    `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
   byId("changeTpl").onclick = () => openPicker((tid) => changeTemplate(tid));
 
@@ -582,8 +878,14 @@ function renderSlot(name, spec, value) {
   const wrap = document.createElement("div");
   wrap.className = "field";
   const label = document.createElement("label");
-  label.textContent = name + (spec.required ? " *" : "");
+  label.textContent = (spec.label || name) + (spec.required ? " *" : "");  // К§2: рус. лейбл, фолбэк на id
   wrap.appendChild(label);
+  if (spec.hint) {
+    const hint = document.createElement("div");
+    hint.className = "field-hint";
+    hint.textContent = spec.hint;
+    wrap.appendChild(hint);
+  }
 
   if (spec.kind === "text") {
     const long = (spec.max_chars || 0) > 40;
@@ -762,9 +1064,14 @@ function collectContent() {
   return content;
 }
 
+// К§5 — бэкофф ретраев автосейва (1с/3с/7с) на сетевой/5xx-ошибке.
+const SAVE_RETRY_MS = [1000, 3000, 7000];
+let saveRetryTimer = null;
+
 function scheduleSave() {
   clearTimeout(putTimer);
-  putTimer = setTimeout(saveCurrentSlide, 600);
+  clearTimeout(saveRetryTimer); // свежий ввод отменяет незавершённую цепочку ретраев
+  putTimer = setTimeout(() => saveCurrentSlide(0), 600);
 }
 
 // Run any pending debounced save NOW. Must be called before leaving the current
@@ -779,7 +1086,40 @@ function flushPendingSave() {
   return saveCurrentSlide();
 }
 
-async function saveCurrentSlide() {
+// К§6 — точечный патч ТЕКСТ-слотов текущего слайда прямо в DOM превью (без полного
+// релоада: нет вспышки, не перезапускаются входы/count-up, живёт .slot-highlight).
+// Возвращает true, если патч применим и выполнен; false — если нужен полный loadDeck
+// (list/group/image-слоты, опустевший слот → сервер вернёт рыбу, .js-count/.sr-value
+// пересчитывает приватный autofitStats движка, или узел не найден).
+function patchPreviewText(idx) {
+  const doc = frame.contentDocument;
+  const section = doc && doc.querySelectorAll(".slide")[idx];
+  const slide = draftPlan.slides[idx];
+  if (!section || !slide) return false;
+  const tpl = tplOf(slide.template_id);
+  if (!tpl) return false;
+  // Любой не-текстовый слот (или загруженное изображение) — превью не гарантируем → релоад.
+  if (Object.entries(tpl.slots).some(([n, s]) => s.kind !== "text" || n === "image")) return false;
+  const content = slide.content || {};
+  for (const [name, spec] of Object.entries(tpl.slots)) {
+    if (spec.kind !== "text") continue;
+    const el = section.querySelector(`[data-slot="${name}"]`);
+    if (!el) return false; // узел не найден — надёжнее полный релоад
+    const val = content[name];
+    if (val == null || String(val).trim() === "") {
+      // Пустой слот: если сейчас показана рыба (.is-placeholder) — так и оставляем.
+      // Если реальный контент опустошили — сервер подставит рыбу-пример → нужен релоад.
+      if (!el.classList.contains("is-placeholder")) return false;
+      continue;
+    }
+    if (el.classList.contains("js-count") || el.classList.contains("sr-value")) return false;
+    el.textContent = String(val);
+    el.classList.remove("is-placeholder"); // слот заполнен — снять метку рыбы (К§3)
+  }
+  return true;
+}
+
+async function saveCurrentSlide(attempt = 0) {
   // Capture the slide index up front: `current` can change (navigation) during
   // the awaited PUT, and the URL/marking must stay bound to the edited slide.
   const idx = current;
@@ -788,7 +1128,7 @@ async function saveCurrentSlide() {
   if (!slide || slide.freeform) return;
   const content = collectContent();
   slide.content = content; // optimistic local update
-  setSaveStatus("saving");
+  setSaveStatus(attempt ? "retrying" : "saving");
   let r;
   try {
     r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}`), {
@@ -802,14 +1142,30 @@ async function saveCurrentSlide() {
     const { errors } = await r.json();
     if (current === idx) markFieldErrors(errors || []); // only if still shown
     setSaveStatus("saved");
-    loadDeck(); // refresh preview
-  } else {
-    // Save failed (network/server): resync from the server so we never write stale
-    // state back on the next edit, and say so in words (persistent red status)
-    // instead of an alert() on every failure.
-    await reloadDraft(idx);
-    setSaveStatus("error");
+    // К§6 — точечный патч, если слайд ещё показан и правка чисто текстовая; иначе релоад.
+    if (current === idx && patchPreviewText(idx)) markExportsStale?.();
+    else loadDeck();
+    return;
   }
+  // К§5 — 409: серверное состояние действительно главнее (дека уже собрана / идёт
+  // пересборка), только тут ресинкаем форму. try/catch — чтобы офлайн-исключение
+  // reloadDraft всё равно оставило видимый error-статус.
+  if (r && r.status === 409) {
+    try { await reloadDraft(idx); } catch (_) { /* оставить локальный ввод виден */ }
+    setSaveStatus("error");
+    return;
+  }
+  // К§5 — сеть/5xx: НЕ трогаем форму и draftPlan (локальное новее серверного), не
+  // стираем набранный текст. Ретраим сам PUT с бэкоффом; свежий ввод пользователя
+  // (scheduleSave) отменяет эту цепочку.
+  if (attempt < SAVE_RETRY_MS.length) {
+    setSaveStatus("retrying");
+    clearTimeout(saveRetryTimer);
+    saveRetryTimer = setTimeout(() => saveCurrentSlide(attempt + 1), SAVE_RETRY_MS[attempt]);
+    return;
+  }
+  // Исчерпали ретраи — красный статус с кликабельным «Повторить» (запускает цепочку заново).
+  setSaveStatusRetry();
 }
 
 // Индикатор автосейва в шапке формы: «Сохранение…» → «Сохранено ✓» → «Не сохранено».
@@ -829,6 +1185,22 @@ function setSaveStatus(state) {
       el.className = "save-status";
     }, 1600);
   }
+}
+
+// К§5 — терминальный статус после исчерпания ретраев: красный текст + кликабельное
+// «Повторить» (btn-link), которое запускает цепочку сейва заново.
+function setSaveStatusRetry() {
+  const el = byId("saveStatus");
+  if (!el) return;
+  clearTimeout(saveStatusTimer);
+  el.className = "save-status save-status--error";
+  el.textContent = (SAVE_STATUS.error || "") + " · ";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-link";
+  btn.textContent = "Повторить";
+  btn.onclick = () => saveCurrentSlide(0);
+  el.appendChild(btn);
 }
 
 function markFieldErrors(errors) {
@@ -881,7 +1253,9 @@ async function changeTemplate(templateId) {
   await reloadDraft(current);
 }
 
-byId("addSlide")?.addEventListener("click", () =>
+// К§4 — общий обработчик добавления слайда: кнопка рейла (#addSlide), кнопка пустой
+// панели (#builderAdd) и клик по заглушке пустого драфта ведут в один пикер.
+function addSlideViaPicker() {
   openPicker(async (tid) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
     pushUndo();
@@ -892,7 +1266,10 @@ byId("addSlide")?.addEventListener("click", () =>
       body: JSON.stringify({ template_id: tid, at }),
     });
     await reloadDraft(at - 1); // переходим на только что добавленный слайд
-  }));
+  });
+}
+byId("addSlide")?.addEventListener("click", addSlideViaPicker);
+byId("builderAdd")?.addEventListener("click", addSlideViaPicker);
 
 // Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
 // дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
@@ -1081,7 +1458,7 @@ function openPicker(onPick) {
     const ifr = document.createElement("iframe");
     ifr.loading = "lazy";
     ifr.tabIndex = -1;
-    ifr.src = U(`/api/templates/${t.id}/preview`);
+    ifr.src = U(`/api/templates/${t.id}/preview?static=1`);  // К§16: покойные превью, без лупов
     prev.appendChild(ifr);
     const num = document.createElement("span");
     num.className = "picker-num";
@@ -1089,8 +1466,10 @@ function openPicker(onPick) {
     prev.appendChild(num);
     const meta = document.createElement("div");
     meta.className = "picker-meta";
-    meta.innerHTML = `<span class="picker-id">${t.id}</span>` +
-      `<span class="picker-intent">${t.intent || ""}</span>`;
+    // К§2: человекочитаемое имя макета крупно; сырой id — приглушённой третьей строкой (фолбэк на id).
+    meta.innerHTML = `<span class="picker-id">${t.display_name || t.id}</span>` +
+      `<span class="picker-intent">${t.intent || ""}</span>` +
+      (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
     card.appendChild(prev);
     card.appendChild(meta);
     card.onclick = () => { picker.classList.add("hidden"); onPick(t.id); };
@@ -1102,7 +1481,7 @@ byId("pickerClose")?.addEventListener("click", () =>
   byId("picker").classList.add("hidden"));
 
 async function initDraftBuilder() {
-  byId("rebuild")?.classList.remove("hidden");   // «Собрать через движок» — в обоих режимах
+  byId("rebuild")?.classList.remove("hidden");   // «Проверить и улучшить слайды» — в обоих режимах
   if (mode === "manual") {
     byId("addSlide")?.classList.remove("hidden");
     byId("builder")?.classList.remove("hidden");
@@ -1118,16 +1497,17 @@ async function initDraftBuilder() {
 let rebuilding = false;
 byId("rebuild")?.addEventListener("click", async () => {
   if (rebuilding) return;
-  if (!draftPlan.slides || !draftPlan.slides.length) {
-    alert("Черновик пуст — добавьте хотя бы один слайд."); return;
-  }
+  if (!draftPlan.slides || !draftPlan.slides.length) return;  // К§17: кнопка дизейблится при пустом плане
   const n = draftPlan.slides.length;
-  if (!confirm(`Прогнать черновик через движок? Каждый из ${n} слайд(ов) пройдёт ` +
-               "вёрстку, визуальную проверку качества и автоисправление; после этого " +
-               "дека станет обычной (правки прямо на слайде). Это ~1–2 мин на слайд.")) return;
+  // Ч§3: единый копирайт, «вы», без «движка»; продуктовая формулировка + русская плюрализация.
+  const ok = await confirmDialog(
+    `Улучшить ${n} ${plural(n, "слайд", "слайда", "слайдов")}? Проверим вёрстку и внешний вид ` +
+    `каждого и исправим ошибки — примерно ${n}–${2 * n} мин.`,
+    "Улучшить", "Отмена");
+  if (!ok) return;
   rebuilding = true;
   const btn = byId("rebuild");
-  btn.disabled = true; btn.textContent = "Запускаю…";
+  btn.disabled = true; btn.textContent = REBUILD_LABEL.busy;
   try {
     // Make sure the last form edit reached the server's plan.json before rebuild
     // reads it — otherwise a quick type→rebuild rebuilds a stale deck.
@@ -1136,8 +1516,9 @@ byId("rebuild")?.addEventListener("click", async () => {
     if (!r.ok) throw new Error(await r.text());
     watchRebuild();
   } catch (e) {
-    rebuilding = false; btn.disabled = false; btn.textContent = "Собрать через движок";
-    alert("Не удалось запустить пересборку: " + (e && e.message ? e.message : e));
+    rebuilding = false; btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
+    // Ч§3/К§17 — продуктовый текст + бренд-диалог вместо нативного alert.
+    alertDialog("Не удалось запустить улучшение: " + (e && e.message ? e.message : e));
   }
 });
 
@@ -1145,7 +1526,7 @@ byId("rebuild")?.addEventListener("click", async () => {
 // deck (drop the draft mode so the editor switches to HTML-as-truth editing).
 function watchRebuild() {
   showOverlay(true);
-  buildTitle.textContent = "Пересобираю через движок…";
+  buildTitle.textContent = "Улучшаю слайды…";
   let done = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
   es.onmessage = (e) => {
@@ -1156,14 +1537,15 @@ function watchRebuild() {
     if (ev.terminal) {
       done = true; es.close();
       if (ev.stage === "done") {
-        location.href = U(`/editor?session=${sessionId}`); // reload as built deck
+        // Ч§5 — &rebuilt=1: на готовой деке один раз показать пояснение после улучшения.
+        location.href = U(`/editor?session=${sessionId}&rebuilt=1`); // reload as built deck
       } else {
         buildTitle.textContent =
-          ev.stage === "cancelled" ? "Пересборка остановлена" : "Не удалось пересобрать";
+          ev.stage === "cancelled" ? "Улучшение остановлено" : "Не удалось улучшить слайды";
         buildSub.textContent = ev.error || "";
         rebuilding = false;
         const btn = byId("rebuild");
-        btn.disabled = false; btn.textContent = "Собрать через движок";
+        btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
       }
     }
   };
@@ -1181,6 +1563,9 @@ function setupChatMode() {
   if (target) target.textContent = "Ассистент";
   chatText.placeholder = "Например: сделай презентацию про наш продукт для инвесторов";
   chatSend.textContent = "Отправить";
+  // Ч§6 — примеры пустого чата про СБОРКУ, а не про точечные правки.
+  const empty = byId("chatEmpty");
+  if (empty) empty.textContent = CHAT_BUILD_EMPTY;
   byId("outline")?.classList.remove("hidden");   // показать живую панель аутлайна
 }
 
@@ -1378,6 +1763,9 @@ function renderOutline() {
     list.appendChild(li);
   });
   byId("buildDeck")?.classList.toggle("hidden", !hasBuildTargets());
+  // Р§4 — ровно одна залитая primary в панели чата: пока есть незаполненные слайды,
+  // primary — #buildDeck (залит в разметке), иначе — #chatSend.
+  byId("chatSend")?.classList.toggle("btn-accent", !hasBuildTargets());
 }
 
 // Fill the whole outline in one shot via POST /api/drafts/{id}/build. Synchronous
@@ -1385,10 +1773,10 @@ function renderOutline() {
 let building = false;
 async function doBuild() {
   if (building) return;
-  if (!hasBuildTargets()) { addMsg("bot", "Аутлайн пуст — нечего собирать."); return; }
+  if (!hasBuildTargets()) { addMsg("bot", "В плане пока нет слайдов — опишите презентацию в чате."); return; }
   building = true;
   showOverlay(true);
-  buildTitle.textContent = "Собираю деку…";
+  buildTitle.textContent = "Собираю презентацию…";
   buildSub.textContent = "Заполняю сырые слайды…";
   try {
     const r = await fetch(U(`/api/drafts/${sessionId}/build`), { method: "POST" });
@@ -1412,6 +1800,7 @@ byId("buildDeck")?.addEventListener("click", doBuild);
 async function sendAgent() {
   const message = chatText.value.trim();
   if (!message) return;
+  lastInstruction = message;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
   addMsg("user", message);
   chatText.value = "";
   const thinking = addMsg("bot", "Думаю…");
@@ -1431,8 +1820,10 @@ async function sendAgent() {
     });
     if (!r.ok) {
       thinking.className = "msg err";
-      thinking.textContent = "Ошибка: " + (await r.text());
+      thinking.textContent = await chatErrText(r);   // Ч§7 — продуктовый текст + «Повторить»
+      appendRetry(thinking);
     } else {
+      lastInstruction = "";
       const res = await r.json();
       thinking.textContent = res.reply || "Готово.";
       if (res.changed) {
@@ -1460,4 +1851,45 @@ async function sendAgent() {
 /* init */
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
+
+// К§8 — одна правая панель с табами «Поля | Чат» (только manual: там обе панели живут
+// вместе). Переключение — класс .hidden на #builder/.chat (id/DOM не трогаем — JS завязан).
+// В chat-режиме и на готовой деке панель одна → табов нет.
+function setupPanelTabs() {
+  const tabs = byId("rpanelTabs");
+  if (!tabs) return;
+  if (mode !== "manual") { tabs.classList.add("hidden"); return; }
+  const builder = byId("builder");
+  const chat = document.querySelector(".chat");
+  const tabF = byId("tabFields");
+  const tabC = byId("tabChat");
+  if (!builder || !chat || !tabF || !tabC) return;
+  tabs.classList.remove("hidden");
+  const show = (fields) => {
+    builder.classList.toggle("hidden", !fields);
+    chat.classList.toggle("hidden", fields);
+    tabF.classList.toggle("is-active", fields);
+    tabC.classList.toggle("is-active", !fields);
+  };
+  tabF.onclick = () => show(true);
+  tabC.onclick = () => show(false);
+  show(true); // дефолт в manual — «Поля»
+}
+
+// Ч§5 — бейдж режима в тулбаре + одноразовое пояснение после улучшения (rebuild-редирект).
+const MODE_BADGE = { "": "Готовая презентация", manual: "Конструктор", chat: "Сборка в чате" };
+(function initModeBadge() {
+  const badge = byId("modeBadge");
+  if (badge) badge.textContent = MODE_BADGE[mode] != null ? MODE_BADGE[mode] : MODE_BADGE[""];
+  if (params.get("rebuilt")) {
+    addMsg("bot", "Презентация собрана и проверена. Теперь правки — прямо на слайде и через чат.");
+    // Убрать параметр, чтобы сообщение не повторялось по F5.
+    const url = new URL(location.href);
+    url.searchParams.delete("rebuilt");
+    history.replaceState(null, "", url);
+  }
+})();
+
+setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode, нужны ли табы)
+
 if (isDraft) { initDraftBuilder().then(initEditor); } else { initEditor(); }

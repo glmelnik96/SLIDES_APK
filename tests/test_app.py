@@ -55,11 +55,10 @@ def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
 def test_index_has_three_entry_cards(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
-        assert 'data-entry="upload"' in html
-        assert 'data-entry="manual"' in html
-        assert 'data-entry="chat"' in html
-        # the upload flow (file input + create) is still present for entry 1
-        assert 'id="uploadFlow"' in html and 'id="create"' in html
+        # three entry zones: upload (hero) + chat + template
+        assert 'id="uploadFlow"' in html and 'id="create"' in html and 'id="drop"' in html
+        assert 'id="openChat"' in html
+        assert 'id="openManual"' in html
 
 
 def test_shell_injects_gateway_email(monkeypatch, tmp_path):
@@ -306,6 +305,39 @@ def test_clear_history_spares_active_run(monkeypatch, tmp_path):
         import webapp.deck_edit as de
         de.save_deck(active, '<section class="slide">A</section>')
         assert c.get(f"/api/jobs/{active}/deck", headers=H("u1")).status_code == 200
+
+
+def test_drafts_list_scoped_and_deletable(monkeypatch, tmp_path):
+    """Г§1 — черновик доступен со своего списка (GET /api/drafts), удаляется владельцем
+    (DELETE), не виден и не удаляем чужим пользователем."""
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/api/drafts", headers=H("u1")).json() == []
+        sid = c.post("/api/drafts", json={"mode": "manual"},
+                     headers=H("u1")).json()["session_id"]
+        items = c.get("/api/drafts", headers=H("u1")).json()
+        assert len(items) == 1
+        assert items[0]["id"] == sid and items[0]["mode"] == "manual"
+        assert items[0]["created_at"]  # дата для «Без названия · дата»
+        # scoped to owner — u2 sees nothing and cannot delete
+        assert c.get("/api/drafts", headers=H("u2")).json() == []
+        assert c.delete(f"/api/drafts/{sid}", headers=H("u2")).status_code == 404
+        # owner deletes → gone; second delete → 404
+        assert c.delete(f"/api/drafts/{sid}", headers=H("u1")).status_code == 200
+        assert c.get("/api/drafts", headers=H("u1")).json() == []
+        assert c.delete(f"/api/drafts/{sid}", headers=H("u1")).status_code == 404
+
+
+def test_drafts_delete_rejects_non_draft(monkeypatch, tmp_path):
+    """Г§1 — DELETE /api/drafts не должен трогать реальную (не-draft) сборку: только
+    черновики; настоящий джоб чистится через историю."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        assert c.delete(f"/api/drafts/{sid}", headers=H("u1")).status_code == 404
+        # a non-draft job never shows up in the drafts list either
+        assert c.get("/api/drafts", headers=H("u1")).json() == []
 
 
 def test_ownership_isolation_on_deck(monkeypatch, tmp_path):

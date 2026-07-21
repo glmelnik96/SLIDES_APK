@@ -8,27 +8,24 @@
 </head>
 <body>
 <div class="editor">
-  <!-- Full-width navigation bar: left edge → right edge -->
+  <!-- К§ — тулбар на всю ширину экрана (общая шапка редактора) -->
   <div class="toolbar">
     <a class="home" href="/">&larr; На главную</a>
-    <button class="btn btn-ghost" id="prev">&#9664;</button>
-    <span class="counter" id="counter">1 / 1</span>
-    <button class="btn btn-ghost" id="next">&#9654;</button>
+    <span class="mode-badge" id="modeBadge"></span>
     <span class="sp"></span>
-    <button class="btn btn-accent hidden" id="rebuild" title="Пересобрать ГОТОВУЮ деку через движок с проверкой качества и автоисправлением — для полировки, не для первичной сборки.">Улучшить через движок</button>
-    <button class="btn" id="save">Сохранить</button>
-    <!-- Единая кнопка экспорта с выпадающим списком форматов -->
-    <div class="export-menu">
-      <button class="btn btn-ghost" id="exportToggle" aria-haspopup="true" aria-expanded="false">Экспорт &#9662;</button>
-      <div class="export-dropdown hidden" id="exportDropdown" role="menu">
-        <button class="btn btn-ghost dropdown-item" id="exportPptx" data-fmt="pptx" role="menuitem">Экспорт в PPTX</button>
-        <button class="btn btn-ghost dropdown-item" id="exportPng" data-fmt="png" role="menuitem">Экспорт в PNG (ZIP)</button>
-        <a class="btn btn-ghost dropdown-item" id="html" role="menuitem">Скачать HTML</a>
+    <button class="btn hidden" id="rebuild" title="Каждый слайд пройдёт вёрстку, визуальную проверку и автоисправление — примерно 1–2 минуты на слайд. После этого правки — прямо на слайде и через чат.">Проверить и улучшить слайды</button>
+    <button class="btn btn-accent" id="save">Сохранить</button>
+    <details class="toolbar-menu" id="exportMenu">
+      <summary class="btn btn-ghost">Скачать &#9662;</summary>
+      <div class="toolbar-menu__list">
+        <button class="btn btn-ghost" id="exportPptx" data-fmt="pptx">Экспорт в PPTX</button>
+        <button class="btn btn-ghost" id="exportPng" data-fmt="png">Экспорт в PNG (ZIP)</button>
+        <a class="btn btn-ghost" id="html">Скачать HTML</a>
       </div>
-    </div>
+    </details>
   </div>
 
-  <div class="editor-body">
+  <div class="editor-main">
   <!-- Thumbnail rail -->
   <aside class="thumbs">
     <div class="thumbs-title">Слайды</div>
@@ -40,39 +37,47 @@
   <div class="stage-col">
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
+      <!-- К§6 — второй буфер двойной буферизации превью (скрыт, грузит следующий кадр) -->
+      <iframe id="deck2" title="Презентация" class="hidden" aria-hidden="true" tabindex="-1"></iframe>
       <div id="buildOverlay" class="build-overlay hidden">
         <div class="build-overlay__card">
-          <div class="build-overlay__title" id="buildTitle">Собираю деку…</div>
+          <div class="build-overlay__title" id="buildTitle">Собираю презентацию…</div>
           <div class="build-overlay__sub" id="buildSub">Заполняю сырые слайды…</div>
-          <div class="build-overlay__note">Это занимает несколько секунд — не закрывайте страницу.</div>
+          <div class="build-overlay__note" id="buildNote">Это занимает несколько секунд — не закрывайте страницу.</div>
+          <div class="build-overlay__actions hidden" id="buildActions"></div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- К§8 — одна правая панель с табами «Поля | Чат» (id панелей #builder/.chat неизменны) -->
+  <aside class="rpanel" id="rpanel">
+    <div class="rpanel-tabs hidden" id="rpanelTabs">
+      <button class="rpanel-tab" id="tabFields" type="button">Содержание</button>
+      <button class="rpanel-tab" id="tabChat" type="button">Правки в чате</button>
+    </div>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
     <div class="builder-head">
-      <h3>Заполнение слайда</h3>
       <span class="save-status" id="saveStatus" aria-live="polite"></span>
     </div>
     <div class="builder-tpl" id="builderTpl"></div>
     <form class="builder-form" id="builderForm"></form>
     <div class="builder-empty" id="builderEmpty">
-      Добавьте слайд кнопкой «+ Добавить слайд» слева, выберите макет и заполните поля.
+      Слайдов пока нет.
+      <button class="btn btn-sm" id="builderAdd">+ Добавить слайд</button>
     </div>
   </aside>
 
   <!-- Chat panel -->
   <aside class="chat">
     <div class="chat-head">
-      <h3>Правки через чат</h3>
       <p>Опишите изменение для текущего слайда — модель перепишет его.</p>
     </div>
     <div class="outline hidden" id="outline">
-      <div class="outline-head">План деки</div>
+      <div class="outline-head">План презентации</div>
       <ol class="outline-list" id="outlineList"></ol>
-      <button class="btn btn-accent hidden" id="buildDeck" title="Прогнать план через движок: заполнить каждый слайд контентом и собрать деку.">Заполнить слайды</button>
+      <button class="btn btn-accent hidden" id="buildDeck" title="Заполнить каждый слайд плана содержанием и собрать презентацию.">Заполнить слайды</button>
       <div class="outline-hint">Обсуди план в чате, потом заполни слайды одной кнопкой.</div>
     </div>
     <div class="chat-log" id="chatLog">
@@ -84,10 +89,11 @@
     <div class="chat-input">
       <div class="chat-target" id="chatTarget">Слайд 1</div>
       <textarea id="chatText" placeholder="Что изменить на этом слайде?"></textarea>
-      <button class="btn" id="chatSend">Применить к слайду</button>
+      <button class="btn btn-accent" id="chatSend">Применить к слайду</button>
     </div>
   </aside>
-  </div>
+  </aside><!-- /.rpanel -->
+  </div><!-- /.editor-main -->
 </div>
 
 <!-- Template picker (manual mode) -->
@@ -95,7 +101,7 @@
   <div class="picker-card">
     <div class="picker-head">
       <h3 id="pickerTitle">Выберите макет слайда</h3>
-      <button class="btn btn-ghost btn-sm" id="pickerClose">&#10005;</button>
+      <button class="btn btn-ghost btn-sm" id="pickerClose" title="Закрыть" aria-label="Закрыть выбор макета">&#10005;</button>
     </div>
     <div class="picker-grid" id="pickerGrid"></div>
   </div>

@@ -70,7 +70,7 @@ async def test_empty_result_is_reported_as_failed(monkeypatch):
     assert r.result_path("s1") is None
 
 
-async def test_worker_exception_emits_failed(monkeypatch):
+async def test_worker_exception_emits_failed(monkeypatch, caplog):
     r = runner.JobRunner()
     r.bind_loop(asyncio.get_running_loop())
     prog = types.SimpleNamespace(publish=None)
@@ -81,11 +81,15 @@ async def test_worker_exception_emits_failed(monkeypatch):
 
     monkeypatch.setattr(runner, "_pipeline_run", boom)
     inp = types.SimpleNamespace(session_id="s2", mode="verstai")
-    q = r.start(inp)
-    ev = await asyncio.wait_for(q.get(), timeout=2)
+    with caplog.at_level("ERROR"):
+        q = r.start(inp)
+        ev = await asyncio.wait_for(q.get(), timeout=2)
     assert ev["terminal"] is True
     assert ev["stage"] == "failed"
-    assert "kaboom" in ev["error"]
+    # Г§8 — the user sees a calm Russian line; the raw exception (with its class and
+    # text) stays in the server log, not in the user-facing error field.
+    assert ev["error"] == "Внутренняя ошибка сборки — попробуйте ещё раз"
+    assert "kaboom" in caplog.text
 
 
 async def test_duplicate_start_same_session_rejected(monkeypatch):
