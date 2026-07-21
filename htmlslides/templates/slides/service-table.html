@@ -7,12 +7,18 @@
     <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
     {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="svc-dots pattern-dots" aria-hidden="true"></div>
-  {% if content.image %}
+  {#- Точки рисуем CSS-слоем ТОЛЬКО когда пользователь подставил своё изображение.
+      В дефолтном ассете консоли точечное поле уже «запечено» из референса (сплошной
+      кадр без маски) — второй CSS-слой создавал бы двойной паттерн/просвет. -#}
+  {% if content.image %}<div class="svc-dots pattern-dots" aria-hidden="true"></div>{% endif %}
+  {#- Иллюстрация продукта слева (3D-консоль с зелёным облаком-логотипом, точно как в
+      референсе 14). Дефолт — СПЛОШНОЙ кадр из референса (без альфа-маски): консоль +
+      зелёные точки + графитовый фон #222222, полностью непрозрачный → ничего не
+      просвечивает. Вылет за левый край, правый край уходит ПОД панель. Пользователь
+      может переопределить своим изображением (тогда включается CSS-поле точек). -#}
   <div class="svc-image" aria-hidden="true" data-slot="image">
-    <img src="{{ content.image }}" alt="">
+    <img src="{{ content.image or asset('service-console-flat.webp') }}" alt="">
   </div>
-  {% endif %}
   <div class="svc-panel m-enter-right">
     <h2 class="svc-name t-head-54" data-slot="service_name">{{ content.service_name }}</h2>
     {% if content.service_desc %}<p class="svc-desc t-body-30" data-slot="service_desc">{{ content.service_desc }}</p>{% endif %}

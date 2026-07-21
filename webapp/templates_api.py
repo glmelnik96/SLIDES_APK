@@ -9,7 +9,10 @@ from __future__ import annotations
 from htmlslides.library import SlotSpec, TemplateLibrary
 
 # Section dividers / back-cover aren't user-fillable content slides.
-_HIDDEN = {"section-dots", "section-frame", "back-cover"}
+# cards-6 скрыт из пикера (правка «дубль 20»): дизайн-дубль новой заливочной grid-2x2.
+# Файл и id ОСТАВЛЕНЫ — на cards-6 завязан конвейер генерации (slide_types/planner/
+# filler/chat_agent), поэтому прячем из ручного пикера, но не удаляем.
+_HIDDEN = {"section-dots", "section-frame", "back-cover", "cards-6"}
 
 
 def _slot_dict(spec: SlotSpec) -> dict:
@@ -53,6 +56,7 @@ def catalog() -> list[dict]:
 _SAMPLE = {
     "title": "Заголовок слайда", "subtitle": "Короткий подзаголовок",
     "highlight": "Главный вывод секции",
+    "quote": "Важная мысль или вывод — максимум в три строки",
     "heading": "Пункт", "text": "Короткое описание пункта",
     "body": "Короткое описание пункта или блок текста.",
     "label": "Метрика", "caption": "пояснение к метрике",
@@ -91,12 +95,23 @@ def _sample_value(name: str, spec: SlotSpec, idx: int = 0):
             return ""  # let the template supply its own default / computed fallback
         if name == "value":
             return str(_SERIES[idx % len(_SERIES)])  # vary per item → non-flat charts
+        if name == "num":
+            return f"{idx + 1:02d}"  # 01/02/03 — последовательная нумерация строк service-table
         s = _SAMPLE.get(name, "Текст")
         return s[: spec.max_chars] if spec.max_chars else s
     if spec.kind == "list":
         # stats2 — второй ряд stats-row, необязательный: в превью пикера показываем
         # только первый ряд, чтобы карточка мастера читалась как классический один ряд.
         if name == "stats2":
+            return []
+        # frames-grid (контур) и grid-2x2 (заливка) делят слоты row1/row2/row3 —
+        # превью обоих показывает 2 ряда (3 и 2 плашки), row3 пустой: карточка
+        # читается как гибкая сетка, а не один длинный ряд.
+        if name == "row1":
+            return [_sample_group(spec, i) for i in range(3)]
+        if name == "row2":
+            return [_sample_group(spec, i) for i in range(2)]
+        if name == "row3":
             return []
         n = min(spec.max_items or 3, 4) or 3
         return [_sample_group(spec, i) for i in range(n)]

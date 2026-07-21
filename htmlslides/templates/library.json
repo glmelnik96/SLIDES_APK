@@ -242,6 +242,16 @@
       }
     },
     {
+      "id": "quote",
+      "type": "content",
+      "file": "quote.html",
+      "display_name": "Цитата",
+      "intent": "Цитата или важная фраза: одна крупная центрированная мысль (до 3 строк) на тёмном фоне с брендовой линейной графикой (стрелки + облака по углам), без рамок. Бери для смыслового акцента или перехода, когда выводу нужно дать «воздух» — без списков, цифр и подзаголовков.",
+      "slots": {
+        "quote": {"kind": "text", "required": true, "max_chars": 72, "label": "Цитата"}
+      }
+    },
+    {
       "id": "timeline",
       "type": "content",
       "file": "timeline.html",
@@ -296,17 +306,29 @@
       "id": "grid-2x2",
       "type": "content",
       "file": "grid-2x2.html",
-      "display_name": "Сетка 2×2",
-      "intent": "Сетка 2×2 ячеек с зелёной обводкой: для матрицы из четырёх равнозначных тезисов или квадрантов.",
+      "display_name": "Сетка плашек",
+      "intent": "Динамическая сетка плашек С ЗАЛИВКОЙ: 1–3 ряда, в каждом 1–5 плашек. Та же гибкая структура, что frames-grid, но плашки залиты фоном с зазором, а не обведены контуром. Бери, когда набор равнозначных блоков нужно разложить заливочной сеткой, а число плашек и рядов заранее не фиксировано. Раскладывай по 2–3 плашки в ряд для баланса.",
       "slots": {
         "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
-        "cells":    {"kind": "list", "required": true, "max_items": 4, "label": "Ячейки",
-                     "item_max_chars": 280,
-                     "item_slots": {
-                       "heading": {"kind": "text", "required": false, "max_chars": 24,  "label": "Заголовок"},
-                       "text":    {"kind": "text", "required": true,  "max_chars": 240, "label": "Текст"}
-                     }}
+        "row1": {"kind": "list", "required": true, "max_items": 5, "label": "Плашки",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }},
+        "row2": {"kind": "list", "required": false, "max_items": 5, "label": "Плашки — второй ряд",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }},
+        "row3": {"kind": "list", "required": false, "max_items": 5, "label": "Плашки — третий ряд",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }}
       }
     },
     {
@@ -324,6 +346,35 @@
                        "heading": {"kind": "text", "required": false, "max_chars": 24,  "label": "Заголовок"},
                        "text":    {"kind": "text", "required": true,  "max_chars": 156, "label": "Текст"}
                      }}
+      }
+    },
+    {
+      "id": "frames-grid",
+      "type": "content",
+      "file": "frames-grid.html",
+      "display_name": "Сетка рамок",
+      "intent": "Динамическая сетка рамок: 1–3 ряда, в каждом 1–5 рамок. Рамки ужимаются при добавлении и растягиваются при удалении на всю ширину и высоту ряда. Бери, когда набор равнозначных блоков нужно разложить гибкой сеткой, а число ячеек и рядов заранее не фиксировано.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
+        "row1": {"kind": "list", "required": true, "max_items": 5, "label": "Рамки",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }},
+        "row2": {"kind": "list", "required": false, "max_items": 5, "label": "Рамки — второй ряд",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }},
+        "row3": {"kind": "list", "required": false, "max_items": 5, "label": "Рамки — третий ряд",
+                 "item_max_chars": 180,
+                 "item_slots": {
+                   "heading": {"kind": "text", "required": false, "max_chars": 24, "label": "Заголовок"},
+                   "text": {"kind": "text", "required": true, "max_chars": 140, "label": "Текст"}
+                 }}
       }
     },
     {

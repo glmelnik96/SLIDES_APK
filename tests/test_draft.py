@@ -171,9 +171,11 @@ def test_templates_catalog(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         cat = c.get("/api/templates", headers=H()).json()
         ids = {t["id"] for t in cat}
-        assert "cover" in ids and "cards-6" in ids
+        assert "cover" in ids and "grid-2x2" in ids
         # dividers hidden
         assert "section-dots" not in ids
+        # cards-6 скрыт из пикера (дизайн-дубль заливочной grid-2x2), но остаётся в library
+        assert "cards-6" not in ids
         cover = next(t for t in cat if t["id"] == "cover")
         assert cover["slots"]["title"]["required"] is True
         assert cover["slots"]["title"]["max_chars"] == 20
@@ -191,7 +193,7 @@ def test_slide_crud_endpoints(monkeypatch, tmp_path):
         r = c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
                    headers=H())
         assert r.status_code == 200 and len(r.json()["slides"]) == 1
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cards-6"},
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"},
                headers=H())
         # update with valid content
         r = c.put(f"/api/drafts/{sid}/slides/1",
@@ -206,7 +208,7 @@ def test_slide_crud_endpoints(monkeypatch, tmp_path):
         assert "<section" in c.get(f"/api/jobs/{sid}/deck", headers=H()).text
         # move 1 -> 2
         r = c.post(f"/api/drafts/{sid}/slides/1/move", json={"to": 2}, headers=H())
-        assert [s["template_id"] for s in r.json()["slides"]] == ["cards-6", "cover"]
+        assert [s["template_id"] for s in r.json()["slides"]] == ["grid-2x2", "cover"]
         # delete
         r = c.delete(f"/api/drafts/{sid}/slides/1", headers=H())
         assert [s["template_id"] for s in r.json()["slides"]] == ["cover"]

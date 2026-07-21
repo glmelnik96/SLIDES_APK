@@ -4,7 +4,15 @@
     брендовый инверт). Зелёный включается переменной force_accent через include —
     разметка не дублируется. -#}
 {% set is_green = force_accent | default(false) %}
-<section class="slide{% if is_green %} statement--accent{% endif %}" data-template="statement{% if is_green %}-green{% endif %}">
+{#- Правило мастера (16): «мало текста → стрелки остаются, много → убираются».
+    Объём считаем по заголовку и плашке; при перегрузе включаем .statement--wide —
+    стрелки скрываются, плашка растягивается на весь формат. -#}
+{%- set _tlen = (content.title or '') | length -%}
+{%- set _hlen = (content.highlight or 'Главный вывод секции') | length -%}
+{#- порог по достижимым лимитам слотов (title≤40, highlight≤90): суммарно >75 —
+    «много текста» → плашка на весь формат, стрелки убираются. -#}
+{%- set text_heavy = (_tlen + _hlen) > 75 -%}
+<section class="slide{% if is_green %} statement--accent{% endif %}{% if text_heavy %} statement--wide{% endif %}" data-template="statement{% if is_green %}-green{% endif %}">
   {% include "_chrome.html" %}
   <div class="statement-box">
     <h1 class="statement-title t-hero-156 m-enter m-enter--hero" data-slot="title">{{ content.title }}</h1>
@@ -14,13 +22,10 @@
   <div class="statement-plate m-enter">
     <p class="statement-plate-text t-sub-36" data-slot="highlight">{{ content.highlight or 'Главный вывод секции' }}</p>
   </div>
+  {#- Брендовые квадратные стрелки — тот же глиф-уголок, что на слайдах 3/5
+      (section-frame), через общий партиал _arrow.html. Скрываются в .statement--wide. -#}
   <div class="statement-tiles" aria-hidden="true">
-    {% for _ in range(4) %}
-    <svg class="statement-tile" viewBox="0 0 180.854 180.854" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M0.353553 180.5L162.793 18.0609" stroke="currentColor"/>
-      <path d="M0.353553 0.5H180.354V180.5" stroke="currentColor"/>
-    </svg>
-    {% endfor %}
+    {% for _ in range(4) %}{% include "_arrow.html" %}{% endfor %}
   </div>
   <div class="statement-dots pattern-dots m-loop-drift" aria-hidden="true"></div>
 </section>
