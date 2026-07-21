@@ -242,7 +242,8 @@ a{color:inherit;}
   color:var(--fg);}
 .quote-art{position:absolute;color:var(--accent);}   /* line-art наследует зелёный акцент */
 .quote-art svg{display:block;width:100%;height:100%;}
-.quote-art--arrows{left:0;top:62px;width:940px;height:660px;}     /* стрелки сверху-слева (viewBox 1442×1012): масштаб 0.651 — правый край ≈939, как в референсе quote-new (было 1040/730 — стрелки были крупнее макета) */
+.quote-art--arrows{left:0;top:62px;width:940px;height:1010px;overflow:hidden;}   /* окно-кроп: SVG внутри крупнее рамки и срезан справа/снизу, как в референсе quote-new (диагонали уходят в левый-низ до y≈926, правые стрелки-хвосты обрезаны) */
+.quote-art--arrows svg{position:absolute;left:-502px;top:0;width:1442px;height:1012px;}  /* натуральный размер 1442×1012 (scale 1.0); left:-502 = origin viewBox на слайде x=-502 (контейнер x=0), origin y=62 (контейнер top); числовой fit s=1.0 tx=-502 ty=62 */
 .quote-art--clouds{right:-259px;bottom:54px;width:1154px;height:465px;}  /* облака снизу-справа (viewBox 1154×465): сдвинуты вправо на 259px — правое облако уходит за край кадра, левое начинается с x≈1027, точно как в референсе quote-new (было right:0 — оба облака целиком в кадре, «поехало» влево) */
 
 /* ---- contacts (figma 3393:11169/3393:10907): light — зелёное полотно с белыми
@@ -393,7 +394,7 @@ html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-bo
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
 .svc-dots{position:absolute;left:60px;top:240px;width:560px;height:720px;color:var(--line);}
-.svc-image{position:absolute;left:0;top:239px;width:543px;height:723px;}   /* консоль-облако из референса 14: прижата к левому краю (вылет как в макете), размер 1:1 с макетом */
+.svc-image{position:absolute;left:0;top:226px;width:614px;height:746px;}   /* консоль-облако из референса 14 (widecrop 640×777 @0.96): целая, НЕ кропнута; правый край 614 заходит ПОД панель (600) → в DOM идёт раньше .svc-panel = лежит слоем ниже, жёсткий стык прячется под фреймом, как в макете */
 .svc-image img{width:100%;height:100%;object-fit:contain;display:block;}
 .svc-panel{position:absolute;left:600px;top:239px;width:1262px;height:725px;
   background:var(--bg-card);padding:23px 0 0 21px;}     /* контент @ (621,262) внутри панели */
