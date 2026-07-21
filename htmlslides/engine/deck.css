@@ -243,7 +243,7 @@ a{color:inherit;}
 .quote-art{position:absolute;color:var(--accent);}   /* line-art наследует зелёный акцент */
 .quote-art svg{display:block;width:100%;height:100%;}
 .quote-art--arrows{left:0;top:56px;width:1040px;height:730px;}     /* стрелки сверху-слева (1442×1012) */
-.quote-art--clouds{right:0;bottom:26px;width:940px;height:379px;}  /* облака снизу-справа (1154×465) */
+.quote-art--clouds{right:0;bottom:54px;width:1154px;height:465px;}  /* облака снизу-справа (viewBox 1154×465): размер 1:1 с viewBox, прижаты к правому краю, низ ≈1025 — как в референсе quote-new */
 
 /* ---- contacts (figma 3393:11169/3393:10907): light — зелёное полотно с белыми
    плашками; dark — зелёный контур с вырезом под логотип и зелёным заголовком ---- */
@@ -393,7 +393,7 @@ html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-bo
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
 .svc-dots{position:absolute;left:60px;top:240px;width:560px;height:720px;color:var(--line);}
-.svc-image{position:absolute;left:-430px;top:250px;width:1040px;height:760px;}   /* вылет за левый край, по центру панели; contain — рендер прозрачный */
+.svc-image{position:absolute;left:0;top:239px;width:543px;height:723px;}   /* консоль-облако из референса 14: прижата к левому краю (вылет как в макете), размер 1:1 с макетом */
 .svc-image img{width:100%;height:100%;object-fit:contain;display:block;}
 .svc-panel{position:absolute;left:600px;top:239px;width:1262px;height:725px;
   background:var(--bg-card);padding:23px 0 0 21px;}     /* контент @ (621,262) внутри панели */
@@ -416,7 +416,10 @@ html[data-theme="light"] .svc-name{color:var(--fg-body);}
   width:100%;height:1px;background:var(--line);}          /* нижняя 6-я линия y=960 */
 .tl-text{width:839px;color:var(--accent);}               /* текст зелёный(D)/чёрный(L) */
 html[data-theme="light"] .tl-text{color:var(--fg-body);}
-.tl-art{position:absolute;left:960px;top:300px;width:900px;height:660px;}
+.tl-art{position:absolute;left:960px;top:300px;width:900px;height:660px;
+  /* кроп по ступенчатой подложке (объединение панелей --a/--b): лайнарт не
+     вылезает в тёмные вырезы сверху-справа и снизу-слева, как в референсе 15 */
+  clip-path:polygon(0% 0%,93.333% 0%,93.333% 25.152%,100% 25.152%,100% 100%,6.667% 100%,6.667% 75%,0% 75%);}
 .tl-art-panel{position:absolute;background:var(--image-bg);}
 .tl-art-panel--a{left:0;top:0;width:840px;height:495px;}        /* @ (960,300) */
 .tl-art-panel--b{left:60px;top:166px;width:840px;height:494px;} /* @ (1020,466) */
