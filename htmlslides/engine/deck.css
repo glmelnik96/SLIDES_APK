@@ -459,11 +459,11 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tcl-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя колонки — зелёный акцент */
 
-/* ---- grid-2x2 (правка «слайд 19→20: заливочная динамика»): динамич. ряды плашек ----
-   Та же гибкая структура, что frames-grid (1–3 ряда × 1–5 плашек, flex делит высоту/
-   ширину), НО плашки ЗАЛИТЫ фоном var(--bg-card) с зазором 4px цветом слайда — вместо
-   контура. Зазоры дают gap:4px на колонке рядов и на самом ряду: сквозь них виден
-   фон .g22-grid (var(--bg)). Зона 1800×659 @ (60,301) как у frames-grid/cards-6. */
+/* ---- grid-2x2 (заливочная динамика): динамич. ряды залитых плашек ----
+   1–3 ряда × 1–5 плашек, flex делит высоту зоны (ряды) и ширину ряда (плашки).
+   Плашки ЗАЛИТЫ фоном var(--bg-card) с зазором 4px цветом слайда: gap:4px на
+   колонке рядов и на самом ряду — сквозь зазоры виден фон .g22-grid (var(--bg)).
+   Зона 1800×659 @ (60,301) как у cards-6. */
 .g22-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
   display:flex;flex-direction:column;gap:4px;background:var(--bg);}  /* ряды делят высоту (flex), зазор 4px = фон слайда */
 .g22-row{display:flex;flex:1 1 0;gap:4px;min-height:0;}   /* плашки делят ширину ряда поровну */
@@ -493,25 +493,6 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
   color:var(--accent);}                                   /* имя — зелёный акцент (ширина = ячейка) */
 .c6-text{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;
   color:var(--fg-body);}                                  /* описание — основной текст */
-
-/* ---- frames-grid (правка 18-19; стык контурами — правка «слайд 21»): динамич. ряды ----
-   Зона контента 1800×659 @ (60,301) как у grid-2x2/cards-6. Ряды делят высоту
-   поровну (flex:1), рамки в ряду — ширину (flex:1): «ужимаются при добавлении,
-   растягиваются при удалении». min-*:0 разрешает сжатие ниже контента.
-   Рамки СТЫКУЮТСЯ контурами (без отступов): gap:0 + отрицательные поля −1px
-   схлопывают смежные 1px-границы в одну общую линию (как grid-2x2). box-sizing
-   глобально border-box (deck.css §base) — паддинг не расширяет рамку. */
-.fg-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
-  display:flex;flex-direction:column;gap:0;}
-.fg-row{display:flex;flex:1 1 0;gap:0;min-height:0;}
-.fg-row + .fg-row{margin-top:-1px;}                       /* смежные ряды делят одну горизонтальную линию */
-.fg-frame{flex:1 1 0;min-width:0;border:1px solid var(--line);padding:30px;
-  display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;
-  overflow:hidden;}                                       /* контур-рамка; текст от ВЕРХА и левого края */
-.fg-frame + .fg-frame{margin-left:-1px;}                  /* смежные рамки в ряду делят одну вертикальную линию */
-.fg-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
-  color:var(--accent);margin-bottom:10px;}                /* имя рамки — зелёный акцент (как g22-name) */
-.fg-text{color:var(--fg-body);}                           /* типографика — роль .t-body-30 */
 
 /* ---- section-dots (figma 3393:11207/3393:10954): поле точек + SECTION + номер ---- */
 .sd-dots{position:absolute;left:60px;top:178px;width:1800px;height:602px;color:var(--line);}

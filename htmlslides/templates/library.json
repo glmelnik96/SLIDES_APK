@@ -287,7 +287,7 @@
       "id": "grid-2x2",
       "type": "content",
       "file": "grid-2x2.html",
-      "intent": "Динамическая сетка плашек С ЗАЛИВКОЙ: 1–3 ряда, в каждом 1–5 плашек. Та же гибкая структура, что frames-grid, но плашки залиты фоном с зазором, а не обведены контуром. Бери, когда набор равнозначных блоков нужно разложить заливочной сеткой, а число плашек и рядов заранее не фиксировано. Раскладывай по 2–3 плашки в ряд для баланса.",
+      "intent": "Динамическая сетка плашек С ЗАЛИВКОЙ: 1–3 ряда, в каждом 1–5 плашек. Плашки залиты фоном с зазором и ужимаются/растягиваются по ширине ряда; ряды делят высоту зоны поровну. Бери, когда набор равнозначных блоков нужно разложить заливочной сеткой, а число плашек и рядов заранее не фиксировано. Раскладывай по 2–3 плашки в ряд для баланса.",
       "slots": {
         "title":    {"kind": "text", "required": true,  "max_chars": 60},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70},
@@ -325,34 +325,6 @@
                        "heading": {"kind": "text", "required": false, "max_chars": 24},
                        "text": {"kind": "text", "required": true, "max_chars": 156}
                      }}
-      }
-    },
-    {
-      "id": "frames-grid",
-      "type": "content",
-      "file": "frames-grid.html",
-      "intent": "Динамическая сетка рамок: 1–3 ряда, в каждом 1–5 рамок. Рамки ужимаются при добавлении и растягиваются при удалении на всю ширину и высоту ряда. Бери, когда набор равнозначных блоков нужно разложить гибкой сеткой, а число ячеек и рядов заранее не фиксировано.",
-      "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60},
-        "subtitle": {"kind": "text", "required": false, "max_chars": 70},
-        "row1": {"kind": "list", "required": true, "max_items": 5,
-                 "item_max_chars": 180,
-                 "item_slots": {
-                   "heading": {"kind": "text", "required": false, "max_chars": 24},
-                   "text": {"kind": "text", "required": true, "max_chars": 140}
-                 }},
-        "row2": {"kind": "list", "required": false, "max_items": 5,
-                 "item_max_chars": 180,
-                 "item_slots": {
-                   "heading": {"kind": "text", "required": false, "max_chars": 24},
-                   "text": {"kind": "text", "required": true, "max_chars": 140}
-                 }},
-        "row3": {"kind": "list", "required": false, "max_items": 5,
-                 "item_max_chars": 180,
-                 "item_slots": {
-                   "heading": {"kind": "text", "required": false, "max_chars": 24},
-                   "text": {"kind": "text", "required": true, "max_chars": 140}
-                 }}
       }
     },
     {
