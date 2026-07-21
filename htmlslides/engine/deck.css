@@ -459,20 +459,19 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tcl-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя колонки — зелёный акцент */
 
-/* ---- grid-2x2 (figma 3393:11276/3393:11023; правка «дубль 19→заливка»): 2×2 плашки ----
-   Плашки с ЗАЛИВКОЙ (не обводка — контур остался во frames-grid, чтобы 19 и 21 не
-   дублировались по дизайну). Фон/паддинг/зазор взяты из cards-6: плитка var(--bg-card),
-   зазор 4px цветом фона слайда. Зона 1800×659 @ (60,301); data-n подгоняет число колонок. */
+/* ---- grid-2x2 (правка «слайд 19→20: заливочная динамика»): динамич. ряды плашек ----
+   Та же гибкая структура, что frames-grid (1–3 ряда × 1–5 плашек, flex делит высоту/
+   ширину), НО плашки ЗАЛИТЫ фоном var(--bg-card) с зазором 4px цветом слайда — вместо
+   контура. Зазоры дают gap:4px на колонке рядов и на самом ряду: сквозь них виден
+   фон .g22-grid (var(--bg)). Зона 1800×659 @ (60,301) как у frames-grid/cards-6. */
 .g22-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
-  display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:1fr;gap:4px;
-  background:var(--bg);}                                   /* grid-auto-rows:1fr — ряды делят высоту, нет мёртвых полос */
-.g22-grid[data-n="1"]{grid-template-columns:1fr;}         /* 1 плашка — на всю зону */
-.g22-grid[data-n="3"] .g22-cell:nth-child(3){grid-column:span 2;}  /* 3 плашки: 2 сверху + 1 широкая снизу, без «дыры» */
-.g22-cell{background:var(--bg-card);padding:30px;min-width:0;
-  display:flex;flex-direction:column;justify-content:flex-start;gap:8px;}  /* размер задаёт грид; текст от ВЕРХА и левого края */
-.g22-text{width:auto;}                                     /* типографика — роль .t-body-30 */
+  display:flex;flex-direction:column;gap:4px;background:var(--bg);}  /* ряды делят высоту (flex), зазор 4px = фон слайда */
+.g22-row{display:flex;flex:1 1 0;gap:4px;min-height:0;}   /* плашки делят ширину ряда поровну */
+.g22-cell{flex:1 1 0;min-width:0;background:var(--bg-card);padding:30px;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:8px;}  /* заливка; текст от ВЕРХА и левого края */
 .g22-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
-  color:var(--accent);}                                   /* имя ячейки — зелёный акцент */
+  color:var(--accent);}                                   /* имя плашки — зелёный акцент */
+.g22-text{color:var(--fg-body);}                           /* типографика — роль .t-body-30 */
 
 /* ---- cards-6 (figma 3393:11293/3393:11040): 6 плиток 3×2 ----
    600×330 @ x=60/660/1260, y=301/631; фон var(--bg-card), разделение 4px цветом фона слайда. */
