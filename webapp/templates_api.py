@@ -9,7 +9,10 @@ from __future__ import annotations
 from htmlslides.library import SlotSpec, TemplateLibrary
 
 # Section dividers / back-cover aren't user-fillable content slides.
-_HIDDEN = {"section-dots", "section-frame", "back-cover"}
+# cards-6 скрыт из пикера (правка «дубль 20»): дизайн-дубль новой заливочной grid-2x2.
+# Файл и id ОСТАВЛЕНЫ — на cards-6 завязан конвейер генерации (slide_types/planner/
+# filler/chat_agent), поэтому прячем из ручного пикера, но не удаляем.
+_HIDDEN = {"section-dots", "section-frame", "back-cover", "cards-6"}
 
 
 def _slot_dict(spec: SlotSpec) -> dict:

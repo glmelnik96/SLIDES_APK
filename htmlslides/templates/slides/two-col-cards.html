@@ -9,10 +9,16 @@
   </div>
   <div class="tcc-grid m-stagger">
     {% for card in content.cards %}
+    {#- Правило мастера (правка «слайд 17/16»): карточка растянута на весь формат;
+        мало текста → бренд-стрелка (глиф со слайдов 3/5) в свободном низе карточки,
+        много текста (перегруз абзаца >200 симв.) → стрелка убирается, тексту нужно
+        место. Считаем ПОКАРТОЧНО: короткая колонка держит стрелку, длинная — нет. -#}
+    {%- set _long = (card.body or '') | length > 200 -%}
     <div class="tcc-card">
       <div class="tcc-tab"><h2 class="tcc-heading">{{ card.heading }}</h2></div>
       <div class="tcc-body">
         {% if card.body %}<p class="tcc-text t-body-30">{{ card.body }}</p>{% endif %}
+        {% if not _long %}<div class="tcc-arrow" aria-hidden="true">{% include "_arrow.html" %}</div>{% endif %}
       </div>
     </div>
     {% endfor %}

@@ -435,16 +435,18 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 
 /* ---- two-col-cards (figma 3393:11245/3393:10992): 2 карточки-«папки» ----
    Вкладка 299×60 @ (61,300)/(992,300) + тело 869×660 @ (61,360). Колонки шаг 931 (992−61). */
-.tcc-grid{position:absolute;left:61px;top:300px;width:1799px;display:flex;gap:62px;
-  align-items:stretch;}                                   /* обе карточки одинаковой высоты */
-.tcc-card{width:869px;display:flex;flex-direction:column;}
+.tcc-grid{position:absolute;left:61px;top:300px;width:1799px;height:720px;display:flex;gap:62px;
+  align-items:stretch;}                                   /* карточки растянуты на весь формат: тело 660 @ y=360 → низ 1020 (над колонтитулом 1042) */
+.tcc-card{width:869px;height:100%;display:flex;flex-direction:column;}  /* карточка на всю высоту зоны — независимо от объёма текста */
 .tcc-tab{width:fit-content;min-width:299px;max-width:869px;box-sizing:border-box;
   height:60px;background:var(--bg-card);padding:7px 28px 0 24px;}  /* правый паддинг 28px — текст не вплотную к краю плашки (SELF-MANAGED) */
 .tcc-heading{font-size:48px;font-weight:600;line-height:1.0;letter-spacing:-.96px;
   white-space:nowrap;color:var(--card-label);}            /* nowrap: не переносится и не вылезает за вкладку; Header 2 — зелёный(D)/чёрный(L) */
-.tcc-body{flex:1;min-height:300px;max-height:660px;background:var(--bg-card);padding:36px 24px;
-  display:flex;flex-direction:column;justify-content:flex-start;}  /* высота по контенту (равная у обеих), текст от ВЕРХА и левого края */
+.tcc-body{flex:1;min-height:0;background:var(--bg-card);padding:36px 24px;
+  display:flex;flex-direction:column;justify-content:flex-start;}  /* тело заполняет карточку целиком, текст от ВЕРХА и левого края */
 .tcc-text{width:814px;}                                    /* типографика — роль .t-body-30 */
+.tcc-arrow{margin-top:auto;align-self:flex-end;color:var(--line);line-height:0;}  /* бренд-стрелка в свободном низе карточки (глиф со слайдов 3/5); много текста → шаблон её убирает */
+.tcc-arrow .brand-arrow{width:140px;height:140px;}
 
 /* ---- three-col (figma 3393:11262/3393:11009): 3 текстовые колонки ----
    Колонки x=61/691/1321 width 540 top 300; зелёные 1px сепараторы @ x=660/1290 h=658. */
@@ -457,16 +459,20 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tcl-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя колонки — зелёный акцент */
 
-/* ---- grid-2x2 (figma 3393:11276/3393:11023): 4 ячейки с зелёной обводкой ----
-   900×330 @ (60,301)/(960,301)/(60,631)/(960,631), общие границы (стык по центру). */
+/* ---- grid-2x2 (figma 3393:11276/3393:11023; правка «дубль 19→заливка»): 2×2 плашки ----
+   Плашки с ЗАЛИВКОЙ (не обводка — контур остался во frames-grid, чтобы 19 и 21 не
+   дублировались по дизайну). Фон/паддинг/зазор взяты из cards-6: плитка var(--bg-card),
+   зазор 4px цветом фона слайда. Зона 1800×659 @ (60,301); data-n подгоняет число колонок. */
 .g22-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
-  display:flex;flex-wrap:wrap;}
-.g22-cell{width:900px;height:330px;border:1px solid var(--line);
-  margin:0 -1px -1px 0;padding:30px;                       /* −1px стыкуют общие границы */
-  display:flex;flex-direction:column;justify-content:flex-start;}  /* текст от ВЕРХА и левого края ячейки */
-.g22-text{width:810px;}                                    /* типографика — роль .t-body-30 */
+  display:grid;grid-template-columns:repeat(2,1fr);grid-auto-rows:1fr;gap:4px;
+  background:var(--bg);}                                   /* grid-auto-rows:1fr — ряды делят высоту, нет мёртвых полос */
+.g22-grid[data-n="1"]{grid-template-columns:1fr;}         /* 1 плашка — на всю зону */
+.g22-grid[data-n="3"] .g22-cell:nth-child(3){grid-column:span 2;}  /* 3 плашки: 2 сверху + 1 широкая снизу, без «дыры» */
+.g22-cell{background:var(--bg-card);padding:30px;min-width:0;
+  display:flex;flex-direction:column;justify-content:flex-start;gap:8px;}  /* размер задаёт грид; текст от ВЕРХА и левого края */
+.g22-text{width:auto;}                                     /* типографика — роль .t-body-30 */
 .g22-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
-  color:var(--accent);margin-bottom:10px;}                /* имя ячейки — зелёный акцент */
+  color:var(--accent);}                                   /* имя ячейки — зелёный акцент */
 
 /* ---- cards-6 (figma 3393:11293/3393:11040): 6 плиток 3×2 ----
    600×330 @ x=60/660/1260, y=301/631; фон var(--bg-card), разделение 4px цветом фона слайда. */
@@ -489,16 +495,21 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .c6-text{font-size:30px;font-weight:400;line-height:1.2;letter-spacing:-.3px;
   color:var(--fg-body);}                                  /* описание — основной текст */
 
-/* ---- frames-grid (правка 18-19): динамические ряды рамок ----
+/* ---- frames-grid (правка 18-19; стык контурами — правка «слайд 21»): динамич. ряды ----
    Зона контента 1800×659 @ (60,301) как у grid-2x2/cards-6. Ряды делят высоту
    поровну (flex:1), рамки в ряду — ширину (flex:1): «ужимаются при добавлении,
-   растягиваются при удалении». min-*:0 разрешает сжатие ниже контента. */
+   растягиваются при удалении». min-*:0 разрешает сжатие ниже контента.
+   Рамки СТЫКУЮТСЯ контурами (без отступов): gap:0 + отрицательные поля −1px
+   схлопывают смежные 1px-границы в одну общую линию (как grid-2x2). box-sizing
+   глобально border-box (deck.css §base) — паддинг не расширяет рамку. */
 .fg-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
-  display:flex;flex-direction:column;gap:20px;}
-.fg-row{display:flex;flex:1 1 0;gap:20px;min-height:0;}
+  display:flex;flex-direction:column;gap:0;}
+.fg-row{display:flex;flex:1 1 0;gap:0;min-height:0;}
+.fg-row + .fg-row{margin-top:-1px;}                       /* смежные ряды делят одну горизонтальную линию */
 .fg-frame{flex:1 1 0;min-width:0;border:1px solid var(--line);padding:30px;
   display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;
   overflow:hidden;}                                       /* контур-рамка; текст от ВЕРХА и левого края */
+.fg-frame + .fg-frame{margin-left:-1px;}                  /* смежные рамки в ряду делят одну вертикальную линию */
 .fg-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя рамки — зелёный акцент (как g22-name) */
 .fg-text{color:var(--fg-body);}                           /* типографика — роль .t-body-30 */

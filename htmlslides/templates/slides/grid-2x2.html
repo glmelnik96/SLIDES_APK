@@ -1,13 +1,14 @@
-{#- Сетка 2×2 (figma D 3393:11276 / L 3393:11023): 4 ячейки с зелёной обводкой 1px,
-    общие границы (стык по центру). Текст Body 2 с отступом 30px от угла.
-    Контентный макет — малый логотип (.slide--chrome-sm). -#}
+{#- Сетка 2×2 (figma D 3393:11276 / L 3393:11023): до 4 плашек с ЗАЛИВКОЙ (var(--bg-card)),
+    зазор 4px цветом фона слайда — фон/отступы взяты из cards-6 (правка «дубль 19→заливка»:
+    контур-версия осталась во frames-grid, чтобы 19 и 21 не дублировались). Текст Body 2 с
+    отступом 30px от угла. Контентный макет — малый логотип (.slide--chrome-sm). -#}
 <section class="slide slide--chrome-sm" data-template="grid-2x2">
   {% include "_chrome.html" %}
   <div class="content-head">
     <h3 class="content-head-title t-head-42">{{ content.title }}</h3>
     {% if content.subtitle %}<p class="content-head-sub t-sub-36">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="g22-grid m-stagger">
+  <div class="g22-grid m-stagger" data-n="{{ content.cells|length }}">
     {% for cell in content.cells %}
     <div class="g22-cell">
       {% if cell.heading %}<p class="g22-name">{{ cell.heading }}</p>{% endif %}
