@@ -78,8 +78,10 @@ function resetFile() {
   selectedFile = null;
   fileInput.value = "";
   drop.classList.remove("has-file");
-  $("#dropText").textContent = "Перетащите файл сюда или нажмите, чтобы выбрать";
+  $("#dropText").textContent = "Перетащите файл или нажмите, чтобы выбрать";
   $("#create").disabled = true;
+  const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
+  if (hint) hint.hidden = false;
 }
 
 function setFile(file) {
@@ -87,6 +89,8 @@ function setFile(file) {
   drop.classList.add("has-file");
   $("#dropText").textContent = "Файл: " + file.name;
   $("#create").disabled = false;
+  const hint = $("#createHint");        // Г§7 — файл выбран → причина исчезла
+  if (hint) hint.hidden = true;
 }
 
 fileInput.addEventListener("change", () => {
@@ -109,6 +113,7 @@ function updateEmptyState() {
     !$("#progress").classList.contains("hidden") ||
     !$("#result").classList.contains("hidden") ||
     !$("#activeWrap").hidden ||
+    !$("#draftsWrap").hidden ||
     $("#histlist").children.length > 0;
   el.hidden = hasContent;
   // Пока показан empty-state, секция истории с «Пока пусто» дублирует его — прячем
@@ -134,9 +139,10 @@ async function loadHistory() {
     const action = ok
       ? `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`
       : `<span class="hist-status hist-status--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>`;
-    const meta = ok || !it.error
-      ? `${it.source_filename || ""} &middot; ${when}`
-      : `${it.source_filename || ""} &middot; ${when} &middot; ${esc(it.error)}`;
+    const name = it.display_name || it.source_filename || "Без названия";
+    const parts = [name, when];
+    if (!ok && it.error) parts.push(esc(it.error));
+    const meta = parts.filter(Boolean).join(" · ");
     li.innerHTML =
       `<div><div class="hist-mode">${label}</div>` +
       `<div class="hist-meta">${meta}</div></div>` +
@@ -206,8 +212,50 @@ async function autoResumeActive() {
                  { stage: it.stage, progress_pct: it.progress_pct, resumed: true });
 }
 
+/* ---- drafts (незавершённая работа: конструктор/чат) ---- */
+async function loadDrafts() {
+  let items = [];
+  try { items = await (await fetch(U("/api/drafts"))).json(); } catch (e) { return; }
+  const wrap = $("#draftsWrap");
+  const ul = $("#draftsList");
+  wrap.hidden = items.length === 0;
+  // Две колонки (Черновики │ История) — только когда черновики есть.
+  $("#historyGrid")?.classList.toggle("two-col", items.length > 0);
+  ul.innerHTML = "";
+  for (const it of items) {
+    const li = document.createElement("li");
+    const label = MODE_LABEL[it.mode] || it.mode;
+    const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
+    const meta = ["Без названия", when].filter(Boolean).join(" · ");
+    // mode в URL обязателен — иначе редактор откроет сессию как built-деку.
+    li.innerHTML =
+      `<div><div class="hist-mode">${label}</div>` +
+      `<div class="hist-meta">${meta}</div></div>` +
+      `<div class="hist-spacer"></div>` +
+      `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
+      `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
+    ul.appendChild(li);
+  }
+  ul.querySelectorAll("[data-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm("Удалить черновик? Это действие необратимо.")) return;
+      b.disabled = true;  // deleting — «Удалить» неактивна до ответа
+      try {
+        const r = await fetch(U(`/api/drafts/${b.dataset.del}`), { method: "DELETE" });
+        if (!r.ok) throw new Error("draft delete failed");
+        loadDrafts();
+      } catch (e) {
+        b.disabled = false;  // при ошибке вернуть кнопку активной
+      }
+    }));
+  updateEmptyState();
+}
+
 /* ---- create job ---- */
-$("#create").onclick = async () => {
+// Г§8 — extracted so the result panel's "Повторить с тем же файлом" can re-run the
+// build directly (after streamProgress, #create stays disabled, so a synthetic click
+// wouldn't fire — we call the function).
+async function createJob() {
   if (!selectedFile) return;
   const fd = new FormData();
   fd.append("mode", MODE);
@@ -217,13 +265,32 @@ $("#create").onclick = async () => {
   $("#create").disabled = true;
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {
-    alert("Ошибка: " + (await res.text()));
+    // Surface the failure in the #result panel (own visual system, SB Sans),
+    // not a native alert. 429 = queue full; 400 already carries a Russian
+    // detail; anything else falls back to raw text in a collapsed <details>.
+    const text = await res.text();
+    const box = $("#result");
+    box.classList.remove("hidden");
+    box.classList.add("error");
+    let body;
+    if (res.status === 429) {
+      body = "<p>Очередь занята — дождитесь завершения текущих сборок.</p>";
+    } else {
+      let detail = "";
+      try { detail = JSON.parse(text).detail; } catch (e) { detail = ""; }
+      body = detail
+        ? `<p>${esc(detail)}</p>`
+        : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`;
+    }
+    box.innerHTML = `<h3>Не удалось запустить сборку</h3>${body}`;
+    updateEmptyState();
     $("#create").disabled = false;
     return;
   }
   const { session_id, kind } = await res.json();
   streamProgress(session_id, kind);
-};
+}
+$("#create").onclick = createJob;
 
 /* If no progress event arrives for this many seconds, warn that the step is
    taking long (helps tell a slow model call apart from a real hang). */
@@ -232,6 +299,10 @@ let lastEventAt = 0;
 let heartbeatTimer = null;
 let currentSession = null;
 let currentStage = null;
+// Consecutive SSE reconnect attempts (Ч§1): incremented on each es.onerror,
+// reset on any es.onmessage. Module-scoped so it survives the streamProgress
+// re-invocation used to re-attach after a transient drop.
+let reconnects = 0;
 
 function logLine(stage, detail) {
   const log = $("#progressLog");
@@ -273,6 +344,9 @@ function streamProgress(sessionId, kind, initial) {
   prog.classList.remove("hidden");
   $("#result").classList.add("hidden");
   updateEmptyState();
+  // A fresh stream starts the reconnect counter clean; a resumed reconnect
+  // (initial.resumed) keeps the running count so 5 failures in a row still bail.
+  if (!(initial && initial.resumed)) reconnects = 0;
   const seedPct = initial && initial.progress_pct ? initial.progress_pct : 0;
   const seedStage = initial && initial.stage ? initial.stage : null;
   $("#barfill").style.width = seedPct + "%";
@@ -296,6 +370,7 @@ function streamProgress(sessionId, kind, initial) {
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     lastEventAt = Date.now();
+    reconnects = 0;  // a live event arrived — the stream is healthy again
     tickHeartbeat();
     const pct = ev.progress_pct || 0;
     currentStage = ev.stage || currentStage;
@@ -317,13 +392,53 @@ function streamProgress(sessionId, kind, initial) {
       loadHistory();
     }
   };
+  // Ч§1 — an SSE drop is NOT a build failure: the job keeps running on the
+  // server. Keep the progress panel, mark the heartbeat stale, and try to
+  // re-attach; only a real terminal `failed` event (handled in onmessage) draws
+  // the "Не удалось собрать презентацию" screen.
   es.onerror = () => {
     if (finished) return; // normal stream close after the terminal event
     es.close();
     stopHeartbeat();
-    currentSession = null;
-    prog.classList.add("hidden");
-    showResult(sessionId, kind, { stage: "failed", error: "Потеряно соединение с сервером" });
+    reconnects++;
+    const hb = $("#heartbeat");
+    if (reconnects > 5) {
+      // Five reconnect attempts failed in a row. Stop retrying, but the build
+      // may still be alive server-side — keep the panel, be honest, no false
+      // "failed" screen.
+      if (hb) hb.classList.add("stale");
+      $("#stageDetail").textContent =
+        "Связь с сервером потеряна. Обновите страницу — если сборка продолжается, прогресс подхватится автоматически.";
+      return;
+    }
+    if (hb) {
+      hb.classList.add("stale");
+      hb.textContent = `Связь прервалась — переподключаюсь… (попытка ${reconnects} из 5)`;
+    }
+    setTimeout(async () => {
+      if (currentSession !== sessionId) return;  // superseded by another stream
+      let items = [];
+      try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) {}
+      const job = items.find((it) => it.session_id === sessionId);
+      if (job) {
+        // Still building — re-attach, seeding the panel from its known state.
+        streamProgress(sessionId, kind,
+          { stage: job.stage, progress_pct: job.progress_pct, resumed: true });
+        return;
+      }
+      // No longer active — it finished (or failed) while we were disconnected.
+      let hist = [];
+      try { hist = await (await fetch(U("/api/history"))).json(); } catch (e) {}
+      const rec = hist.find((it) => it.id === sessionId);
+      if (rec) {
+        stopHeartbeat();
+        currentSession = null;
+        prog.classList.add("hidden");
+        showResult(sessionId, kind, { stage: rec.status, error: rec.error });
+      }
+      // Neither active nor in history yet: leave the panel as-is (no false
+      // failure); a refresh or the next poll will resolve it.
+    }, 3000);
   };
 }
 
@@ -341,19 +456,37 @@ $("#stopBtn").onclick = async () => {
 function showResult(sessionId, kind, ev) {
   const box = $("#result");
   box.classList.remove("hidden");
-  box.classList.toggle("error", ev.stage === "failed");
-  if (ev.stage === "cancelled") {
+  const failed = ev.stage === "failed";
+  box.classList.toggle("error", failed);
+  if (failed || ev.stage === "cancelled") {
+    // Г§8 — recovery that keeps the user's context: retry with the SAME file
+    // (and «Точный перенос» choice), or pick another. ev.error is escaped —
+    // it can carry engine text. If the file is gone (e.g. a build resumed after
+    // reload), only «Выбрать другой файл» is offered.
+    const title = failed ? "Не удалось собрать презентацию" : "Сборка остановлена";
+    const msg = failed
+      ? esc(ev.error || "Произошла ошибка.")
+      : "Генерация прервана по запросу.";
+    const retry = selectedFile
+      ? `<button class="btn btn-accent" data-res="retry">Повторить с тем же файлом</button>`
+      : "";
     box.innerHTML =
-      `<h3>Сборка остановлена</h3>` +
-      `<p>Генерация прервана по запросу.</p>` +
-      `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
-    return;
-  }
-  if (ev.stage === "failed") {
-    box.innerHTML =
-      `<h3>Не удалось собрать презентацию</h3>` +
-      `<p>${ev.error || "Произошла ошибка."}</p>` +
-      `<div class="res-actions"><button class="btn" onclick="location.reload()">Начать заново</button></div>`;
+      `<h3>${title}</h3><p>${msg}</p>` +
+      `<div class="res-actions">${retry}` +
+      `<button class="btn btn-ghost" data-res="other">Выбрать другой файл</button></div>`;
+    const retryBtn = box.querySelector('[data-res="retry"]');
+    if (retryBtn) retryBtn.addEventListener("click", () => {
+      box.classList.add("hidden");
+      updateEmptyState();
+      createJob();
+    });
+    box.querySelector('[data-res="other"]').addEventListener("click", () => {
+      resetFile();
+      box.classList.add("hidden");
+      updateEmptyState();
+      $("#drop").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    });
+    updateEmptyState();
     return;
   }
   // HTML deck — go straight to the editor.
@@ -364,7 +497,7 @@ function showResult(sessionId, kind, ev) {
 async function startDraft(mode, btn) {
   const prev = btn.textContent;
   btn.disabled = true;
-  btn.querySelector(".entry-cta").textContent = "Создаю…";
+  btn.textContent = "Создаю…";
   try {
     const r = await fetch(U("/api/drafts"), {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -375,39 +508,52 @@ async function startDraft(mode, btn) {
     location.href = U(`/editor?session=${session_id}&mode=${mode}`);
   } catch (e) {
     btn.disabled = false;
-    btn.querySelector(".entry-cta").textContent = "Ошибка, попробуйте ещё раз";
+    btn.classList.add("is-error");  // Г§6 — ошибка одета в danger, не в акцент
+    btn.textContent = "Ошибка, попробуйте ещё раз";
+    setTimeout(() => { btn.classList.remove("is-error"); btn.textContent = prev; }, 4000);
   }
 }
 
-const ENTRY_CTA = { upload: "Выбрано ↓", manual: "Открыть конструктор →",
-                    chat: "Открыть чат →" };
-
-document.querySelectorAll(".entry-card").forEach((card) => {
-  card.onclick = () => {
-    const entry = card.dataset.entry;
-    if (entry === "upload") {
-      document.querySelectorAll(".entry-card").forEach((c) =>
-        c.classList.toggle("is-active", c === card));
-      $("#uploadFlow").classList.remove("hidden");
-      $("#uploadFlow").scrollIntoView({ behavior: "smooth", block: "start" });
-    } else {
-      startDraft(entry, card);
-    }
+// Зоны точек входа: кликабельна вся рамка .entry-alt (не только ссылка). Черновик
+// создаётся при клике/Enter/Space; ссылка внутри — лишь визуальная подсказка.
+document.querySelectorAll(".entry-alt").forEach((card) => {
+  const mode = card.dataset.mode;
+  const label = card.querySelector(".entry-open");
+  if (!mode || !label) return;
+  const go = () => {
+    if (card.dataset.busy) return;  // не плодим черновики по дабл-клику
+    card.dataset.busy = "1";
+    Promise.resolve(startDraft(mode, label)).finally(() => { delete card.dataset.busy; });
   };
-});
-
-// Returning via browser Back restores this page from the bfcache with a draft
-// card still stuck "Создаю…"/disabled — re-enable cards so they're clickable again.
-window.addEventListener("pageshow", () => {
-  document.querySelectorAll(".entry-card").forEach((c) => {
-    c.disabled = false;
-    const cta = c.querySelector(".entry-cta");
-    if (cta) cta.textContent = ENTRY_CTA[c.dataset.entry] || "";
+  card.addEventListener("click", go);
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
   });
 });
 
+// Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
+const _OPEN_LABEL = { openChat: "Открыть чат →", openManual: "Открыть конструктор →" };
+window.addEventListener("pageshow", () => {
+  Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
+    const b = $("#" + id);
+    if (b) { b.disabled = false; b.classList.remove("is-error"); b.textContent = label; }
+  });
+  loadDrafts();  // возврат по Back мог оставить/удалить черновик — обновляем список
+});
+
 /* init */
+// Г§4 — empty-state превью настоящего слайда: src через U() (несёт gateway-префикс);
+// lazy + скрытый родитель → грузится только когда empty-state показан.
+const _emptyPrev = $("#emptyPrev");
+if (_emptyPrev) _emptyPrev.src = U("/api/templates/cover/preview");
+// Г§9 — объявляем окно ретеншена (истории и черновиков) прямо в заголовках секций.
+const _retHours = window.__RETENTION_HOURS__ || 24;
+const _retCap = $("#retentionCap");
+if (_retCap) _retCap.textContent = "хранится " + _retHours + " ч";
+const _draftsCap = $("#draftsCap");
+if (_draftsCap) _draftsCap.textContent = "хранится " + _retHours + " ч";
 resetFile();
 loadHistory();
 loadActive();
+loadDrafts();
 autoResumeActive();

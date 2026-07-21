@@ -44,15 +44,19 @@ def screenshot_slides(html_path: str | Path, indices: Iterable[int],
     shots: dict[int, Path] = {}
     with sync_playwright() as pw:
         browser = _launch(pw)
+        # Р§5 — детерминированные кадры: reduced-motion мгновенно ставит финал всех
+        # входов/графиков/счётчиков (motion.css:157-172, deck.js:16-17) — снимаем
+        # финальное состояние по факту, а не по sleep. Симметрично measure_overflow.
         page = browser.new_page(
-            viewport={"width": viewport[0], "height": viewport[1]})
+            viewport={"width": viewport[0], "height": viewport[1]},
+            reduced_motion="reduce")
         page.goto(url)
         # deck-chrome (зелёный прогресс-бар) не должен попадать в кадры:
         # vision-QA считает его лишним зелёным акцентом.
         page.add_style_tag(content=".deck-progress{display:none}")
         for index in sorted(set(indices)):
             page.evaluate(f"window.deck.goTo({index - 1})")
-            page.wait_for_timeout(900)            # дать motion-входам доиграть (slow-02=700ms)
+            page.wait_for_timeout(200)            # Р§5 — только дорисовка шрифтов/раскладки (входы уже финальны при reduced-motion)
             png = out / f"qa-slide-{index:02d}.png"
             page.screenshot(path=str(png))
             shots[index] = png

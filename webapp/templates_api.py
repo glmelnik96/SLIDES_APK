@@ -20,6 +20,10 @@ def _slot_dict(spec: SlotSpec) -> dict:
         out["max_items"] = spec.max_items
     if spec.item_max_chars:
         out["item_max_chars"] = spec.item_max_chars
+    if spec.label:
+        out["label"] = spec.label
+    if spec.hint:
+        out["hint"] = spec.hint
     if spec.item_slots:
         out["item_slots"] = {n: _slot_dict(s) for n, s in spec.item_slots.items()}
     return out
@@ -36,6 +40,7 @@ def catalog() -> list[dict]:
             "id": t.id,
             "type": t.type,
             "intent": t.intent,
+            "display_name": t.display_name,
             "slots": {n: _slot_dict(s) for n, s in t.slots.items()},
         })
     return out

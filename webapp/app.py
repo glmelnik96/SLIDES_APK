@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import logging
 import os
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from webapp.paths import session_dir
 from webapp.runner import CapacityError, JobRunner
 
 _STATIC = Path(__file__).parent / "static"
+logger = logging.getLogger(__name__)
 
 
 def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
@@ -50,7 +52,10 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
     mtimes += [p.stat().st_mtime for p in _STATIC.glob("*.css")]
     token = str(int(max(mtimes))) if mtimes else "0"
     html = re.sub(r'(/static/[\w./-]+\.(?:js|css))"', rf'{prefix}\1?v={token}"', html)
-    inject = f"<script>window.__APP_PREFIX__={json.dumps(prefix)};</script>"
+    # Г§9 — expose the data-retention window so the UI can announce it (silent
+    # deletion of history/drafts is a least-astonishment violation otherwise).
+    inject = (f"<script>window.__APP_PREFIX__={json.dumps(prefix)};"
+              f"window.__RETENTION_HOURS__={int(settings.retention_hours)};</script>")
     html = html.replace("<head>", "<head>\n" + inject, 1)
     # Canon topbar shows the gateway-supplied email; no email = standalone dev.
     from html import escape as _esc
@@ -225,6 +230,20 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     return JSONResponse({"session_id": session_id, "kind": "draft", "mode": mode})
 
 
+@app.get("/api/drafts")
+async def list_drafts(request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Черновики пользователя (status="draft") — незавершённая работа, снова
+    достижимая с главной («Продолжить» ведёт обратно в редактор)."""
+    async with request.app.state.sessionmaker() as s:
+        jobs = await jobs_repo.list_drafts_for_user(s, user.id)
+    return JSONResponse([
+        {"id": j.session_id, "mode": j.mode,
+         "created_at": j.created_at.isoformat() if j.created_at else None}
+        for j in jobs
+    ])
+
+
 @app.get("/api/templates")
 def list_templates(user=Depends(get_current_user)) -> JSONResponse:
     """Slide-template catalog with slot contracts (drives the manual builder)."""
@@ -232,11 +251,31 @@ def list_templates(user=Depends(get_current_user)) -> JSONResponse:
     return JSONResponse(templates_api.catalog())
 
 
+# Правила покоя для статичного превью пикера: копия print-блока
+# htmlslides/engine/motion.css:175–186 БЕЗ обёртки @media print — входы, лупы и
+# графики в финальном видимом состоянии, чтобы ~20 превью не мельтешили.
+# motion.css не редактируется; при правках блока печати синхронизировать вручную.
+_PREVIEW_QUIET_STYLE = (
+    "<style>"
+    ".m-enter,.m-enter-left,.m-enter-right,.m-enter-scale,"
+    ".m-fade,.m-stagger>*{opacity:1 !important;animation:none !important;}"
+    ".m-loop-pulse,.m-loop-drift,.m-loop-draw,.m-loop-float{"
+    "animation:none !important;opacity:1 !important;transform:none !important;}"
+    ".bar-fill,.sb-seg{animation:none !important;transform:scaleX(1) !important;}"
+    ".arc-draw{animation:none !important;stroke-dashoffset:var(--draw-to,0) !important;}"
+    ".line-draw{animation:none !important;stroke-dashoffset:0 !important;}"
+    ".line-fade{animation:none !important;opacity:1 !important;}"
+    "</style>"
+)
+
+
 @app.get("/api/templates/{template_id}/preview", response_class=HTMLResponse)
-def template_preview(template_id: str, user=Depends(get_current_user)):
+def template_preview(template_id: str, static: bool = False,
+                     user=Depends(get_current_user)):
     """A one-slide deck with representative sample content — the visual preview
     shown in the template picker. Reuses the real engine so the preview matches
-    the actual output."""
+    the actual output. ``static=1`` injects quiet motion rules so the picker
+    shows still final frames instead of ~20 looping decks."""
     from htmlslides.assembler import assemble
     from htmlslides.library import TemplateLibrary
     from htmlslides.models import DeckPlan, SlidePlan
@@ -248,7 +287,10 @@ def template_preview(template_id: str, user=Depends(get_current_user)):
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type=spec.type, template_id=template_id,
         content=templates_api.sample_content(template_id))])
-    return HTMLResponse(assemble(plan))
+    html = assemble(plan)
+    if static:
+        html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return HTMLResponse(html)
 
 
 def _validation_errors(template_id: str, content: dict) -> list[dict]:
@@ -299,6 +341,26 @@ async def get_draft(session_id: str, request: Request,
                     user=Depends(get_current_user)) -> JSONResponse:
     plan = await _draft_or_404(request, session_id, user)
     return JSONResponse(plan.model_dump())
+
+
+@app.delete("/api/drafts/{session_id}")
+async def delete_draft(session_id: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
+    """Delete a draft session (owner only). 404 if it doesn't exist or is not a
+    draft (a real build must go through history/clear, never here). Cleanup mirrors
+    clear_history: drop the Job row, drop any export state, remove the session dir."""
+    import shutil
+    async with request.app.state.sessionmaker() as s:
+        job = await jobs_repo.get_owned(s, session_id, user.id)
+        if job is None or job.status != "draft":
+            raise HTTPException(404, "not found")
+        await s.delete(job)
+        await s.commit()
+    exports.registry.drop(session_id)
+    d = session_dir(session_id)
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
+    return JSONResponse({"ok": True})
 
 
 def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
@@ -476,8 +538,12 @@ async def draft_agent(session_id: str, request: Request,
     try:
         res = await run_in_threadpool(
             chat_agent.run_turn, session_id, message, current_index)
-    except Exception as exc:  # noqa: BLE001 — surface a clear message
-        raise HTTPException(500, f"agent failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — logged; neutral message to user
+        logger.exception("chat agent run_turn failed (session %s)", session_id)
+        raise HTTPException(
+            500,
+            "Ассистент не смог обработать запрос — попробуйте переформулировать",
+        ) from exc
     if res.changed:
         _persist_draft(session_id, draft.load_plan(session_id))
     return JSONResponse(res.model_dump())
@@ -495,7 +561,8 @@ async def build_draft(session_id: str, request: Request,
     targets = [s for s in plan.slides if s.brief and not s.filled
                and not s.freeform and not s.slide_type]
     if not targets:
-        raise HTTPException(400, "нечего собирать — аутлайн пуст")
+        raise HTTPException(
+            400, "в плане пока нет слайдов — добавьте их в чате")
     await run_in_threadpool(chat_agent.build_outline, session_id)
     return JSONResponse(draft.load_plan(session_id).model_dump())
 
@@ -523,7 +590,8 @@ async def job_status(session_id: str, request: Request,
     await _owned_or_404(request, session_id, user)
     st = runner.status(session_id)
     if st is None:
-        raise HTTPException(404, "unknown session")
+        raise HTTPException(
+            404, "Сессия не найдена — возможно, удалена по сроку хранения (24 часа)")
     return JSONResponse(st)
 
 
@@ -544,7 +612,8 @@ async def job_events(session_id: str, request: Request,
     async def gen():
         if status is None and queue is None:
             yield {"data": _json.dumps({"stage": "failed", "terminal": True,
-                                        "error": "unknown session"})}
+                                        "error": "Сессия не найдена — возможно, "
+                                                 "удалена по сроку хранения (24 часа)"})}
             return
         if status is not None:
             yield {"data": _json.dumps(status)}
@@ -618,8 +687,12 @@ async def post_chat(session_id: str, request: Request,
             chat_edit.rewrite_slide, html, slide_index, instruction)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    except Exception as exc:  # noqa: BLE001 — surface a clear message
-        raise HTTPException(500, f"chat edit failed: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — logged; neutral message to user
+        logger.exception("chat edit failed (session %s)", session_id)
+        raise HTTPException(
+            500,
+            "Не получилось применить правку — попробуйте переформулировать",
+        ) from exc
     section = chat_edit.nth_section(new_html, slide_index)
     # The LLM call above takes seconds-to-minutes and runs UNLOCKED; the deck may
     # have been saved meanwhile (another tab, contenteditable autosave). Splice
@@ -633,7 +706,8 @@ async def post_chat(session_id: str, request: Request,
                     fresh, slide_index, section)
             except ValueError:
                 raise HTTPException(
-                    409, "дека изменилась во время правки — повторите запрос")
+                    409,
+                    "презентация изменилась во время правки — повторите запрос")
         deck_edit.save_deck(session_id, new_html)
     # For a draft (DeckPlan-as-truth), persist the rewrite into plan.json as a
     # freeform slide, so a later form edit / re-render doesn't clobber it.
@@ -707,10 +781,22 @@ async def get_history(request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:
     async with request.app.state.sessionmaker() as s:
         jobs = await jobs_repo.list_for_user(s, user.id)
+
+    def _draft_title(j) -> str | None:
+        """Deck name for constructor/chat drafts (plan.title); None for uploads
+        so the client falls back to the source filename. Best-effort I/O."""
+        if j.kind != "draft":
+            return None
+        try:
+            return draft.load_plan(j.session_id).title or None
+        except Exception:  # noqa: BLE001 — missing/corrupt plan → no name
+            return None
+
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode, "kind": j.kind,
          "source_filename": j.source_filename, "status": j.status,
          "error": j.error,
+         "display_name": _draft_title(j),
          "created_at": j.created_at.isoformat() if j.created_at else None}
         for j in jobs
     ])

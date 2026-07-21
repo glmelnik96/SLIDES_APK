@@ -174,6 +174,13 @@
     if (!slides.length) return;
     progressEl = document.querySelector(".deck-progress");
 
+    /* К§6: превью в редакторе (?editor=1) — режим покоя. Входы/лупы/графики
+       показываем в финальном видимом состоянии (motion.css .no-motion), чтобы
+       повторяющиеся сейвы не перезапускали спектакль в iframe. */
+    if (/[?&]editor=1/.test(location.search) && document.body) {
+      document.body.classList.add("no-motion");
+    }
+
     /* Инвариант: активен РОВНО один слайд. goTo() снимает .is-active только с
        предыдущего current, поэтому любой «застрявший» маркер в исходном HTML
        (редактор сохраняет живой DOM вместе с .is-active того слайда, что был на

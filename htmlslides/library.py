@@ -18,16 +18,21 @@ class SlotSpec:
     max_chars: int = 0                          # 0 = не ограничено
     max_items: int = 0
     item_max_chars: int = 0
+    label: str = ""                             # русская подпись поля (UI)
+    hint: str = ""                              # необязательная подсказка (UI)
     item_slots: dict[str, "SlotSpec"] = field(default_factory=dict)
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "SlotSpec":
+        # Неизвестные ключи JSON игнорируются; label/hint по умолчанию "".
         return cls(
             kind=data["kind"],
             required=data.get("required", False),
             max_chars=data.get("max_chars", 0),
             max_items=data.get("max_items", 0),
             item_max_chars=data.get("item_max_chars", 0),
+            label=data.get("label", ""),
+            hint=data.get("hint", ""),
             item_slots={
                 name: SlotSpec.from_json(spec)
                 for name, spec in data.get("item_slots", {}).items()
@@ -49,6 +54,7 @@ class TemplateSpec:
     file: str
     intent: str
     slots: dict[str, SlotSpec]
+    display_name: str = ""                       # русское имя макета (UI)
 
 
 @dataclass
@@ -70,6 +76,7 @@ class TemplateLibrary:
                 file=t["file"],
                 intent=t["intent"],
                 slots={name: SlotSpec.from_json(s) for name, s in t["slots"].items()},
+                display_name=t.get("display_name", ""),
             )
             for t in data["templates"]
         ]
