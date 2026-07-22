@@ -158,7 +158,7 @@ a{color:inherit;}
 .exact-code{font-family:var(--font-text);white-space:pre-wrap;}
 
 /* ---- прогресс-бар ---- */
-.deck-progress{position:fixed;left:0;bottom:0;height:6px;width:0;background:var(--cl-green);}
+.deck-progress{position:fixed;left:0;bottom:0;height:3px;width:0;background:var(--cl-green);}
 
 /* ---- хром v2 (figma-map §Chrome): логотип, колонтитул, номер слайда ---- */
 .deck-stage{counter-reset:slide;}
@@ -285,13 +285,13 @@ html[data-theme="dark"] .contacts-arrows{color:var(--accent);}
 .content-head-sub{color:var(--fg);}      /* типографика — роль .t-sub-36 */
 
 /* ---- kpi (figma 3393:11314/3393:11061) ---- */
-.kpi-grid{position:absolute;left:53px;top:328px;width:1807px;display:flex;}
-.kpi-cell{display:flex;align-items:flex-start;}
+.kpi-grid{position:absolute;left:53px;top:396px;width:1807px;display:flex;}  /* цифры опущены ниже (было 328) */
+.kpi-cell{display:flex;align-items:flex-start;}   /* unit/desc — по верхнему краю цифры */
 .kpi-cell:nth-child(1){width:766px;}     /* первая цифра width 766 @ x=53 */
-.kpi-cell:nth-child(2){width:490px;margin-left:311px;}  /* вторая @ x=1130 (53+766+311) width 490 */
-.kpi-value{color:var(--accent);white-space:nowrap;}
+.kpi-cell:nth-child(2){width:490px;margin-left:150px;}  /* вторая @ x=969 (53+766+150) — ближе к центру */
+.kpi-value{color:var(--accent);white-space:nowrap;line-height:1;}
 html[data-theme="light"] .kpi-value{color:var(--fg-body);}
-.kpi-side{padding-top:98px;padding-left:24px;width:280px;flex:none;}  /* unit/desc верх y≈426 (330+96) */
+.kpi-side{padding-left:24px;padding-top:52px;width:280px;flex:none;}  /* верх unit ≈ верхний край глифа цифры */
 .kpi-unit{color:var(--fg);}               /* типографика — роль .t-head-36 */
 .kpi-desc{margin-top:41px;color:var(--fg);}  /* desc @ y=503; white(D)/black(L) */
 
@@ -360,37 +360,33 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .kr-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
 /* ---- before-after (не из Figma; бренд-производное «было → стало») ----
-   Композиция «ВЕРТИКАЛЬНЫЙ ПОТОК»: две полноширинные полосы-состояния друг над
-   другом (before — var(--bg-card), after — зелёная), между ними коннектор
-   .ba-flow: стрелка ВНИЗ + опц. дельта-чип. Полоса — ряд: .ba-body (ярлык+текст,
-   верх-лево, flex:1) слева + .ba-dots (брендовая точка, фикс-460) справа: точки
-   заполняют горизонтальную пустоту при коротком тексте — полоса не «куце» и
-   читается собранно при любой длине. Занимает весь слайд (top320, h700).
-   before-ярлык var(--fg-muted); after-полоса зелёная — текст/ярлык графит.
+   Композиция «ДИАГОНАЛЬНЫЙ СТАГГЕР» (правка 2026-07-22): две равные панели-
+   состояния, смещённые по диагонали. before (var(--bg-card)) — нижняя-левая,
+   after (зелёный) — верхняя-правая, приподнята и лежит поверх на шве (z-index).
+   Ярлык+текст прижаты к верх-лево панели. На верх-правом углу before —
+   брендовая диагональная стрелка (.ba-arrow, _arrow.html) зелёным, указывает
+   вверх-вправо к after. Занимает весь слайд (top300, h720).
+   before-ярлык зелёный (var(--accent)); after — зелёная панель, ярлык/текст графит.
    Токены только, без hex/инлайн-style. */
-.ba-stage{position:absolute;left:60px;top:320px;width:1800px;height:700px;
-  display:flex;flex-direction:column;}
-.ba-band{position:relative;flex:1;min-height:0;display:flex;align-items:stretch;overflow:hidden;}
-.ba-band--before{background:var(--bg-card);}
-.ba-band--after{background:var(--accent);}
-.ba-body{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;
-  justify-content:flex-start;gap:20px;padding:44px 56px;box-sizing:border-box;}   /* верх-лево; роли .t-head-36 / .t-body-30 */
+.ba-stage{position:absolute;left:60px;top:300px;width:1800px;height:720px;}
+.ba-col{position:absolute;width:900px;height:604px;overflow:hidden;box-sizing:border-box;
+  display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;
+  gap:22px;padding:56px 64px;}   /* верх-лево; роли .t-head-36 / .t-body-30 */
+.ba-col--before{left:0;top:116px;background:var(--bg-card);z-index:1;}
+.ba-col--after{right:0;top:0;background:var(--accent);z-index:2;}
 .ba-label{margin:0;}
-.ba-label--before{color:var(--fg-muted);}
-.ba-label--after{color:var(--cl-graphite);}          /* графит на зелёном (оба тайла темы) */
-.ba-text{margin:0;}                                  /* .t-body-30 → var(--fg-body) */
-.ba-band--after .ba-text{color:var(--cl-graphite);}  /* графит на зелёной полосе */
-/* Точечное поле справа заполняет пустоту: before — зелёные точки .5,
-   after — графит .16 (мягко на зелёном). Фикс-ширина, чтобы текст не наезжал. */
-.ba-dots{flex:0 0 460px;--dot-step:32px;}
-.ba-band--before .ba-dots{color:var(--line);opacity:.5;}
-.ba-band--after .ba-dots{color:var(--cl-graphite);opacity:.16;}
-/* Коннектор-шов: стрелка вниз + дельта-чип, выровнены по левому контент-краю. */
-.ba-flow{flex:0 0 96px;display:flex;align-items:center;gap:28px;padding:0 56px;background:var(--bg);}
-.ba-arrow{flex:none;width:56px;height:56px;display:block;}
-.ba-delta{margin:0;font-family:var(--font-display);font-weight:600;font-size:22px;
-  letter-spacing:-.2px;color:var(--accent);border:1px solid var(--accent);padding:10px 16px;}
-html[data-theme="light"] .ba-delta{color:var(--fg-body);border-color:var(--fg-body);}
+.ba-label--before{color:var(--accent);}              /* зелёный ярлык на графитовой панели */
+.ba-label--after{color:var(--cl-graphite);}          /* графит на зелёном */
+.ba-text{margin:0;max-width:640px;}                  /* .t-body-30 → var(--fg-body) */
+.ba-col--after .ba-text{color:var(--cl-graphite);}   /* графит на зелёной панели */
+/* Брендовая стрелка в верх-правом углу before, зелёная, указывает вверх-вправо к after. */
+.ba-arrow{position:absolute;top:44px;right:48px;z-index:3;width:132px;height:132px;
+  color:var(--accent);}
+.ba-arrow .brand-arrow{width:100%;height:100%;}
+/* Дельта-чип — графитовая плашка в нижнем-правом углу зелёной панели, отступы = поля панели (64/56). */
+.ba-delta{position:absolute;right:64px;bottom:56px;z-index:3;margin:0;white-space:nowrap;
+  font-family:var(--font-display);font-weight:600;font-size:24px;letter-spacing:-.2px;
+  color:var(--accent);background:var(--cl-graphite);padding:10px 18px;}
 
 /* ---- service-table (figma 3393:11365/3393:11112) ---- */
 .svc-dots{position:absolute;left:60px;top:240px;width:560px;height:720px;color:var(--line);}
@@ -445,7 +441,7 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tcc-body{flex:1;min-height:0;background:var(--bg-card);padding:36px 24px;
   display:flex;flex-direction:column;justify-content:flex-start;}  /* тело заполняет карточку целиком, текст от ВЕРХА и левого края */
 .tcc-text{width:814px;}                                    /* типографика — роль .t-body-30 */
-.tcc-arrow{margin-top:auto;align-self:flex-end;color:var(--line);line-height:0;}  /* бренд-стрелка в свободном низе карточки (глиф со слайдов 3/5); много текста → шаблон её убирает */
+.tcc-arrow{margin-top:auto;margin-right:12px;align-self:flex-end;color:var(--line);line-height:0;}  /* бренд-стрелка в свободном низе; +12px справа → отступ справа (24+12) = отступу снизу (36) */
 .tcc-arrow .brand-arrow{width:140px;height:140px;}
 
 /* ---- three-col (figma 3393:11262/3393:11009): 3 текстовые колонки ----
