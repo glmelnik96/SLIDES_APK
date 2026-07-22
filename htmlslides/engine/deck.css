@@ -316,7 +316,8 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 .sr-label{margin-top:30px;}   /* типографика — роль .t-body-30 (var(--fg-body)) */
 .sr-caption{margin-top:14px;font-size:22px;font-weight:400;line-height:1.3;
   letter-spacing:-.22px;color:var(--fg-muted);max-width:680px;}
-.kpi-dots{position:absolute;left:60px;top:600px;width:1800px;height:414px;color:var(--line);}
+.kpi-dots{position:absolute;left:60px;top:600px;width:1800px;height:414px;color:var(--line);
+  --dot-step:30px;opacity:.5;}   /* разреженнее (шаг 30) и в половину прозрачности — как в оригинале */
 
 /* ---- bar-chart (не из Figma; бренд-производная SVG-гистограмма) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
