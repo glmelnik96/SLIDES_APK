@@ -135,3 +135,10 @@ class ProgressEvent(BaseModel):
     # path (worker + bot share the same machine). M5 will swap this for an
     # S3 key — the field name carries that intent.
     result_path: str | None = None
+    # Расход прогона (только на терминальном DONE): токены и стоимость в рублях
+    # ставит движок из client.usage_total; duration_ms — раннер (он знает старт
+    # для любого исхода). Все опциональны — на промежуточных событиях None.
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    cost_rub: float | None = None
+    duration_ms: int | None = None

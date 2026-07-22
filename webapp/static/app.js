@@ -123,6 +123,29 @@ function updateEmptyState() {
 }
 
 /* ---- history ---- */
+// Иконка инструмента сборки (из файла / конструктор / чат) — острые контуры 24×24.
+const HIST_ICON_STROKE = `fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="butt" stroke-linejoin="miter"`;
+const HIST_TOOL = {
+  htmlnew: { title: "Из файла",
+    paths: `<path d="M6 4H14L18 8V20H6Z"/><path d="M14 4V8H18"/><path d="M9 12.5H15"/><path d="M9 15.5H15"/>` },
+  manual: { title: "Конструктор",
+    paths: `<path d="M4.5 19.5L5.5 15.5L15.7 5.3L18.7 8.3L8.5 18.5Z"/><path d="M5.5 15.5L8.5 18.5"/><path d="M14.4 6.6L17.4 9.6"/>` },
+  chat: { title: "Чат-ассистент",
+    paths: `<path d="M4 5H20V15H11L7 19V15H4Z"/><path d="M8 9H16"/><path d="M8 11.5H13"/>` },
+};
+function histToolBadge(mode) {
+  const t = HIST_TOOL[mode] || HIST_TOOL.htmlnew;
+  return `<span class="hist-tool" title="${t.title}">` +
+    `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><g ${HIST_ICON_STROKE}>${t.paths}</g></svg></span>`;
+}
+// Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
+const histInt = (n) => Number(n).toLocaleString("ru-RU");
+const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
+function histDur(ms) {
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 async function loadHistory() {
   const items = await (await fetch(U("/api/history"))).json();
   const ul = $("#histlist");
@@ -131,22 +154,36 @@ async function loadHistory() {
   for (const it of items) {
     const li = document.createElement("li");
     const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
-    const label = MODE_LABEL[it.mode] || it.mode;
-    // Only a successful build has a deck to open. failed/cancelled builds show
-    // their outcome (and the reason) instead of an "Открыть" link that would
-    // lead to a 404 deck in the editor.
     const ok = it.status === "done";
+    const name = it.display_name || it.source_filename || "Без названия";
+    // Строка расхода: у готовой сборки — время/токены/деньги (только те, что есть);
+    // у неуспешной — причина. Доступные части разделяем средней точкой.
+    const seg = [];
+    if (when) seg.push(esc(when));
+    if (ok) {
+      if (it.duration_ms != null) seg.push(`⏱ ${histDur(it.duration_ms)}`);
+      if (it.in_tokens != null) seg.push(`↑ ${histInt(it.in_tokens)}`);
+      if (it.out_tokens != null) seg.push(`↓ ${histInt(it.out_tokens)}`);
+      if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
+    } else if (it.error) {
+      seg.push(`<span class="err">${esc(it.error)}</span>`);
+    }
+    const row2 = seg.join(`<span class="sep">·</span>`);
+    // Только у готовой сборки есть дека — показываем «Открыть»; у неуспешной статус
+    // виден лейблом рядом с именем (ссылки на 404-деку быть не должно).
     const action = ok
       ? `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`
-      : `<span class="hist-status hist-status--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>`;
-    const name = it.display_name || it.source_filename || "Без названия";
-    const parts = [name, when];
-    if (!ok && it.error) parts.push(esc(it.error));
-    const meta = parts.filter(Boolean).join(" · ");
+      : "";
     li.innerHTML =
-      `<div><div class="hist-mode">${label}</div>` +
-      `<div class="hist-meta">${meta}</div></div>` +
-      `<div class="hist-spacer"></div>${action}`;
+      `<div class="hist-main">` +
+        `<div class="hist-row1">` +
+          histToolBadge(it.mode) +
+          `<span class="hist-name">${esc(name)}</span>` +
+          `<span class="hist-tag hist-tag--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>` +
+        `</div>` +
+        `<div class="hist-row2">${row2}</div>` +
+      `</div>` +
+      action;
     ul.appendChild(li);
   }
   updateEmptyState();
@@ -299,6 +336,9 @@ let lastEventAt = 0;
 let heartbeatTimer = null;
 let currentSession = null;
 let currentStage = null;
+// Live SSE stream for the panel on screen. Hoisted to module scope so «Остановить»
+// (§ вариант A) can close it instantly — without waiting for the terminal event.
+let currentES = null;
 // Consecutive SSE reconnect attempts (Ч§1): incremented on each es.onerror,
 // reset on any es.onmessage. Module-scoped so it survives the streamProgress
 // re-invocation used to re-attach after a transient drop.
@@ -357,6 +397,7 @@ function streamProgress(sessionId, kind, initial) {
     : "Полная сборка обычно занимает несколько минут. Можно уйти со страницы или переключить раздел — сборка не прервётся, прогресс сохранится.";
   $("#progressLog").innerHTML = "";
   $("#stopBtn").disabled = false;
+  $("#stopBtn").textContent = "Остановить";   // сбрасываем метку после прошлого стопа
   currentSession = sessionId;
   currentStage = seedStage;
   lastEventAt = Date.now();
@@ -367,6 +408,7 @@ function streamProgress(sessionId, kind, initial) {
   // Progress via SSE (the gateway proxies HTTP streaming, not WebSocket).
   let finished = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
+  currentES = es;
   es.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     lastEventAt = Date.now();
@@ -385,6 +427,7 @@ function streamProgress(sessionId, kind, initial) {
     if (ev.terminal) {
       finished = true;
       es.close();
+      currentES = null;
       stopHeartbeat();
       currentSession = null;
       prog.classList.add("hidden");
@@ -444,13 +487,25 @@ function streamProgress(sessionId, kind, initial) {
 
 $("#stopBtn").onclick = async () => {
   if (!currentSession) return;
+  const sid = currentSession;
+  // Вариант A — мгновенная реакция. Не ждём терминального события (уже идущие
+  // вызовы модели ещё доходят до конца ~до минуты): сразу закрываем поток и прячем
+  // прогресс. Кнопка остаётся на «Останавливаю…» — финальный экран НЕ показываем
+  // (сборка ещё доедет и сама уйдёт в «Историю» как «Отменено»).
   $("#stopBtn").disabled = true;
+  $("#stopBtn").textContent = "Останавливаю…";
   $("#stageDetail").textContent = "Останавливаю…";
+  if (currentES) { currentES.close(); currentES = null; }
+  stopHeartbeat();
+  currentSession = null;
+  $("#progress").classList.add("hidden");
+  updateEmptyState();
+  loadActive();               // сборка ещё «активна», пока доедает начатое
   try {
-    await fetch(U(`/api/jobs/${currentSession}/cancel`), { method: "POST" });
-  } catch (e) {
-    $("#stopBtn").disabled = false;
-  }
+    await fetch(U(`/api/jobs/${sid}/cancel`), { method: "POST" });
+  } catch (e) { /* запрос best-effort — UI уже обновлён */ }
+  loadActive();
+  loadHistory();
 };
 
 function showResult(sessionId, kind, ev) {

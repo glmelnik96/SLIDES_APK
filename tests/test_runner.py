@@ -143,8 +143,35 @@ async def test_cancel_queued_job_emits_cancelled(monkeypatch):
     ev = await asyncio.wait_for(qb.get(), timeout=2)
     assert ev["terminal"] is True and ev["stage"] == "cancelled"
     assert "b" not in r._active
+    # queued-cancel never ran → нет started_at → длительность неизвестна (None)
+    assert ev.get("duration_ms") is None
     await asyncio.sleep(0.05)               # let the hook coroutine run
     assert ("b", "cancelled") in hooked
+    release.set()
+
+
+async def test_runner_exposes_cancel_predicate_to_pipeline(monkeypatch):
+    """Variant A fast stop: the runner hands the sync build loop a predicate (via
+    progress.set_cancel_check) that reports whether a session was asked to stop, so
+    the fill loop can bail before launching new LLM calls — instead of waiting for
+    the next progress emit to raise. cancel() must flip the predicate to True."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    captured = {}
+    prog = types.SimpleNamespace(
+        publish=None,
+        set_cancel_check=lambda fn: captured.__setitem__("cc", fn))
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    release = threading.Event()
+    monkeypatch.setattr(runner, "_pipeline_run", lambda inp: release.wait(timeout=5))
+    inp = types.SimpleNamespace(session_id="s1", mode="verstai")
+    r.start(inp)
+    cc = captured.get("cc")
+    assert cc is not None                  # predicate installed at sink setup
+    assert cc("s1") is False               # not cancelled yet
+    r.cancel("s1")
+    assert cc("s1") is True                # flagged → pipeline bails before new calls
     release.set()
 
 
@@ -170,6 +197,48 @@ async def test_cancel_running_job_aborts_at_next_event(monkeypatch):
     assert r.cancel("s1") is True
     ev = await asyncio.wait_for(q.get(), timeout=2)
     assert ev["terminal"] is True and ev["stage"] == "cancelled"
+
+
+async def test_done_event_carries_duration_ms(monkeypatch, tmp_path):
+    """Раннер проставляет duration_ms в терминальный done — замер от started_at
+    (реальное время сборки), а не поле движка."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    out = tmp_path / "out.html"
+    out.write_text("<html></html>", encoding="utf-8")
+
+    def fake_run(inp):
+        time.sleep(0.02)                     # накопить измеримую длительность
+        prog.publish(_Event(terminal=True, stage="done", result_path=str(out)))
+
+    monkeypatch.setattr(runner, "_pipeline_run", fake_run)
+    inp = types.SimpleNamespace(session_id="s1", mode="htmlnew")
+    q = r.start(inp)
+    ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["terminal"] is True and ev["stage"] == "done"
+    assert isinstance(ev["duration_ms"], int)
+    assert ev["duration_ms"] >= 10
+
+
+async def test_failed_event_carries_duration_ms(monkeypatch, caplog):
+    """Сбой тоже несёт длительность — для строки статистики любого исхода."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    monkeypatch.setattr(runner, "_pipeline_run",
+                        lambda inp: (_ for _ in ()).throw(RuntimeError("kaboom")))
+    inp = types.SimpleNamespace(session_id="s2", mode="htmlnew")
+    with caplog.at_level("ERROR"):
+        q = r.start(inp)
+        ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["stage"] == "failed"
+    assert isinstance(ev["duration_ms"], int)
+    assert ev["duration_ms"] >= 0
 
 
 async def test_watchdog_force_fails_overrunning_build(monkeypatch):

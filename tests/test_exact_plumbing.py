@@ -1,6 +1,15 @@
+import types
 from pathlib import Path
 
 from schemas.session import Mode, SessionInput, SessionState
+
+
+def _fake_client(*a, **k):
+    # Движок теперь создаёт KimiClient для не-exact режимов; в тестах без ключа
+    # подменяем его заглушкой с пустым usage_total.
+    return types.SimpleNamespace(
+        usage_total={"prompt_tokens": 0, "completion_tokens": 0,
+                     "cached_tokens": 0, "calls": 0})
 
 
 def _input(**kw):
@@ -53,6 +62,7 @@ def test_run_htmlnew_default_mode_unchanged(monkeypatch, tmp_path):
         return Path(out)
 
     monkeypatch.setattr("htmlslides.pipeline.build.build_deck", fake_build_deck)
+    monkeypatch.setattr("htmlslides.pipeline.client.KimiClient", _fake_client)
     monkeypatch.setattr(htmlnew.progress, "stage", lambda *a, **k: None)
     monkeypatch.setattr(htmlnew.progress, "done", lambda *a, **k: None)
     monkeypatch.setattr(htmlnew, "session_dir", lambda sid: tmp_path)

@@ -134,12 +134,18 @@ def fill_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *
 
 
 def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
-              workers: int = 8, progress=lambda message: None) -> DeckPlan:
+              workers: int = 8, progress=lambda message: None,
+              check_cancel=lambda: None) -> DeckPlan:
     """Параллельное заполнение всех слайдов (RPS держит гейт клиента).
 
     Мягкая деградация: FillError одного слайда НЕ валит всю деку — слайд
     откатывается на blank с темой в заголовке (warn в progress). Прочие сбои
-    (сеть/авторизация) гасят бюджет — отменяют ещё не начатые слайды и пробрасываются."""
+    (сеть/авторизация) гасят бюджет — отменяют ещё не начатые слайды и пробрасываются.
+
+    check_cancel — чекпоинт «вариант A»: вызывается в НАЧАЛЕ каждого слайда, до
+    вызова LLM. Если пользователь нажал «Остановить», hook поднимает исключение, и
+    ещё не начатый слайд не тратит токены. Уже запущенные вызовы (≤workers) дойдут
+    до конца — прервать их поток Python не может, но новых не стартует."""
     aborted = threading.Event()
     total = len(plan.slides)
     done_lock = threading.Lock()
@@ -155,6 +161,9 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
         progress(f"fill: слайд {k}/{total}")
 
     def one(slide: SlidePlan) -> SlidePlan:
+        # Вариант A: остановка «кусается» ДО начала слайда — если сборку попросили
+        # прекратить, ещё не запущенный слайд не зовёт LLM (нет лишних токенов).
+        check_cancel()
         if aborted.is_set():  # барьер: после жёсткого сбоя соседа LLM не зовём
             return slide
         try:

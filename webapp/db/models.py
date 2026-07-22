@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -50,6 +50,12 @@ class Job(Base):
         DateTime(timezone=True), default=_utcnow, index=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
+    # Расход прогона (проставляется на терминальном событии; None для старых
+    # строк и для исходов без LLM). Стоимость — в рублях по прайсу MiniMax.
+    in_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    out_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    cost_rub: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="jobs")
 

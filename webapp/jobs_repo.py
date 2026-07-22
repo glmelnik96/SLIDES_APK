@@ -64,7 +64,15 @@ async def list_drafts_for_user(session: AsyncSession, user_id: int,
 
 
 async def mark_terminal(session: AsyncSession, session_id: str, *, status: str,
-                        result_path: str | None, error: str | None) -> None:
+                        result_path: str | None, error: str | None,
+                        in_tokens: int | None = None,
+                        out_tokens: int | None = None,
+                        cost_rub: float | None = None,
+                        duration_ms: int | None = None) -> None:
+    """Флип джобы в терминальный статус + расход прогона (токены/стоимость/время).
+    Поля расхода опциональны и по умолчанию None — старые вызовы (только
+    status/result_path/error) остаются валидными; None не затирает осмысленным
+    нулём (у исходов без LLM и старых строк расход честно неизвестен)."""
     job = (await session.execute(
         select(models.Job).where(models.Job.session_id == session_id))
     ).scalar_one_or_none()
@@ -74,6 +82,10 @@ async def mark_terminal(session: AsyncSession, session_id: str, *, status: str,
     job.result_path = result_path
     job.error = error
     job.finished_at = datetime.now(timezone.utc)
+    job.in_tokens = in_tokens
+    job.out_tokens = out_tokens
+    job.cost_rub = cost_rub
+    job.duration_ms = duration_ms
 
 
 async def delete_for_user(session: AsyncSession, user_id: int) -> list[str]:

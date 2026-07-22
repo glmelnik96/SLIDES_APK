@@ -13,6 +13,7 @@ from typing import Any
 import structlog
 
 from schemas.session import SessionState, Stage
+from webapp import pricing
 from webapp.paths import session_dir
 from worker import progress
 
@@ -60,6 +61,7 @@ def pick_mode(input_path: Path) -> str:
 def run_htmlnew(state: SessionState) -> dict[str, Any]:
     """Синхронная сборка. Возвращает summary того же вида, что run_pipeline."""
     from htmlslides.pipeline.build import build_deck  # лениво: пакет есть только в worker
+    from htmlslides.pipeline.client import KimiClient
 
     session_id = state.session_id
     input_path = Path(state.input_s3_key)
@@ -79,7 +81,18 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
             current = mapped
         progress.stage(session_id, current[0], current[1], detail=message)
 
+    def check_cancel() -> None:
+        """Чекпоинт «варианта A»: build_deck зовёт это в начале каждого слайда.
+        Если пользователь нажал «Остановить», прерываем сборку до нового LLM-вызова
+        — уже идущие вызовы (≤workers) дойдут до конца, новых не стартует."""
+        if progress.is_cancelled(session_id):
+            raise progress.Cancelled(session_id)
+
     mode_arg = "exact" if state.exact_transfer else pick_mode(input_path)
+    # Движок сам владеет клиентом, чтобы после сборки прочитать накопленный
+    # usage_total и посчитать рубли. В exact LLM нет — клиент не создаём (там
+    # он не нужен и не должен требовать API-ключ).
+    client = None if mode_arg == "exact" else KimiClient()
     progress.stage(session_id, Stage.PARSING, 5, detail="старт сборки HTML")
     log.info("htmlnew.start", input=str(input_path), mode=mode_arg)
     result = build_deck(
@@ -88,8 +101,21 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
         mode=mode_arg,
         vision=True,
         freeform_ok=True,        # включён управляемый freeform (вариант B); в exact игнорируется
+        client=client,
         progress=on_progress,
+        check_cancel=check_cancel,
     )
     log.info("htmlnew.done", result=str(result))
-    progress.done(session_id, detail="HTML-дека готова", result_path=str(result))
+    # Расход прогона: токены накопились в client.usage_total (тот же объект,
+    # что мутировал build_deck). Считаем рубли по прайсу и кладём в done →
+    # раннер/БД → строка статистики в «Истории». В exact клиента нет → None.
+    prompt_tokens = completion_tokens = cost = None
+    if client is not None:
+        usage = client.usage_total
+        prompt_tokens = int(usage.get("prompt_tokens", 0))
+        completion_tokens = int(usage.get("completion_tokens", 0))
+        cost = pricing.cost_rub(prompt_tokens, completion_tokens)
+    progress.done(session_id, detail="HTML-дека готова", result_path=str(result),
+                  prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                  cost_rub=cost)
     return {"ok": True, "session_id": session_id, "stage": Stage.DONE.value}

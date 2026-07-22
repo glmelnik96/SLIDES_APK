@@ -24,7 +24,8 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
                theme: str = "dark",
                max_autofix: int = 1, keep_artifacts: str | Path | None = None,
                client: Optional[KimiClient] = None,
-               progress: Progress = lambda message: None) -> Path:
+               progress: Progress = lambda message: None,
+               check_cancel: Callable[[], None] = lambda: None) -> Path:
     """Собрать деку из md/docx/pptx. Возвращает путь к готовому .html.
 
     Исключения (контракт для вызывающего кода, например бота /htmlnew):
@@ -70,12 +71,13 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     _dump(artifacts, "deckplan.json", plan.model_dump_json(indent=2))
 
     progress(f"fill: заполняю {len(plan.slides)} слайдов (параллельно)")
-    plan = fill_deck(client, library, plan, progress=progress)
+    plan = fill_deck(client, library, plan, progress=progress,
+                     check_cancel=check_cancel)
     _dump(artifacts, "deckfill.json", plan.model_dump_json(indent=2))
 
     return polish_plan(plan, out, client=client, library=library, vision=vision,
                        theme=theme, max_autofix=max_autofix, artifacts=artifacts,
-                       progress=progress)
+                       progress=progress, check_cancel=check_cancel)
 
 
 def _build_exact(src: Path, out: Path, *, theme: str,
@@ -126,7 +128,8 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                 vision: bool = True, vision_all: bool = False,
                 theme: str = "dark", max_autofix: int = 1,
                 artifacts: Optional[Path] = None,
-                progress: Progress = lambda message: None) -> Path:
+                progress: Progress = lambda message: None,
+                check_cancel: Callable[[], None] = lambda: None) -> Path:
     """Assemble + QA + autofix a fully-filled DeckPlan and write the deck.
 
     The post-fill tail of build_deck, exposed so an already-authored plan (e.g. a
@@ -153,6 +156,9 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                       artifacts=artifacts, progress=progress)
 
     if notes and max_autofix > 0:
+        # Вариант A: не начинаем круг автоправок (это ещё LLM-вызовы на слайд),
+        # если сборку уже попросили остановить.
+        check_cancel()
         progress(f"autofix: исправляю слайды {sorted(notes)} (1 круг)")
         by_index = {s.index: s for s in plan.slides}
         for index, slide_notes in notes.items():
