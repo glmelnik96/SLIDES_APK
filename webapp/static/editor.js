@@ -469,6 +469,19 @@ const EXPORT_LABEL = {
 const _exportResets = [];
 function markExportsStale() { _exportResets.forEach((fn) => fn()); }
 
+// Скачивание за один клик: как только рендер готов, poll() дёргает это сам —
+// пользователь нажал «Скачать» один раз, файл прилетает без второго клика.
+// Скрытый <a download> вместо location.href, чтобы вкладка не «моргала» навигацией
+// и чтобы тот же контрол остался живым для ручного повторного скачивания.
+function triggerDownload(fmt) {
+  const a = document.createElement("a");
+  a.href = U(`/api/jobs/${sessionId}/export/${fmt}/file`);
+  a.download = "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 // К§3 — предэкспортная проверка: не выпустить пример-текст молча. В chat-режиме
 // каталог не загружен — дозапрашиваем лениво. Возвращает true, если можно экспортировать.
 async function ensureCatalog() {
@@ -538,14 +551,21 @@ function setupExport(btn) {
     } catch { return; }               // transient network blip — keep polling
     if (!r.ok) { toIdle("Ошибка — повторить"); return; }
     const { state } = await r.json();
-    if (state === "ready") toReady();
+    // Рендер готов — автоскачивание (один клик), контрол остаётся «Скачать»
+    // для ручного повтора. wasBusy: качаем только по завершению активного
+    // рендера, а не когда poll() застал уже готовый прошлый файл.
+    if (state === "ready") {
+      const wasBusy = btn.classList.contains("is-busy");
+      toReady();
+      if (wasBusy) triggerDownload(fmt);
+    }
     else if (state === "error") toIdle("Ошибка — повторить");
   }
 
   btn.onclick = async () => {
     // A ready control downloads; anything else (re)starts an export.
     if (btn.classList.contains("is-ready")) {
-      location.href = U(`/api/jobs/${sessionId}/export/${fmt}/file`);
+      triggerDownload(fmt);
       return;
     }
     if (!(await confirmExportWithPlaceholders())) return; // К§3 — пример-текст в экспорт?

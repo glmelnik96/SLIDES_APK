@@ -1,7 +1,7 @@
 """Роль 1 — Deck Planner: InputDoc + каталог шаблонов -> DeckPlan.
 
 Текстовый вход (основной путь) планируется ПО РАЗДЕЛАМ (map) параллельно, затем
-структура деки собирается в коде (reduce: cover/contacts/разнообразие/accent).
+структура деки собирается в коде (reduce: cover/разнообразие/accent).
 Причина — монолитный вызов на весь документ систематически падал на крупных доках:
 reasoning-heavy модели уходили в runaway и возвращали пустой content (no JSON), а у
 планировщика не было мягкой деградации, поэтому падал ВЕСЬ билд. Per-section вызовы
@@ -78,7 +78,7 @@ PLANNER_SYSTEM = """\
 ]}}
 
 Правила:
-- Первый слайд — cover, последний — contacts.
+- Первый слайд — cover.
 - template_id строго из каталога; type бери из каталога.
 - ПОЛНОТА: КАЖДЫЙ смысловой раздел исходника — ОТДЕЛЬНЫЙ слайд; не объединяй и не
   выбрасывай разделы. Ориентир 6–18 слайдов.
@@ -347,12 +347,6 @@ def _cover_slide(doc: InputDoc, library: TemplateLibrary) -> SlidePlan:
                      content={"brief": brief})
 
 
-def _contacts_slide(library: TemplateLibrary) -> SlidePlan:
-    spec = library.get("contacts")
-    return SlidePlan(index=1, type=spec.type, template_id="contacts",
-                     content={"brief": "Контакты Cloud.ru: cloud.ru"})
-
-
 # Два макета-разделителя чередуем для разнообразия (точки → рамка → точки …).
 _SECTION_TEMPLATES = ("section-dots", "section-frame")
 
@@ -461,8 +455,9 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
     else:
         body_plans = {}
 
-    # REDUCE: cover + [разделитель части?] + слайды разделов (в порядке документа) +
-    # contacts; разнообразие и accent — в коде.
+    # REDUCE: cover + [разделитель части?] + слайды разделов (в порядке документа);
+    # контакты автоматически НЕ добавляем — вставляются вручную при необходимости.
+    # Разнообразие и accent — в коде.
     slides: list[SlidePlan] = [_cover_slide(doc, library)]
     divider_no = 0
     for i, section in enumerate(sections):
@@ -471,7 +466,6 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
             slides.append(_divider_slide(section, library, divider_no))
         if i in body_plans:
             slides.extend(body_plans[i])
-    slides.append(_contacts_slide(library))
     _enforce_variety(slides, library)
     _pick_accent(slides)
     for i, slide in enumerate(slides, start=1):

@@ -1,7 +1,7 @@
 """Planner map→reduce: текстовый вход планируется по разделам параллельно, затем
 структура собирается в коде. Регрессия для прод-падения `LLMFormatError: no JSON
 object`, которое роняло ВЕСЬ билд: теперь сбой раздела изолирован (эвристический
-фолбэк), а cover/contacts/разнообразие/accent детерминированы кодом."""
+фолбэк), а cover/разнообразие/accent детерминированы кодом."""
 import pytest
 
 from htmlslides.library import TemplateLibrary
@@ -43,12 +43,13 @@ def _sp(template_id, brief="факт"):
     return _SectionPlan(slides=[_SectionSlide(template_id=template_id, brief=brief)])
 
 
-def test_text_path_maps_sections_and_wraps_cover_contacts():
+def test_text_path_maps_sections_and_wraps_cover():
     lib = TemplateLibrary.load()
     client = FakeClient([_sp("three-col"), _sp("statement")])
     plan = planner.plan_deck(client, _doc(), lib)
     ids = [s.template_id for s in plan.slides]
-    assert ids[0] == "cover" and ids[-1] == "contacts"
+    assert ids[0] == "cover"
+    assert "contacts" not in ids            # контакты больше не прикрепляются автоматически
     assert "three-col" in ids and "statement" in ids
     assert [s.index for s in plan.slides] == list(range(1, len(plan.slides) + 1))
     assert client.calls == 2                      # один вызов на раздел
@@ -59,8 +60,8 @@ def test_section_failure_falls_back_not_aborts():
     lib = TemplateLibrary.load()
     client = FakeClient([LLMFormatError("no JSON object"), _sp("statement")])
     plan = planner.plan_deck(client, _doc(), lib)
-    # деки собралась: cover + 2 контентных + contacts
-    assert len(plan.slides) == 4
+    # деки собралась: cover + 2 контентных (без авто-contacts)
+    assert len(plan.slides) == 3
     assert plan.slides[0].template_id == "cover"
     # упавший раздел (3 пункта списка) ушёл на эвристику three-col, брифом — текст раздела
     assert plan.slides[1].template_id == "three-col"
@@ -72,8 +73,7 @@ def test_variety_swaps_adjacent_duplicate():
     # оба раздела просят cards-6 подряд → второй должен свапнуться на альтернативу
     client = FakeClient([_sp("cards-6"), _sp("cards-6")])
     plan = planner.plan_deck(client, _doc(), lib)
-    content = [s.template_id for s in plan.slides if s.template_id not in
-               ("cover", "contacts")]
+    content = [s.template_id for s in plan.slides if s.template_id != "cover"]
     assert content[0] == "cards-6"
     assert content[1] != "cards-6"                # разнообразие
     assert content[1] in planner._VARIETY_SWAP["cards-6"]
@@ -98,11 +98,11 @@ def test_unknown_template_id_falls_back():
 
 
 def test_empty_plan_is_impossible():
-    """DeckPlan всегда непуст: даже без разделов есть cover+contacts."""
+    """DeckPlan всегда непуст: даже без разделов есть хотя бы cover."""
     lib = TemplateLibrary.load()
     client = FakeClient([])
     plan = planner.plan_deck(client, InputDoc(title="Пусто", sections=[]), lib)
-    assert [s.template_id for s in plan.slides] == ["cover", "contacts"]
+    assert [s.template_id for s in plan.slides] == ["cover"]
     assert isinstance(plan, DeckPlan)
 
 
@@ -155,7 +155,7 @@ def test_part_title_sections_become_dividers():
     plan = planner.plan_deck(client, doc, lib)
     ids = [s.template_id for s in plan.slides]
     assert client.calls == 2                       # шапки частей LLM не трогают
-    assert ids[0] == "cover" and ids[-1] == "contacts"
+    assert ids[0] == "cover" and "contacts" not in ids
     dots = next(s for s in plan.slides if s.template_id == "section-dots")
     frame = next(s for s in plan.slides if s.template_id == "section-frame")
     assert dots.content == {"label": "ЧАСТЬ 1", "number": "01"}
@@ -212,7 +212,7 @@ def test_single_divider_is_suppressed_and_section_survives():
     ids = [s.template_id for s in plan.slides]
     assert "section-dots" not in ids and "section-frame" not in ids
     assert client.calls == 2                       # оба раздела ушли в body
-    assert len(plan.slides) == 4                   # cover + 2 + contacts, ничего не пропало
+    assert len(plan.slides) == 3                   # cover + 2, ничего не пропало
 
 
 def test_divider_label_trims_on_word_boundary():
