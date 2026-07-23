@@ -121,6 +121,8 @@ function toolSvg(mode) {
   return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g ${HIST_ICON_STROKE}>${t.paths}</g></svg>`;
 }
 function toolTitle(mode) { return (HIST_TOOL[mode] || HIST_TOOL.htmlnew).title; }
+// Галочка «Готово» — тот же острый контур 24×24, что и у иконок инструментов.
+const CHECK_SVG = `<svg class="st-ico" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 12L10 17L19 6.5" ${HIST_ICON_STROKE}/></svg>`;
 // Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
 const histInt = (n) => Number(n).toLocaleString("ru-RU");
 const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
@@ -210,7 +212,7 @@ function statusPill(state) {
   switch (state) {
     case "running": return `<span class="st st-run"><span class="dot"></span>В работе</span>`;
     case "queued": return `<span class="st st-queue">В очереди</span>`;
-    case "done": return `<span class="st st-done">✓ Готово</span>`;
+    case "done": return `<span class="st st-done">${CHECK_SVG}Готово</span>`;
     case "draft": return `<span class="st st-draft">Черновик</span>`;
     case "failed": return `<span class="st st-fail">Ошибка</span>`;
     case "cancelled": return `<span class="st st-cancel">Отменено</span>`;

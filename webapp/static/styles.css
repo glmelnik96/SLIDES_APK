@@ -483,34 +483,27 @@ a { color: var(--accent); }
   transition: border-color var(--dur-fast) var(--ease-productive); }
 .pcard.expandable { cursor: pointer; }
 .pcard.expandable:hover { border-color: var(--accent-line); }
-/* Идёт сборка — единый градиент-«комета» из акцента (#26D07C) бежит ПО КРУГУ
-   вдоль рамки. Два фоновых слоя: padding-box заливкой фона маскирует нутро
-   (карточка остаётся «без фона»), а border-box коническим градиентом красит
-   только рамку. Незелёная часть — светло-серый --pcard-ring (НЕ фон!), иначе
-   рамка сливалась бы с фоном и «пропадала»; зелёная дуга широкая (солид ~80° +
-   плавные переходы). Вращаем угол через @property --pcard-angle — иначе угол в
-   custom-property прыгал бы дискретно, а не интерполировался. */
-@property --pcard-angle {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
+/* Идёт сборка — рамка карточки остаётся серой по умолчанию (как у всех).
+   Признак активности перенесён на зелёную полосу прогресса: по ней плавно
+   бежит одна серая тень (на шаг светлее дорожки бара) — мягко и равномерно,
+   без резких границ. Спокойно даже когда активных карточек несколько. */
+.pcard[data-state="running"] .pcard-bar > i {
+  background-image: linear-gradient(90deg, var(--accent), var(--line), var(--accent));
+  background-size: 200% 100%;
+  animation: pcard-bar-sheen 1.5s linear infinite;
 }
-.pcard[data-state="running"],
-.pcard[data-state="running"].expandable:hover {
-  --pcard-ring: #4d4d4d;
-  border-color: transparent;
-  background:
-    linear-gradient(var(--bg), var(--bg)) padding-box,
-    conic-gradient(from var(--pcard-angle),
-      var(--accent) 0deg, var(--accent) 60deg,
-      var(--pcard-ring) 150deg, var(--pcard-ring) 250deg,
-      var(--accent) 340deg, var(--accent) 360deg) border-box;
-  animation: pcard-rotate 3s linear infinite;
+@keyframes pcard-bar-sheen { from { background-position: 200% 0; } to { background-position: 0 0; } }
+/* Лог идущей сборки — в утопленной панели без обводки: отдельная поверхность
+   (--bg-soft) читается как самостоятельная прокручиваемая область. Верхняя
+   строка растворяется — видно, что список длиннее и его можно листать вверх. */
+.pcard[data-state="running"] .pcard-loglines {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  background: var(--bg-soft);
+  padding: 8px 10px;
 }
-@keyframes pcard-rotate { to { --pcard-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) {
-  .pcard[data-state="running"] { animation: none; background: none;
-    border-color: var(--accent-line); }
+  .pcard[data-state="running"] .pcard-bar > i { animation: none; }
 }
 .pcard-head { display: flex; align-items: center; gap: 15px; }
 .pcard-tool { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
@@ -563,6 +556,7 @@ a { color: var(--accent); }
 .st-cancel { color: var(--warn-ink); background: rgba(236, 213, 129, .10); }
 .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   display: inline-block; margin-right: 5px; vertical-align: middle; }
+.st .st-ico { display: inline-block; margin-right: 4px; vertical-align: -2px; }
 
 /* ===== Редактор ===== */
 .editor { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }  /* К§8 — высота от видимого вьюпорта; тулбар-шапка + ряд из трёх колонок */
