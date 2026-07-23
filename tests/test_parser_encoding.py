@@ -5,7 +5,7 @@
 вылетал». read_text_smart угадывает кодировку; проверяем цепочку и сквозной parse_file.
 """
 from htmlslides.parsers import parse_file
-from htmlslides.parsers.base import read_text_smart
+from htmlslides.parsers.base import decode_smart, read_text_smart
 
 CYR = "Заголовок\n\nПервый тезис с цифрой 42.\nВторой тезис.\n"
 
@@ -47,3 +47,15 @@ def test_parse_file_cp1251_md_headings(tmp_path):
     p.write_bytes("# Заголовок\n\nТекст раздела.\n".encode("cp1251"))
     doc = parse_file(p)
     assert doc.title == "Заголовок"
+
+
+def test_decode_smart_cp1251_bytes():
+    assert decode_smart(CYR.encode("cp1251")) == CYR
+
+
+def test_decode_smart_pure_cyrillic_not_empty():
+    # Пустой-файл-гейт на загрузке проверяет непустоту через decode_smart. Раньше
+    # использовался decode("utf-8","ignore") — на чисто кириллическом cp1251 без
+    # ASCII-цифр/пунктуации он выдавал "", и реальный файл падал как «пустой».
+    raw = "Привет всем участникам встречи".encode("cp1251")
+    assert decode_smart(raw).strip()

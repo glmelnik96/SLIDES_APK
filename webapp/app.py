@@ -213,9 +213,11 @@ async def create_job(request: Request, mode: str = Form(...),
     # Reject an empty upload up front: an all-whitespace doc would otherwise pass
     # validation, occupy a queue slot and "succeed" with a contentless cover+
     # contacts deck. Binary inputs (docx/pptx) carry structure even when "small",
-    # so only the plain-text formats are whitespace-checked.
-    if not raw.strip() or (suffix in (".md", ".txt")
-                           and not raw.decode("utf-8", "ignore").strip()):
+    # so only the plain-text formats are whitespace-checked. Decode with the same
+    # encoding guess the build uses — plain utf-8 would drop a cp1251/utf-16 doc's
+    # Cyrillic and falsely flag a real file as empty.
+    from htmlslides.parsers.base import decode_smart as _decode_smart
+    if not raw.strip() or (suffix in (".md", ".txt") and not _decode_smart(raw).strip()):
         raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
 
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,

@@ -67,16 +67,16 @@ class InputDoc(BaseModel):
     sections: list[Section] = Field(default_factory=list)
 
 
-def read_text_smart(path: str | Path) -> str:
-    """Прочитать текстовый документ, угадывая кодировку.
+def decode_smart(data: bytes) -> str:
+    """Декодировать байты текстового документа, угадывая кодировку.
 
     Реальные .md/.txt приходят не только в UTF-8: на Windows это сплошь и рядом
-    Windows-1251 или UTF-16 («Юникод» в Блокноте). Чтение таких файлов как UTF-8
+    Windows-1251 или UTF-16 («Юникод» в Блокноте). Декодирование как UTF-8
     роняло весь билд (UnicodeDecodeError). Пробуем осмысленную цепочку:
-    UTF-16 при наличии BOM → UTF-8 (в т.ч. с BOM) → Windows-1251; на совсем
-    нечитаемый байт отвечаем заменой, чтобы парсер никогда не падал на входе.
+    UTF-16 при наличии BOM → UTF-8 (в т.ч. с BOM) → Windows-1251. cp1251
+    принимает почти любой байт, поэтому финальный replace — лишь страховка от
+    неопределённых в нём позиций, чтобы парсер никогда не падал на входе.
     """
-    data = Path(path).read_bytes()
     if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
         try:
             return data.decode("utf-16")
@@ -88,6 +88,11 @@ def read_text_smart(path: str | Path) -> str:
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def read_text_smart(path: str | Path) -> str:
+    """Прочитать текстовый документ с диска, угадывая кодировку (см. decode_smart)."""
+    return decode_smart(Path(path).read_bytes())
 
 
 def parse_file(path: str | Path) -> InputDoc:
