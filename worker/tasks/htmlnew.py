@@ -115,6 +115,20 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
         prompt_tokens = int(usage.get("prompt_tokens", 0))
         completion_tokens = int(usage.get("completion_tokens", 0))
         cost = pricing.cost_rub(prompt_tokens, completion_tokens)
+        calls = usage.get("calls", 0)
+        # 0 ₽ бывает по двум разным причинам — разводим их в логах, иначе оба
+        # выглядят одинаково «молча»:
+        if not calls:
+            # Ни одного успешного вызова модели: дека собрана детерминированным
+            # fallback, т.к. LLM недоступен (сеть/TLS/таймаут — вызовы падали и
+            # planner/filler уходили в section_fallback). Это НЕ баг подсчёта:
+            # считать было нечего. Главный симптом реальных нулей в «Истории».
+            log.warning("htmlnew.no_llm_calls",
+                        model=getattr(client, "model", None))
+        elif not prompt_tokens and not completion_tokens:
+            # Вызовы были, а токенов ноль — провайдер не прислал usage в ответе.
+            log.warning("htmlnew.usage_empty", calls=calls,
+                        model=getattr(client, "model", None))
     progress.done(session_id, detail="HTML-дека готова", result_path=str(result),
                   prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
                   cost_rub=cost)

@@ -131,17 +131,30 @@ class KimiClient:
             max_retries=max_retries,  # 429/5xx ретраит сам openai-клиент (экспонента)
             timeout=timeout)
 
+    @staticmethod
+    def _usage_get(src, key: str, default=0):
+        """Прочитать поле usage независимо от формы ответа. Cloud.ru через
+        openai-SDK отдаёт typed-объект CompletionUsage (атрибуты) — его getattr
+        читает верно. Но часть OpenAI-совместимых шлюзов и model_dump-пути отдают
+        usage ПЛОСКИМ словарём, на котором getattr молча вернул бы 0. Читаем обе
+        формы защитно: форма зависит от шлюза, полагаться на объект нельзя."""
+        if src is None:
+            return default
+        val = src.get(key, default) if isinstance(src, dict) else getattr(src, key, default)
+        return default if val is None else val
+
     def _record_usage(self, resp) -> None:
         """Сложить usage ответа в self.usage_total. Моки без usage игнорируем."""
         usage = getattr(resp, "usage", None)
-        details = getattr(usage, "prompt_tokens_details", None) if usage is not None else None
-        cached = getattr(details, "cached_tokens", 0) if details is not None else 0
+        if usage is None and isinstance(resp, dict):
+            usage = resp.get("usage")
+        details = self._usage_get(usage, "prompt_tokens_details", None)
+        cached = self._usage_get(details, "cached_tokens", 0)
         with self._usage_lock:
             if usage is not None:
-                self.usage_total["prompt_tokens"] += getattr(usage, "prompt_tokens", 0) or 0
-                self.usage_total["completion_tokens"] += (
-                    getattr(usage, "completion_tokens", 0) or 0)
-                self.usage_total["cached_tokens"] += cached or 0
+                self.usage_total["prompt_tokens"] += self._usage_get(usage, "prompt_tokens", 0)
+                self.usage_total["completion_tokens"] += self._usage_get(usage, "completion_tokens", 0)
+                self.usage_total["cached_tokens"] += cached
             self.usage_total["calls"] += 1
 
     def chat(self, messages: list[dict], *, max_tokens: int = 4096,
