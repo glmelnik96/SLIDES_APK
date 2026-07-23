@@ -55,6 +55,18 @@ class Settings(BaseSettings):
     # Leave empty in production so a missing X-User-Id is a hard 401.
     dev_user_id: str = Field("", alias="DEV_USER_ID")
 
+    # Cross-app usage push (variant B of the shared analytics contract). On every
+    # finished build App2 POSTs one anonymised metric to the gateway so the admin
+    # panel can show "Slides" alongside "Images". EMPTY TOKEN = disabled (the push
+    # is a no-op), so local dev and any un-provisioned deploy stay silent.
+    usage_ingest_url: str = Field(
+        "https://cloudrudesign.ru/internal/usage", alias="USAGE_INGEST_URL")
+    usage_ingest_token: str = Field("", alias="USAGE_INGEST_TOKEN")
+    # Comma-separated emails to exclude from usage reporting (smoke/tech accounts),
+    # so control-plane traffic never pollutes the stats. Matched case-insensitively.
+    usage_smoke_emails: str = Field(
+        "e2e-smoke@cloud.ru", alias="USAGE_SMOKE_EMAILS")
+
     def normalized_prefix(self) -> str:
         p = self.app_prefix.strip()
         if p and not p.startswith("/"):
