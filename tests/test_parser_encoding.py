@@ -30,7 +30,7 @@ def test_read_text_smart_utf8_bom(tmp_path):
 
 def test_read_text_smart_plain_utf8(tmp_path):
     p = tmp_path / "plain.md"
-    p.write_text(CYR, encoding="utf-8")
+    p.write_text(CYR, encoding="utf-8", newline="")
     assert read_text_smart(p) == CYR
 
 
