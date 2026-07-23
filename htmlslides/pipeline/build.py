@@ -88,7 +88,7 @@ def _build_exact(src: Path, out: Path, *, theme: str,
     слайд); .md/.txt режем по меткам «Слайд N:». docx на Этапе 1 не поддержан.
     """
     from ..parsers import parse_file
-    from ..parsers.base import InputDoc
+    from ..parsers.base import InputDoc, read_text_smart
     from ..parsers.exact_text import split_exact_text
     from .exact_builder import build_exact_plan
 
@@ -97,7 +97,7 @@ def _build_exact(src: Path, out: Path, *, theme: str,
     if suffix == ".pptx":
         doc = parse_file(src)
     elif suffix in (".md", ".txt"):
-        raw = src.read_text(encoding="utf-8")
+        raw = read_text_smart(src)
         doc = InputDoc(title=src.stem,
                        sections=split_exact_text(raw, progress=progress))
     else:

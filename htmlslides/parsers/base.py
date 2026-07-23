@@ -67,13 +67,36 @@ class InputDoc(BaseModel):
     sections: list[Section] = Field(default_factory=list)
 
 
+def read_text_smart(path: str | Path) -> str:
+    """Прочитать текстовый документ, угадывая кодировку.
+
+    Реальные .md/.txt приходят не только в UTF-8: на Windows это сплошь и рядом
+    Windows-1251 или UTF-16 («Юникод» в Блокноте). Чтение таких файлов как UTF-8
+    роняло весь билд (UnicodeDecodeError). Пробуем осмысленную цепочку:
+    UTF-16 при наличии BOM → UTF-8 (в т.ч. с BOM) → Windows-1251; на совсем
+    нечитаемый байт отвечаем заменой, чтобы парсер никогда не падал на входе.
+    """
+    data = Path(path).read_bytes()
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        try:
+            return data.decode("utf-16")
+        except UnicodeDecodeError:
+            pass
+    for encoding in ("utf-8-sig", "cp1251"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
 def parse_file(path: str | Path) -> InputDoc:
     """Диспетчер по расширению: .md/.markdown/.txt, .docx, .pptx."""
     p = Path(path)
     suffix = p.suffix.lower()
     if suffix in (".md", ".markdown", ".txt"):
         from .md import parse_md
-        return parse_md(p.read_text("utf-8-sig"))
+        return parse_md(read_text_smart(p))
     if suffix == ".docx":
         from .docx import parse_docx
         return parse_docx(p)
