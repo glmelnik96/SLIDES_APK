@@ -193,6 +193,36 @@ a { color: var(--accent); }
 .entry-alt:hover .entry-open { color: var(--accent-2); }
 .entry-open.is-error { color: var(--danger); }
 
+/* Отключённые точки входа (фича в разработке): серые, некликабельные, с курсором-стопом.
+   Прозрачность вешаем на ВНУТРЕННИЙ контент, а не на всю карточку — иначе opacity
+   создаёт stacking context и приглушает саму подсказку [data-tip]::after. */
+.entry-alt.is-disabled { cursor: not-allowed; }
+.entry-alt.is-disabled:hover { background: none; }
+.entry-alt.is-disabled .alt-main,
+.entry-alt.is-disabled .alt-aside { opacity: .5; }
+.entry-alt.is-disabled .entry-open { color: var(--muted-2); }
+/* Бейдж «в разработке» — по образцу .outline-badge (строгие прямые углы бренда) */
+.soon-badge { display: inline-block; margin-left: 8px; vertical-align: middle;
+  font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
+  font-weight: 600; padding: 2px 7px; border: 1px solid var(--line); border-radius: var(--r);
+  color: var(--muted-2); }
+
+/* Дружелюбная подсказка при наведении на отключённую фичу: не только курсор-стоп,
+   но и текст «фича ещё не готова». Чистый CSS-тултип через [data-tip] + ::after. */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
+  width: max-content; max-width: 280px; white-space: normal; text-align: left;
+  padding: 10px 12px; background: var(--bg-soft); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r);
+  font-family: var(--font-text); font-size: var(--fs-sm); font-weight: 400; line-height: 1.45;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 60; pointer-events: none; }
+[data-tip]:hover::before {
+  content: ""; position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: var(--line);
+  z-index: 61; pointer-events: none; }
+
 .output { margin-top: 32px; display: flex; flex-direction: column; gap: 30px; }
 
 /* Черновики и История — рядом в две колонки; только когда есть черновики
@@ -286,6 +316,9 @@ a { color: var(--accent); }
   display: flex; align-items: flex-start; gap: 10px;
   margin: 16px 0; cursor: pointer; user-select: none;
 }
+/* display:flex выше перебивает браузерный [hidden] — возвращаем скрытие явно,
+   чтобы атрибут hidden реально прятал строку-опцию. */
+.opt-row[hidden] { display: none; }
 /* нативный чекбокс прячем, но оставляем доступным с клавиатуры; рисуем свой .opt-box */
 .opt-check { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
 .opt-box {
@@ -650,6 +683,14 @@ a { color: var(--accent); }
 .chat-input textarea:focus { border-color: var(--accent); }
 .chat-input textarea:focus:not(:focus-visible) { outline: none; }
 .chat-target { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
+
+/* Правки в чате — фича в разработке: контролы серые/некликабельные, подсказка [data-tip]
+   висит на самом .chat-input (его прозрачность НЕ трогаем — иначе приглушится и тултип). */
+.chat-input.is-disabled { cursor: not-allowed; }
+.chat-input.is-disabled textarea,
+.chat-input.is-disabled .btn { opacity: .5; pointer-events: none; }
+.rpanel-tab.is-disabled,
+.rpanel-tab.is-disabled:hover { cursor: not-allowed; color: var(--muted-2); background: var(--panel-2); }
 
 /* ===== Живой аутлайн (chat mode) ===== */
 .outline { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }

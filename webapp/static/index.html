@@ -58,7 +58,7 @@
             </div>
           </label>
           <div class="upload-side">
-            <label class="opt-row">
+            <label class="opt-row" hidden>
               <input type="checkbox" id="exactTransfer" class="opt-check">
               <span class="opt-box" aria-hidden="true"></span>
               <span class="opt-text">
@@ -74,24 +74,26 @@
 
       <!-- Или соберите вручную — вся строка кликабельна; дивайдер на 60% под дивайдером загрузки -->
       <div class="entry-alts">
-        <div class="entry-alt" data-mode="chat" role="button" tabindex="0" aria-label="Собрать презентацию в чате">
+        <div class="entry-alt is-disabled" data-mode="chat" aria-disabled="true"
+             data-tip="Ассистент ещё учится собирать презентации 🙂">
           <div class="alt-main">
-            <div class="alt-name">Собрать в чате</div>
+            <div class="alt-name">Собрать в чате <span class="soon-badge">в разработке</span></div>
             <p class="alt-desc">Опишите презентацию — ассистент спланирует структуру и создаст слайды.</p>
           </div>
           <div class="alt-aside">
             <div class="alt-when">когда нет готового материала</div>
-            <span class="entry-open" id="openChat">Открыть чат &rarr;</span>
+            <span class="entry-open" id="openChat">В разработке</span>
           </div>
         </div>
-        <div class="entry-alt" data-mode="manual" role="button" tabindex="0" aria-label="Заполнить шаблон вручную">
+        <div class="entry-alt is-disabled" data-mode="manual" aria-disabled="true"
+             data-tip="Конструктор шаблонов ещё в разработке 🙂">
           <div class="alt-main">
-            <div class="alt-name">Заполнить шаблон</div>
+            <div class="alt-name">Заполнить шаблон <span class="soon-badge">в разработке</span></div>
             <p class="alt-desc">Собирайте по слайду из готовых макетов, заполняя поля вручную.</p>
           </div>
           <div class="alt-aside">
             <div class="alt-when">когда нужен полный контроль</div>
-            <span class="entry-open" id="openManual">Открыть конструктор &rarr;</span>
+            <span class="entry-open" id="openManual">В разработке</span>
           </div>
         </div>
       </div>

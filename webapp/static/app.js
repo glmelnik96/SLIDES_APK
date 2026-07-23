@@ -590,6 +590,7 @@ async function startDraft(mode, btn) {
 // Зоны точек входа: кликабельна вся рамка .entry-alt (не только ссылка). Черновик
 // создаётся при клике/Enter/Space; ссылка внутри — лишь визуальная подсказка.
 document.querySelectorAll(".entry-alt").forEach((card) => {
+  if (card.classList.contains("is-disabled")) return;  // фича в разработке — не вешаем обработчики
   const mode = card.dataset.mode;
   const label = card.querySelector(".entry-open");
   if (!mode || !label) return;
@@ -609,7 +610,9 @@ const _OPEN_LABEL = { openChat: "Открыть чат →", openManual: "Отк
 window.addEventListener("pageshow", () => {
   Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
     const b = $("#" + id);
-    if (b) { b.disabled = false; b.classList.remove("is-error"); b.textContent = label; }
+    // Отключённые точки входа (фича в разработке) не воскрешаем — оставляем «Скоро».
+    if (!b || b.closest(".entry-alt.is-disabled")) return;
+    b.disabled = false; b.classList.remove("is-error"); b.textContent = label;
   });
   loadDrafts();  // возврат по Back мог оставить/удалить черновик — обновляем список
 });

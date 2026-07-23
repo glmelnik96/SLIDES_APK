@@ -718,6 +718,7 @@ function tickElapsed(thinking, t0) {
 }
 
 async function sendChat() {
+  if (CHAT_EDIT_DISABLED) return;   // правки в чате — фича в разработке
   // If a request is already running, the button acts as Cancel.
   if (chatInFlight) {
     chatInFlight.abort();
@@ -784,6 +785,35 @@ chatSend.onclick = sendChat;
 chatText.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
 });
+
+// Правки/сборка слайдов через чат — фича в разработке. Оставляем панель видимой,
+// но неинтерактивной: серые контролы, курсор-стоп и дружелюбная подсказка при
+// наведении (см. [data-tip] в styles.css). Идемпотентно — можно звать повторно.
+const CHAT_EDIT_DISABLED = true;
+const CHAT_DEV_TIP =
+  "Чат-ассистент пока на стажировке 🙂";
+function disableChatEditing() {
+  if (!CHAT_EDIT_DISABLED) return;
+  const head = document.querySelector(".chat-head");
+  if (head) head.innerHTML =
+    '<h3>Правки в чате <span class="soon-badge">в разработке</span></h3>' +
+    "<p>Пока меняйте текст прямо на слайде — правки через чат в разработке.</p>";
+  byId("chatEmpty")?.remove();
+  byId("outline")?.classList.add("hidden");   // план-аутлайн — часть чат-сборки
+  byId("chatTarget")?.classList.add("hidden");
+  if (chatText) {
+    chatText.disabled = true;
+    chatText.value = "";
+    chatText.placeholder = "Правки через чат в разработке";
+  }
+  if (chatSend) {
+    chatSend.disabled = true;
+    chatSend.textContent = "В разработке";
+    chatSend.classList.remove("btn-stop");
+  }
+  const box = document.querySelector(".chat-input");
+  if (box) { box.classList.add("is-disabled"); box.setAttribute("data-tip", CHAT_DEV_TIP); }
+}
 
 /* ===================== DRAFT BUILDER (manual mode) ===================== */
 let catalog = [];          // [{id,type,intent,slots}]
@@ -1818,6 +1848,7 @@ async function doBuild() {
 byId("buildDeck")?.addEventListener("click", doBuild);
 
 async function sendAgent() {
+  if (CHAT_EDIT_DISABLED) return;   // сборка в чате — фича в разработке
   const message = chatText.value.trim();
   if (!message) return;
   lastInstruction = message;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
@@ -1892,7 +1923,15 @@ function setupPanelTabs() {
     tabC.classList.toggle("is-active", !fields);
   };
   tabF.onclick = () => show(true);
-  tabC.onclick = () => show(false);
+  if (CHAT_EDIT_DISABLED) {
+    // Вкладка «Правки в чате» — фича в разработке: неактивна, с дружелюбной подсказкой.
+    tabC.classList.add("is-disabled");
+    tabC.setAttribute("aria-disabled", "true");
+    tabC.setAttribute("data-tip", CHAT_DEV_TIP);
+    tabC.onclick = null;
+  } else {
+    tabC.onclick = () => show(false);
+  }
   show(true); // дефолт в manual — «Поля»
 }
 
@@ -1902,7 +1941,7 @@ const MODE_BADGE = { "": "Готовая презентация", manual: "Ко�
   const badge = byId("modeBadge");
   if (badge) badge.textContent = MODE_BADGE[mode] != null ? MODE_BADGE[mode] : MODE_BADGE[""];
   if (params.get("rebuilt")) {
-    addMsg("bot", "Презентация собрана и проверена. Теперь правки — прямо на слайде и через чат.");
+    addMsg("bot", "Презентация собрана и проверена. Теперь правки — прямо на слайде.");
     // Убрать параметр, чтобы сообщение не повторялось по F5.
     const url = new URL(location.href);
     url.searchParams.delete("rebuilt");
@@ -1911,5 +1950,9 @@ const MODE_BADGE = { "": "Готовая презентация", manual: "Ко�
 })();
 
 setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode, нужны ли табы)
+disableChatEditing(); // сразу гасим чат-контролы, чтобы не мелькали активными
 
-if (isDraft) { initDraftBuilder().then(initEditor); } else { initEditor(); }
+// Повторно после инициализации: в chat-режиме setupChatMode() возвращает чату
+// активный вид — .finally перекрывает его обратно в «в разработке» (и на ошибке init).
+if (isDraft) { initDraftBuilder().then(initEditor).finally(disableChatEditing); }
+else { Promise.resolve(initEditor()).finally(disableChatEditing); }
