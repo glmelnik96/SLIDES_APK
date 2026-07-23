@@ -92,6 +92,28 @@ async def test_worker_exception_emits_failed(monkeypatch, caplog):
     assert "kaboom" in caplog.text
 
 
+async def test_worker_value_error_surfaces_readable_reason(monkeypatch, caplog):
+    """Кураторский ValueError движка (напр. неподдерживаемый формат) доходит до
+    пользователя дословно, а не подменяется общей «Внутренней ошибкой»."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+    reason = "точный перенос на Этапе 1 поддерживает .pptx/.md/.txt, не .docx"
+
+    def boom(inp):
+        raise ValueError(reason)
+
+    monkeypatch.setattr(runner, "_pipeline_run", boom)
+    inp = types.SimpleNamespace(session_id="s2v", mode="htmlnew")
+    with caplog.at_level("ERROR"):
+        q = r.start(inp)
+        ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["stage"] == "failed"
+    assert ev["error"] == reason           # понятная причина, не заглушка
+    assert "build failed" in caplog.text   # полный трейс всё равно в server-логе
+
+
 async def test_duplicate_start_same_session_rejected(monkeypatch):
     """Starting a session that is already active (double-click on rebuild) must
     be refused: a second start would overwrite _futures/_queues for the sid and

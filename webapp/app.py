@@ -71,6 +71,12 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
 _ALLOWED = {
     "htmlnew": {".md", ".txt", ".docx", ".pptx"},
 }
+# «Точный перенос» (mode=exact) переносит источник послайдово 1-в-1 без ИИ: в
+# .pptx слайды есть, в .md/.txt границы задаёт метка «Слайд N:». В .docx понятия
+# «слайд» нет (parse_docx режет по стилям заголовков), поэтому exact его не берёт.
+# Раньше эта связка проходила приём, занимала слот очереди и падала глубоко в
+# воркере голым ValueError — теперь режем на входе понятной 400.
+_EXACT_ALLOWED = {".pptx", ".md", ".txt"}
 
 from webapp.config import settings as _settings
 
@@ -189,6 +195,14 @@ async def create_job(request: Request, mode: str = Form(...),
     if suffix not in _ALLOWED[mode]:
         raise HTTPException(400, f"bad file type {suffix} for mode {mode}")
 
+    exact = exact_transfer.lower() in ("1", "true", "on", "yes")
+    if exact and suffix not in _EXACT_ALLOWED:
+        raise HTTPException(
+            400,
+            f"«Точный перенос» не поддерживает {suffix} — снимите галочку "
+            "«Точный перенос» (обычная сборка отлично переносит Word) или "
+            "загрузите .pptx, .md либо .txt.")
+
     raw = await file.read()
     # Reject an empty upload up front: an all-whitespace doc would otherwise pass
     # validation, occupy a queue slot and "succeed" with a contentless cover+
@@ -201,7 +215,7 @@ async def create_job(request: Request, mode: str = Form(...),
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(mode), input_s3_key=None,
                        source_filename=file.filename,
-                       exact_transfer=exact_transfer.lower() in ("1", "true", "on", "yes"))
+                       exact_transfer=exact)
     dest = session_dir(inp.session_id) / f"input{suffix}"
     dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})

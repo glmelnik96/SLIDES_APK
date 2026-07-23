@@ -608,6 +608,54 @@ def test_create_job_exact_defaults_false(monkeypatch, tmp_path):
         assert started["exact"] is False
 
 
+def test_create_job_exact_docx_rejected_early(monkeypatch, tmp_path):
+    """«Точный перенос» + .docx отбраковывается на входе понятной 400, а не
+    падает глубоко в воркере голым ValueError (реальные прод-сбои 2026-07)."""
+    calls = {"n": 0}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: calls.update(n=calls["n"] + 1)
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs",
+                   data={"mode": "htmlnew", "exact_transfer": "true"},
+                   files={"file": ("doc.docx", b"PK\x03\x04stub", "application/octet-stream")},
+                   headers=H())
+        assert r.status_code == 400
+        assert "Точный перенос" in r.json()["detail"]
+        assert ".docx" in r.json()["detail"]
+        assert calls["n"] == 0  # сборка не поставлена в очередь
+
+
+def test_create_job_exact_pptx_allowed(monkeypatch, tmp_path):
+    """.pptx с «Точным переносом» — валидная связка, сборка стартует."""
+    started = {}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs",
+                   data={"mode": "htmlnew", "exact_transfer": "true"},
+                   files={"file": ("d.pptx", b"PK\x03\x04stub",
+                                   "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
+                   headers=H())
+        assert r.status_code == 200
+        assert started["exact"] is True
+
+
+def test_create_job_docx_allowed_without_exact(monkeypatch, tmp_path):
+    """.docx в обычной (не exact) сборке по-прежнему принимается."""
+    started = {}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        or asyncio.Queue())
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("doc.docx", b"PK\x03\x04stub", "application/octet-stream")},
+                   headers=H())
+        assert r.status_code == 200
+        assert started["exact"] is False
+
+
 def test_chat_accumulates_usage():
     """chat() должен собирать resp.usage в client.usage_total (для замера экономии)."""
     import htmlslides.pipeline.client as clientmod
