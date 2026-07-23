@@ -101,7 +101,13 @@ async def _startup() -> None:
         async with app.state.sessionmaker() as s:
             await jobs_repo.mark_terminal(
                 s, session_id, status=status,
-                result_path=data.get("result_path"), error=data.get("error"))
+                result_path=data.get("result_path"), error=data.get("error"),
+                # Провод несёт prompt_tokens/completion_tokens → колонки БД
+                # in_tokens/out_tokens; cost_rub/duration_ms — как есть.
+                in_tokens=data.get("prompt_tokens"),
+                out_tokens=data.get("completion_tokens"),
+                cost_rub=data.get("cost_rub"),
+                duration_ms=data.get("duration_ms"))
             await s.commit()
         # Usage log — best-effort and isolated in its OWN transaction so a logging
         # failure can never roll back / block the terminal status above.
@@ -815,7 +821,11 @@ async def get_history(request: Request,
          "source_filename": j.source_filename, "status": j.status,
          "error": j.error,
          "display_name": _draft_title(j),
-         "created_at": j.created_at.isoformat() if j.created_at else None}
+         "created_at": j.created_at.isoformat() if j.created_at else None,
+         # Расход прогона для строки статистики (None у старых строк и исходов
+         # без LLM — фронт просто не рисует соответствующие части).
+         "in_tokens": j.in_tokens, "out_tokens": j.out_tokens,
+         "cost_rub": j.cost_rub, "duration_ms": j.duration_ms}
         for j in jobs
     ])
 

@@ -134,11 +134,30 @@ class JobRunner:
         for usage-log duration, excludes queue wait."""
         return self._meta.get(session_id, {}).get("started_at")
 
+    def _duration_ms(self, session_id: str) -> int | None:
+        """Реальная длительность сборки: now − started_at, в мс. None — если
+        задача так и не стартовала (отмена из очереди): длительности нет.
+        Единая точка для всех терминальных исходов (done/failed/cancelled)."""
+        started = self._meta.get(session_id, {}).get("started_at")
+        if started is None:
+            return None
+        return int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+
     # ── routing sink ─────────────────────────────────────────────────────
     def _install_sink(self) -> None:
         if self._sink_installed:
             return
         prog = _progress_module()
+
+        # Variant A: give the sync build loop a fast checkpoint. Besides the
+        # cooperative sink (which only fires on the next progress emit), expose a
+        # cheap predicate the pipeline can poll at the top of each slide to bail
+        # BEFORE starting a new LLM call. Both user-cancel and the watchdog add to
+        # self._cancel, so this covers both. getattr keeps older test doubles (a
+        # bare progress stub without the hook) working.
+        set_cancel_check = getattr(prog, "set_cancel_check", None)
+        if set_cancel_check is not None:
+            set_cancel_check(lambda sid: sid in self._cancel)
 
         def sink(event: Any) -> None:
             sid = getattr(event, "session_id", None)
@@ -162,6 +181,9 @@ class JobRunner:
                                 "error": "движок вернул пустой результат "
                                          "(файл не создан) — повторите запуск"}
                 self._active.discard(sid)
+                # Реальная длительность сборки: раннер знает started_at для любого
+                # исхода, движок — нет. Перекрывает дефолт None из схемы.
+                data["duration_ms"] = self._duration_ms(sid)
             self._status[sid] = data
             if data.get("terminal") and self._terminal_hook and self._loop:
                 asyncio.run_coroutine_threadsafe(
@@ -256,6 +278,7 @@ class JobRunner:
                     ev = {"session_id": session_id, "stage": "failed",
                           "terminal": True, "result_path": None,
                           "error": "Внутренняя ошибка сборки — попробуйте ещё раз"}
+                ev["duration_ms"] = self._duration_ms(session_id)
                 self._status[session_id] = ev
                 if self._loop is not None:
                     if self._terminal_hook:
@@ -292,7 +315,8 @@ class JobRunner:
             self._disarm_watchdog(session_id)
             self._futures.pop(session_id, None)
             ev = {"session_id": session_id, "stage": "cancelled", "terminal": True,
-                  "progress_pct": 0, "result_path": None}
+                  "progress_pct": 0, "result_path": None,
+                  "duration_ms": self._duration_ms(session_id)}
             self._status[session_id] = ev
             # work() never runs for a queued-cancel, so fire the terminal hook here
             # too — otherwise the DB row stays "queued" forever (missing from history

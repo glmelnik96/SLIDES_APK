@@ -11,3 +11,6 @@ data/
 tmp_*.py
 # model-eval artifacts (decks, PNGs, reports)
 scripts/eval_out/
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store

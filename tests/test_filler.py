@@ -73,3 +73,43 @@ def test_unknown_exception_still_aborts_deck():
             filler.fill_deck(object(), library, _plan(), workers=1)
     finally:
         filler.fill_slide = orig
+
+
+def test_cancel_checkpoint_prevents_new_fills_after_stop():
+    """Variant A (мгновенный стоп без лишних токенов): once a stop is requested,
+    no NEW fill_slide (LLM) call may start. fill_deck must call check_cancel() at
+    the top of EACH slide, BEFORE fill_slide, so slides that haven't begun bail at
+    the checkpoint instead of spending tokens. In-flight calls still finish — but
+    nothing new is launched."""
+    library = TemplateLibrary.load()
+    filled = []
+    stop = {"on": False}
+
+    def fake_fill(client, lib, slide, *, deck_title=""):
+        filled.append(slide.index)
+        stop["on"] = True          # a stop is requested right after slide 1 fills
+        return slide.model_copy(update={"content": {"title": "ok"}})
+
+    class _Stop(Exception):
+        pass
+
+    def check_cancel():
+        if stop["on"]:
+            raise _Stop()
+
+    plan = DeckPlan(title="T", slides=[
+        SlidePlan(index=i, type="content", template_id="statement")
+        for i in range(1, 6)])      # 5 slides, 1 worker → strictly sequential
+
+    orig = filler.fill_slide
+    filler.fill_slide = fake_fill
+    try:
+        with pytest.raises(_Stop):
+            filler.fill_deck(object(), library, plan, workers=1,
+                             check_cancel=check_cancel)
+    finally:
+        filler.fill_slide = orig
+
+    # Only slide 1 was actually filled; slides 2-5 hit the checkpoint and never
+    # called fill_slide — no tokens spent after the stop.
+    assert filled == [1]

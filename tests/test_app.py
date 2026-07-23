@@ -226,6 +226,36 @@ def test_history_includes_error_for_failed(monkeypatch, tmp_path):
         assert item["error"] == "boom 42"
 
 
+def test_history_includes_usage_stats(monkeypatch, tmp_path):
+    """История отдаёт расход прогона (токены/стоимость/время), чтобы фронт показал
+    строку ⏱ … · ↑ … · ↓ … · ≈ … ₽. Гоним через терминальный хук — он проверяет
+    и маппинг имён с провода в БД (prompt_tokens→in_tokens), и выдачу в JSON."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("f.md", b"# hi", "text/markdown")},
+                     headers=H()).json()["session_id"]
+        import asyncio as _aio
+        # Провод (ProgressEvent) несёт prompt_tokens/completion_tokens; хук маппит
+        # их в in_tokens/out_tokens БД.
+        data = {"session_id": sid, "stage": "done", "terminal": True,
+                "result_path": None, "error": None,
+                "prompt_tokens": 12_400, "completion_tokens": 8_900,
+                "cost_rub": 11.96, "duration_ms": 167_000}
+        # Own loop: a prior async test can leave get_event_loop() with no current loop.
+        loop = _aio.new_event_loop()
+        try:
+            loop.run_until_complete(appmod.runner._terminal_hook(sid, data))
+        finally:
+            loop.close()
+        item = c.get("/api/history", headers=H()).json()[0]
+        assert item["status"] == "done"
+        assert item["in_tokens"] == 12_400
+        assert item["out_tokens"] == 8_900
+        assert item["cost_rub"] == 11.96
+        assert item["duration_ms"] == 167_000
+
+
 def test_pptx_modes_rejected(monkeypatch, tmp_path):
     _no_run(monkeypatch)
     with _client(monkeypatch, tmp_path) as c:
