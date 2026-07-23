@@ -113,51 +113,20 @@
     <p class="empty-note">Готовую презентацию можно править прямо в браузере и скачивать в <b>HTML или PNG</b>.</p>
   </div>
 
-  <!-- PROGRESS -->
-  <section id="progress" class="panel hidden">
-    <div class="progress-head">
-      <span class="spinner"></span>
-      <span id="stageLabel" class="stage-label">Подготовка&hellip;</span>
-      <span id="stagePct" class="stage-pct">0%</span>
-      <button id="stopBtn" class="btn-link btn-stop" type="button">Остановить</button>
-    </div>
-    <div class="bar"><div id="barfill"></div></div>
-    <div id="stageDetail" class="stage-detail"></div>
-    <div id="heartbeat" class="heartbeat">обновлено только что</div>
-    <div id="progressLog" class="progress-log"></div>
-  </section>
-
-  <!-- RESULT -->
+  <!-- RESULT (ошибки запуска / баннеры) -->
   <section id="result" class="panel result hidden"></section>
 
-  <!-- ACTIVE QUEUE — во всю ширину -->
-  <section class="history" id="activeWrap" hidden>
-    <div class="hist-head">
-      <h2>Активные сборки <span class="queue-cap" id="queueCap"></span></h2>
+  <!-- FEED · единый список всех сборок -->
+  <section class="feedwrap" id="feedWrap" hidden>
+    <div class="feed-head">
+      <h2>Презентации</h2>
+      <button id="clear" class="btn-link">Очистить историю</button>
     </div>
-    <ul id="activeList" class="histlist"></ul>
+    <p class="feed-sub">Один список всего. Готовые и черновики хранятся <span id="retentionCap">24 часа</span>.</p>
+    <div class="chips" id="feedChips"></div>
+    <div class="feed" id="feed"></div>
+    <div id="feedEmpty" class="hist-empty hidden">В этой категории пока пусто.</div>
   </section>
-
-  <!-- Черновики и История сборок — рядом, в две колонки -->
-  <div class="history-grid" id="historyGrid">
-    <!-- DRAFTS: незавершённая работа снова достижима -->
-    <section class="history" id="draftsWrap" hidden>
-      <div class="hist-head"><h2>Черновики <span class="queue-cap" id="draftsCap"></span></h2></div>
-      <p class="hist-sub">Начатые, но не собранные — можно продолжить.</p>
-      <ul id="draftsList" class="histlist"></ul>
-    </section>
-
-    <!-- HISTORY -->
-    <section class="history">
-      <div class="hist-head">
-        <h2>История сборок <span class="queue-cap" id="retentionCap"></span></h2>
-        <button id="clear" class="btn-link">Очистить</button>
-      </div>
-      <p class="hist-sub">Готовые презентации — хранятся 24 часа.</p>
-      <ul id="histlist" class="histlist"></ul>
-      <div id="histEmpty" class="hist-empty">Пока пусто &mdash; создайте первую презентацию. Готовые сборки хранятся 24 часа.</div>
-    </section>
-  </div>
 
   </section><!-- /.output -->
 </main>

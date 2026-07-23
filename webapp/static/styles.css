@@ -6,6 +6,15 @@
    структурный приём, СТРОГИЕ прямые углы (border-radius: 0), SB Sans Display,
    капс-микролейблы. ВАЖНО: имена селекторов и id неизменны — JS/шаблоны на них
    завязаны; меняется только визуальный слой.
+
+   ПРАВИЛО СТАТУС-ЛЕЙБЛОВ (бейджи, пилюли, теги состояний): БЕЗ ОБВОДОК. Фон —
+   полупрозрачная заливка того же тона, цвет текста задаёт семантику:
+     • нейтральный  → background: var(--neutral-dim),  color: var(--muted[-2])
+     • акцент/успех → background: var(--accent-dim),   color: var(--accent)
+     • ошибка       → background: rgba(255,107,107,.10), color: var(--danger)
+     • предупрежд.  → background: rgba(236,213,129,.10), color: var(--warn-ink)
+   Никаких border у лейблов. Кнопки — по тому же принципу: заливка того же цвета
+   вместо обводки (см. .pcard-actions .btn-ghost / .btn-stop).
    ============================================================================ */
 @font-face { font-family: "SB Sans Text"; font-weight: 400; font-style: normal; font-display: swap;
   src: url("/static/fonts/sb-sans-text-400.woff2") format("woff2"); }
@@ -39,6 +48,7 @@
   --accent-dim: rgba(38, 208, 124, .10);
   --accent-dim-2: rgba(38, 208, 124, .18);  /* НОВЫЙ: hover акцентных плашек */
   --accent-line: rgba(38, 208, 124, .35);
+  --neutral-dim: rgba(255, 255, 255, .06); /* НОВЫЙ: заливка нейтральных статус-лейблов — полупрозрачная, читается на любой поверхности */
   /* Семантика состояний */
   --danger: #ff6b6b;      /* 5.7:1 на --bg */
   --danger-line: rgba(255, 107, 107, .35);  /* НОВЫЙ: рамки ошибок (симметрия --accent-line) */
@@ -103,7 +113,7 @@ a { color: var(--accent); }
 .eyebrow { font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
 /* Ч§5 — бейдж режима редактора (капс-микролейбл на хайрлайне) */
 .mode-badge { font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
-  color: var(--muted); border: 1px solid var(--line); padding: 3px 8px; }
+  color: var(--muted); background: var(--neutral-dim); padding: 3px 8px; }
 
 /* ===== Канонная шапка платформы (идентична во всех Apps) ===== */
 .topbar { display: flex; align-items: center; gap: 28px; padding: 0 28px; height: 60px;
@@ -201,10 +211,10 @@ a { color: var(--accent); }
 .entry-alt.is-disabled .alt-main,
 .entry-alt.is-disabled .alt-aside { opacity: .5; }
 .entry-alt.is-disabled .entry-open { color: var(--muted-2); }
-/* Бейдж «в разработке» — по образцу .outline-badge (строгие прямые углы бренда) */
+/* Бейдж «в разработке» — статус-лейбл: без обводки, полупрозрачная нейтральная заливка */
 .soon-badge { display: inline-block; margin-left: 8px; vertical-align: middle;
   font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
-  font-weight: 600; padding: 2px 7px; border: 1px solid var(--line); border-radius: var(--r);
+  font-weight: 600; padding: 2px 7px; background: var(--neutral-dim);
   color: var(--muted-2); }
 
 /* Дружелюбная подсказка при наведении на отключённую фичу: не только курсор-стоп,
@@ -451,6 +461,75 @@ a { color: var(--accent); }
 .hist-row2 .err { color: var(--danger); }
 .hist-empty { color: var(--muted); font-size: var(--fs-sm); padding: 6px 2px; }
 .queue-cap { color: var(--muted-2); font-size: var(--fs-sm); font-weight: 400; }
+
+/* ===== Единый список сборок (feed) — заменяет активные/черновики/историю ===== */
+.feedwrap { margin-top: 40px; }
+.feed-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.feed-head h2 { font-size: var(--fs-h2); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.feed-sub { color: var(--muted-2); font-size: var(--fs-sm); margin: 0 0 18px; }
+/* Фильтры: плоские плашки заливкой (без обводок), активная — акцентная */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+  border: 0; border-radius: 0; background: var(--bg-soft); color: var(--muted); font: inherit; font-size: var(--fs-sm);
+  cursor: pointer; transition: color var(--dur-fast) var(--ease-productive), background var(--dur-fast) var(--ease-productive); }
+.chip:hover { color: var(--text); background: var(--panel-2); }
+.chip .n { font-size: var(--fs-xs); color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.chip.on { background: var(--accent-dim); color: var(--accent); }
+.chip.on:hover { background: var(--accent-dim-2); color: var(--accent); }
+.chip.on .n { color: var(--accent); }
+/* Карточка сборки: одна и та же для всех состояний — эволюционирует на месте */
+.feed { display: flex; flex-direction: column; }
+.pcard { border: 1px solid var(--line); margin-bottom: 11px; padding: 15px 17px;
+  transition: border-color var(--dur-fast) var(--ease-productive); }
+.pcard.expandable { cursor: pointer; }
+.pcard.expandable:hover { border-color: var(--accent-line); }
+.pcard-head { display: flex; align-items: center; gap: 15px; }
+.pcard-tool { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
+  background: var(--panel); color: var(--muted); }
+.pcard-tool svg { display: block; }
+.pcard-main { flex: 1; min-width: 0; }
+.pcard-trow { display: flex; align-items: center; gap: 11px; }
+.pcard-title { font-size: 15.5px; font-weight: 600; color: var(--text); min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-title .ext { color: var(--muted-2); font-weight: 400; font-size: var(--fs-sm); }
+.pcard-meta { color: var(--muted); font-size: var(--fs-xs); margin-top: 5px; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-meta .sep { color: var(--line); margin: 0 8px; }
+.pcard-meta .cost { color: var(--warn-ink); }
+.pcard-meta .err { color: var(--danger); }
+.pcard-actions { display: flex; gap: 8px; flex: 0 0 auto; align-items: center; }
+/* Кнопки карточки — заливкой того же цвета вместо обводок */
+.pcard-actions .btn-ghost { background: var(--panel-2); border-color: transparent; color: var(--text); }
+.pcard-actions .btn-ghost:hover { background: var(--accent-dim); border-color: transparent; color: var(--accent); }
+.pcard-actions .btn-stop { background: rgba(255, 107, 107, .10); border-color: transparent; color: var(--danger); }
+.pcard-actions .btn-stop:hover { background: rgba(255, 107, 107, .18); border-color: transparent; }
+/* Прогресс-бар — только пока идёт сборка (JS снимает .hidden) */
+.pcard-bar { height: 4px; background: var(--line-soft); margin-top: 12px; overflow: hidden; }
+.pcard-bar > i { display: block; height: 100%; width: 0; background: var(--accent);
+  transition: width var(--dur-bar) var(--ease-productive); }
+/* Аккордеон-лог: свёрнут по умолчанию, раскрывается на .open (Вариант A) */
+.pcard-log { display: none; margin-top: 13px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.pcard.open .pcard-log { display: block; }
+.pcard-stage { color: var(--text); font-size: var(--fs-sm); margin-bottom: 8px; }
+.pcard-hb { color: var(--muted-2); font-size: var(--fs-xs); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.pcard-hb.stale { color: var(--warn-ink); }
+.pcard-hb:empty { display: none; }
+.pcard-loglines { font-size: var(--fs-xs); line-height: 1.85; color: var(--muted); }
+.pcard-loglines .t { color: var(--muted-2); margin-right: 10px; font-variant-numeric: tabular-nums; }
+.pcard-loglines .cur { color: var(--text); }
+.pcard-loglines .cur .live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  display: inline-block; margin-right: 8px; vertical-align: middle; }
+/* Статус-пилюли: капс-микролейбл заливкой того же цвета (без обводок) */
+.st { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px;
+  border-radius: 0; border: 0; white-space: nowrap; flex: none; }
+.st-run { color: var(--accent); background: var(--accent-dim); }
+.st-queue { color: var(--muted); background: var(--neutral-dim); }
+.st-done { color: var(--accent); background: var(--accent-dim); }
+.st-draft { color: var(--muted); background: var(--neutral-dim); }
+.st-fail { color: var(--danger); background: rgba(255, 107, 107, .10); }
+.st-cancel { color: var(--warn-ink); background: rgba(236, 213, 129, .10); }
+.st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  display: inline-block; margin-right: 5px; vertical-align: middle; }
 
 /* ===== Редактор ===== */
 .editor { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }  /* К§8 — высота от видимого вьюпорта; тулбар-шапка + ряд из трёх колонок */
@@ -700,10 +779,10 @@ a { color: var(--accent); }
 .outline-num { flex: 0 0 auto; min-width: 16px; text-align: right; font-size: var(--fs-xs); color: var(--muted-2); }
 .outline-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outline-badge { flex: 0 0 auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase;
-  padding: 2px 7px; border-radius: var(--r); border: 1px solid var(--line); }
-.outline-badge.is-plan { color: var(--muted); }
-.outline-badge.is-ready { color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim); }
-.outline-badge.is-typed { color: var(--accent); border-color: var(--accent-line); background: var(--accent-dim); }
+  padding: 2px 7px; }
+.outline-badge.is-plan { color: var(--muted); background: var(--neutral-dim); }
+.outline-badge.is-ready { color: var(--accent); background: var(--accent-dim); }
+.outline-badge.is-typed { color: var(--accent); background: var(--accent-dim); }
 #buildDeck { width: 100%; }
 .outline-hint { margin-top: 4px; font-size: var(--fs-cap); line-height: 1.4; color: var(--muted-2); }
 

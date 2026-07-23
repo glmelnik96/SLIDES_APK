@@ -105,24 +105,7 @@ drop.addEventListener("drop", (e) => {
   if (f) setFile(f);
 });
 
-/* ---- empty state (канон v4): показать при первом входе, скрыть при контенте ---- */
-function updateEmptyState() {
-  const el = $("#workspaceEmpty");
-  if (!el) return;
-  const hasContent =
-    !$("#progress").classList.contains("hidden") ||
-    !$("#result").classList.contains("hidden") ||
-    !$("#activeWrap").hidden ||
-    !$("#draftsWrap").hidden ||
-    $("#histlist").children.length > 0;
-  el.hidden = hasContent;
-  // Пока показан empty-state, секция истории с «Пока пусто» дублирует его — прячем
-  // (как на /images: пустая история скрыта, вместо неё сценарии).
-  const hist = $("#histlist").closest(".history");
-  if (hist) hist.hidden = !hasContent;
-}
-
-/* ---- history ---- */
+/* ---- icons + расход формата ---- */
 // Иконка инструмента сборки (из файла / конструктор / чат) — острые контуры 24×24.
 const HIST_ICON_STROKE = `fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="butt" stroke-linejoin="miter"`;
 const HIST_TOOL = {
@@ -133,11 +116,11 @@ const HIST_TOOL = {
   chat: { title: "Чат-ассистент",
     paths: `<path d="M4 5H20V15H11L7 19V15H4Z"/><path d="M8 9H16"/><path d="M8 11.5H13"/>` },
 };
-function histToolBadge(mode) {
+function toolSvg(mode) {
   const t = HIST_TOOL[mode] || HIST_TOOL.htmlnew;
-  return `<span class="hist-tool" title="${t.title}">` +
-    `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><g ${HIST_ICON_STROKE}>${t.paths}</g></svg></span>`;
+  return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g ${HIST_ICON_STROKE}>${t.paths}</g></svg>`;
 }
+function toolTitle(mode) { return (HIST_TOOL[mode] || HIST_TOOL.htmlnew).title; }
 // Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
 const histInt = (n) => Number(n).toLocaleString("ru-RU");
 const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
@@ -146,92 +129,301 @@ function histDur(ms) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-async function loadHistory() {
-  const items = await (await fetch(U("/api/history"))).json();
-  const ul = $("#histlist");
-  ul.innerHTML = "";
-  $("#histEmpty").classList.toggle("hidden", items.length > 0);
-  for (const it of items) {
-    const li = document.createElement("li");
-    const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
-    const ok = it.status === "done";
-    const name = it.display_name || it.source_filename || "Без названия";
-    // Строка расхода: у готовой сборки — время/токены/деньги (только те, что есть);
-    // у неуспешной — причина. Доступные части разделяем средней точкой.
+/* ============================================================================
+   ЕДИНЫЙ ФИД «Презентации» — один список всех сборок (активные + черновики +
+   история) с чипами-фильтрами. Карточка стабильна по session_id и эволюционирует
+   на месте: пока идёт сборка — прогресс-бар + аккордеон с живым логом; после
+   завершения тот же элемент превращается в «Готово». Три источника (/api/jobs/
+   active, /api/drafts, /api/history) сливаются в один массив и раскладываются
+   в DOM keyed-реконсиляцией (чтобы поллинг не стирал раскрытый лог активной
+   сборки и не мигал).
+   ============================================================================ */
+const CHIPS = [
+  { key: "all", label: "Все" },
+  { key: "work", label: "В работе" },   // running + queued
+  { key: "draft", label: "Черновики" },
+  { key: "done", label: "Готовые" },
+  { key: "fail", label: "Ошибки" },     // failed + cancelled
+];
+let activeFilter = "all";
+let feedTotal = 0;                       // всего карточек (до фильтра) — для empty-state
+const feedCards = new Map();             // id -> элемент карточки (реконсиляция)
+const feedItemById = new Map();          // id -> нормализованный элемент данных (для live-перерисовки)
+const livePct = {};                      // id -> % из SSE (свежее поллинга)
+const liveDetail = {};                   // id -> человекочитаемая строка шага из SSE
+let expandedId = null;                   // какая карточка сейчас раскрыта (аккордеон)
+
+// Нормализация трёх источников к единому виду карточки.
+function baseExt(raw) {
+  const m = String(raw).match(/^(.*?)(\.[a-zа-я0-9]+)$/i);
+  return m ? { base: m[1], ext: m[2] } : { base: String(raw), ext: "" };
+}
+function nameParts(it) {
+  if (it.display_name) return { base: it.display_name, ext: "" };
+  if (it.source_filename) return baseExt(it.source_filename);
+  return { base: MODE_LABEL[it.mode] || it.mode || "Без названия", ext: "" };
+}
+function normActive(a) {
+  const running = a.stage && a.stage !== "queued";
+  return {
+    id: a.session_id, mode: a.mode, source_filename: a.source_filename || null, display_name: null,
+    state: running ? "running" : "queued", active: true,
+    stage: a.stage || "queued", pct: a.progress_pct || 0, ts: Infinity,
+    kind: a.mode === "htmlnew" ? "build" : "draft",
+  };
+}
+function normHistory(h) {
+  return {
+    id: h.id, mode: h.mode, source_filename: h.source_filename, display_name: h.display_name,
+    state: h.status, active: false, ts: h.created_at ? Date.parse(h.created_at) : 0,
+    created_at: h.created_at, error: h.error, kind: h.kind,
+    in_tokens: h.in_tokens, out_tokens: h.out_tokens, cost_rub: h.cost_rub, duration_ms: h.duration_ms,
+  };
+}
+function normDraft(d) {
+  return {
+    id: d.id, mode: d.mode, source_filename: null, display_name: null, state: "draft",
+    active: false, ts: d.created_at ? Date.parse(d.created_at) : 0, created_at: d.created_at, kind: "draft",
+  };
+}
+
+function inFilter(state, key) {
+  if (key === "all") return true;
+  if (key === "work") return state === "running" || state === "queued";
+  if (key === "draft") return state === "draft";
+  if (key === "done") return state === "done";
+  if (key === "fail") return state === "failed" || state === "cancelled";
+  return true;
+}
+// Активные сверху (running перед queued), остальное — по времени убыванием.
+function feedSort(a, b) {
+  const ga = a.active ? 0 : 1, gb = b.active ? 0 : 1;
+  if (ga !== gb) return ga - gb;
+  if (a.active && b.active) {
+    const ra = a.state === "running" ? 0 : 1, rb = b.state === "running" ? 0 : 1;
+    if (ra !== rb) return ra - rb;
+  }
+  return (b.ts || 0) - (a.ts || 0);
+}
+
+function statusPill(state) {
+  switch (state) {
+    case "running": return `<span class="st st-run"><span class="dot"></span>В работе</span>`;
+    case "queued": return `<span class="st st-queue">В очереди</span>`;
+    case "done": return `<span class="st st-done">✓ Готово</span>`;
+    case "draft": return `<span class="st st-draft">Черновик</span>`;
+    case "failed": return `<span class="st st-fail">Ошибка</span>`;
+    case "cancelled": return `<span class="st st-cancel">Отменено</span>`;
+    default: return "";
+  }
+}
+function cardMeta(it) {
+  const SEP = `<span class="sep">·</span>`;
+  const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
+  if (it.state === "running") {
+    const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
+    const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идёт сборка";
+    return [toolTitle(it.mode), esc(detail), pct + "%"].join(SEP);
+  }
+  if (it.state === "queued") return [toolTitle(it.mode), "скоро начнётся"].join(SEP);
+  if (it.state === "done") {
     const seg = [];
     if (when) seg.push(esc(when));
-    if (ok) {
-      if (it.duration_ms != null) seg.push(`⏱ ${histDur(it.duration_ms)}`);
-      if (it.in_tokens != null) seg.push(`↑ ${histInt(it.in_tokens)}`);
-      if (it.out_tokens != null) seg.push(`↓ ${histInt(it.out_tokens)}`);
-      if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
-    } else if (it.error) {
-      seg.push(`<span class="err">${esc(it.error)}</span>`);
-    }
-    const row2 = seg.join(`<span class="sep">·</span>`);
-    // Только у готовой сборки есть дека — показываем «Открыть»; у неуспешной статус
-    // виден лейблом рядом с именем (ссылки на 404-деку быть не должно).
-    const action = ok
-      ? `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`
-      : "";
-    li.innerHTML =
-      `<div class="hist-main">` +
-        `<div class="hist-row1">` +
-          histToolBadge(it.mode) +
-          `<span class="hist-name">${esc(name)}</span>` +
-          `<span class="hist-tag hist-tag--${it.status}">${STAGE_LABEL[it.status] || it.status}</span>` +
-        `</div>` +
-        `<div class="hist-row2">${row2}</div>` +
-      `</div>` +
-      action;
-    ul.appendChild(li);
+    if (it.duration_ms != null) seg.push(`⏱ ${histDur(it.duration_ms)}`);
+    if (it.out_tokens != null) seg.push(`↓ ${histInt(it.out_tokens)}`);
+    if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
+    return seg.join(SEP);
   }
+  if (it.state === "draft") return [toolTitle(it.mode), when ? `изменён ${esc(when)}` : ""].filter(Boolean).join(SEP);
+  if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, when ? esc(when) : ""].filter(Boolean).join(SEP);
+  if (it.state === "cancelled") return ["Остановлено вручную", when ? esc(when) : ""].filter(Boolean).join(SEP);
+  return "";
+}
+// Кнопки карточки — только на реально существующие эндпоинты (без «мёртвых»):
+// готовая → «Открыть» (редактор); черновик → «Продолжить» + «Удалить»;
+// сбой/отмена черновика → то же; сбой загрузки → «Повторить» (снова через загрузку);
+// активная → «Остановить».
+function cardActions(it) {
+  if (it.state === "running" || it.state === "queued")
+    return `<button class="btn btn-stop btn-sm" data-stop="${it.id}">Остановить</button>`;
+  if (it.state === "done")
+    return `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
+  if (it.state === "draft" || ((it.state === "failed" || it.state === "cancelled") && it.kind === "draft"))
+    return `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
+      `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
+  if (it.state === "failed" || it.state === "cancelled")
+    return `<button class="btn btn-ghost" data-retry="1">Повторить</button>`;
+  return "";
+}
+
+function updateCard(card, it) {
+  card.dataset.state = it.state;
+  card.dataset.mode = it.mode || "";
+  const expandable = it.state === "running" || it.state === "queued";
+  card.classList.toggle("expandable", expandable);
+  const np = nameParts(it);
+  const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
+  card.querySelector(".pcard-head").innerHTML =
+    `<div class="pcard-tool">${toolSvg(it.mode)}</div>` +
+    `<div class="pcard-main">` +
+      `<div class="pcard-trow">` +
+        `<span class="pcard-title">${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}</span>` +
+        statusPill(it.state) +
+      `</div>` +
+      `<div class="pcard-meta">${cardMeta(it)}</div>` +
+    `</div>` +
+    `<div class="pcard-actions">${cardActions(it)}</div>`;
+  const bar = card.querySelector(".pcard-bar");
+  if (it.state === "running") {          // бар — только у идущей сборки (не у очереди)
+    bar.classList.remove("hidden");
+    bar.querySelector("i").style.width = pct + "%";
+  } else {
+    bar.classList.add("hidden");
+  }
+  if (!expandable) {                      // терминальная карточка — лог не нужен, свернуть
+    const lines = card.querySelector(".pcard-loglines");
+    if (lines) lines.innerHTML = "";
+    card.classList.remove("open");
+  }
+}
+
+function renderChips(counts) {
+  $("#feedChips").innerHTML = CHIPS.map((c) =>
+    `<button class="chip${activeFilter === c.key ? " on" : ""}" data-filter="${c.key}">` +
+    `${c.label} <span class="n">${counts[c.key] || 0}</span></button>`).join("");
+}
+
+function renderFeed(items) {
+  const feed = $("#feed");
+  feedItemById.clear();
+  const seen = new Set();
+  let prev = null;
+  for (const it of items) {
+    seen.add(it.id);
+    feedItemById.set(it.id, it);
+    let card = feedCards.get(it.id);
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "pcard";
+      card.dataset.id = it.id;
+      card.innerHTML =
+        `<div class="pcard-head"></div>` +
+        `<div class="pcard-bar hidden"><i></i></div>` +
+        `<div class="pcard-log">` +
+          `<div class="pcard-stage"></div>` +
+          `<div class="pcard-hb"></div>` +
+          `<div class="pcard-loglines"></div>` +
+        `</div>`;
+      feedCards.set(it.id, card);
+    }
+    updateCard(card, it);
+    const ref = prev ? prev.nextSibling : feed.firstChild;
+    if (ref !== card) feed.insertBefore(card, ref);
+    prev = card;
+  }
+  for (const [id, el] of feedCards) {
+    if (!seen.has(id)) { el.remove(); feedCards.delete(id); if (expandedId === id) expandedId = null; }
+  }
+  // Раскрытие держим только на активной карточке; терминальная/исчезнувшая — закрыть.
+  const ex = expandedId ? feedCards.get(expandedId) : null;
+  if (!ex || !(ex.dataset.state === "running" || ex.dataset.state === "queued")) expandedId = null;
+  for (const [id, el] of feedCards) el.classList.toggle("open", id === expandedId);
+}
+
+async function loadFeed() {
+  const [active, drafts, history] = await Promise.all([
+    fetch(U("/api/jobs/active")).then((r) => r.json()).catch(() => []),
+    fetch(U("/api/drafts")).then((r) => r.json()).catch(() => []),
+    fetch(U("/api/history")).then((r) => r.json()).catch(() => []),
+  ]);
+  const byId = new Map();
+  for (const h of history) byId.set(h.id, normHistory(h));
+  for (const d of drafts) if (!byId.has(d.id)) byId.set(d.id, normDraft(d));
+  for (const a of active) byId.set(a.session_id, normActive(a));  // живая запись перекрывает
+  const items = [...byId.values()];
+  feedTotal = items.length;
+  const counts = { all: items.length, work: 0, draft: 0, done: 0, fail: 0 };
+  for (const it of items) {
+    if (it.state === "running" || it.state === "queued") counts.work++;
+    else if (it.state === "draft") counts.draft++;
+    else if (it.state === "done") counts.done++;
+    else if (it.state === "failed" || it.state === "cancelled") counts.fail++;
+  }
+  renderChips(counts);
+  items.sort(feedSort);
+  renderFeed(items.filter((it) => inFilter(it.state, activeFilter)));
   updateEmptyState();
 }
+
+function updateEmptyState() {
+  const shown = $("#feed").children.length;
+  const resultVisible = !$("#result").classList.contains("hidden");
+  $("#feedWrap").hidden = feedTotal === 0;
+  $("#feedEmpty").classList.toggle("hidden", !(feedTotal > 0 && shown === 0));
+  const empty = $("#workspaceEmpty");
+  if (empty) empty.hidden = feedTotal > 0 || resultVisible;
+}
+
+/* ---- действия над карточками (делегирование на #feed) ---- */
+async function stopBuild(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Останавливаю…"; }
+  // Мгновенная реакция: если это отслеживаемая сборка — сразу гасим поток, не ждём
+  // терминального события (уже идущие вызовы модели ещё доедают ~до минуты).
+  if (currentSession === id && currentES) { currentES.close(); currentES = null; stopHeartbeat(); currentSession = null; }
+  try { await fetch(U(`/api/jobs/${id}/cancel`), { method: "POST" }); } catch (e) { /* best-effort */ }
+  loadFeed();
+}
+async function deleteDraft(id, btn) {
+  if (!confirm("Удалить черновик? Это действие необратимо.")) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(U(`/api/drafts/${id}`), { method: "DELETE" });
+    if (!r.ok) throw new Error("draft delete failed");
+    loadFeed();
+  } catch (e) {
+    if (btn) btn.disabled = false;
+  }
+}
+function retryUpload() {
+  const smooth = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  $("#drop").scrollIntoView({ behavior: smooth, block: "start" });
+  if (selectedFile) createJob();  // файл ещё выбран — перезапускаем сразу
+}
+function toggleCard(id) {
+  const card = feedCards.get(id);
+  if (!card) return;
+  if (expandedId === id) { expandedId = null; card.classList.remove("open"); return; }
+  if (expandedId) { const p = feedCards.get(expandedId); if (p) p.classList.remove("open"); }
+  expandedId = id;
+  card.classList.add("open");
+  // Раскрыли активную сборку, за которой ещё не следим, — переводим поток на неё.
+  const st = card.dataset.state;
+  if ((st === "running" || st === "queued") && currentSession !== id)
+    streamProgress(id, "html", { resumed: true });
+}
+
+$("#feed").addEventListener("click", (e) => {
+  const stopEl = e.target.closest("[data-stop]");
+  if (stopEl) { e.stopPropagation(); stopBuild(stopEl.dataset.stop, stopEl); return; }
+  const delEl = e.target.closest("[data-del]");
+  if (delEl) { e.stopPropagation(); deleteDraft(delEl.dataset.del, delEl); return; }
+  const retryEl = e.target.closest("[data-retry]");
+  if (retryEl) { e.stopPropagation(); retryUpload(); return; }
+  if (e.target.closest("a, button")) return;          // ссылки/кнопки работают сами
+  const card = e.target.closest(".pcard.expandable");
+  if (card) toggleCard(card.dataset.id);
+});
+$("#feedChips").addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-filter]");
+  if (!chip || chip.dataset.filter === activeFilter) return;
+  activeFilter = chip.dataset.filter;
+  loadFeed();
+});
 
 $("#clear").onclick = async () => {
   await fetch(U("/api/history/clear"), { method: "POST" });
-  loadHistory();
+  loadFeed();
 };
-
-/* ---- active queue ---- */
-const MAX_ACTIVE = 5;
-
-async function loadActive() {
-  let items = [];
-  try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) { return; }
-  const wrap = $("#activeWrap");
-  const ul = $("#activeList");
-  wrap.hidden = items.length === 0;
-  $("#queueCap").textContent = `${items.length} / ${MAX_ACTIVE}`;
-  ul.innerHTML = "";
-  for (const it of items) {
-    const running = it.stage && it.stage !== "queued";
-    const li = document.createElement("li");
-    const label = MODE_LABEL[it.mode] || it.mode;
-    const state = running
-      ? `${STAGE_LABEL[it.stage] || it.stage} · ${it.progress_pct || 0}%`
-      : "В очереди";
-    li.innerHTML =
-      `<div><div class="hist-mode">${label}</div>` +
-      `<div class="hist-meta">${state}</div></div>` +
-      `<div class="hist-spacer"></div>` +
-      `<button class="btn btn-ghost" data-open="${it.session_id}" data-kind="html">Открыть</button>` +
-      `<button class="btn-link btn-stop" data-stop="${it.session_id}">Остановить</button>`;
-    ul.appendChild(li);
-  }
-  ul.querySelectorAll("[data-open]").forEach((b) =>
-    b.addEventListener("click", () => streamProgress(b.dataset.open, b.dataset.kind)));
-  ul.querySelectorAll("[data-stop]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      b.disabled = true;
-      await fetch(U(`/api/jobs/${b.dataset.stop}/cancel`), { method: "POST" });
-      loadActive();
-    }));
-  updateEmptyState();
-}
-
-setInterval(loadActive, 2000);
 
 // Contract §8 — rehydrate the in-flight run after a full page reload (canon-nav
 // links reload the page, dropping the SSE/JS state, but the build keeps running
@@ -242,56 +434,12 @@ async function autoResumeActive() {
   let items = [];
   try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) { return; }
   if (!items.length || currentSession) return;
-  // Seed the panel from the run's known stage/pct so returning to the page shows
-  // live progress immediately (not a reset "0%"), making clear the build kept going.
   const it = items[0];
-  streamProgress(it.session_id, "html",
-                 { stage: it.stage, progress_pct: it.progress_pct, resumed: true });
-}
-
-/* ---- drafts (незавершённая работа: конструктор/чат) ---- */
-async function loadDrafts() {
-  let items = [];
-  try { items = await (await fetch(U("/api/drafts"))).json(); } catch (e) { return; }
-  const wrap = $("#draftsWrap");
-  const ul = $("#draftsList");
-  wrap.hidden = items.length === 0;
-  // Две колонки (Черновики │ История) — только когда черновики есть.
-  $("#historyGrid")?.classList.toggle("two-col", items.length > 0);
-  ul.innerHTML = "";
-  for (const it of items) {
-    const li = document.createElement("li");
-    const label = MODE_LABEL[it.mode] || it.mode;
-    const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
-    const meta = ["Без названия", when].filter(Boolean).join(" · ");
-    // mode в URL обязателен — иначе редактор откроет сессию как built-деку.
-    li.innerHTML =
-      `<div><div class="hist-mode">${label}</div>` +
-      `<div class="hist-meta">${meta}</div></div>` +
-      `<div class="hist-spacer"></div>` +
-      `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
-      `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
-    ul.appendChild(li);
-  }
-  ul.querySelectorAll("[data-del]").forEach((b) =>
-    b.addEventListener("click", async () => {
-      if (!confirm("Удалить черновик? Это действие необратимо.")) return;
-      b.disabled = true;  // deleting — «Удалить» неактивна до ответа
-      try {
-        const r = await fetch(U(`/api/drafts/${b.dataset.del}`), { method: "DELETE" });
-        if (!r.ok) throw new Error("draft delete failed");
-        loadDrafts();
-      } catch (e) {
-        b.disabled = false;  // при ошибке вернуть кнопку активной
-      }
-    }));
-  updateEmptyState();
+  streamProgress(it.session_id, "html", { stage: it.stage, progress_pct: it.progress_pct, resumed: true });
 }
 
 /* ---- create job ---- */
-// Г§8 — extracted so the result panel's "Повторить с тем же файлом" can re-run the
-// build directly (after streamProgress, #create stays disabled, so a synthetic click
-// wouldn't fire — we call the function).
+// Г§8 — extracted so a failed card's «Повторить» can re-run the build directly.
 async function createJob() {
   if (!selectedFile) return;
   const ex = document.getElementById("exactTransfer");
@@ -313,6 +461,21 @@ async function createJob() {
     updateEmptyState();
     return;
   }
+  // Лимит: не больше двух своих сборок одновременно (остальное — дождаться).
+  try {
+    const act = await (await fetch(U("/api/jobs/active"))).json();
+    if (Array.isArray(act) && act.length >= 2) {
+      const box = $("#result");
+      box.classList.remove("hidden");
+      box.classList.add("error");
+      box.innerHTML =
+        `<h3>Дождитесь завершения</h3>` +
+        `<p>Одновременно можно собирать не больше двух презентаций. ` +
+        `Как только одна закончится — запустите следующую.</p>`;
+      updateEmptyState();
+      return;
+    }
+  } catch (e) { /* сеть — не блокируем запуск, сервер всё равно поставит лимит */ }
   const fd = new FormData();
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
@@ -343,7 +506,9 @@ async function createJob() {
     return;
   }
   const { session_id, kind } = await res.json();
+  $("#result").classList.add("hidden");   // прошлая ошибка запуска больше не актуальна
   streamProgress(session_id, kind);
+  resetFile();                            // дропзона свободна — можно готовить следующую
 }
 $("#create").onclick = createJob;
 
@@ -354,34 +519,40 @@ let lastEventAt = 0;
 let heartbeatTimer = null;
 let currentSession = null;
 let currentStage = null;
-// Live SSE stream for the panel on screen. Hoisted to module scope so «Остановить»
-// (§ вариант A) can close it instantly — without waiting for the terminal event.
+// Live SSE stream for the watched card. Hoisted so «Остановить» can close it
+// instantly — without waiting for the terminal event.
 let currentES = null;
-// Consecutive SSE reconnect attempts (Ч§1): incremented on each es.onerror,
-// reset on any es.onmessage. Module-scoped so it survives the streamProgress
+// Consecutive SSE reconnect attempts: incremented on each es.onerror, reset on
+// any es.onmessage. Module-scoped so it survives the streamProgress
 // re-invocation used to re-attach after a transient drop.
 let reconnects = 0;
 
-function logLine(stage, detail) {
-  const log = $("#progressLog");
+// Живой лог пишем в аккордеон конкретной карточки (.pcard-loglines). Поллинг
+// эту область не трогает, поэтому строки не мигают и не пропадают.
+function logLineCard(id, stage, detail) {
+  const card = feedCards.get(id);
+  if (!card) return;
+  const log = card.querySelector(".pcard-loglines");
+  if (!log) return;
   const time = new Date().toLocaleTimeString("ru-RU");
-  const friendly = friendlyDetail(detail);
-  const label = STAGE_LABEL[stage] || stage || "";
-  const text = friendly || label;
+  const text = friendlyDetail(detail) || STAGE_LABEL[stage] || stage || "";
   if (!text) return;
   const last = log.lastElementChild;
   if (last && last.dataset.text === text) return;  // skip identical repeats
   const row = document.createElement("div");
   row.dataset.text = text;
-  row.innerHTML = `<span class="log-time">${time}</span>${text}`;
+  row.innerHTML = `<span class="t">${time}</span>${esc(text)}`;
   log.appendChild(row);
   while (log.children.length > 100) log.removeChild(log.firstChild);
   log.scrollTop = log.scrollHeight;
 }
 
 function tickHeartbeat() {
-  const hb = $("#heartbeat");
-  if (!hb || !lastEventAt) return;
+  if (!currentSession || !lastEventAt) return;
+  const card = feedCards.get(currentSession);
+  if (!card) return;
+  const hb = card.querySelector(".pcard-hb");
+  if (!hb) return;
   const secs = Math.round((Date.now() - lastEventAt) / 1000);
   if (secs >= STALL_SECONDS) {
     hb.classList.add("stale");
@@ -392,36 +563,33 @@ function tickHeartbeat() {
     hb.textContent = secs <= 1 ? "обновлено только что" : `обновлено ${secs} сек назад`;
   }
 }
-
 function stopHeartbeat() {
   if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
 }
 
+// Живая перерисовка отслеживаемой карточки из данных SSE (шапка + бар + заголовок
+// шага в аккордеоне). Данные берём из последнего снимка фида + live-карт.
+function paintCard(id) {
+  const card = feedCards.get(id);
+  if (!card) return;
+  const it = feedItemById.get(id);
+  if (it) updateCard(card, it);
+  const stageEl = card.querySelector(".pcard-stage");
+  if (stageEl) stageEl.textContent = STAGE_LABEL[currentStage] || currentStage || "Идёт сборка";
+}
+
 function streamProgress(sessionId, kind, initial) {
-  const prog = $("#progress");
-  prog.classList.remove("hidden");
-  $("#result").classList.add("hidden");
-  updateEmptyState();
   // A fresh stream starts the reconnect counter clean; a resumed reconnect
   // (initial.resumed) keeps the running count so 5 failures in a row still bail.
   if (!(initial && initial.resumed)) reconnects = 0;
-  const seedPct = initial && initial.progress_pct ? initial.progress_pct : 0;
-  const seedStage = initial && initial.stage ? initial.stage : null;
-  $("#barfill").style.width = seedPct + "%";
-  $("#stageLabel").textContent = seedStage ? (STAGE_LABEL[seedStage] || seedStage) : "Подготовка…";
-  $("#stagePct").textContent = seedPct + "%";
-  $("#stageDetail").textContent = initial && initial.resumed
-    ? "Сборка продолжается — она не прерывается при переходе между разделами."
-    : "Полная сборка обычно занимает несколько минут. Можно уйти со страницы или переключить раздел — сборка не прервётся, прогресс сохранится.";
-  $("#progressLog").innerHTML = "";
-  $("#stopBtn").disabled = false;
-  $("#stopBtn").textContent = "Остановить";   // сбрасываем метку после прошлого стопа
   currentSession = sessionId;
-  currentStage = seedStage;
+  currentStage = initial && initial.stage ? initial.stage : currentStage;
+  expandedId = sessionId;                 // следим — значит раскрываем эту карточку
+  if (initial && initial.progress_pct) livePct[sessionId] = Math.max(livePct[sessionId] || 0, initial.progress_pct);
   lastEventAt = Date.now();
   stopHeartbeat();
   heartbeatTimer = setInterval(tickHeartbeat, 1000);
-  tickHeartbeat();
+  loadFeed();                             // карточка появится/раскроется немедленно
 
   // Progress via SSE (the gateway proxies HTTP streaming, not WebSocket).
   let finished = false;
@@ -431,139 +599,50 @@ function streamProgress(sessionId, kind, initial) {
     const ev = JSON.parse(e.data);
     lastEventAt = Date.now();
     reconnects = 0;  // a live event arrived — the stream is healthy again
-    tickHeartbeat();
     const pct = ev.progress_pct || 0;
     currentStage = ev.stage || currentStage;
-    $("#barfill").style.width = pct + "%";
-    $("#stagePct").textContent = pct + "%";
-    $("#stageLabel").textContent = STAGE_LABEL[ev.stage] || ev.stage || "";
-    // Detail line: live step in plain language, falling back to the stage hint.
+    livePct[sessionId] = Math.max(livePct[sessionId] || 0, pct);
     const friendly = friendlyDetail(ev.detail);
-    $("#stageDetail").textContent =
-      friendly || STAGE_HINT[ev.stage] || $("#stageDetail").textContent;
-    logLine(ev.stage, ev.detail || ev.error);
+    if (friendly) liveDetail[sessionId] = friendly;
+    paintCard(sessionId);
+    tickHeartbeat();
+    logLineCard(sessionId, ev.stage, ev.detail || ev.error);
     if (ev.terminal) {
       finished = true;
       es.close();
       currentES = null;
       stopHeartbeat();
       currentSession = null;
-      prog.classList.add("hidden");
-      showResult(sessionId, kind, ev);
-      loadHistory();
+      delete livePct[sessionId];
+      delete liveDetail[sessionId];
+      // Готовая дека — сразу в редактор; сбой/отмена — остаёмся, карточка сама
+      // перерисуется в терминальное состояние следующим поллингом.
+      if (ev.stage === "done") { location.href = U(`/editor?session=${sessionId}`); return; }
+      loadFeed();
     }
   };
-  // Ч§1 — an SSE drop is NOT a build failure: the job keeps running on the
-  // server. Keep the progress panel, mark the heartbeat stale, and try to
-  // re-attach; only a real terminal `failed` event (handled in onmessage) draws
-  // the "Не удалось собрать презентацию" screen.
+  // An SSE drop is NOT a build failure: the job keeps running on the server.
+  // Mark the heartbeat stale and try to re-attach; only a real terminal `failed`
+  // event (handled in onmessage) turns the card red.
   es.onerror = () => {
     if (finished) return; // normal stream close after the terminal event
     es.close();
     stopHeartbeat();
     reconnects++;
-    const hb = $("#heartbeat");
-    if (reconnects > 5) {
-      // Five reconnect attempts failed in a row. Stop retrying, but the build
-      // may still be alive server-side — keep the panel, be honest, no false
-      // "failed" screen.
-      if (hb) hb.classList.add("stale");
-      $("#stageDetail").textContent =
-        "Связь с сервером потеряна. Обновите страницу — если сборка продолжается, прогресс подхватится автоматически.";
-      return;
-    }
-    if (hb) {
-      hb.classList.add("stale");
-      hb.textContent = `Связь прервалась — переподключаюсь… (попытка ${reconnects} из 5)`;
-    }
+    if (reconnects > 5) { tickHeartbeat(); return; }
+    tickHeartbeat();
     setTimeout(async () => {
       if (currentSession !== sessionId) return;  // superseded by another stream
       let items = [];
       try { items = await (await fetch(U("/api/jobs/active"))).json(); } catch (e) {}
       const job = items.find((it) => it.session_id === sessionId);
       if (job) {
-        // Still building — re-attach, seeding the panel from its known state.
-        streamProgress(sessionId, kind,
-          { stage: job.stage, progress_pct: job.progress_pct, resumed: true });
+        streamProgress(sessionId, kind, { stage: job.stage, progress_pct: job.progress_pct, resumed: true });
         return;
       }
-      // No longer active — it finished (or failed) while we were disconnected.
-      let hist = [];
-      try { hist = await (await fetch(U("/api/history"))).json(); } catch (e) {}
-      const rec = hist.find((it) => it.id === sessionId);
-      if (rec) {
-        stopHeartbeat();
-        currentSession = null;
-        prog.classList.add("hidden");
-        showResult(sessionId, kind, { stage: rec.status, error: rec.error });
-      }
-      // Neither active nor in history yet: leave the panel as-is (no false
-      // failure); a refresh or the next poll will resolve it.
+      loadFeed();  // no longer active — finished/failed while disconnected
     }, 3000);
   };
-}
-
-$("#stopBtn").onclick = async () => {
-  if (!currentSession) return;
-  const sid = currentSession;
-  // Вариант A — мгновенная реакция. Не ждём терминального события (уже идущие
-  // вызовы модели ещё доходят до конца ~до минуты): сразу закрываем поток и прячем
-  // прогресс. Кнопка остаётся на «Останавливаю…» — финальный экран НЕ показываем
-  // (сборка ещё доедет и сама уйдёт в «Историю» как «Отменено»).
-  $("#stopBtn").disabled = true;
-  $("#stopBtn").textContent = "Останавливаю…";
-  $("#stageDetail").textContent = "Останавливаю…";
-  if (currentES) { currentES.close(); currentES = null; }
-  stopHeartbeat();
-  currentSession = null;
-  $("#progress").classList.add("hidden");
-  updateEmptyState();
-  loadActive();               // сборка ещё «активна», пока доедает начатое
-  try {
-    await fetch(U(`/api/jobs/${sid}/cancel`), { method: "POST" });
-  } catch (e) { /* запрос best-effort — UI уже обновлён */ }
-  loadActive();
-  loadHistory();
-};
-
-function showResult(sessionId, kind, ev) {
-  const box = $("#result");
-  box.classList.remove("hidden");
-  const failed = ev.stage === "failed";
-  box.classList.toggle("error", failed);
-  if (failed || ev.stage === "cancelled") {
-    // Г§8 — recovery that keeps the user's context: retry with the SAME file
-    // (and «Точный перенос» choice), or pick another. ev.error is escaped —
-    // it can carry engine text. If the file is gone (e.g. a build resumed after
-    // reload), only «Выбрать другой файл» is offered.
-    const title = failed ? "Не удалось собрать презентацию" : "Сборка остановлена";
-    const msg = failed
-      ? esc(ev.error || "Произошла ошибка.")
-      : "Генерация прервана по запросу.";
-    const retry = selectedFile
-      ? `<button class="btn btn-accent" data-res="retry">Повторить с тем же файлом</button>`
-      : "";
-    box.innerHTML =
-      `<h3>${title}</h3><p>${msg}</p>` +
-      `<div class="res-actions">${retry}` +
-      `<button class="btn btn-ghost" data-res="other">Выбрать другой файл</button></div>`;
-    const retryBtn = box.querySelector('[data-res="retry"]');
-    if (retryBtn) retryBtn.addEventListener("click", () => {
-      box.classList.add("hidden");
-      updateEmptyState();
-      createJob();
-    });
-    box.querySelector('[data-res="other"]').addEventListener("click", () => {
-      resetFile();
-      box.classList.add("hidden");
-      updateEmptyState();
-      $("#drop").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
-    });
-    updateEmptyState();
-    return;
-  }
-  // HTML deck — go straight to the editor.
-  location.href = U(`/editor?session=${sessionId}`);
 }
 
 /* entry cards: choose how to start (upload | manual draft | chat draft) */
@@ -614,7 +693,7 @@ window.addEventListener("pageshow", () => {
     if (!b || b.closest(".entry-alt.is-disabled")) return;
     b.disabled = false; b.classList.remove("is-error"); b.textContent = label;
   });
-  loadDrafts();  // возврат по Back мог оставить/удалить черновик — обновляем список
+  loadFeed();  // возврат по Back мог создать/удалить сборку или черновик — обновляем
 });
 
 /* init */
@@ -622,14 +701,11 @@ window.addEventListener("pageshow", () => {
 // lazy + скрытый родитель → грузится только когда empty-state показан.
 const _emptyPrev = $("#emptyPrev");
 if (_emptyPrev) _emptyPrev.src = U("/api/templates/cover/preview");
-// Г§9 — объявляем окно ретеншена (истории и черновиков) прямо в заголовках секций.
+// Г§9 — объявляем окно ретеншена (истории и черновиков) прямо под заголовком.
 const _retHours = window.__RETENTION_HOURS__ || 24;
 const _retCap = $("#retentionCap");
-if (_retCap) _retCap.textContent = "хранится " + _retHours + " ч";
-const _draftsCap = $("#draftsCap");
-if (_draftsCap) _draftsCap.textContent = "хранится " + _retHours + " ч";
+if (_retCap) _retCap.textContent = _retHours + " часа";
 resetFile();
-loadHistory();
-loadActive();
-loadDrafts();
+loadFeed();
 autoResumeActive();
+setInterval(loadFeed, 2000);

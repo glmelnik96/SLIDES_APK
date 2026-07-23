@@ -118,6 +118,7 @@ class JobRunner:
             out.append({
                 "session_id": sid,
                 "mode": meta.get("mode", ""),
+                "source_filename": meta.get("source_filename"),
                 "stage": st.get("stage", "queued"),
                 "progress_pct": st.get("progress_pct", 0),
             })
@@ -244,7 +245,8 @@ class JobRunner:
         queue: asyncio.Queue = asyncio.Queue()
         self._queues[session_id] = queue
         self._results[session_id] = None
-        self._meta[session_id] = {"mode": _mode_of(inp), "user_id": user_id}
+        self._meta[session_id] = {"mode": _mode_of(inp), "user_id": user_id,
+                                  "source_filename": getattr(inp, "source_filename", None)}
         self._status[session_id] = {"stage": "queued", "progress_pct": 0,
                                     "terminal": False}
         self._active.add(session_id)
