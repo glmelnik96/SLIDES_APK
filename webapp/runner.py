@@ -115,10 +115,14 @@ class JobRunner:
             if user_id is not None and meta.get("user_id") != user_id:
                 continue
             st = self._status.get(sid) or {}
+            started = meta.get("started_at")
             out.append({
                 "session_id": sid,
                 "mode": meta.get("mode", ""),
                 "source_filename": meta.get("source_filename"),
+                # Реальный старт сборки (None пока в очереди) — фронт считает по нему
+                # прошедшее время mm:ss в шапке аккордеона (переживает перезагрузку).
+                "started_at": started.isoformat() if started else None,
                 "stage": st.get("stage", "queued"),
                 "progress_pct": st.get("progress_pct", 0),
             })

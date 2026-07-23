@@ -483,6 +483,35 @@ a { color: var(--accent); }
   transition: border-color var(--dur-fast) var(--ease-productive); }
 .pcard.expandable { cursor: pointer; }
 .pcard.expandable:hover { border-color: var(--accent-line); }
+/* Идёт сборка — единый градиент-«комета» из акцента (#26D07C) бежит ПО КРУГУ
+   вдоль рамки. Два фоновых слоя: padding-box заливкой фона маскирует нутро
+   (карточка остаётся «без фона»), а border-box коническим градиентом красит
+   только рамку. Незелёная часть — светло-серый --pcard-ring (НЕ фон!), иначе
+   рамка сливалась бы с фоном и «пропадала»; зелёная дуга широкая (солид ~80° +
+   плавные переходы). Вращаем угол через @property --pcard-angle — иначе угол в
+   custom-property прыгал бы дискретно, а не интерполировался. */
+@property --pcard-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.pcard[data-state="running"],
+.pcard[data-state="running"].expandable:hover {
+  --pcard-ring: #4d4d4d;
+  border-color: transparent;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    conic-gradient(from var(--pcard-angle),
+      var(--accent) 0deg, var(--accent) 60deg,
+      var(--pcard-ring) 150deg, var(--pcard-ring) 250deg,
+      var(--accent) 340deg, var(--accent) 360deg) border-box;
+  animation: pcard-rotate 3s linear infinite;
+}
+@keyframes pcard-rotate { to { --pcard-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) {
+  .pcard[data-state="running"] { animation: none; background: none;
+    border-color: var(--accent-line); }
+}
 .pcard-head { display: flex; align-items: center; gap: 15px; }
 .pcard-tool { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
   background: var(--panel); color: var(--muted); }
@@ -514,7 +543,11 @@ a { color: var(--accent); }
 .pcard-hb { color: var(--muted-2); font-size: var(--fs-xs); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
 .pcard-hb.stale { color: var(--warn-ink); }
 .pcard-hb:empty { display: none; }
-.pcard-loglines { font-size: var(--fs-xs); line-height: 1.85; color: var(--muted); }
+/* Окно лога — фиксированной высоты со своей прокруткой: строки прибавляются
+   (JS держит scrollTop у дна), но карточка больше НЕ растёт. */
+.pcard-loglines { font-size: var(--fs-xs); line-height: 1.85; color: var(--muted);
+  height: 132px; overflow-y: auto; scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent; }
 .pcard-loglines .t { color: var(--muted-2); margin-right: 10px; font-variant-numeric: tabular-nums; }
 .pcard-loglines .cur { color: var(--text); }
 .pcard-loglines .cur .live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);

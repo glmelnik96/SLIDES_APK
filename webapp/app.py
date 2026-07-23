@@ -386,13 +386,18 @@ async def get_draft(session_id: str, request: Request,
 @app.delete("/api/drafts/{session_id}")
 async def delete_draft(session_id: str, request: Request,
                        user=Depends(get_current_user)) -> JSONResponse:
-    """Delete a draft session (owner only). 404 if it doesn't exist or is not a
-    draft (a real build must go through history/clear, never here). Cleanup mirrors
-    clear_history: drop the Job row, drop any export state, remove the session dir."""
+    """Delete a draft session (owner only). Removes an editable draft — status
+    "draft", or a draft-kind build that ended in failed/cancelled (the card shows
+    «Удалить» for those too). A real UPLOAD build must go through history/clear,
+    and an in-flight run is never deletable here (would orphan the active build).
+    Cleanup mirrors clear_history: drop the Job row, export state, session dir."""
     import shutil
     async with request.app.state.sessionmaker() as s:
         job = await jobs_repo.get_owned(s, session_id, user.id)
-        if job is None or job.status != "draft":
+        deletable = job is not None and (
+            job.status == "draft"
+            or (job.kind == "draft" and job.status in ("failed", "cancelled")))
+        if not deletable:
             raise HTTPException(404, "not found")
         await s.delete(job)
         await s.commit()

@@ -14,6 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from webapp.db import models
 
 _TERMINAL = {"done", "failed", "cancelled"}
+# «Очистить историю» сносит всё, что НЕ в полёте: терминальные сборки + черновики.
+# Отдельно от _TERMINAL, чтобы список истории и mark_terminal не считали draft
+# терминальным. queued/running не трогаем — иначе осиротим активную сборку.
+_CLEARABLE = _TERMINAL | {"draft"}
 
 
 async def create(session: AsyncSession, *, session_id: str, user_id: int,
@@ -89,17 +93,18 @@ async def mark_terminal(session: AsyncSession, session_id: str, *, status: str,
 
 
 async def delete_for_user(session: AsyncSession, user_id: int) -> list[str]:
-    """Clear the user's history. Only TERMINAL jobs are removed — an in-flight
-    run (queued/running) is left intact so clearing history never deletes the Job
-    row out from under an active build (which would 404 its /events, /deck and
+    """Clear the user's list. Terminal builds AND drafts are removed (the feed is
+    one unified list, so «Очистить историю» clears everything visible). Only an
+    in-flight run (queued/running) is left intact so clearing never deletes the
+    Job row out from under an active build (which would 404 its /events, /deck and
     /cancel and orphan the result). Returns the removed session_ids."""
     rows = await session.execute(
         select(models.Job.session_id).where(
             models.Job.user_id == user_id,
-            models.Job.status.in_(_TERMINAL)))
+            models.Job.status.in_(_CLEARABLE)))
     session_ids = [r[0] for r in rows.all()]
     await session.execute(
         delete(models.Job).where(
             models.Job.user_id == user_id,
-            models.Job.status.in_(_TERMINAL)))
+            models.Job.status.in_(_CLEARABLE)))
     return session_ids

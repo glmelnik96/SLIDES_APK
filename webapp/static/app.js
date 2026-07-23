@@ -167,7 +167,7 @@ function normActive(a) {
   const running = a.stage && a.stage !== "queued";
   return {
     id: a.session_id, mode: a.mode, source_filename: a.source_filename || null, display_name: null,
-    state: running ? "running" : "queued", active: true,
+    state: running ? "running" : "queued", active: true, started_at: a.started_at || null,
     stage: a.stage || "queued", pct: a.progress_pct || 0, ts: Infinity,
     kind: a.mode === "htmlnew" ? "build" : "draft",
   };
@@ -247,12 +247,12 @@ function cardActions(it) {
   if (it.state === "running" || it.state === "queued")
     return `<button class="btn btn-stop btn-sm" data-stop="${it.id}">Остановить</button>`;
   if (it.state === "done")
-    return `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
+    return `<a class="btn btn-ghost btn-sm" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
   if (it.state === "draft" || ((it.state === "failed" || it.state === "cancelled") && it.kind === "draft"))
-    return `<a class="btn btn-ghost" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
+    return `<a class="btn btn-ghost btn-sm" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
       `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
   if (it.state === "failed" || it.state === "cancelled")
-    return `<button class="btn btn-ghost" data-retry="1">Повторить</button>`;
+    return `<button class="btn btn-ghost btn-sm" data-retry="1">Повторить</button>`;
   return "";
 }
 
@@ -516,6 +516,7 @@ $("#create").onclick = createJob;
    taking long (helps tell a slow model call apart from a real hang). */
 const STALL_SECONDS = 30;
 let lastEventAt = 0;
+let watchStartAt = 0;   // клиентский запасной старт (если сервер не дал started_at)
 let heartbeatTimer = null;
 let currentSession = null;
 let currentStage = null;
@@ -547,20 +548,32 @@ function logLineCard(id, stage, detail) {
   log.scrollTop = log.scrollHeight;
 }
 
+// Прошедшее время сборки → «M:SS». Старт берём из серверного started_at (переживает
+// перезагрузку страницы), запасной вариант — клиентский watchStartAt.
+function elapsedClock() {
+  const it = feedItemById.get(currentSession);
+  let startMs = it && it.started_at ? Date.parse(it.started_at) : NaN;
+  if (!Number.isFinite(startMs)) startMs = watchStartAt || lastEventAt;
+  const s = Math.max(0, Math.round((Date.now() - startMs) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
 function tickHeartbeat() {
   if (!currentSession || !lastEventAt) return;
   const card = feedCards.get(currentSession);
   if (!card) return;
   const hb = card.querySelector(".pcard-hb");
   if (!hb) return;
-  const secs = Math.round((Date.now() - lastEventAt) / 1000);
-  if (secs >= STALL_SECONDS) {
+  const clock = elapsedClock();
+  // «Тишина» (нет SSE-событий) считается отдельно от общего времени — по ней
+  // включаем жёлтую подсказку про долгий шаг модели.
+  const silent = Math.round((Date.now() - lastEventAt) / 1000);
+  if (silent >= STALL_SECONDS) {
     hb.classList.add("stale");
     const where = STAGE_HINT[currentStage] || "идёт долгий шаг модели.";
-    hb.textContent = `Обрабатываю уже ${secs} сек — это нормально: ${where}`;
+    hb.textContent = `Обрабатываю уже ${clock} — это нормально: ${where}`;
   } else {
     hb.classList.remove("stale");
-    hb.textContent = secs <= 1 ? "обновлено только что" : `обновлено ${secs} сек назад`;
+    hb.textContent = `Обрабатываю ${clock}`;
   }
 }
 function stopHeartbeat() {
@@ -587,6 +600,9 @@ function streamProgress(sessionId, kind, initial) {
   expandedId = sessionId;                 // следим — значит раскрываем эту карточку
   if (initial && initial.progress_pct) livePct[sessionId] = Math.max(livePct[sessionId] || 0, initial.progress_pct);
   lastEventAt = Date.now();
+  // Свежий поток (не reconnect) — сбрасываем запасной счётчик времени; на resume
+  // держим прежний, чтобы M:SS не начинался заново после разрыва SSE.
+  if (!(initial && initial.resumed)) watchStartAt = lastEventAt;
   stopHeartbeat();
   heartbeatTimer = setInterval(tickHeartbeat, 1000);
   loadFeed();                             // карточка появится/раскроется немедленно
