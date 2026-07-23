@@ -271,13 +271,16 @@ class JobRunner:
                     ev = {"session_id": session_id, "stage": "cancelled",
                           "terminal": True, "progress_pct": 0, "result_path": None}
                 else:
-                    # Г§8 — the raw class/text is an English internal dump; keep it
-                    # in the server log and show the user one calm Russian line.
+                    # Полный трейс (класс+текст, часто английский дамп) остаётся
+                    # в server-логе; пользователю показываем классифицированную
+                    # русскую причину: неподдерживаемый формат, обрыв/таймаут ИИ,
+                    # лимит Cloud.ru и т.п. — вместо «Внутренняя ошибка».
                     logger.exception(
                         "build failed (session %s)", session_id)
+                    from webapp.build_errors import user_message
                     ev = {"session_id": session_id, "stage": "failed",
                           "terminal": True, "result_path": None,
-                          "error": "Внутренняя ошибка сборки — попробуйте ещё раз"}
+                          "error": user_message(exc)}
                 ev["duration_ms"] = self._duration_ms(session_id)
                 self._status[session_id] = ev
                 if self._loop is not None:

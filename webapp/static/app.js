@@ -294,11 +294,29 @@ async function loadDrafts() {
 // wouldn't fire — we call the function).
 async function createJob() {
   if (!selectedFile) return;
+  const ex = document.getElementById("exactTransfer");
+  const isExact = !!(ex && ex.checked);
+  // Client-side gate: «Точный перенос» works only on slide-structured inputs
+  // (.pptx) or slide-delimited text (.md/.txt). A .docx has no slide boundaries,
+  // so this combo can only fail deep in the worker — reject it instantly with a
+  // clear, actionable message, no wasted round-trip or queue slot. The server
+  // enforces the same rule (400) as the source of truth.
+  if (isExact && !/\.(pptx|md|txt)$/i.test(selectedFile.name || "")) {
+    const box = $("#result");
+    box.classList.remove("hidden");
+    box.classList.add("error");
+    box.innerHTML =
+      `<h3>Не удалось запустить сборку</h3>` +
+      `<p>«Точный перенос» поддерживает .pptx, .md и .txt. ` +
+      `Для .docx снимите галочку «Точный перенос» — обычная сборка отлично ` +
+      `переносит Word, — либо сохраните файл как .pptx.</p>`;
+    updateEmptyState();
+    return;
+  }
   const fd = new FormData();
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
-  const ex = document.getElementById("exactTransfer");
-  if (ex && ex.checked) fd.append("exact_transfer", "true");
+  if (isExact) fd.append("exact_transfer", "true");
   $("#create").disabled = true;
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {
