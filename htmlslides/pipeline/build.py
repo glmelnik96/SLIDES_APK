@@ -4,12 +4,13 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
 from ..assembler import assemble
 from ..library import TemplateLibrary
-from ..models import DeckPlan
+from ..models import DeckPlan, SlidePlan
 from ..parsers import parse_file
 from .client import KimiClient, LLMFormatError
 from .filler import FillError, autofix_slide, fill_deck
@@ -18,10 +19,21 @@ from .planner import plan_deck
 
 Progress = Callable[[str], None]
 
+# Хвостовые фазы (vision-QA, autofix) — по одному LLM-вызову на слайд. Пока они
+# шли последовательно, крупная дека выедала десятки минут и упиралась в watchdog
+# сборки. Держим ту же ширину пула, что и plan/fill (RPS ограничивает клиент).
+QA_WORKERS = 8
+
+# Потолок слайдов в деке. Документ на 150+ разделов раскладывался в план на
+# сотни слайдов: даже параллельно это не влезало в watchdog, и пользователь
+# терял 40 минут ради «сборка превысила лимит времени». Лучше честно собрать
+# первые MAX_DECK_SLIDES и сказать, что документ надо разбить на части.
+MAX_DECK_SLIDES = 60
+
 
 def build_deck(input_path: str | Path, out_path: str | Path, *,
                mode: str = "auto", vision: bool = True, freeform_ok: bool = False,
-               theme: str = "dark",
+               theme: str = "dark", max_slides: int = MAX_DECK_SLIDES,
                max_autofix: int = 1, keep_artifacts: str | Path | None = None,
                client: Optional[KimiClient] = None,
                progress: Progress = lambda message: None,
@@ -68,6 +80,7 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
         raise LLMFormatError(
             "планировщик вернул пустой план (0 слайдов) — повторите запуск; "
             "возможно, превышен лимит запросов Cloud.ru")
+    plan = _cap_slides(plan, max_slides=max_slides, progress=progress)
     _dump(artifacts, "deckplan.json", plan.model_dump_json(indent=2))
 
     progress(f"fill: заполняю {len(plan.slides)} слайдов (параллельно)")
@@ -127,6 +140,7 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                 library: Optional[TemplateLibrary] = None,
                 vision: bool = True, vision_all: bool = False,
                 theme: str = "dark", max_autofix: int = 1,
+                workers: int = QA_WORKERS,
                 artifacts: Optional[Path] = None,
                 progress: Progress = lambda message: None,
                 check_cancel: Callable[[], None] = lambda: None) -> Path:
@@ -152,7 +166,7 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
 
     progress("lint: статические проверки")
     notes = _qa_notes(plan, html, vision=vision, vision_all=vision_all,
-                      client=client, theme=theme,
+                      client=client, theme=theme, workers=workers,
                       artifacts=artifacts, progress=progress)
 
     if notes and max_autofix > 0:
@@ -161,17 +175,31 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
         check_cancel()
         progress(f"autofix: исправляю слайды {sorted(notes)} (1 круг)")
         by_index = {s.index: s for s in plan.slides}
+        pending = []
         for index, slide_notes in notes.items():
-            slide = by_index.get(index)
-            if slide is None:                         # индекс notes вне плана
+            if index not in by_index:                 # индекс notes вне плана
                 progress(f"warn: замечания к несуществующему слайду {index}: "
                          + "; ".join(slide_notes))
                 continue
+            pending.append((index, slide_notes))
+
+        def _fix(item: tuple[int, list[str]]) -> tuple[int, Optional[SlidePlan]]:
+            """Автоправка одного слайда в воркере; None = оставить как было."""
+            index, slide_notes = item
             try:
-                by_index[index] = autofix_slide(client, library, slide,
-                                                slide_notes, deck_title=plan.title)
+                return index, autofix_slide(client, library, by_index[index],
+                                            slide_notes, deck_title=plan.title)
             except (FillError, LLMFormatError) as exc:
                 progress(f"warn: autofix слайда {index} не удался: {exc}")
+                return index, None
+
+        # Параллельно по той же причине, что и vision-QA: круг автоправок — это
+        # ещё по LLM-вызову на каждый отмеченный слайд. by_index читаем из
+        # воркеров, пишем только здесь.
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for index, fixed in pool.map(_fix, pending):
+                if fixed is not None:
+                    by_index[index] = fixed
         plan = plan.model_copy(
             update={"slides": [by_index[k] for k in sorted(by_index)]})
         html = assemble(plan, theme=theme)
@@ -199,9 +227,24 @@ def _normalize_indices(plan: DeckPlan) -> DeckPlan:
         for i, s in enumerate(ordered, start=1)]})
 
 
+def _cap_slides(plan: DeckPlan, *, max_slides: int, progress: Progress) -> DeckPlan:
+    """Обрезать план до max_slides, честно сказав об этом в прогресс.
+
+    Без потолка документ на сотню разделов раскладывался в план на сотни слайдов,
+    сборка не влезала в watchdog и пользователь получал таймаут вместо результата —
+    хуже, чем усечённая, но готовая дека с явным предупреждением."""
+    if max_slides <= 0 or len(plan.slides) <= max_slides:
+        return plan
+    progress(f"warn: план получился на {len(plan.slides)} слайдов — собираю первые "
+             f"{max_slides}; чтобы перенести документ целиком, разбейте его на части")
+    return _normalize_indices(
+        plan.model_copy(update={"slides": plan.slides[:max_slides]}))
+
+
 def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
               theme: str = "dark", artifacts: Optional[Path],
-              progress: Progress, vision_all: bool = False) -> dict[int, list[str]]:
+              progress: Progress, vision_all: bool = False,
+              workers: int = QA_WORKERS) -> dict[int, list[str]]:
     """slide_index -> замечания (линтер + замер bbox + vision-QA).
 
     vision_all=True ревьюит КАЖДЫЙ слайд (а не только flagged/freeform)."""
@@ -240,20 +283,33 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
             shots = screenshot_slides(tmp_html, targets, artifacts or Path(tmp))
             briefs = {s.index: json.dumps(s.content, ensure_ascii=False)[:2000]
                       for s in plan.slides}
+            reviewable = []
             for index in targets:
                 if index not in briefs or index not in shots:  # target вне плана
                     progress(f"warn: vision-qa пропущен для слайда {index}: "
                              "нет брифа или скриншота")
                     continue
-                progress(f"vision-qa: слайд {index}")
+                reviewable.append(index)
+
+            def _review(index: int) -> tuple[int, list[str]]:
+                """Ревью одного слайда в воркере: наружу — только данные."""
                 try:
                     verdict = review_slide(client, shots[index],
                                            brief=briefs[index], theme=theme)
                 except LLMFormatError as exc:
                     progress(f"warn: vision-qa слайда {index} не удался: {exc}")
-                    continue
-                if not verdict.passed:
-                    notes.setdefault(index, []).extend(verdict.fixes)
+                    return index, []
+                return index, [] if verdict.passed else list(verdict.fixes)
+
+            # Параллельно: последовательный обход стоил одного vision-вызова на
+            # слайд подряд и на крупной деке съедал watchdog целиком. Результаты
+            # разбираем в главном потоке (pool.map сохраняет порядок) — notes
+            # мутирует один поток, лок не нужен.
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for index, fixes in pool.map(_review, reviewable):
+                    progress(f"vision-qa: слайд {index}")
+                    if fixes:
+                        notes.setdefault(index, []).extend(fixes)
     except QAUnavailable as exc:
         progress(f"vision-qa пропущен: {exc}")
     return notes

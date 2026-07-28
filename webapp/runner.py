@@ -269,8 +269,14 @@ class JobRunner:
                 if session_id in self._timed_out:
                     ev = {"session_id": session_id, "stage": "failed",
                           "terminal": True, "progress_pct": 0, "result_path": None,
-                          "error": "сборка превысила лимит времени и была "
-                                   "остановлена — повторите запуск"}
+                          # «Повторите запуск» тут вводило в заблуждение: тот же
+                          # файл упрётся в тот же лимит. Таймаут почти всегда
+                          # значит «документ слишком большой» — так и говорим.
+                          "error": "сборка превысила лимит времени "
+                                   f"({self._build_timeout // 60} мин) и была "
+                                   "остановлена. Обычно причина в объёме "
+                                   "исходника — разбейте документ на части "
+                                   "и соберите их по отдельности."}
                 # A JobCancelled (or any error after a stop was requested, e.g. the
                 # engine framework re-wrapping it) is reported as a clean cancel.
                 elif isinstance(exc, JobCancelled) or session_id in self._cancel:

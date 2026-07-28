@@ -290,7 +290,11 @@ async def test_watchdog_force_fails_overrunning_build(monkeypatch):
             ev = e
             break
     assert ev["stage"] == "failed"
+    # Причина, а не «повторите запуск»: тот же файл упрётся в тот же лимит,
+    # полезный совет — разбить документ (прод-таймауты 2026-07-28).
     assert "лимит времени" in (ev.get("error") or "")
+    assert "разбейте документ на части" in ev["error"]
+    assert "повторите запуск" not in ev["error"]
     assert "s1" not in r._active           # worker freed, no zombie
     # the watchdog timer is cleaned up in work()'s finally, which runs in the
     # worker thread AFTER the terminal event is queued — poll briefly for it.

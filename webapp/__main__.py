@@ -9,9 +9,11 @@ from __future__ import annotations
 import uvicorn
 
 from webapp.config import settings
+from webapp.logging_setup import configure_service_logging
 
 
 def main() -> None:
+    configure_service_logging()      # уровни логов видны journalctl -p warning
     uvicorn.run("webapp.app:app", host=settings.host, port=settings.port,
                 reload=False)
 
