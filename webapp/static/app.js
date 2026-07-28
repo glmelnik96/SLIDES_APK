@@ -65,6 +65,10 @@ function friendlyDetail(detail) {
   if (detail.startsWith("vision-qa")) return "Проверяю внешний вид";
   if (detail.startsWith("autofix:")) return "Улучшаю слайды по результатам проверки";
   if (detail.startsWith("done:")) return "Готово";
+  // "limit:" — сообщения о принятых за пользователя решениях (напр. план обрезан
+  // по потолку слайдов). Движок пишет их сразу по-русски, поэтому показываем
+  // дословно: молча отдать неполную деку было бы нечестно.
+  if (detail.startsWith("limit:")) return detail.slice(6).trim();
   return "";  // warnings & internal notes: keep them out of the user-facing line
 }
 

@@ -59,7 +59,25 @@ def test_cap_slides_truncates_and_warns():
     out = build._cap_slides(_plan(10), max_slides=4, progress=msgs.append)
     assert len(out.slides) == 4
     assert [s.index for s in out.slides] == [1, 2, 3, 4]   # индексы перенумерованы
-    assert any(m.startswith("warn:") and "разбейте" in m for m in msgs)
+    # префикс limit:, а не warn: — иначе UI проглотит сообщение молча
+    assert len(msgs) == 1 and msgs[0].startswith("limit:")
+    assert "разбейте его на части" in msgs[0]
+
+
+def test_cap_notice_reaches_ui_and_keeps_stage():
+    """Контракт с фронтом: `limit:` не двигает стадию, но показывается дословно."""
+    from pathlib import Path
+
+    from worker.tasks.htmlnew import map_progress
+
+    msgs = []
+    build._cap_slides(_plan(10), max_slides=4, progress=msgs.append)
+    assert map_progress(msgs[0]) is None      # стадия не сбивается на «warn»
+
+    app_js = Path(__file__).resolve().parents[1] / "webapp" / "static" / "app.js"
+    src = app_js.read_text(encoding="utf-8")
+    # без этой ветки friendlyDetail вернёт "" и урезание деки пройдёт молча
+    assert 'detail.startsWith("limit:")' in src
 
 
 def test_cap_slides_noop_under_limit():

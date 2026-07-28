@@ -235,8 +235,12 @@ def _cap_slides(plan: DeckPlan, *, max_slides: int, progress: Progress) -> DeckP
     хуже, чем усечённая, но готовая дека с явным предупреждением."""
     if max_slides <= 0 or len(plan.slides) <= max_slides:
         return plan
-    progress(f"warn: план получился на {len(plan.slides)} слайдов — собираю первые "
-             f"{max_slides}; чтобы перенести документ целиком, разбейте его на части")
+    # Префикс `limit:` (а не `warn:`) — намеренно: UI глушит внутренние warn, а
+    # про урезанную деку пользователь обязан узнать. Сообщения с этим префиксом
+    # уходят в живой лог сборки дословно, поэтому пишем их на языке пользователя.
+    progress(f"limit: документ большой — план вышел на {len(plan.slides)} слайдов, "
+             f"собираю первые {max_slides}. Чтобы перенести документ целиком, "
+             "разбейте его на части и соберите по отдельности.")
     return _normalize_indices(
         plan.model_copy(update={"slides": plan.slides[:max_slides]}))
 
