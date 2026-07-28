@@ -17,11 +17,37 @@ import time
 from pathlib import Path
 from typing import Optional, Type, TypeVar
 
-from openai import OpenAI
+from openai import (APIConnectionError, APITimeoutError, InternalServerError,
+                    OpenAI, RateLimitError)
 from pydantic import BaseModel, ValidationError
 
 DEFAULT_BASE_URL = "https://foundation-models.api.cloud.ru/v1"
 DEFAULT_MODEL = "MiniMaxAI/MiniMax-M3"
+
+# Транзиентные сбои API на ОДИН вызов, уже после собственных ретраев openai-клиента
+# (лимит/таймаут/обрыв/5xx). Шлюз Cloud.ru отдаёт их пачками на несколько минут, а
+# ретраи SDK укладываются в ~15 с, поэтому «пережить блип» на уровне клиента нельзя —
+# гасить их обязана каждая пофазная обёртка, деградируя ОДИН слайд/раздел.
+#
+# Живёт здесь, а не в filler/planner: 2026-07-28 503 из шлюза убил 34-минутную
+# сборку целиком именно потому, что кортеж был скопирован в двух фазах, а третья
+# (хвост build.py — vision-QA/autofix) про него не знала. Один источник правды —
+# чтобы новая фаза не могла «забыть» его снова.
+TRANSIENT_API_ERRORS = (
+    RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
+
+# Худший случай ОДНОГО вызова = timeout × (max_retries + 1): ретраи openai-SDK
+# спят миллисекунды, всё время съедают сами висящие попытки. Watchdog сборки
+# кооперативный — прервать висящий HTTP-запрос он не может, поэтому этот худший
+# случай обязан быть много меньше BUILD_TIMEOUT_SEC (2400 с).
+#
+# Было 300 × 6 = 30 мин на ОДИН вызов. 2026-07-28 шлюз Cloud.ru деградировал, и
+# два запроса засели в таком цикле (по журналу — паузы ровно по ~4,5 мин между
+# ретраями): сборка упёрлась в 40-минутный watchdog, хотя работы оставалось на
+# минуты. Теперь 180 × 3 = 9 мин — вписывается в бюджет, а редкие транзиентные
+# сбои гасятся пофазной деградацией (TRANSIENT_API_ERRORS), а не ретраями SDK.
+DEFAULT_TIMEOUT = 180.0
+DEFAULT_MAX_RETRIES = 2
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -95,8 +121,8 @@ class KimiClient:
                  base_url: Optional[str] = None,
                  model: Optional[str] = None,
                  rps: Optional[float] = None,
-                 timeout: float = 300.0,
-                 max_retries: int = 5,
+                 timeout: float = DEFAULT_TIMEOUT,
+                 max_retries: int = DEFAULT_MAX_RETRIES,
                  extra_body: Optional[dict] = None,
                  transport=None) -> None:
         self.model = model or os.environ.get("CLOUDRU_MODEL", DEFAULT_MODEL)

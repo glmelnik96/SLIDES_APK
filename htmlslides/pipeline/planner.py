@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import structlog
-from openai import (APIConnectionError, APITimeoutError, InternalServerError,
-                    RateLimitError)
 from pydantic import BaseModel, Field
 
 from ..brand import brand_rules
@@ -31,7 +29,8 @@ from ..library import SlotSpec, TemplateLibrary
 from ..models import DeckPlan, SlidePlan
 from ..parsers.base import (Block, CodeBlock, ImageBlock, InputDoc, ListBlock,
                             Section, TableBlock, TextBlock)
-from .client import KimiClient, LLMFormatError, image_part
+from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
+                     image_part)
 
 logger = structlog.get_logger(__name__)
 
@@ -49,11 +48,6 @@ _SECTION_MAX_TOKENS = 1280
 # Параллелизм map-шага. RPS держит гейт клиента (env HTMLSLIDES_RPS, дефолт 10),
 # так что 8 воркеров безопасны и сокращают wall-clock на многосекционных доках.
 _MAP_WORKERS = 8
-
-# Транзиентные сбои API на ОДИН раздел (после собственных ретраев openai-клиента):
-# лимит/таймаут/обрыв/5xx. Не должны ронять деку — деградируем раздел на эвристику.
-_TRANSIENT_API_ERRORS = (
-    RateLimitError, APITimeoutError, APIConnectionError, InternalServerError)
 
 # Семейство текстовых перечислений — взаимозаменяемы для правила разнообразия.
 # Чарты/таймлайны/спец-шаблоны НЕ свапаем (у них профильный смысл).
@@ -312,7 +306,7 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
         # retries=1: вторую медленную попытку не ждём — деградируем эвристикой.
         sp = client.chat_json(messages, _SectionPlan, max_tokens=_SECTION_MAX_TOKENS,
                               retries=1, extra_body=_PLANNER_NO_THINK)
-    except (LLMFormatError, *_TRANSIENT_API_ERRORS) as exc:
+    except (LLMFormatError, *TRANSIENT_API_ERRORS) as exc:
         logger.warning("planner.section_fallback", heading=heading[:40],
                        error=str(exc)[:80])
         return [_fallback_slide(section, library)]

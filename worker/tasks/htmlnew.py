@@ -88,6 +88,12 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
         if progress.is_cancelled(session_id):
             raise progress.Cancelled(session_id)
 
+    def wrapup() -> bool:
+        """Мягкий дедлайн раннера: бюджет почти исчерпан — пропустить косметику.
+        Не отмена: дека всё равно доводится до файла. Упереться в watchdog хуже —
+        там пользователь не получает ничего (прод-таймауты 2026-07-28)."""
+        return progress.should_wrapup(session_id)
+
     mode_arg = "exact" if state.exact_transfer else pick_mode(input_path)
     # Движок сам владеет клиентом, чтобы после сборки прочитать накопленный
     # usage_total и посчитать рубли. В exact LLM нет — клиент не создаём (там
@@ -104,6 +110,7 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
         client=client,
         progress=on_progress,
         check_cancel=check_cancel,
+        wrapup=wrapup,
     )
     log.info("htmlnew.done", result=str(result))
     # Расход прогона: токены накопились в client.usage_total (тот же объект,

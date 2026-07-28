@@ -28,6 +28,12 @@ MAX_ACTIVE = 60  # total jobs in the system (running + waiting) before 429
 MAX_PER_USER = 15  # how many jobs one user may have in the system at once
 BUILD_WORKERS = 3  # how many builds run in parallel (rest wait in the queue)
 BUILD_TIMEOUT_SEC = 2400  # per-build watchdog: force-fail a build past this (~40 min)
+# Доля бюджета, после которой движку велено сворачиваться: довести деку до файла,
+# но пропустить необязательный хвост (vision-QA + автоправки — по LLM-вызову на
+# слайд). Watchdog отдаёт пользователю НИЧЕГО, поэтому упереться в него — худший
+# из исходов; лучше отдать деку без косметической вычитки. 0.75 от 40 мин = 30 мин:
+# хвоста хватает на оставшиеся 10 даже на деке в потолок MAX_DECK_SLIDES.
+SOFT_DEADLINE_FRAC = 0.75
 
 
 class CapacityError(RuntimeError):
@@ -73,7 +79,8 @@ class JobRunner:
         self._max_per_user = max_per_user
         self._build_timeout = build_timeout_sec
         self._timed_out: set[str] = set()      # sessions killed by the watchdog
-        self._timers: dict[str, threading.Timer] = {}
+        self._wrapup: set[str] = set()         # sessions told to skip optional polish
+        self._timers: dict[str, list[threading.Timer]] = {}
         self._queues: dict[str, asyncio.Queue] = {}
         self._results: dict[str, str | None] = {}
         self._status: dict[str, dict] = {}     # session_id -> latest event dict
@@ -163,6 +170,9 @@ class JobRunner:
         set_cancel_check = getattr(prog, "set_cancel_check", None)
         if set_cancel_check is not None:
             set_cancel_check(lambda sid: sid in self._cancel)
+        set_wrapup_check = getattr(prog, "set_wrapup_check", None)
+        if set_wrapup_check is not None:
+            set_wrapup_check(lambda sid: sid in self._wrapup)
 
         def sink(event: Any) -> None:
             sid = getattr(event, "session_id", None)
@@ -202,13 +212,25 @@ class JobRunner:
 
     # ── watchdog ─────────────────────────────────────────────────────────
     def _arm_watchdog(self, session_id: str) -> None:
-        """Start a timer that force-aborts a build past the deadline. Python can't
-        kill a thread, so we reuse cooperative cancellation: mark the session and
-        the sink raises JobCancelled at the next progress checkpoint. Each LLM call
-        returns within its own client timeout, so a checkpoint always arrives soon
-        after — bounding total runtime to ~deadline + one LLM timeout."""
+        """Arm two timers: a soft deadline and the hard watchdog.
+
+        Hard watchdog force-aborts a build past the deadline. Python can't kill a
+        thread, so we reuse cooperative cancellation: mark the session and the sink
+        raises JobCancelled at the next progress checkpoint. Total runtime is
+        bounded by deadline + the worst case of one in-flight LLM call
+        (client.DEFAULT_TIMEOUT × (DEFAULT_MAX_RETRIES + 1) — deliberately kept
+        far below this timeout, see the comment on those constants).
+
+        Soft deadline fires earlier and is NOT a cancel: it tells the engine to
+        skip the optional polish tail and still deliver a deck. Hitting the hard
+        watchdog means the user gets nothing after 40 minutes, which is the worst
+        possible outcome — the soft deadline exists to make that rare."""
         if self._build_timeout <= 0:
             return
+
+        def _fire_soft() -> None:
+            if session_id in self._active:
+                self._wrapup.add(session_id)
 
         def _fire() -> None:
             if session_id not in self._active:
@@ -216,14 +238,17 @@ class JobRunner:
             self._timed_out.add(session_id)
             self._cancel.add(session_id)       # sink raises JobCancelled next emit
 
-        t = threading.Timer(self._build_timeout, _fire)
-        t.daemon = True
-        self._timers[session_id] = t
-        t.start()
+        timers = [
+            threading.Timer(self._build_timeout * SOFT_DEADLINE_FRAC, _fire_soft),
+            threading.Timer(self._build_timeout, _fire),
+        ]
+        self._timers[session_id] = timers
+        for t in timers:
+            t.daemon = True
+            t.start()
 
     def _disarm_watchdog(self, session_id: str) -> None:
-        t = self._timers.pop(session_id, None)
-        if t is not None:
+        for t in self._timers.pop(session_id, []):
             t.cancel()
 
     # ── job lifecycle ────────────────────────────────────────────────────
@@ -309,6 +334,7 @@ class JobRunner:
                 self._disarm_watchdog(session_id)
                 self._cancel.discard(session_id)
                 self._timed_out.discard(session_id)
+                self._wrapup.discard(session_id)
                 self._futures.pop(session_id, None)
 
         self._futures[session_id] = self._pool.submit(work)

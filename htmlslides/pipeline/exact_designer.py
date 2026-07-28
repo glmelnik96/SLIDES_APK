@@ -20,8 +20,9 @@ from ..models import DeckPlan, SlidePlan
 from ..parsers.base import (CodeBlock, ImageBlock, InputDoc, ListBlock, Section,
                             TableBlock, TextBlock)
 from .exact_builder import _block_html
+from .client import TRANSIENT_API_ERRORS
 from .filler import (_FILL_MAX_TOKENS, _FILL_NO_THINK, _FORBIDDEN_FRAGMENT,
-                     _TRANSIENT_API_ERRORS, _extract_html)
+                     _extract_html)
 from .linter import ALLOWED_CLASSES, _is_allowed_class
 
 
@@ -245,7 +246,7 @@ def design_exact_deck(client, doc: InputDoc, plan: DeckPlan, *,
             return slide
         try:
             result = _design_slide(client, sections[pos], slide)
-        except _TRANSIENT_API_ERRORS as exc:
+        except TRANSIENT_API_ERRORS as exc:
             progress(f"warn: слайд {slide.index} — сбой API ({type(exc).__name__}); "
                      "оставляю простой вид (как Этап 1)")
             result = slide

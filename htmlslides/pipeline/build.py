@@ -12,7 +12,7 @@ from ..assembler import assemble
 from ..library import TemplateLibrary
 from ..models import DeckPlan, SlidePlan
 from ..parsers import parse_file
-from .client import KimiClient, LLMFormatError
+from .client import TRANSIENT_API_ERRORS, KimiClient, LLMFormatError
 from .filler import FillError, autofix_slide, fill_deck
 from .linter import lint_html
 from .planner import plan_deck
@@ -37,7 +37,8 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
                max_autofix: int = 1, keep_artifacts: str | Path | None = None,
                client: Optional[KimiClient] = None,
                progress: Progress = lambda message: None,
-               check_cancel: Callable[[], None] = lambda: None) -> Path:
+               check_cancel: Callable[[], None] = lambda: None,
+               wrapup: Callable[[], bool] = lambda: False) -> Path:
     """Собрать деку из md/docx/pptx. Возвращает путь к готовому .html.
 
     Исключения (контракт для вызывающего кода, например бота /htmlnew):
@@ -90,7 +91,8 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
 
     return polish_plan(plan, out, client=client, library=library, vision=vision,
                        theme=theme, max_autofix=max_autofix, artifacts=artifacts,
-                       progress=progress, check_cancel=check_cancel)
+                       progress=progress, check_cancel=check_cancel,
+                       wrapup=wrapup)
 
 
 def _build_exact(src: Path, out: Path, *, theme: str,
@@ -143,7 +145,8 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                 workers: int = QA_WORKERS,
                 artifacts: Optional[Path] = None,
                 progress: Progress = lambda message: None,
-                check_cancel: Callable[[], None] = lambda: None) -> Path:
+                check_cancel: Callable[[], None] = lambda: None,
+                wrapup: Callable[[], bool] = lambda: False) -> Path:
     """Assemble + QA + autofix a fully-filled DeckPlan and write the deck.
 
     The post-fill tail of build_deck, exposed so an already-authored plan (e.g. a
@@ -152,7 +155,13 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
 
     vision_all=True forces vision-QA over EVERY slide (not just lint-flagged or
     freeform ones) — used by the manual/chat 'rebuild through the engine' button so
-    it actually reviews each slide rather than skipping a lint-clean deck."""
+    it actually reviews each slide rather than skipping a lint-clean deck.
+
+    wrapup() — мягкий дедлайн раннера: «бюджет сборки почти исчерпан». Хвост
+    (vision-QA + автоправки) стоит по LLM-вызову на слайд и при этом только
+    косметика поверх уже заполненной деки. Упереться в watchdog значит отдать
+    пользователю НИЧЕГО, поэтому по этому сигналу хвост пропускается, а дека
+    всё равно доводится до файла."""
     out = Path(out_path)
     # Client is only needed for vision-QA and autofix; build it lazily so a pure
     # assemble (vision=False, max_autofix=0) needs no CLOUDRU_API_KEY.
@@ -165,9 +174,21 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
     html = assemble(plan, theme=theme)
 
     progress("lint: статические проверки")
-    notes = _qa_notes(plan, html, vision=vision, vision_all=vision_all,
+    # Проверяем дважды, а не один раз на входе: сама vision-QA идёт минутами и
+    # вполне может исчерпать бюджет уже после первой проверки.
+    skip_vision = vision and wrapup()
+    if skip_vision:
+        progress("limit: времени на сборку почти не осталось — пропускаю "
+                 "визуальную вычитку, отдаю деку как есть.")
+    notes = _qa_notes(plan, html, vision=vision and not skip_vision,
+                      vision_all=vision_all,
                       client=client, theme=theme, workers=workers,
                       artifacts=artifacts, progress=progress)
+
+    if notes and max_autofix > 0 and wrapup():
+        progress("limit: времени на сборку почти не осталось — пропускаю круг "
+                 "автоправок, отдаю деку как есть.")
+        max_autofix = 0
 
     if notes and max_autofix > 0:
         # Вариант A: не начинаем круг автоправок (это ещё LLM-вызовы на слайд),
@@ -191,6 +212,15 @@ def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                                             slide_notes, deck_title=plan.title)
             except (FillError, LLMFormatError) as exc:
                 progress(f"warn: autofix слайда {index} не удался: {exc}")
+                return index, None
+            except TRANSIENT_API_ERRORS as exc:
+                # 503/лимит/таймаут шлюза на ОДНОМ слайде не должен обнулять уже
+                # заполненную деку: к autofix мы приходим после plan+fill, то есть
+                # после десятков минут работы и оплаченных токенов. Худшее, что
+                # теряется, — одна косметическая правка (прод-сбой 2026-07-28 18:37,
+                # где 503 выбросился наружу и убил сборку целиком).
+                progress(f"warn: autofix слайда {index} — сбой API "
+                         f"({type(exc).__name__}); оставляю слайд как есть")
                 return index, None
 
         # Параллельно по той же причине, что и vision-QA: круг автоправок — это
@@ -302,6 +332,12 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
                                            brief=briefs[index], theme=theme)
                 except LLMFormatError as exc:
                     progress(f"warn: vision-qa слайда {index} не удался: {exc}")
+                    return index, []
+                except TRANSIENT_API_ERRORS as exc:
+                    # Тот же контракт, что и в fill_deck: транзиентный сбой шлюза
+                    # стоит ревью одного слайда, а не всей сборки.
+                    progress(f"warn: vision-qa слайда {index} — сбой API "
+                             f"({type(exc).__name__}); слайд без ревью")
                     return index, []
                 return index, [] if verdict.passed else list(verdict.fixes)
 

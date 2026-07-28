@@ -43,6 +43,24 @@ def is_cancelled(session_id: str) -> bool:
     return bool(_cancel_check(session_id))
 
 
+# Мягкий дедлайн: «бюджет сборки почти исчерпан, сворачивайся». В отличие от
+# _cancel_check это НЕ отмена — движок доводит деку до файла, но пропускает
+# необязательный хвост (vision-QA, автоправки), который стоит по LLM-вызову на
+# слайд. Ставится тем же раннером, что владеет watchdog'ом.
+_wrapup_check: Callable[[str], bool] = lambda session_id: False
+
+
+def set_wrapup_check(fn: Callable[[str], bool]) -> None:
+    """Install the soft-deadline predicate (see ``_wrapup_check``)."""
+    global _wrapup_check
+    _wrapup_check = fn
+
+
+def should_wrapup(session_id: str) -> bool:
+    """Пора сворачиваться: отдать деку без косметики, но отдать."""
+    return bool(_wrapup_check(session_id))
+
+
 def publish(event: ProgressEvent) -> None:
     """Default sink — a no-op. The runtime (``webapp.runner``) overrides this
     with its routing sink before any job starts; if a stray event is emitted
