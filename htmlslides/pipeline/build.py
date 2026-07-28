@@ -69,6 +69,9 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     doc = parse_file(src)
     slide_images = _render_source_slides(src, mode, artifacts, progress)
 
+    doc, slide_images, capped = _cap_sections(
+        doc, slide_images, max_slides=max_slides, progress=progress)
+
     progress(f"plan: планирую деку ({client.model})")
     plan = plan_deck(client, doc, library,
                      slide_images=slide_images, freeform_ok=freeform_ok)
@@ -81,7 +84,8 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
         raise LLMFormatError(
             "планировщик вернул пустой план (0 слайдов) — повторите запуск; "
             "возможно, превышен лимит запросов Cloud.ru")
-    plan = _cap_slides(plan, max_slides=max_slides, progress=progress)
+    plan = _cap_slides(plan, max_slides=max_slides, progress=progress,
+                       announce=not capped)
     _dump(artifacts, "deckplan.json", plan.model_dump_json(indent=2))
 
     progress(f"fill: заполняю {len(plan.slides)} слайдов (параллельно)")
@@ -257,20 +261,51 @@ def _normalize_indices(plan: DeckPlan) -> DeckPlan:
         for i, s in enumerate(ordered, start=1)]})
 
 
-def _cap_slides(plan: DeckPlan, *, max_slides: int, progress: Progress) -> DeckPlan:
+# Префикс `limit:` (а не `warn:`) — намеренно: UI глушит внутренние warn, а про
+# урезанную деку пользователь обязан узнать. Сообщения с этим префиксом уходят в
+# живой лог сборки дословно, поэтому пишем их на языке пользователя.
+_CAP_NOTICE = ("limit: документ большой — собираю первые {n} слайдов. Чтобы "
+               "перенести документ целиком, разбейте его на части и соберите "
+               "по отдельности.")
+
+
+def _cap_sections(doc, slide_images, *, max_slides: int,
+                  progress: Progress):
+    """Отбросить разделы, слайды которых всё равно срежет потолок.
+
+    Планирование стоит LLM-вызова на РАЗДЕЛ, и на крупном документе это половина
+    всей сборки (замер 2026-07-28: фаза plan — 544 с из 1102 с). Планировать
+    полторы сотни разделов, чтобы затем выбросить всё после 60-го слайда, —
+    чистая потеря и времени, и денег.
+
+    Каждый раздел даёт 1-2 слайда (`_plan_section`, фолбэк тоже даёт один),
+    поэтому первых max_slides разделов заведомо хватает, чтобы набрать
+    max_slides слайдов. Возвращает (doc, slide_images, обрезали ли).
+
+    slide_images режем тем же срезом: в pptx-rebrand скриншоты идут 1-в-1 с
+    разделами, и обрезка одних лишь разделов сдвинула бы весь визуальный ряд.
+    """
+    if max_slides <= 0 or len(doc.sections) <= max_slides:
+        return doc, slide_images, False
+    progress(_CAP_NOTICE.format(n=max_slides))
+    return (doc.model_copy(update={"sections": doc.sections[:max_slides]}),
+            list(slide_images)[:max_slides], True)
+
+
+def _cap_slides(plan: DeckPlan, *, max_slides: int, progress: Progress,
+                announce: bool = True) -> DeckPlan:
     """Обрезать план до max_slides, честно сказав об этом в прогресс.
 
     Без потолка документ на сотню разделов раскладывался в план на сотни слайдов,
     сборка не влезала в watchdog и пользователь получал таймаут вместо результата —
-    хуже, чем усечённая, но готовая дека с явным предупреждением."""
+    хуже, чем усечённая, но готовая дека с явным предупреждением.
+
+    announce=False, когда про потолок уже сказал `_cap_sections`: одно урезание —
+    одно сообщение, иначе пользователь видит дубль."""
     if max_slides <= 0 or len(plan.slides) <= max_slides:
         return plan
-    # Префикс `limit:` (а не `warn:`) — намеренно: UI глушит внутренние warn, а
-    # про урезанную деку пользователь обязан узнать. Сообщения с этим префиксом
-    # уходят в живой лог сборки дословно, поэтому пишем их на языке пользователя.
-    progress(f"limit: документ большой — план вышел на {len(plan.slides)} слайдов, "
-             f"собираю первые {max_slides}. Чтобы перенести документ целиком, "
-             "разбейте его на части и соберите по отдельности.")
+    if announce:
+        progress(_CAP_NOTICE.format(n=max_slides))
     return _normalize_indices(
         plan.model_copy(update={"slides": plan.slides[:max_slides]}))
 

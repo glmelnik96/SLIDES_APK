@@ -109,6 +109,52 @@ def test_cap_slides_disabled_by_zero():
     assert build._cap_slides(plan, max_slides=0, progress=lambda m: None) is plan
 
 
+# ── _cap_sections: не планировать то, что потолок всё равно выбросит ─────────
+def _doc(n: int):
+    from htmlslides.parsers.base import InputDoc, Section
+    return InputDoc(title="D", sections=[Section(heading=f"h{i}", level=2,
+                                                 blocks=[]) for i in range(n)])
+
+
+def test_cap_sections_truncates_before_planning_and_warns():
+    """Планирование стоит LLM-вызова на РАЗДЕЛ и на замере 2026-07-28 съедало
+    49% сборки. Разделы за потолком планировать бессмысленно — их слайды
+    выбросит _cap_slides."""
+    msgs = []
+    doc, images, cut = build._cap_sections(_doc(150), [], max_slides=60,
+                                           progress=msgs.append)
+    assert len(doc.sections) == 60      # каждый раздел даёт ≥1 слайд → 60 хватает
+    assert cut is True
+    assert len(msgs) == 1 and msgs[0].startswith("limit:")
+
+
+def test_cap_sections_keeps_images_aligned():
+    """pptx-rebrand: скриншоты идут 1-в-1 с разделами. Обрезать разделы, не
+    обрезав картинки, значит сдвинуть планировщику весь визуальный ряд."""
+    doc, images, cut = build._cap_sections(
+        _doc(10), [f"s{i}.png" for i in range(10)], max_slides=4,
+        progress=lambda m: None)
+    assert len(doc.sections) == 4 and images == ["s0.png", "s1.png", "s2.png",
+                                                 "s3.png"]
+
+
+def test_cap_sections_noop_under_limit():
+    msgs = []
+    doc = _doc(5)
+    out, images, cut = build._cap_sections(doc, [], max_slides=60,
+                                           progress=msgs.append)
+    assert out is doc and cut is False and msgs == []
+
+
+def test_cap_slides_stays_silent_when_sections_already_announced():
+    """Одно урезание — одно сообщение. Разделы обрезаны → про потолок уже
+    сказано, второе сообщение от _cap_slides было бы дублем."""
+    msgs = []
+    out = build._cap_slides(_plan(10), max_slides=4, progress=msgs.append,
+                            announce=False)
+    assert len(out.slides) == 4 and msgs == []
+
+
 # ── vision-QA пулом ──────────────────────────────────────────────────────────
 def _stub_qa_env(monkeypatch, tmp_path, review):
     """Подменить окружение vision-QA: без браузера и без сети."""
