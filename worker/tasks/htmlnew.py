@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -73,11 +74,19 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
     log = logger.bind(session_id=session_id)
 
     current: tuple[Stage, int] = (Stage.PARSING, 5)
+    phase_started = time.monotonic()
 
     def on_progress(message: str) -> None:
-        nonlocal current
+        nonlocal current, phase_started
         mapped = map_progress(message)
         if mapped is not None:
+            if mapped[0] is not current[0]:
+                # Длительность каждой фазы — в журнал. Без неё разбор прод-таймаута
+                # сводится к подсчёту строк httpx вручную: 2026-07-28 именно так и
+                # пришлось искать, какая фаза съела 40-минутный бюджет.
+                log.info("htmlnew.phase", phase=current[0].value,
+                         seconds=round(time.monotonic() - phase_started, 1))
+                phase_started = time.monotonic()
             current = mapped
         progress.stage(session_id, current[0], current[1], detail=message)
 
@@ -112,6 +121,8 @@ def run_htmlnew(state: SessionState) -> dict[str, Any]:
         check_cancel=check_cancel,
         wrapup=wrapup,
     )
+    log.info("htmlnew.phase", phase=current[0].value,       # хвостовая фаза
+             seconds=round(time.monotonic() - phase_started, 1))
     log.info("htmlnew.done", result=str(result))
     # Расход прогона: токены накопились в client.usage_total (тот же объект,
     # что мутировал build_deck). Считаем рубли по прайсу и кладём в done →
