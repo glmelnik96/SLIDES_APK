@@ -9,6 +9,8 @@ __pycache__/
 data/
 # local scratch
 tmp_*.py
+# per-machine разрешения Claude Code (локальные пути, SSH-команды) — не общий конфиг
+.claude/settings.local.json
 # model-eval artifacts (decks, PNGs, reports)
 scripts/eval_out/
 # macOS Finder metadata
