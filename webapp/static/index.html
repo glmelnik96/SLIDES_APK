@@ -27,12 +27,10 @@
   <section class="intro">
     <h1 class="intro-title">Презентации в бренде Cloud.ru</h1>
     <p class="intro-lead">Загрузите документ (<b>.md / .txt / .docx / .pptx</b>) &mdash; модель разобьёт его на слайды и соберёт деку в фирменном стиле. Готовую презентацию можно править в браузере и скачать в HTML, PNG или PPTX.</p>
-    <p class="intro-lead">Нет готового документа? Подготовьте исходник одним из способов:</p>
-
     <div class="prep-cards">
       <div class="prep-card">
-        <div class="prep-card__name">Промпт для нейросети</div>
-        <p class="prep-card__desc">Вставьте в ChatGPT, Claude или GigaChat &mdash; бот соберёт .md&#8209;файл под наш генератор. Деку в стиле Cloud.ru построим здесь; текст сжимается под макеты слайдов.</p>
+        <div class="prep-card__name">Нет готового документа? Промпт для нейросети</div>
+        <p class="prep-card__desc">Вставьте в ChatGPT, Claude или GigaChat &mdash; бот соберёт .md&#8209;файл под наш генератор из вашего обсуждения. Останется загрузить его ниже.</p>
         <div class="prep-card__actions">
           <button id="copyPrompt" class="btn" type="button">Скопировать промпт</button>
           <button id="togglePrompt" class="prep-toggle" type="button" aria-expanded="false">Показать текст</button>
@@ -45,21 +43,13 @@
 
 В файле — только сам markdown: никаких комментариев, пояснений, приветствий и ```-обёрток.</pre>
       </div>
-
-      <div class="prep-card">
-        <div class="prep-card__name">Скилл для Claude Code</div>
-        <p class="prep-card__desc">Соберите презентацию у себя, своими руками &mdash; полный бренд&#8209;кит Cloud.ru, без ограничений наших макетов. Скилл написан под Claude Code; для Codex потребуется доработка.</p>
-        <div class="prep-card__actions">
-          <a id="skillDownload" class="btn" href="/downloads/cloud-ru-slides.skill" download>Скачать .skill &middot; 22&nbsp;МБ</a>
-        </div>
-      </div>
     </div>
   </section>
 
   <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
-    <p class="entry-lead">Три способа сделать презентацию — выберите один, смотря что у вас уже есть.</p>
+    <p class="entry-lead">Соберите презентацию на сервисе — или скачайте скилл и соберите у себя, в Claude Code.</p>
     <div class="entry-stack">
 
       <!-- Основной способ: загрузить документ -->
@@ -117,6 +107,17 @@
             <span class="entry-open" id="openManual">В разработке</span>
           </div>
         </div>
+        <a class="entry-alt entry-alt--link" id="skillDownload"
+           href="/downloads/cloud-ru-slides.skill" download>
+          <div class="alt-main">
+            <div class="alt-name">Собрать у себя &mdash; скилл для Claude Code</div>
+            <p class="alt-desc">Полный бренд-кит Cloud.ru: презентацию собирает ваш Claude Code, без ограничений наших макетов. Для Codex скилл потребует доработки.</p>
+          </div>
+          <div class="alt-aside">
+            <div class="alt-when">когда сборка нужна не на сайте</div>
+            <span class="entry-open">Скачать .skill &middot; 22&nbsp;МБ</span>
+          </div>
+        </a>
       </div>
 
     </div>

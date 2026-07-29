@@ -159,9 +159,9 @@ a { color: var(--accent); }
   font-size: var(--fs-xs); color: var(--accent); background: var(--accent-dim);
   border: 1px solid var(--accent-line); padding: 1px 5px; }
 
-/* ===== Подготовка исходника: две карточки (промпт для LLM / скилл) =====
+/* ===== Подготовка исходника: карточка промпта для LLM =====
    Стиль наследует .entry-alts: 1px-рамки, плоские панели, без теней (канон). */
-.prep-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+.prep-cards { display: grid; grid-template-columns: 1fr; max-width: 640px; gap: 12px; margin-top: 20px; }
 .prep-card { border: 1px solid var(--line); padding: 16px 20px;
   display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .prep-card__name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
@@ -175,9 +175,10 @@ a { color: var(--accent); }
   border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
-@media (max-width: 860px) {
-  .prep-cards { grid-template-columns: 1fr; }
-}
+
+/* Строка-альтернатива «скилл»: настоящая ссылка-скачивание в списке точек входа.
+   Наследует .entry-alt; якорные дефолты глушим, клик ловит вся строка. */
+.entry-alt--link { color: inherit; text-decoration: none; }
 
 /* ===== Три точки входа: карточки выбора способа старта ===== */
 .entry { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 36) */
