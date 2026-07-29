@@ -2,10 +2,12 @@
 структура собирается в коде. Регрессия для прод-падения `LLMFormatError: no JSON
 object`, которое роняло ВЕСЬ билд: теперь сбой раздела изолирован (эвристический
 фолбэк), а cover/разнообразие/accent детерминированы кодом."""
+import base64
+
 import pytest
 
 from htmlslides.library import TemplateLibrary
-from htmlslides.models import DeckPlan
+from htmlslides.models import DeckPlan, SlidePlan
 from htmlslides.parsers.base import (InputDoc, ListBlock, Section, TableBlock,
                                      TextBlock)
 from htmlslides.pipeline import planner
@@ -220,3 +222,141 @@ def test_divider_label_trims_on_word_boundary():
     # section-frame label max_chars=14 → режем по слову, капсом
     assert planner._divider_label("Информационная безопасность", 14) == "ИНФОРМАЦИОННАЯ"
     assert planner._divider_label("Часть 1", 16) == "ЧАСТЬ 1"
+
+
+# ============ Точность: brief несёт исходник, rebrand — map+reduce ============
+#
+# Замер прод-кейсов 2026-07-29: pptx-rebrand удерживал 31–66% фактов исходника.
+# Две причины: (1) filler видел ТОЛЬКО пересказ-brief планировщика — исходный
+# текст доезжал лишь при пустом brief; (2) rebrand планировался монолитным
+# vision-вызовом на всю деку (16K токенов на 39 слайдов ≈ по абзацу на слайд).
+
+class CapturingClient(FakeClient):
+    """FakeClient, дополнительно запоминающий (messages, model_cls) вызовов."""
+    def __init__(self, replies):
+        super().__init__(replies)
+        self.seen = []
+
+    def chat_json(self, messages, model_cls, *, max_tokens=4096, retries=2,
+                  extra_body=None):
+        self.seen.append((messages, model_cls))
+        return super().chat_json(messages, model_cls, max_tokens=max_tokens,
+                                 retries=retries, extra_body=extra_body)
+
+
+def _pngs(tmp_path, n):
+    paths = []
+    for i in range(n):
+        p = tmp_path / f"slide{i}.png"
+        p.write_bytes(b"PNG-BYTES-%d" % i)
+        paths.append(p)
+    return paths
+
+
+def _b64(path) -> str:
+    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+def _image_urls(messages) -> list[str]:
+    content = messages[-1]["content"]
+    if isinstance(content, str):
+        return []
+    return [part["image_url"]["url"] for part in content
+            if part.get("type") == "image_url"]
+
+
+def test_brief_always_carries_source_text():
+    """Brief = пересказ модели + ВСЕГДА дословный текст раздела: filler видит
+    конкретику исходника, а не только сжатый пересказ планировщика."""
+    lib = TemplateLibrary.load()
+    client = FakeClient([_sp("three-col", brief="пересказ-1"),
+                         _sp("statement", brief="пересказ-2")])
+    plan = planner.plan_deck(client, _doc(), lib)
+    briefs = " ".join(s.content["brief"] for s in plan.slides[1:])
+    assert "пересказ-1" in briefs and "пересказ-2" in briefs
+    assert "A — раз" in briefs                    # исходник доехал дословно
+    assert "152-ФЗ" in briefs
+
+
+def test_rebrand_aligned_images_use_map_reduce(tmp_path):
+    """Скриншоты 1:1 с разделами → per-section map+reduce вместо монолита:
+    вызов на раздел, модель _SectionPlan (не DeckPlan)."""
+    lib = TemplateLibrary.load()
+    imgs = _pngs(tmp_path, 2)
+    client = CapturingClient([_sp("three-col"), _sp("statement")])
+    plan = planner.plan_deck(client, _doc(), lib, slide_images=imgs)
+    assert client.calls == 2
+    assert all(mc is _SectionPlan for _, mc in client.seen)
+    assert plan.slides[0].template_id == "cover"
+    # каждый map-вызов несёт ровно один скриншот; оба скриншота использованы
+    per_call = [_image_urls(m) for m, _ in client.seen]
+    assert all(len(urls) == 1 for urls in per_call)
+    assert {urls[0] for urls in per_call} == \
+        {f"data:image/png;base64,{_b64(p)}" for p in imgs}
+
+
+def test_rebrand_map_call_gets_its_own_screenshot(tmp_path):
+    """Порядок сохранён: i-й раздел получает i-й скриншот (workers=1 для
+    детерминизма), плюс rebrand-примечание в тексте вызова."""
+    lib = TemplateLibrary.load()
+    imgs = _pngs(tmp_path, 2)
+    client = CapturingClient([_sp("three-col"), _sp("statement")])
+    planner._plan_deck_text(client, _doc(), lib, freeform_ok=False,
+                            workers=1, images=imgs)
+    for (messages, _), img in zip(client.seen, imgs):
+        urls = _image_urls(messages)
+        assert urls == [f"data:image/png;base64,{_b64(img)}"]
+        text = messages[-1]["content"][0]["text"]
+        assert "скриншот" in text.lower()
+
+
+def test_rebrand_empty_section_drops_its_screenshot_not_neighbours(tmp_path):
+    """Пустой раздел выпадает вместе СО СВОИМ скриншотом — соседние не сдвигаются
+    (zip ДО фильтра _has_content)."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="A", level=1, blocks=[TextBlock(text="Текст A.")]),
+        Section(heading="", level=1, blocks=[]),           # пустой слайд
+        Section(heading="B", level=1, blocks=[TextBlock(text="Текст B.")]),
+    ])
+    imgs = _pngs(tmp_path, 3)
+    client = CapturingClient([_sp("statement"), _sp("statement")])
+    planner._plan_deck_text(client, doc, lib, freeform_ok=False,
+                            workers=1, images=imgs)
+    assert client.calls == 2
+    got = [_image_urls(m)[0] for m, _ in client.seen]
+    assert got == [f"data:image/png;base64,{_b64(imgs[0])}",
+                   f"data:image/png;base64,{_b64(imgs[2])}"]
+
+
+def test_rebrand_heading_only_slides_are_planned_not_dividerized(tmp_path):
+    """В rebrand дивайдеры не синтезируем: слайд-«шапка» исходника планируется
+    как обычный слайд (структуру задаёт исходная дека, не наша эвристика)."""
+    lib = TemplateLibrary.load()
+    doc = InputDoc(title="D", sections=[
+        Section(heading="Часть 1", level=1, blocks=[]),
+        Section(heading="Обзор", level=1, blocks=[TextBlock(text="Обзор.")]),
+        Section(heading="Часть 2", level=1, blocks=[]),
+        Section(heading="Итоги", level=1, blocks=[TextBlock(text="Выводы.")]),
+    ])
+    imgs = _pngs(tmp_path, 4)
+    client = CapturingClient([_sp("statement")] * 4)
+    plan = planner._plan_deck_text(client, doc, lib, freeform_ok=False,
+                                   workers=1, images=imgs)
+    assert client.calls == 4                       # все 4 слайда планируются LLM
+    ids = [s.template_id for s in plan.slides]
+    assert "section-dots" not in ids and "section-frame" not in ids
+
+
+def test_rebrand_misaligned_images_fall_back_to_monolith(tmp_path):
+    """Скриншоты не 1:1 с разделами (рендер отдал не всё) → прежний монолитный
+    vision-вызов со всеми скриншотами, а не молчаливый сдвиг визуального ряда."""
+    lib = TemplateLibrary.load()
+    imgs = _pngs(tmp_path, 3)                      # 3 картинки на 2 раздела
+    deck = DeckPlan(title="D", slides=[SlidePlan(
+        index=1, type="title", template_id="cover", content={"brief": "D"})])
+    client = CapturingClient([deck])
+    planner.plan_deck(client, _doc(), lib, slide_images=imgs)
+    assert client.calls == 1
+    assert client.seen[0][1] is DeckPlan
+    assert len(_image_urls(client.seen[0][0])) == 3

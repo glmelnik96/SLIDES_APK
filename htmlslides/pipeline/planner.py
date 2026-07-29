@@ -9,8 +9,11 @@ reasoning-heavy модели уходили в runaway и возвращали �
 — пустой ответ роняет ОДИН слайд, а не деку (тот же паттерн отказоустойчивости, что
 у filler).
 
-Для pptx-входа (rebrand) сохранён монолитный vision-вызов: ему нужны PNG всех
-исходных слайдов разом, разбить по разделам нельзя.
+Pptx-вход (rebrand) идёт тем же map+reduce: скриншоты слайдов 1:1 с разделами,
+поэтому каждый map-вызов получает СВОЙ скриншот. Монолитный vision-вызов остался
+только фолбэком на случай рассинхрона «скриншоты ≠ разделы» (рендер отдал не всё).
+Причина ухода от монолита — точность: 16K токенов на всю деку давали ~абзац
+пересказа на слайд, замер 2026-07-29 показал удержание 31–66% фактов исходника.
 """
 from __future__ import annotations
 
@@ -44,6 +47,11 @@ _PLANNER_NO_THINK = {"thinking": {"type": "disabled"}}
 # только предохранителем от reasoning-runaway: чем он ниже, тем быстрее пустой ответ
 # отвалится в фолбэк (а не будет минуту молотить скрытое рассуждение).
 _SECTION_MAX_TOKENS = 1280
+
+# Для map-вызова СО скриншотом потолок выше: brief обязан вместить всё содержимое
+# слайда (в т.ч. текст, которого нет в XML — вектор/SmartArt), обрезанный JSON
+# отвалился бы в фолбэк и потерял визуальную часть.
+_SECTION_VISION_MAX_TOKENS = 2560
 
 # Параллелизм map-шага. RPS держит гейт клиента (env HTMLSLIDES_RPS, дефолт 10),
 # так что 8 воркеров безопасны и сокращают wall-clock на многосекционных доках.
@@ -127,6 +135,12 @@ _FREEFORM_FORBIDDEN = ('- freeform запрещён: каждый слайд о�
 
 _REBRAND_NOTE = ("Ниже — скриншоты слайдов исходной презентации (режим rebrand). "
                  "Перенеси её структуру, порядок и содержание слайдов в бренд-шаблоны.")
+
+_SECTION_REBRAND_NOTE = (
+    "Приложен скриншот этого слайда исходной презентации (режим rebrand). Перенеси "
+    "в brief ВСЁ его содержимое — заголовок, пункты, цифры, подписи — без потери. "
+    "Текст раздела выше может быть неполным (вектор/схемы в XML не видны) — "
+    "скриншот главнее.")
 
 
 # ============================ ОБЩЕЕ ============================
@@ -289,22 +303,49 @@ def _fallback_template(section: Section, library: TemplateLibrary) -> str:
     return next(iter(known))
 
 
+def _merge_brief(model_brief: str, section: Section) -> str:
+    """Brief модели + ВСЕГДА дословный текст раздела.
+
+    Раньше исходник попадал в brief только при ПУСТОМ ответе модели, и filler видел
+    лишь сжатый пересказ — замер прод-кейсов 2026-07-29 показал удержание 31–66%
+    фактов. Теперь пересказ модели задаёт подачу (что вынести, каким шаблоном),
+    а конкретику filler берёт из дословного исходника."""
+    model_brief = model_brief.strip()
+    src = _section_to_text(section)
+    if not model_brief:
+        return src
+    return (f"{model_brief}\n\n"
+            f"Исходный текст раздела (факты переносить дословно):\n{src}")
+
+
 def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
-                  section: Section, *, freeform_ok: bool) -> list[SlidePlan]:
-    """Map-шаг: один раздел -> 1-2 SlidePlan. Любой сбой -> эвристический фолбэк."""
+                  section: Section, *, freeform_ok: bool,
+                  image: Path | None = None) -> list[SlidePlan]:
+    """Map-шаг: один раздел -> 1-2 SlidePlan. Любой сбой -> эвристический фолбэк.
+
+    image — скриншот исходного слайда (pptx-rebrand): прикладывается к вызову,
+    чтобы brief вобрал и то, чего нет в XML-тексте (вектор, SmartArt, схемы)."""
     known = {t.id for t in library.templates}
     rule = _FREEFORM_ALLOWED if freeform_ok else _FREEFORM_FORBIDDEN
     system = SECTION_SYSTEM.format(menu=menu, freeform_rule=rule, rules=brand_rules())
     heading = section.heading or "Раздел"
     user = f"Раздел «{heading}».\n\nТекст раздела:\n{_section_to_text(section)}"
+    if image is not None:
+        content: str | list = [
+            {"type": "text", "text": f"{user}\n\n{_SECTION_REBRAND_NOTE}"},
+            image_part(image)]
+        max_tokens = _SECTION_VISION_MAX_TOKENS
+    else:
+        content = user
+        max_tokens = _SECTION_MAX_TOKENS
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": user}]
+                {"role": "user", "content": content}]
     try:
         # max_tokens мал нарочно: валидный план раздела — ~0.5KB, потолок не нужен.
         # При reasoning-runaway модель жжёт ВЕСЬ бюджет до пустого ответа — низкий
         # потолок делает такой провал в разы быстрее (к фолбэку).
         # retries=1: вторую медленную попытку не ждём — деградируем эвристикой.
-        sp = client.chat_json(messages, _SectionPlan, max_tokens=_SECTION_MAX_TOKENS,
+        sp = client.chat_json(messages, _SectionPlan, max_tokens=max_tokens,
                               retries=1, extra_body=_PLANNER_NO_THINK)
     except (LLMFormatError, *TRANSIENT_API_ERRORS) as exc:
         logger.warning("planner.section_fallback", heading=heading[:40],
@@ -313,7 +354,7 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
 
     out: list[SlidePlan] = []
     for ss in sp.slides[:2]:                       # не больше 2 слайдов на раздел
-        brief = ss.brief.strip() or _section_to_text(section)
+        brief = _merge_brief(ss.brief, section)
         if ss.freeform and freeform_ok:
             out.append(SlidePlan(index=1, type="content", template_id=None,
                                  freeform=True, content={"brief": brief}))
@@ -426,10 +467,17 @@ def _pick_accent(slides: list[SlidePlan]) -> None:
 
 
 def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
-                    freeform_ok: bool, workers: int = _MAP_WORKERS) -> DeckPlan:
+                    freeform_ok: bool, workers: int = _MAP_WORKERS,
+                    images: Sequence[Path] | None = None) -> DeckPlan:
     menu = library_menu(library)
-    sections = [s for s in doc.sections if _has_content(s)]
-    dividers = _divider_flags(sections)
+    # images (pptx-rebrand) идут 1:1 с doc.sections — зипуем ДО фильтра пустых
+    # разделов, иначе выпавший раздел сдвинул бы весь визуальный ряд.
+    imgs: list[Path | None] = list(images) if images else [None] * len(doc.sections)
+    pairs = [(s, im) for s, im in zip(doc.sections, imgs) if _has_content(s)]
+    sections = [s for s, _ in pairs]
+    # В rebrand дивайдеры не синтезируем: структуру задаёт исходная дека, а
+    # слайд-«шапка» исходника — полноценный слайд со своим скриншотом.
+    dividers = [False] * len(sections) if images else _divider_flags(sections)
 
     # MAP: LLM-ом планируем всё, кроме разделов-«шапок частей», ставших дивайдерами
     # (у них нет своего тела — LLM не зовём, «титул вместо дивайдера» уходит). Глава
@@ -441,7 +489,8 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
         pool = ThreadPoolExecutor(max_workers=workers)
         try:
             futures = {i: pool.submit(_plan_section, client, library, menu,
-                                      sections[i], freeform_ok=freeform_ok)
+                                      sections[i], freeform_ok=freeform_ok,
+                                      image=pairs[i][1])
                        for i in body_idx}
             body_plans = {i: f.result() for i, f in futures.items()}
         finally:
@@ -495,10 +544,17 @@ def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
               max_tokens: int = 16384) -> DeckPlan:
     """InputDoc + каталог -> DeckPlan.
 
-    Текстовый вход — map(по разделам)+reduce(в коде); pptx-rebrand со скриншотами —
-    монолитный vision-вызов. Бросает SlotValidationError на неизвестный template_id.
+    Оба входа — map(по разделам)+reduce(в коде); в pptx-rebrand каждый map-вызов
+    несёт скриншот своего слайда. Монолитный vision-вызов — только фолбэк при
+    рассинхроне «скриншоты ≠ разделы» (рендер исходника отдал не все PNG).
+    Бросает SlotValidationError на неизвестный template_id.
     """
-    if slide_images:
+    if slide_images and len(slide_images) == len(doc.sections):
+        plan = _plan_deck_text(client, doc, library, freeform_ok=freeform_ok,
+                               images=slide_images)
+    elif slide_images:
+        logger.warning("planner.vision_monolith_fallback",
+                       images=len(slide_images), sections=len(doc.sections))
         plan = _plan_deck_vision(client, doc, library, slide_images,
                                  freeform_ok=freeform_ok, max_tokens=max_tokens)
     else:
