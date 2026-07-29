@@ -246,6 +246,18 @@ async def create_job(request: Request, mode: str = Form(...),
     dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
 
+    # Оценка размера для фронта: считаем разделы тем же парсером, что и сборка
+    # (двойной парсинг — миллисекунды на фоне LLM-этапов). Ошибка парсинга НЕ
+    # блокирует запуск — реальную причину покажет воркер со своей диагностикой.
+    # Модуль импортируем целиком и зовём атрибут, чтобы monkeypatch в тестах
+    # (htmlslides.parsers.base.parse_file) действовал и здесь.
+    try:
+        from htmlslides.parsers import base as _parsers_base
+        doc = await run_in_threadpool(_parsers_base.parse_file, dest)
+        section_count: int | None = len(doc.sections)
+    except Exception:  # noqa: BLE001
+        section_count = None
+
     kind = "html"
     # Persist ownership BEFORE starting so even a fast terminal can update it.
     async with request.app.state.sessionmaker() as s:
@@ -253,10 +265,11 @@ async def create_job(request: Request, mode: str = Form(...),
                                mode=mode, kind=kind, source_filename=file.filename)
         await s.commit()
     try:
-        runner.start(inp, user_id=user.id)
+        runner.start(inp, user_id=user.id, section_count=section_count)
     except CapacityError as exc:
         raise HTTPException(429, str(exc))
-    return JSONResponse({"session_id": inp.session_id, "kind": kind})
+    return JSONResponse({"session_id": inp.session_id, "kind": kind,
+                         "section_count": section_count})
 
 
 _DRAFT_MODES = {"manual", "chat"}

@@ -138,6 +138,26 @@ async def test_duplicate_start_same_session_rejected(monkeypatch):
     release.set()
 
 
+async def test_active_jobs_carries_section_count(monkeypatch):
+    """active_jobs() отдаёт section_count из меты старта — фронт рисует по нему
+    оценку времени сборки, и она переживает перезагрузку страницы."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    release = threading.Event()
+    monkeypatch.setattr(runner, "_pipeline_run", lambda inp: release.wait(timeout=5))
+
+    inp = types.SimpleNamespace(session_id="s1", mode="htmlnew")
+    r.start(inp, user_id=1, section_count=7)
+    try:
+        jobs = r.active_jobs(user_id=1)
+        assert jobs and jobs[0]["section_count"] == 7
+    finally:
+        release.set()
+
+
 async def test_cancel_queued_job_emits_cancelled(monkeypatch):
     """A job still waiting in the queue is cancelled instantly via its Future."""
     r = runner.JobRunner(build_workers=1)   # 1 worker so b genuinely queues behind a

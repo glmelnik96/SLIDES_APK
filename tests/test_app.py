@@ -145,6 +145,40 @@ def test_create_job_starts_runner_html_only(monkeypatch, tmp_path):
         assert started["user"] is not None
 
 
+def test_create_job_reports_section_count(monkeypatch, tmp_path):
+    """Ответ /api/jobs несёт число разделов исходника (для оценки времени на
+    фронте) и прокидывает его в runner.start — считаем тем же парсером, что и
+    сборка (htmlslides.parsers.base.parse_file)."""
+    started = {}
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.update(kw) or asyncio.Queue())
+    md = "# Дека\n\n## Раз\n\nтекст\n\n## Два\n\nтекст\n\n## Три\n\nтекст\n"
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("doc.md", md.encode(), "text/markdown")},
+                   headers=H())
+        assert r.status_code == 200
+        assert r.json()["section_count"] == 3
+        assert started["section_count"] == 3
+
+
+def test_create_job_parser_crash_still_starts(monkeypatch, tmp_path):
+    """Падение парсера при подсчёте разделов НЕ блокирует запуск: сборка
+    стартует, section_count честно null (реальную ошибку покажет воркер)."""
+    _no_run(monkeypatch)
+
+    def boom(path):  # noqa: ARG001
+        raise RuntimeError("parser died")
+    monkeypatch.setattr("htmlslides.parsers.base.parse_file", boom)
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("doc.md", b"# t\n\n## a\n\nx\n",
+                                   "text/markdown")},
+                   headers=H())
+        assert r.status_code == 200
+        assert r.json()["section_count"] is None
+
+
 def test_concurrent_first_touch_same_user_no_500(monkeypatch, tmp_path):
     """A brand-new user firing several requests at once must not 500 on a racing
     user INSERT (regression: parallel workers exposed a UNIQUE-constraint race in

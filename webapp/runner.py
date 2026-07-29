@@ -127,6 +127,7 @@ class JobRunner:
                 "session_id": sid,
                 "mode": meta.get("mode", ""),
                 "source_filename": meta.get("source_filename"),
+                "section_count": meta.get("section_count"),
                 # Реальный старт сборки (None пока в очереди) — фронт считает по нему
                 # прошедшее время mm:ss в шапке аккордеона (переживает перезагрузку).
                 "started_at": started.isoformat() if started else None,
@@ -252,7 +253,8 @@ class JobRunner:
             t.cancel()
 
     # ── job lifecycle ────────────────────────────────────────────────────
-    def start(self, inp: Any, *, user_id: int | None = None) -> asyncio.Queue:
+    def start(self, inp: Any, *, user_id: int | None = None,
+              section_count: int | None = None) -> asyncio.Queue:
         assert self._loop is not None, "bind_loop() must be called at startup"
         # Idempotence guard: the same session must never run twice at once
         # (e.g. a double-click on rebuild). Starting again would overwrite
@@ -275,7 +277,10 @@ class JobRunner:
         self._queues[session_id] = queue
         self._results[session_id] = None
         self._meta[session_id] = {"mode": _mode_of(inp), "user_id": user_id,
-                                  "source_filename": getattr(inp, "source_filename", None)}
+                                  "source_filename": getattr(inp, "source_filename", None),
+                                  # Число разделов исходника (None — не посчитали):
+                                  # фронт рисует по нему оценку времени сборки.
+                                  "section_count": section_count}
         self._status[session_id] = {"stage": "queued", "progress_pct": 0,
                                     "terminal": False}
         self._active.add(session_id)
