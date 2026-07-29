@@ -26,16 +26,17 @@
   <!-- INTRO -->
   <section class="intro">
     <h1 class="intro-title">Презентации в бренде Cloud.ru</h1>
-    <p class="intro-lead">Загрузите документ (<b>.md / .txt / .docx / .pptx</b>) &mdash; модель разобьёт его на слайды и соберёт деку в фирменном стиле. Готовую презентацию можно править в браузере и скачать в HTML, PNG или PPTX.</p>
+    <p class="intro-lead">Загрузите документ &mdash; модель разобьёт его на слайды и соберёт презентацию в фирменном стиле. Результат можно править в браузере и скачать в HTML, PNG или PPTX.</p>
+    <p class="intro-lead">Здесь презентация собирается в сервисе. Хотите собрать сами &mdash; <a id="skillDownload" class="intro-link" href="/downloads/cloud-ru-slides.skill" download>скачайте скилл для Claude&nbsp;Code</a> (22&nbsp;МБ): полный бренд&#8209;кит Cloud.ru, без ограничений наших макетов. Для Codex скилл потребует доработки.</p>
     <div class="prep-cards">
       <div class="prep-card">
-        <div class="prep-card__name">Нет готового документа? Промпт для нейросети</div>
-        <p class="prep-card__desc">Вставьте в ChatGPT, Claude или GigaChat &mdash; бот соберёт .md&#8209;файл под наш генератор из вашего обсуждения. Останется загрузить его ниже.</p>
+        <div class="prep-card__name">Подготовьте документ под требования генератора</div>
+        <p class="prep-card__desc">Переработайте готовый документ или соберите новый с этим промптом в ChatGPT, Claude или GigaChat &mdash; чем ближе исходник к требованиям, тем точнее и нагляднее презентация.</p>
         <div class="prep-card__actions">
           <button id="copyPrompt" class="btn" type="button">Скопировать промпт</button>
           <button id="togglePrompt" class="prep-toggle" type="button" aria-expanded="false">Показать текст</button>
         </div>
-        <pre id="promptText" class="prep-prompt" hidden>Собери из нашего обсуждения markdown-файл для генератора презентаций. Правила:
+        <pre id="promptText" class="prep-prompt" hidden>Собери markdown-файл для генератора презентаций — из приложенного документа или нашего обсуждения. Правила:
 
 Первый «# Заголовок» — название презентации, каждый «## Подзаголовок» — отдельный слайд. Оптимально 10–20 разделов (можно до 100, но сборка займёт заметно дольше). Один раздел — одна мысль: заголовок до 40 символов, 1–2 вводных предложения, плоский список из 3–6 пунктов по одной строке (до ~150 символов каждый). Если в разделе и ключевые цифры, и большой список — разбей его на два раздела.
 
@@ -49,7 +50,7 @@
   <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
-    <p class="entry-lead">Соберите презентацию на сервисе — или скачайте скилл и соберите у себя, в Claude Code.</p>
+    <p class="entry-lead">Три способа сделать презентацию — выберите один, смотря что у вас уже есть.</p>
     <div class="entry-stack">
 
       <!-- Основной способ: загрузить документ -->
@@ -107,17 +108,6 @@
             <span class="entry-open" id="openManual">В разработке</span>
           </div>
         </div>
-        <a class="entry-alt entry-alt--link" id="skillDownload"
-           href="/downloads/cloud-ru-slides.skill" download>
-          <div class="alt-main">
-            <div class="alt-name">Собрать у себя &mdash; скилл для Claude Code</div>
-            <p class="alt-desc">Полный бренд-кит Cloud.ru: презентацию собирает ваш Claude Code, без ограничений наших макетов. Для Codex скилл потребует доработки.</p>
-          </div>
-          <div class="alt-aside">
-            <div class="alt-when">когда сборка нужна не на сайте</div>
-            <span class="entry-open">Скачать .skill &middot; 22&nbsp;МБ</span>
-          </div>
-        </a>
       </div>
 
     </div>

@@ -63,16 +63,16 @@ def test_index_has_three_entry_cards(monkeypatch, tmp_path):
 
 def test_index_has_prep_cards(monkeypatch, tmp_path):
     """Интро несёт карточку промпта для LLM (копирование + раскрываемый текст,
-    запрет LLM-приписок), а скилл — НЕ подготовка исходника, а отдельный способ
-    сборки: строка-ссылка в списке точек входа «С чего начать»."""
+    запрет LLM-приписок) и ссылку на скилл В ОПИСАНИИ сверху («тут соберёте в
+    сервисе, а со скиллом — сами»), выше зоны загрузки."""
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
         assert 'id="copyPrompt"' in html and 'id="promptText"' in html
         assert "только сам markdown" in html  # пункт «без сообщений от нейронки»
         assert "10–20 разделов" in html
-        # скилл — точка входа (якорь-строка среди альтернатив), не prep-карточка
-        assert 'class="entry-alt entry-alt--link" id="skillDownload"' in html
-        assert html.index('id="skillDownload"') > html.index('id="openManual"')
+        # скилл — ссылка в верхнем описании, до точек входа
+        assert 'id="skillDownload"' in html
+        assert html.index('id="skillDownload"') < html.index('id="uploadFlow"')
 
 
 def test_download_skill_requires_auth(monkeypatch, tmp_path):
