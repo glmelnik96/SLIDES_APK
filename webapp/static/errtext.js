@@ -51,13 +51,33 @@
     return "";
   }
 
+  // Оценка времени сборки по числу разделов исходника (~30 с на слайд, замер
+  // 2026-07: 40 слайдов ≈ 20 мин). Возвращает {text, warn} или null (нет данных).
+  // >20 разделов — предупреждающий тон; >100 — движок соберёт первые 100
+  // (MAX_DECK_SLIDES), минуты честно считаем по капу. Для .pptx единица —
+  // «слайд», у остальных форматов — «раздел».
+  function estimateLine(count, filename) {
+    if (count == null || count <= 0) return null;
+    var pptx = /\.pptx$/i.test(filename || "");
+    var unit = pptx ? plural(count, "слайд", "слайда", "слайдов")
+                    : plural(count, "раздел", "раздела", "разделов");
+    var minutes = Math.max(2, Math.round(Math.min(count, 100) * 0.5));
+    var text = count + " " + unit + " · примерно " + minutes + " мин";
+    if (count > 100) text += ", соберём первые 100";
+    var warn = count > 20;
+    if (warn) text = "крупный документ: " + text;
+    return { text: text, warn: warn };
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
   root.REBUILD_LABEL = REBUILD_LABEL;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
   root.plural = plural;
   root.errText = errText;
+  root.estimateLine = estimateLine;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
-      CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText };
+      CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
+      estimateLine: estimateLine };
   }
 })(typeof window !== "undefined" ? window : globalThis);
