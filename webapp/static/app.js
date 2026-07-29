@@ -173,6 +173,7 @@ function normActive(a) {
   const running = a.stage && a.stage !== "queued";
   return {
     id: a.session_id, mode: a.mode, source_filename: a.source_filename || null, display_name: null,
+    section_count: a.section_count ?? null,
     state: running ? "running" : "queued", active: true, started_at: a.started_at || null,
     stage: a.stage || "queued", pct: a.progress_pct || 0, ts: Infinity,
     kind: a.mode === "htmlnew" ? "build" : "draft",
@@ -223,15 +224,31 @@ function statusPill(state) {
     default: return "";
   }
 }
+// Сегмент «N разделов · примерно X мин» для активной карточки. estimateLine —
+// из errtext.js (window); guard на случай, если модуль не загрузился.
+function estSegment(it) {
+  if (typeof estimateLine !== "function") return "";
+  const e = estimateLine(it.section_count, it.source_filename);
+  if (!e) return "";
+  return e.warn ? `<span class="est-warn">${esc(e.text)}</span>` : esc(e.text);
+}
 function cardMeta(it) {
   const SEP = `<span class="sep">·</span>`;
   const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
     const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идёт сборка";
-    return [toolTitle(it.mode), esc(detail), pct + "%"].join(SEP);
+    const seg = [toolTitle(it.mode), esc(detail), pct + "%"];
+    const est = estSegment(it);
+    if (est) seg.push(est);
+    return seg.join(SEP);
   }
-  if (it.state === "queued") return [toolTitle(it.mode), "скоро начнётся"].join(SEP);
+  if (it.state === "queued") {
+    const seg = [toolTitle(it.mode), "скоро начнётся"];
+    const est = estSegment(it);
+    if (est) seg.push(est);
+    return seg.join(SEP);
+  }
   if (it.state === "done") {
     const seg = [];
     if (when) seg.push(esc(when));

@@ -540,6 +540,7 @@ a { color: var(--accent); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pcard-meta .sep { color: var(--line); margin: 0 8px; }
 .pcard-meta .cost { color: var(--warn-ink); }
+.pcard-meta .est-warn { color: var(--warn-ink); font-weight: 600; }
 .pcard-meta .err { color: var(--danger); }
 .pcard-actions { display: flex; gap: 8px; flex: 0 0 auto; align-items: center; }
 /* Кнопки карточки — заливкой того же цвета вместо обводок */
