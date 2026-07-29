@@ -16,3 +16,6 @@ scripts/eval_out/
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store
+
+# Крупные раздаваемые бинарники (см. settings.downloads_dir) — кладутся scp-ом
+downloads/

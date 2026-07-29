@@ -718,6 +718,35 @@ window.addEventListener("pageshow", () => {
   loadFeed();  // возврат по Back мог создать/удалить сборку или черновик — обновляем
 });
 
+/* ===== Интро: карточки подготовки исходника (промпт / скилл) ===== */
+// Ссылка на .skill живёт в HTML без префикса — доклеиваем gateway-префикс, как
+// у всех остальных URL (иначе на проде /downloads уйдёт мимо /slides).
+const _skillLink = $("#skillDownload");
+if (_skillLink) _skillLink.href = U("/downloads/cloud-ru-slides.skill");
+
+function syncPromptToggle() {
+  const pre = $("#promptText"), t = $("#togglePrompt");
+  if (!pre || !t) return;
+  t.textContent = pre.hidden ? "Показать текст" : "Скрыть текст";
+  t.setAttribute("aria-expanded", String(!pre.hidden));
+}
+const _togglePrompt = $("#togglePrompt");
+if (_togglePrompt) _togglePrompt.addEventListener("click", () => {
+  const pre = $("#promptText");
+  pre.hidden = !pre.hidden;
+  syncPromptToggle();
+});
+const _copyPrompt = $("#copyPrompt");
+if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
+  const text = $("#promptText").textContent.trim();
+  let ok = true;
+  try { await navigator.clipboard.writeText(text); }
+  catch { ok = false; }  // clipboard API требует secure context — фолбэк: раскрыть текст
+  _copyPrompt.textContent = ok ? "Скопировано ✓" : "Скопируйте вручную ↓";
+  if (!ok) { $("#promptText").hidden = false; syncPromptToggle(); }
+  setTimeout(() => { _copyPrompt.textContent = "Скопировать промпт"; }, 2000);
+});
+
 /* init */
 // Г§4 — empty-state превью настоящего слайда: src через U() (несёт gateway-префикс);
 // lazy + скрытый родитель → грузится только когда empty-state показан.

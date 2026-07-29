@@ -159,6 +159,26 @@ a { color: var(--accent); }
   font-size: var(--fs-xs); color: var(--accent); background: var(--accent-dim);
   border: 1px solid var(--accent-line); padding: 1px 5px; }
 
+/* ===== Подготовка исходника: две карточки (промпт для LLM / скилл) =====
+   Стиль наследует .entry-alts: 1px-рамки, плоские панели, без теней (канон). */
+.prep-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+.prep-card { border: 1px solid var(--line); padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.prep-card__name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
+.prep-card__desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0; }
+.prep-card__actions { display: flex; align-items: center; gap: 14px; margin-top: auto; }
+.prep-toggle { background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent); font-size: var(--fs-sm);
+  transition: color var(--dur-fast) var(--ease-productive); }
+.prep-toggle:hover { color: var(--accent-2); }
+.prep-prompt { width: 100%; box-sizing: border-box; margin: 4px 0 0; padding: 12px 14px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
+@media (max-width: 860px) {
+  .prep-cards { grid-template-columns: 1fr; }
+}
+
 /* ===== Три точки входа: карточки выбора способа старта ===== */
 .entry { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 36) */
 .entry .eyebrow { margin-bottom: 12px; }

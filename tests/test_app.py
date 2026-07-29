@@ -61,6 +61,50 @@ def test_index_has_three_entry_cards(monkeypatch, tmp_path):
         assert 'id="openManual"' in html
 
 
+def test_index_has_prep_cards(monkeypatch, tmp_path):
+    """Интро несёт две карточки подготовки исходника: промпт для LLM (копирование
+    + раскрываемый текст) и скачивание .skill. Промпт запрещает LLM-приписки."""
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/").text
+        assert 'id="copyPrompt"' in html and 'id="promptText"' in html
+        assert 'id="skillDownload"' in html
+        assert "только сам markdown" in html  # пункт «без сообщений от нейронки»
+        assert "10–20 разделов" in html
+
+
+def test_download_skill_requires_auth(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/downloads/cloud-ru-slides.skill").status_code == 401
+
+
+def test_download_unknown_name_404(monkeypatch, tmp_path):
+    """Только allowlist: произвольные имена (в т.ч. path traversal) не отдаются."""
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/downloads/other.bin", headers=H()).status_code == 404
+        assert c.get("/downloads/..%2f.env", headers=H()).status_code == 404
+
+
+def test_download_skill_served_from_downloads_dir(monkeypatch, tmp_path):
+    dl = tmp_path / "downloads"
+    dl.mkdir()
+    (dl / "cloud-ru-slides.skill").write_bytes(b"PK\x03\x04skill")
+    monkeypatch.setattr(cfg.settings, "downloads_dir", dl)
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.get("/downloads/cloud-ru-slides.skill", headers=H())
+        assert r.status_code == 200
+        assert r.content == b"PK\x03\x04skill"
+        assert r.headers["content-type"].startswith("application/zip")
+        assert "cloud-ru-slides.skill" in r.headers.get("content-disposition", "")
+
+
+def test_download_skill_missing_file_404(monkeypatch, tmp_path):
+    """Файл не разложен на диск (свежий деплой без scp) — честная 404, не 500."""
+    monkeypatch.setattr(cfg.settings, "downloads_dir", tmp_path / "nope")
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/downloads/cloud-ru-slides.skill",
+                     headers=H()).status_code == 404
+
+
 def test_shell_injects_gateway_email(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/", headers={"X-User-Email": "u@cloud.ru"}).text

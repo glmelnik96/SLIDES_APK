@@ -189,6 +189,24 @@ def editor(request: Request) -> HTMLResponse:
                         email=request.headers.get("X-User-Email", ""))
 
 
+# Раздача крупных файлов вне репозитория (см. settings.downloads_dir). Явный
+# allowlist вместо {name}-подстановки: никакого обхода путей и никакой раздачи
+# случайно оказавшегося в каталоге файла. Auth как у всех — заголовки шлюза.
+_DOWNLOADS = {"cloud-ru-slides.skill": "application/zip"}
+
+
+@app.get("/downloads/{name}")
+async def download_file(name: str,
+                        user=Depends(get_current_user)) -> FileResponse:
+    mime = _DOWNLOADS.get(name)
+    if mime is None:
+        raise HTTPException(404, "not found")
+    path = _settings.downloads_dir / name
+    if not path.is_file():
+        raise HTTPException(404, "file not provisioned")
+    return FileResponse(path, filename=name, media_type=mime)
+
+
 @app.post("/api/jobs")
 async def create_job(request: Request, mode: str = Form(...),
                      exact_transfer: str = Form(default="false"),

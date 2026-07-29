@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     db_url: str = Field("sqlite+aiosqlite:///./data/app2.db", alias="DB_URL")
     data_dir: Path = Field(ROOT / "data", alias="DATA_DIR")
 
+    # Раздаваемые файлы вне репозитория (крупные бинарники вроде .skill-архива).
+    # Прод кладёт их в /var/lib/app2/downloads (обновление — scp, без деплоя).
+    downloads_dir: Path = Field(ROOT / "downloads", alias="DOWNLOADS_DIR")
+
     # Queue capacity. Goal: tasks WAIT in the queue rather than 429. These caps are
     # safety valves (memory/abuse), set high enough to never trip in normal use.
     # max_active = total jobs in the system (running + waiting); per-user = how many
