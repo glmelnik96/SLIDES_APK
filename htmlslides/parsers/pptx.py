@@ -80,6 +80,42 @@ def _chart_blocks(shape) -> list[Block]:
     return blocks
 
 
+# Нестандартные mime SVG (прод 2026-07-29: сторонний экспорт писал `image/svg`)
+# нормализуем в честный `image/svg+xml` — иначе data-URI не отрисуется браузером.
+_SVG_MIMES = {"image/svg", "image/svg+xml"}
+
+
+def _picture_block(shape) -> ImageBlock | None:
+    """Картинка -> ImageBlock, либо None, если её не прочитать. Парсер не падает.
+
+    `shape.image` работает только для частей, которые python-pptx признал
+    ImagePart (реестр стандартных content-type). Прод-кейс 2026-07-29 (job 22/23):
+    дека со сторонним экспортом несла 85 картинок с типом `image/svg` — такая
+    часть собирается как generic Part без `.image`, и AttributeError ронял всю
+    сборку за полсекунды. Фолбэк читает blob напрямую из related part: контент
+    сохраняем, а не выбрасываем. None — только если и это не удалось
+    (например, картинка-ссылка на внешний файл, у которой blob'а нет вовсе)."""
+    try:
+        image = shape.image
+        return ImageBlock(data=image.blob, mime=image.content_type)
+    except Exception:
+        pass
+    try:
+        rId = shape._element.blip_rId
+        if not rId:
+            return None
+        part = shape.part.related_part(rId)
+        blob = getattr(part, "blob", None)
+        if not blob:
+            return None
+        mime = getattr(part, "content_type", "") or "application/octet-stream"
+        if mime in _SVG_MIMES:
+            mime = "image/svg+xml"
+        return ImageBlock(data=blob, mime=mime)
+    except Exception:
+        return None
+
+
 def _slide_notes(slide) -> str:
     """Заметки докладчика (пусто, если их нет). has_notes_slide — чтобы не плодить
     пустые notes-слайды обращением к геттеру notes_slide."""
@@ -113,9 +149,9 @@ def parse_pptx(path: str | Path) -> InputDoc:
                           for row in shape.table.rows]))
                 continue
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                image = shape.image
-                section.blocks.append(
-                    ImageBlock(data=image.blob, mime=image.content_type))
+                block = _picture_block(shape)
+                if block is not None:
+                    section.blocks.append(block)
                 continue
             if shape.has_text_frame:
                 paragraphs = [p.text.strip()

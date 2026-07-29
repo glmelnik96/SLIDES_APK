@@ -91,3 +91,63 @@ def test_notes_reach_planner_section_text(tmp_path):
     from htmlslides.pipeline.planner import _section_to_text
     txt = _section_to_text(parse_pptx(_fixture(tmp_path)).sections[2])
     assert "СЕКРЕТНАЯ-ЗАМЕТКА" in txt
+
+
+# 1x1 прозрачный PNG — валидный blob для add_picture
+_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def _fixture_alien_picture(tmp_path: Path) -> Path:
+    """pptx, где у картинки content-type НЕ из реестра python-pptx.
+
+    Репро прод-файла 2026-07-29 (job 22/23): дека со сторонним экспортом несла
+    85 картинок с content-type `image/svg` (не стандартный `image/svg+xml`).
+    python-pptx собирает такую часть как generic Part, у которого нет `.image`,
+    и `shape.image` падает AttributeError. Строим то же самое: настоящий pptx с
+    картинкой + текстом, затем в [Content_Types].xml переписываем тип png-части.
+    """
+    import io
+    import zipfile
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    slide.shapes.add_picture(io.BytesIO(_PNG), Inches(1), Inches(1))
+    box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(4), Inches(1))
+    box.text_frame.text = "Текст-рядом-с-картинкой"
+    normal = tmp_path / "normal.pptx"
+    prs.save(str(normal))
+
+    out = tmp_path / "alien.pptx"
+    with zipfile.ZipFile(normal) as src, \
+            zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for item in src.infolist():
+            data = src.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                data = data.replace(b'ContentType="image/png"',
+                                    b'ContentType="image/svg"')
+            dst.writestr(item, data)
+    return out
+
+
+def test_alien_picture_mime_does_not_crash_parse(tmp_path):
+    """Картинка с типом вне реестра python-pptx не роняет parse_pptx.
+
+    Прод 2026-07-29: файл падал за 0,5 с с «Внутренняя ошибка сборки» — до
+    единого LLM-вызова. Контракт тот же, что у _chart_blocks: парсер не падает,
+    текст слайда доезжает, нечитаемая картинка в худшем случае пропускается."""
+    doc = parse_pptx(_fixture_alien_picture(tmp_path))
+    assert "Текст-рядом-с-картинкой" in _all_text(doc.sections[0])
+
+
+def test_alien_picture_blob_still_captured(tmp_path):
+    """Blob сторонней картинки достаём напрямую из part — контент не теряется,
+    а нестандартный `image/svg` нормализуется в честный `image/svg+xml`."""
+    from htmlslides.parsers.base import ImageBlock
+    doc = parse_pptx(_fixture_alien_picture(tmp_path))
+    images = [b for b in doc.sections[0].blocks if isinstance(b, ImageBlock)]
+    assert images and images[0].data == _PNG
+    assert images[0].mime == "image/svg+xml"
