@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     # Result retention (sessions + Job rows older than this are purged).
     retention_hours: int = Field(24, alias="RETENTION_HOURS")
 
+    # Общий с платформой секрет для машинного чтения GET /internal/stats
+    # (заголовок X-Ingest-Token). Имя переменной историческое — раньше тем же
+    # секретом подписывался пуш на шлюз; App1 попросил переиспользовать её, а не
+    # заводить второй секрет и рестарты у всех. Пусто = эндпоинт выключен (404),
+    # это нормальное состояние локалки.
+    stats_token: str = Field("", alias="USAGE_INGEST_TOKEN")
+
     # Local-dev only: when no gateway is present, treat requests as this user id.
     # Leave empty in production so a missing X-User-Id is a hard 401.
     dev_user_id: str = Field("", alias="DEV_USER_ID")

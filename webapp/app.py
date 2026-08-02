@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import json as _json
 import logging
 import os
@@ -20,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from webapp import (
     chat_edit, deck_edit, draft, draft_render, exports, jobs_repo, render_png,
-    render_pptx,
+    render_pptx, stats,
 )
 from webapp.auth import get_current_user
 from webapp.paths import session_dir
@@ -118,10 +119,16 @@ async def _startup() -> None:
             from webapp import usage
             async with app.state.sessionmaker() as s:
                 await usage.log_render(
-                    s, owner_user_id=runner.owner(session_id), status=status,
+                    s, session_id=session_id,
+                    owner_user_id=runner.owner(session_id), status=status,
                     workflow=runner.workflow(session_id),
                     started_at=runner.started_at(session_id),
-                    result_path=data.get("result_path"))
+                    result_path=data.get("result_path"),
+                    # Разрезы, которые знает только раннер (память процесса) или
+                    # только терминальное событие: строка jobs про них не в курсе.
+                    section_count=runner.section_count(session_id),
+                    truncated=runner.truncated(session_id),
+                    error_code=data.get("error_code"))
                 await s.commit()
         except Exception:  # noqa: BLE001 — analytics must never affect the build
             pass
@@ -862,6 +869,49 @@ async def get_history(request: Request,
          "cost_rub": j.cost_rub, "duration_ms": j.duration_ms}
         for j in jobs
     ])
+
+
+@app.get("/internal/stats")
+async def internal_stats(request: Request, since: str | None = None,
+                         until: str | None = None,
+                         limit: int = 8) -> JSONResponse:
+    """Метрики /slides для блока «Слайды» в админке платформы.
+
+    БЕЗ get_current_user: шлюз ходит машинным запросом, X-User-Id у него нет.
+    Граница — общий с платформой секрет в X-Ingest-Token: loopback на общей VM
+    границей не является (соседние приложения ходят на 127.0.0.1:8012 так же
+    свободно), а метрики несут email'ы. Пустой секрет = эндпоинт выключен (404).
+    """
+    import secrets
+    token = _settings.stats_token
+    if not token:
+        raise HTTPException(status_code=404)
+    if not secrets.compare_digest(request.headers.get("X-Ingest-Token", ""),
+                                  token):
+        raise HTTPException(status_code=401, detail="invalid token")
+
+    def _ts(name: str, raw: str | None):
+        if not raw:
+            return None
+        try:
+            return _dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            # Молча игнорировать кривой параметр нельзя: шлюз показал бы данные
+            # за другой период, не заметив этого.
+            raise HTTPException(status_code=400,
+                                detail=f"{name} must be ISO-8601 UTC")
+
+    since_dt, until_dt = _ts("since", since), _ts("until", until)
+    try:
+        async with request.app.state.sessionmaker() as s:
+            body = await stats.collect(s, since=since_dt, until=until_dt,
+                                       limit=max(0, min(limit, 100)))
+    except Exception:  # noqa: BLE001
+        # Честный 5xx вместо 200 с нулями: нули читаются админкой как «работы не
+        # было», а это неправда (условие App1).
+        logger.exception("stats aggregation failed")
+        raise HTTPException(status_code=503, detail="stats unavailable")
+    return JSONResponse(body)
 
 
 @app.post("/api/history/clear")

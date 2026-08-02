@@ -34,6 +34,11 @@ BUILD_TIMEOUT_SEC = 2400  # per-build watchdog: force-fail a build past this (~4
 # из исходов; лучше отдать деку без косметической вычитки. 0.75 от 40 мин = 30 мин:
 # хвоста хватает на оставшиеся 10 даже на деке в потолок MAX_DECK_SLIDES.
 SOFT_DEADLINE_FRAC = 0.75
+# Префикс прогресс-сообщения, которым движок объявляет обрезку по потолку слайдов
+# (htmlslides.pipeline.build._CAP_NOTICE). Ловим его здесь, чтобы отличать «done с
+# оговоркой» от чистого done в статистике. Связь двух сторон пинится тестом —
+# импортировать движок в веб-слой нельзя (веб-тесты крутятся без htmlslides).
+_TRUNCATION_MARKER = "limit:"
 
 
 class CapacityError(RuntimeError):
@@ -142,6 +147,13 @@ class JobRunner:
     def workflow(self, session_id: str) -> str | None:
         return self._meta.get(session_id, {}).get("mode")
 
+    def truncated(self, session_id: str) -> bool:
+        """Была ли дека обрезана по потолку слайдов («успех с оговоркой»)."""
+        return bool(self._meta.get(session_id, {}).get("truncated"))
+
+    def section_count(self, session_id: str) -> int | None:
+        return self._meta.get(session_id, {}).get("section_count")
+
     def started_at(self, session_id: str):
         """When the build actually began running (None while still queued) — used
         for usage-log duration, excludes queue wait."""
@@ -181,6 +193,8 @@ class JobRunner:
             if sid in self._cancel and not getattr(event, "terminal", False):
                 raise JobCancelled(sid)
             data = event.model_dump(mode="json")
+            if str(data.get("detail") or "").startswith(_TRUNCATION_MARKER):
+                self._meta.setdefault(sid, {})["truncated"] = True
             if data.get("terminal"):
                 if data.get("stage") == "done":
                     # Safety net: never deliver an empty "success". If the engine
@@ -306,7 +320,10 @@ class JobRunner:
                                    f"({self._build_timeout // 60} мин) и была "
                                    "остановлена. Обычно причина в объёме "
                                    "исходника — разбейте документ на части "
-                                   "и соберите их по отдельности."}
+                                   "и соберите их по отдельности.",
+                          # Исключения-причины у таймаута нет (сборку останавливает
+                          # кооперативная отмена), поэтому код ставит раннер.
+                          "error_code": "build_timeout"}
                 # A JobCancelled (or any error after a stop was requested, e.g. the
                 # engine framework re-wrapping it) is reported as a clean cancel.
                 elif isinstance(exc, JobCancelled) or session_id in self._cancel:
@@ -319,10 +336,13 @@ class JobRunner:
                     # лимит Cloud.ru и т.п. — вместо «Внутренняя ошибка».
                     logger.exception(
                         "build failed (session %s)", session_id)
-                    from webapp.build_errors import user_message
+                    from webapp.build_errors import error_code, user_message
                     ev = {"session_id": session_id, "stage": "failed",
                           "terminal": True, "result_path": None,
-                          "error": user_message(exc)}
+                          "error": user_message(exc),
+                          # В статистику уходит только код класса: текст ошибки
+                          # может нести фрагменты клиентского документа.
+                          "error_code": error_code(exc)}
                 ev["duration_ms"] = self._duration_ms(session_id)
                 self._status[session_id] = ev
                 if self._loop is not None:

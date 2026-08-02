@@ -323,3 +323,122 @@ async def test_watchdog_force_fails_overrunning_build(monkeypatch):
             break
         await asyncio.sleep(0.02)
     assert "s1" not in r._timers           # watchdog timer cleaned up
+
+
+# ── разрезы для статистики: код ошибки и флаг обрезки по потолку ──────────────
+class _DetailEvent(_Event):
+    """Событие с текстом прогресса (движок шлёт уведомления в detail)."""
+    def __init__(self, detail="", **kw):
+        super().__init__(**kw)
+        self.detail = detail
+
+    def model_dump(self, mode="json"):
+        d = super().model_dump(mode)
+        d["detail"] = self.detail
+        return d
+
+
+def test_truncation_marker_matches_engine_notice():
+    """Контракт двух сторон одним тестом: раннер узнаёт обрезку по префиксу
+    сообщения движка. Если текст в build.py поправят — упадёт здесь, а не молча
+    перестанет считаться `truncated` в статистике."""
+    from htmlslides.pipeline.build import _CAP_NOTICE
+    assert _CAP_NOTICE.startswith(runner._TRUNCATION_MARKER)
+
+
+async def test_truncated_flag_set_from_progress_notice(monkeypatch, tmp_path):
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+    out = tmp_path / "d.html"
+    out.write_text("<section></section>", encoding="utf-8")
+
+    def fake_run(inp):
+        prog.publish(_DetailEvent(
+            detail=runner._TRUNCATION_MARKER + " — собираю первые 100 слайдов.",
+            stage="planning"))
+        prog.publish(_Event(terminal=True, stage="done", result_path=str(out)))
+
+    monkeypatch.setattr(runner, "_pipeline_run", fake_run)
+    q = r.start(types.SimpleNamespace(session_id="s1", mode="htmlnew"))
+    while not (await asyncio.wait_for(q.get(), timeout=2)).get("terminal"):
+        pass
+    assert r.truncated("s1") is True
+
+
+async def test_truncated_defaults_to_false(monkeypatch, tmp_path):
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+    out = tmp_path / "d.html"
+    out.write_text("<section></section>", encoding="utf-8")
+    monkeypatch.setattr(runner, "_pipeline_run", lambda inp: prog.publish(
+        _Event(terminal=True, stage="done", result_path=str(out))))
+    q = r.start(types.SimpleNamespace(session_id="s1", mode="htmlnew"))
+    while not (await asyncio.wait_for(q.get(), timeout=2)).get("terminal"):
+        pass
+    assert r.truncated("s1") is False
+
+
+async def test_failed_event_carries_error_code(monkeypatch):
+    """Метрике нужен код класса, а не текст (текст может нести куски документа)."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def boom(inp):
+        raise ValueError("формат .doc не поддерживается")
+
+    monkeypatch.setattr(runner, "_pipeline_run", boom)
+    q = r.start(types.SimpleNamespace(session_id="s1", mode="htmlnew"))
+    ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["stage"] == "failed"
+    assert ev["error_code"] == "input_invalid"
+
+
+async def test_cancel_has_no_error_code(monkeypatch):
+    """Отмена пользователем — не сбой, класса ошибки у неё нет."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def stop(inp):
+        raise runner.JobCancelled("s1")
+
+    monkeypatch.setattr(runner, "_pipeline_run", stop)
+    q = r.start(types.SimpleNamespace(session_id="s1", mode="htmlnew"))
+    ev = await asyncio.wait_for(q.get(), timeout=2)
+    assert ev["stage"] == "cancelled"
+    assert ev.get("error_code") is None
+
+
+async def test_watchdog_failure_is_coded_build_timeout(monkeypatch):
+    r = runner.JobRunner(build_timeout_sec=0.3)
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+
+    def run(inp):
+        for _ in range(10000):
+            prog.publish(_Event(stage="designing"))
+            time.sleep(0.01)
+
+    monkeypatch.setattr(runner, "_pipeline_run", run)
+    q = r.start(types.SimpleNamespace(session_id="s1", mode="htmlnew"))
+    while True:
+        ev = await asyncio.wait_for(q.get(), timeout=10)
+        if ev.get("terminal"):
+            break
+    assert ev["stage"] == "failed"
+    assert ev["error_code"] == "build_timeout"
+
+
+def test_section_count_accessor():
+    r = runner.JobRunner()
+    r._meta["s1"] = {"section_count": 42}
+    assert r.section_count("s1") == 42
+    assert r.section_count("nope") is None

@@ -26,6 +26,60 @@ def user_message(exc: BaseException) -> str:
             or GENERIC)
 
 
+def error_code(exc: BaseException) -> str:
+    """Код класса сбоя для статистики (`by_error` в блоке админки платформы).
+
+    Наружу уходит ТОЛЬКО этот код-перечисление: текст ошибки может нести фрагменты
+    клиентского документа, а имена файлов и содержимое мы не отдаём никому. Коды
+    держим рядом с `user_message`, чтобы классификация была одна на оба выхода
+    (пользователю — текст, в метрику — код). Неизвестное → "generic".
+
+    Watchdog-таймаут кодирует раннер ("build_timeout"): исключения-причины у него
+    нет — сборку останавливает кооперативная отмена по дедлайну.
+    """
+    return (_openai_code(exc) or _pipeline_code(exc)
+            or ("input_invalid" if isinstance(exc, ValueError) else None)
+            or "generic")
+
+
+def _openai_code(exc: BaseException) -> str | None:
+    try:
+        import openai
+    except ImportError:
+        return None
+    # Порядок как в _openai_message: узкие подклассы раньше базовых.
+    if isinstance(exc, openai.APITimeoutError):
+        return "provider_timeout"
+    if isinstance(exc, openai.APIConnectionError):
+        return "provider_connection"
+    if isinstance(exc, openai.RateLimitError):
+        return "provider_ratelimit"
+    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return "provider_auth"
+    if isinstance(exc, openai.APIError):
+        return "provider_error"
+    return None
+
+
+def _pipeline_code(exc: BaseException) -> str | None:
+    try:
+        from htmlslides.assembler import AssembleError
+        from htmlslides.parsers.render import RenderUnavailable
+        from htmlslides.pipeline.client import LLMFormatError
+        from htmlslides.pipeline.filler import FillError
+    except ImportError:
+        return None
+    if isinstance(exc, LLMFormatError):
+        return "plan_format"
+    if isinstance(exc, FillError):
+        return "fill"
+    if isinstance(exc, AssembleError):
+        return "assemble"
+    if isinstance(exc, RenderUnavailable):
+        return "render_unavailable"
+    return None
+
+
 def _openai_message(exc: BaseException) -> str | None:
     """Сеть/лимиты/авторизация при обращении к Cloud.ru FM (openai-совместимый)."""
     try:

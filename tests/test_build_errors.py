@@ -1,7 +1,7 @@
 """Классификатор сбоев сборки → понятный пользователю текст (webapp.build_errors)."""
 import pytest
 
-from webapp.build_errors import GENERIC, user_message
+from webapp.build_errors import GENERIC, error_code, user_message
 
 
 def test_value_error_message_is_surfaced_verbatim():
@@ -58,3 +58,41 @@ def test_openai_connection_message():
     msg = user_message(exc)
     assert "связаться" in msg.lower() or "соединени" in msg.lower()
     assert msg != GENERIC
+
+
+# ── error_code: коды классов для статистики (наружу уходит только код) ────────
+def test_error_code_unknown_is_generic():
+    assert error_code(RuntimeError("kaboom internal dump")) == "generic"
+
+
+def test_error_code_value_error_is_input_invalid():
+    """Кураторский ValueError = проблема исходника, а не наш сбой."""
+    assert error_code(ValueError("формат .doc не поддерживается")) == "input_invalid"
+
+
+def test_error_code_pipeline_classes():
+    from htmlslides.assembler import AssembleError
+    from htmlslides.pipeline.client import LLMFormatError
+    from htmlslides.pipeline.filler import FillError
+    assert error_code(LLMFormatError("truncated")) == "plan_format"
+    assert error_code(FillError("slot")) == "fill"
+    assert error_code(AssembleError("theme")) == "assemble"
+
+
+def test_error_code_openai_classes():
+    openai = pytest.importorskip("openai")
+    import httpx
+    req = httpx.Request("POST", "http://x")
+    assert error_code(openai.APITimeoutError(request=req)) == "provider_timeout"
+    assert error_code(
+        openai.APIConnectionError(request=req)) == "provider_connection"
+
+
+def test_error_code_never_leaks_error_text():
+    """Код — перечисление; текст ошибки может нести фрагменты документа и наружу
+    не уходит (запрет из нашего описания метрик для админки платформы)."""
+    secret = "Договор с ООО Ромашка на 12 млн"
+    for exc in (RuntimeError(secret), ValueError(secret)):
+        code = error_code(exc)
+        assert secret not in code
+        assert code.replace("_", "").isalpha()   # только snake_case-латиница
