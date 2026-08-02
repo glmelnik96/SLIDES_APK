@@ -98,9 +98,6 @@ async def _startup() -> None:
     await init_db(engine)
     app.state.engine = engine
     app.state.sessionmaker = make_sessionmaker(engine)
-    # Keep strong refs to fire-and-forget usage-push tasks so the loop can't GC
-    # them mid-flight (create_task only holds a weak reference).
-    app.state._usage_tasks = set()
 
     async def _persist_terminal(session_id: str, data: dict) -> None:
         status = data.get("stage", "failed")
@@ -126,21 +123,6 @@ async def _startup() -> None:
                     started_at=runner.started_at(session_id),
                     result_path=data.get("result_path"))
                 await s.commit()
-        except Exception:  # noqa: BLE001 — analytics must never affect the build
-            pass
-        # Cross-app usage push to the gateway (variant B). Fire-and-forget: identity
-        # args are captured NOW (runner meta may be cleared before the task runs);
-        # the coroutine swallows its own errors and no-ops when the token is unset.
-        try:
-            from webapp import usage
-            task = asyncio.create_task(usage.report_to_gateway(
-                app.state.sessionmaker,
-                owner_user_id=runner.owner(session_id), status=status,
-                workflow=runner.workflow(session_id),
-                started_at=runner.started_at(session_id),
-                result_path=data.get("result_path")))
-            app.state._usage_tasks.add(task)
-            task.add_done_callback(app.state._usage_tasks.discard)
         except Exception:  # noqa: BLE001 — analytics must never affect the build
             pass
 
