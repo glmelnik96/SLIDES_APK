@@ -69,6 +69,10 @@ function friendlyDetail(detail) {
   // по потолку слайдов). Движок пишет их сразу по-русски, поэтому показываем
   // дословно: молча отдать неполную деку было бы нечестно.
   if (detail.startsWith("limit:")) return detail.slice(6).trim();
+  // "notice:" — решения, принятые за пользователя во время сборки (напр. переезд
+  // на резервную модель, когда основная не отвечает). Показываем дословно и
+  // отдельно от "limit:": тот помечает деку как обрезанную в статистике.
+  if (detail.startsWith("notice:")) return detail.slice(7).trim();
   return "";  // warnings & internal notes: keep them out of the user-facing line
 }
 

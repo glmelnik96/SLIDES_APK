@@ -59,6 +59,9 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
           subprocess.TimeoutExpired — рендер исходных слайдов; только при
           mode=rebrand (в mode=auto деградирует до текстового пайплайна).
       RuntimeError — нет CLOUDRU_API_KEY (из KimiClient, если client не задан).
+      ProviderUnavailable — не отвечают ни основная модель, ни резервная (проба
+          в начале сборки), либо из-за сбоев API деградировала большая часть
+          разделов/слайдов: отдавать деку из заглушек как успех нельзя.
       openai.* (APIError и наследники) — сеть/авторизация при вызовах LLM.
     """
     src, out = Path(input_path), Path(out_path)
@@ -67,6 +70,10 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
     if mode == "rebrand" and src.suffix.lower() != ".pptx":
         raise ValueError("mode=rebrand доступен только для .pptx")
     client = client or KimiClient()
+    # Проба ДО парса и рендера: если модель молчит, отказ должен стоить полминуты,
+    # а не сорока минут пофазных таймаутов (инцидент 2026-08-04). Заодно это
+    # единственное место, где клиент узнаёт, куда сообщать о подмене модели.
+    client.preflight(progress)
     library = TemplateLibrary.load()
     artifacts = Path(keep_artifacts) if keep_artifacts else None
     if artifacts:

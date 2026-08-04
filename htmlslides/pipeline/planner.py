@@ -33,7 +33,7 @@ from ..models import DeckPlan, SlidePlan
 from ..parsers.base import (Block, CodeBlock, ImageBlock, InputDoc, ListBlock,
                             Section, TableBlock, TextBlock)
 from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
-                     image_part)
+                     ProviderUnavailable, degradation_is_total, image_part)
 
 logger = structlog.get_logger(__name__)
 
@@ -321,8 +321,12 @@ def _merge_brief(model_brief: str, section: Section) -> str:
 
 def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
                   section: Section, *, freeform_ok: bool,
-                  image: Path | None = None) -> list[SlidePlan]:
+                  image: Path | None = None) -> tuple[list[SlidePlan], bool]:
     """Map-шаг: один раздел -> 1-2 SlidePlan. Любой сбой -> эвристический фолбэк.
+
+    Возвращает ещё и флаг «фолбэк случился ИЗ-ЗА сбоя API»: осечка формата стоит
+    одного раздела и лечится эвристикой, а молчащий провайдер положит и следующую
+    фазу — про него зовущий обязан узнать (см. `degradation_is_total`).
 
     image — скриншот исходного слайда (pptx-rebrand): прикладывается к вызову,
     чтобы brief вобрал и то, чего нет в XML-тексте (вектор, SmartArt, схемы)."""
@@ -351,7 +355,7 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
     except (LLMFormatError, *TRANSIENT_API_ERRORS) as exc:
         logger.warning("planner.section_fallback", heading=heading[:40],
                        error=str(exc)[:80])
-        return [_fallback_slide(section, library)]
+        return [_fallback_slide(section, library)], isinstance(exc, TRANSIENT_API_ERRORS)
 
     out: list[SlidePlan] = []
     for ss in sp.slides[:2]:                       # не больше 2 слайдов на раздел
@@ -365,7 +369,7 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
             tid = _fallback_template(section, library)
         out.append(SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
                              freeform=False, content={"brief": brief}))
-    return out or [_fallback_slide(section, library)]
+    return (out or [_fallback_slide(section, library)]), False
 
 
 def _fallback_slide(section: Section, library: TemplateLibrary) -> SlidePlan:
@@ -493,9 +497,16 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
                                       sections[i], freeform_ok=freeform_ok,
                                       image=pairs[i][1])
                        for i in body_idx}
-            body_plans = {i: f.result() for i, f in futures.items()}
+            results = {i: f.result() for i, f in futures.items()}
         finally:
             pool.shutdown()
+        body_plans = {i: slides for i, (slides, _) in results.items()}
+        # Если из-за молчащего провайдера эвристикой пришлось спасать большую часть
+        # разделов — планировать дальше нечего: впереди фаза fill (ещё вызов на
+        # слайд), и она молча отдаст деку из пустых заглушек под видом «готово».
+        if degradation_is_total(sum(bad for _, bad in results.values()), len(results)):
+            raise ProviderUnavailable(
+                "сервис ИИ не отвечает: не удалось спланировать разделы")
     else:
         body_plans = {}
 

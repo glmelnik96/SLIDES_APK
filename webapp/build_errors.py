@@ -48,6 +48,8 @@ def _openai_code(exc: BaseException) -> str | None:
     except ImportError:
         return None
     # Порядок как в _openai_message: узкие подклассы раньше базовых.
+    if isinstance(exc, openai.NotFoundError):
+        return "provider_unavailable"
     if isinstance(exc, openai.APITimeoutError):
         return "provider_timeout"
     if isinstance(exc, openai.APIConnectionError):
@@ -65,10 +67,13 @@ def _pipeline_code(exc: BaseException) -> str | None:
     try:
         from htmlslides.assembler import AssembleError
         from htmlslides.parsers.render import RenderUnavailable
-        from htmlslides.pipeline.client import LLMFormatError
+        from htmlslides.pipeline.client import (LLMFormatError,
+                                                ProviderUnavailable)
         from htmlslides.pipeline.filler import FillError
     except ImportError:
         return None
+    if isinstance(exc, ProviderUnavailable):
+        return "provider_unavailable"
     if isinstance(exc, LLMFormatError):
         return "plan_format"
     if isinstance(exc, FillError):
@@ -88,6 +93,13 @@ def _openai_message(exc: BaseException) -> str | None:
         return None
     # Порядок важен: узкие подклассы раньше базовых (APITimeoutError <
     # APIConnectionError; RateLimitError/Auth < APIStatusError < APIError).
+    if isinstance(exc, openai.NotFoundError):
+        # 404 = модель снята или переименована на стороне Cloud.ru. Прежний общий
+        # текст советовал «повторить запуск» — совет заведомо пустой: повтор
+        # упрётся в ту же стену, помочь может только смена модели в настройках.
+        return ("Модель ИИ недоступна на стороне провайдера (её сняли или "
+                "переименовали). Повторный запуск не поможет — сообщите "
+                "администратору.")
     if isinstance(exc, openai.APITimeoutError):
         return ("Сервис ИИ не ответил вовремя (таймаут). Обычно помогает "
                 "повторный запуск через минуту.")
@@ -115,10 +127,17 @@ def _pipeline_message(exc: BaseException) -> str | None:
     try:
         from htmlslides.assembler import AssembleError
         from htmlslides.parsers.render import RenderUnavailable
-        from htmlslides.pipeline.client import LLMFormatError
+        from htmlslides.pipeline.client import (LLMFormatError,
+                                                ProviderUnavailable)
         from htmlslides.pipeline.filler import FillError
     except ImportError:
         return None
+    if isinstance(exc, ProviderUnavailable):
+        # Молчат и основная модель, и резервная. Звать «повторите запуск» нечестно:
+        # сборка уже пробовала обе, повтор упрётся в ту же недоступность.
+        return ("Сервис ИИ сейчас недоступен: не отвечают ни основная модель, "
+                "ни резервная. Это сбой на стороне провайдера — попробуйте "
+                "позже; если долго не проходит, сообщите администратору.")
     if isinstance(exc, LLMFormatError):
         return ("Не удалось спланировать презентацию: модель вернула неполный "
                 "ответ (возможно, превышен лимит Cloud.ru). Повторите запуск.")

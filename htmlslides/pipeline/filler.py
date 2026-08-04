@@ -16,7 +16,8 @@ from pydantic import BaseModel, Field
 from ..brand import brand_rules
 from ..library import TemplateLibrary
 from ..models import DeckPlan, SlidePlan
-from .client import TRANSIENT_API_ERRORS, KimiClient, LLMFormatError
+from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
+                     ProviderUnavailable, degradation_is_total)
 from .linter import ALLOWED_CLASSES
 from .planner import slot_brief
 
@@ -136,6 +137,7 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
     total = len(plan.slides)
     done_lock = threading.Lock()
     done = 0
+    api_degraded = 0                 # слайдов, потерянных именно из-за сбоя API
 
     def _tick() -> None:
         """Emit per-slide completion progress (thread-safe) so the UI shows live
@@ -163,6 +165,9 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
             # ситуация под нагрузкой. Деградируем слайд на blank, как и FillError.
             progress(f"warn: слайд {slide.index} — сбой API ({type(exc).__name__}); "
                      "фолбэк на blank")
+            nonlocal api_degraded
+            with done_lock:
+                api_degraded += 1
             result = _fallback_slide(library, slide)
         except Exception:
             aborted.set()
@@ -178,6 +183,12 @@ def fill_deck(client: KimiClient, library: TemplateLibrary, plan: DeckPlan, *,
         pool.shutdown(wait=False, cancel_futures=True)
         raise
     pool.shutdown()
+    # Заглушка филлера — пустой blank с одним заголовком. Дека, где такими стала
+    # большая часть слайдов, — не результат, а тишина провайдера, выданная за
+    # «готово»: отдавать её молча нельзя, лучше честный отказ.
+    if degradation_is_total(api_degraded, total):
+        raise ProviderUnavailable(
+            "сервис ИИ не отвечает: слайды не удалось заполнить")
     return plan.model_copy(update={"slides": slides})
 
 

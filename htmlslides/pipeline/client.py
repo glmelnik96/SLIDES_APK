@@ -15,7 +15,7 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Optional, Type, TypeVar
+from typing import Callable, Optional, Type, TypeVar
 
 from openai import (APIConnectionError, APITimeoutError, InternalServerError,
                     OpenAI, RateLimitError)
@@ -23,6 +23,27 @@ from pydantic import BaseModel, ValidationError
 
 DEFAULT_BASE_URL = "https://foundation-models.api.cloud.ru/v1"
 DEFAULT_MODEL = "MiniMaxAI/MiniMax-M3"
+
+# Резерв на время недоступности основной модели. Kimi-K2.6 был дефолтом до 339298a
+# и мультимодален — то есть заведомо тянет ВЕСЬ пайплайн, включая vision-роли.
+# Пустая строка в env = резерва нет (сборка честно падает вместо подмены модели).
+#
+# 2026-08-04 MiniMax-M3 перестала отвечать на стороне Cloud.ru (таймаут на каждом
+# вызове), Kimi в ту же минуту отвечала за 1,9 с. Фолбэка не было вовсе, и две
+# сборки ползли по 17-18 минут до отмены пользователем.
+FALLBACK_MODEL = os.environ.get("CLOUDRU_FALLBACK_MODEL", "moonshotai/Kimi-K2.6")
+
+# Проба перед сборкой: узнать о мёртвой модели за секунды. Боевые таймаут и ретраи
+# здесь недопустимы — они и есть то, что превращало сбой в 40-минутное ожидание.
+PROBE_TIMEOUT = 30.0
+# ≥256: MiniMax ВСЕГДА эмитит короткий reasoning перед content, и при меньшем
+# бюджете возвращает пустую строку — проба объявила бы живую модель мёртвой.
+PROBE_MAX_TOKENS = 256
+
+# Сколько транзиентных сбоев ПОДРЯД считаем отказом модели, а не блипом. Ловит
+# деградацию, начавшуюся уже после пробы. Одиночный сбой штатно стоит одного
+# слайда (см. пофазную деградацию) — менять из-за него модель на всю деку хуже.
+SWITCH_AFTER = 3
 
 # Транзиентные сбои API на ОДИН вызов, уже после собственных ретраев openai-клиента
 # (лимит/таймаут/обрыв/5xx). Шлюз Cloud.ru отдаёт их пачками на несколько минут, а
@@ -67,6 +88,26 @@ _TOKEN_CAP = 32768
 
 class LLMFormatError(RuntimeError):
     """Модель не вернула валидный JSON после ретрая (или JSON не найден)."""
+
+
+class ProviderUnavailable(RuntimeError):
+    """Собирать нечем: ни основная, ни резервная модель не отвечают.
+
+    Отдельный класс, а не openai-исключение: это не «сбой одного вызова», а вывод
+    о состоянии провайдера, и вести он должен к честному отказу сборки, а не к
+    пофазной деградации (иначе пользователь получает деку из пустых заглушек).
+    """
+
+
+def degradation_is_total(degraded: int, total: int) -> bool:
+    """Деградировала ли БОЛЬШАЯ ЧАСТЬ работы из-за сбоев API?
+
+    Один источник правды для планировщика и филлера: обе фазы обязаны отвечать на
+    этот вопрос одинаково, иначе «дека из заглушек» пролезет через ту, которая
+    забыла про порог. Строго больше половины — единичные блипы штатны и по
+    задумке стоят одного слайда.
+    """
+    return total > 0 and degraded * 2 > total
 
 
 class _RateGate:
@@ -120,12 +161,24 @@ class KimiClient:
     def __init__(self, api_key: Optional[str] = None, *,
                  base_url: Optional[str] = None,
                  model: Optional[str] = None,
+                 fallback_model: Optional[str] = None,
                  rps: Optional[float] = None,
                  timeout: float = DEFAULT_TIMEOUT,
                  max_retries: int = DEFAULT_MAX_RETRIES,
                  extra_body: Optional[dict] = None,
                  transport=None) -> None:
         self.model = model or os.environ.get("CLOUDRU_MODEL", DEFAULT_MODEL)
+        # Резерв не может совпадать с основной: иначе «переключение» было бы
+        # пустышкой, молча удваивающей ожидание на мёртвом провайдере.
+        fb = FALLBACK_MODEL if fallback_model is None else fallback_model
+        self._fallback = fb if fb and fb != self.model else ""
+        self._switched = False
+        self._switch_lock = threading.Lock()
+        self._streak = 0
+        # Куда сообщать о подмене модели. build.py подставляет сюда progress —
+        # решение, принятое за пользователя, он обязан увидеть, а не вычитать из
+        # журнала. Вызывается ровно один раз (переключение липкое).
+        self.on_notice: Callable[[str], None] = lambda message: None
         # Per-request kwargs for every call (e.g. {"thinking": {"type": "disabled"}}
         # to suppress reasoning for simple edits — harmless on models that ignore it).
         self._extra_body = extra_body
@@ -156,6 +209,77 @@ class KimiClient:
             base_url=base_url or os.environ.get("CLOUDRU_BASE_URL", DEFAULT_BASE_URL),
             max_retries=max_retries,  # 429/5xx ретраит сам openai-клиент (экспонента)
             timeout=timeout)
+
+    # ── доступность модели ───────────────────────────────────────────────────
+
+    def preflight(self, notice: Optional[Callable[[str], None]] = None) -> None:
+        """Проверить основную модель до начала работы; при отказе — уйти на резерв.
+
+        Стоит ~2 с и несколько токенов на здоровом провайдере. Смысл — сдвинуть
+        обнаружение сбоя с «через 9 минут на каждом вызове» на «через полминуты
+        один раз»: прод-инцидент 2026-08-04 стоил двух отменённых сборок именно
+        потому, что о мёртвой модели никто не узнавал.
+
+        Пробуем и резерв тоже: если молчат обе, честный отказ ДО планирования
+        лучше, чем сорок минут работы, заканчивающихся декой из заглушек.
+        """
+        if notice is not None:
+            self.on_notice = notice
+        if self._probe(self.model):
+            return
+        dead = self.model
+        if not self._switch(f"модель {dead} не отвечает"):
+            raise ProviderUnavailable(
+                f"сервис ИИ не отвечает (модель {dead}), резервной модели нет")
+        if not self._probe(self.model):
+            raise ProviderUnavailable(
+                f"сервис ИИ не отвечает: молчат и основная модель ({dead}), "
+                f"и резервная ({self.model})")
+
+    def _probe(self, model: str) -> bool:
+        """Дешёвый вызов «жива ли модель». Любая ошибка API = не жива."""
+        import openai
+        try:
+            self._probe_client().chat.completions.create(
+                model=model, messages=[{"role": "user", "content": "ping"}],
+                max_tokens=PROBE_MAX_TOKENS, temperature=0)
+        except openai.APIError:
+            return False
+        return True
+
+    def _probe_client(self):
+        """Клон клиента с коротким таймаутом и без ретраев (боевые 180 × 3 на
+        пробе означали бы ровно то ожидание, которое проба и должна убрать)."""
+        with_options = getattr(self._client, "with_options", None)
+        if with_options is None:                       # тестовый транспорт
+            return self._client
+        return with_options(timeout=PROBE_TIMEOUT, max_retries=0)
+
+    def _switch(self, reason: str) -> bool:
+        """Липко перевести клиент на резервную модель. False = резерва нет.
+
+        Липко и однократно: возврат назад заставлял бы клиент метаться между
+        моделями на деградирующем шлюзе, платя полным таймаутом за каждую пробу.
+        """
+        with self._switch_lock:
+            if self._switched or not self._fallback:
+                return self._switched
+            self.model, self._switched, self._streak = self._fallback, True, 0
+        self.on_notice(
+            f"notice: {reason} — собираю на резервной модели ({self.model}). "
+            "Оформление может отличаться от обычного.")
+        return True
+
+    def _note_call(self, ok: bool) -> None:
+        """Серия транзиентных сбоев подряд = отказ модели, а не блип."""
+        if ok:
+            self._streak = 0
+            return
+        with self._switch_lock:
+            self._streak += 1
+            fire = self._streak >= SWITCH_AFTER and not self._switched
+        if fire:
+            self._switch("основная модель ИИ перестала отвечать")
 
     @staticmethod
     def _usage_get(src, key: str, default=0):
@@ -211,11 +335,19 @@ class KimiClient:
             # task does one call then frees the slot — no task holds a slot while
             # awaiting another, so the semaphore can't deadlock even with many
             # parallel filler/planner threads.
-            with _INFLIGHT:
-                resp = self._client.chat.completions.create(
-                    model=self.model, messages=messages,
-                    max_tokens=max_tokens, temperature=temperature,
-                    extra_body=body or None)
+            try:
+                with _INFLIGHT:
+                    resp = self._client.chat.completions.create(
+                        model=self.model, messages=messages,
+                        max_tokens=max_tokens, temperature=temperature,
+                        extra_body=body or None)
+            except TRANSIENT_API_ERRORS:
+                # Единственная точка, через которую проходят ВСЕ вызовы пайплайна:
+                # здесь и только здесь видно, что сбоит не один слайд, а модель.
+                # Сам сбой пробрасываем — гасить его по-прежнему обязана фаза.
+                self._note_call(ok=False)
+                raise
+            self._note_call(ok=True)
             self._record_usage(resp)
             choice = resp.choices[0]
             content = choice.message.content or ""

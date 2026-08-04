@@ -96,3 +96,28 @@ def test_error_code_never_leaks_error_text():
         code = error_code(exc)
         assert secret not in code
         assert code.replace("_", "").isalpha()   # только snake_case-латиница
+
+
+# ── недоступность модели (инцидент 2026-08-04): без ложного «повторите» ───────
+def test_provider_unavailable_has_own_code_and_honest_text():
+    """Обе модели молчат: советовать «повторите запуск» — врать. Повтор упрётся
+    в ту же стену, а пользователь потеряет ещё полчаса."""
+    from htmlslides.pipeline.client import ProviderUnavailable
+    exc = ProviderUnavailable("нет живых моделей")
+    assert error_code(exc) == "provider_unavailable"
+    msg = user_message(exc)
+    assert msg != GENERIC
+    assert "повторите запуск" not in msg.lower()
+
+
+def test_model_not_found_is_provider_unavailable_not_retry_advice():
+    """404 = модель снята или переименована. Прежний текст звал «повторить запуск»
+    — заведомо бесполезный совет: нужен администратор."""
+    openai = pytest.importorskip("openai")
+    import httpx
+    resp = httpx.Response(404, request=httpx.Request("POST", "http://x"))
+    exc = openai.NotFoundError("model not found", response=resp, body=None)
+    assert error_code(exc) == "provider_unavailable"
+    msg = user_message(exc)
+    assert "повторите запуск" not in msg.lower()
+    assert "администратор" in msg.lower()
