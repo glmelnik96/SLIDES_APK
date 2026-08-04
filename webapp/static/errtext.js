@@ -69,15 +69,47 @@
     return { text: text, warn: warn };
   }
 
+  // Доступность сервиса ИИ (GET /api/models/health) → тон индикатора и текст.
+  // Роли, а не имена моделей: имя — деталь реализации, менялось уже дважды.
+  // При "down" кнопку сборки НЕ блокируем — состояние могло измениться за секунды,
+  // а запрет был бы решением за пользователя по данным минутной давности.
+  var MODEL_HEALTH = {
+    ok: { tone: "ok", text: "Сервис ИИ работает штатно" },
+    fallback: { tone: "warn",
+      text: "Основная модель не отвечает. Соберём на резервной — может быть медленнее" },
+    down: { tone: "down",
+      text: "Сервис ИИ недоступен: не отвечают обе модели. Сборка сейчас не пройдёт" },
+    unknown: { tone: "idle", text: "Проверяю доступность сервиса ИИ…" },
+  };
+  function healthLine(state) {
+    return MODEL_HEALTH[state] || MODEL_HEALTH.unknown;
+  }
+
+  // Возраст проверки доступности. Проба идёт только по запросу (загрузка страницы
+  // и возврат во вкладку), поэтому свежесть данных пользователь обязан видеть —
+  // иначе зелёный индикатор часовой давности читается как «сейчас всё хорошо».
+  function checkedAgo(sec) {
+    if (sec == null || !isFinite(sec) || sec < 0) return "";
+    if (sec < 5) return "только что";
+    if (sec < 60) return sec + " с назад";
+    var min = Math.floor(sec / 60);
+    if (min < 60) return min + " " + plural(min, "минуту", "минуты", "минут") + " назад";
+    var h = Math.floor(min / 60);
+    return h + " " + plural(h, "час", "часа", "часов") + " назад";
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
   root.REBUILD_LABEL = REBUILD_LABEL;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
   root.plural = plural;
   root.errText = errText;
   root.estimateLine = estimateLine;
+  root.healthLine = healthLine;
+  root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
-      estimateLine: estimateLine };
+      estimateLine: estimateLine, healthLine: healthLine,
+      checkedAgo: checkedAgo };
   }
 })(typeof window !== "undefined" ? window : globalThis);

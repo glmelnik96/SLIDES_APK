@@ -235,6 +235,16 @@ async def create_job(request: Request, mode: str = Form(...),
     dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
 
+    return await _start_build(request, inp, user, source=dest)
+
+
+async def _start_build(request: Request, inp, user, *,
+                       source: Path) -> JSONResponse:
+    """Общий хвост постановки сборки в очередь: оценка объёма, строка владения,
+    старт раннера, единая форма ответа.
+
+    Один код на загрузку и на перезапуск — чтобы перезапуск не стал дырой в
+    лимитах очереди и не разошёлся с загрузкой по форме ответа."""
     # Оценка размера для фронта: считаем разделы тем же парсером, что и сборка
     # (двойной парсинг — миллисекунды на фоне LLM-этапов). Ошибка парсинга НЕ
     # блокирует запуск — реальную причину покажет воркер со своей диагностикой.
@@ -242,7 +252,7 @@ async def create_job(request: Request, mode: str = Form(...),
     # (htmlslides.parsers.base.parse_file) действовал и здесь.
     try:
         from htmlslides.parsers import base as _parsers_base
-        doc = await run_in_threadpool(_parsers_base.parse_file, dest)
+        doc = await run_in_threadpool(_parsers_base.parse_file, source)
         section_count: int | None = len(doc.sections)
     except Exception:  # noqa: BLE001
         section_count = None
@@ -251,7 +261,9 @@ async def create_job(request: Request, mode: str = Form(...),
     # Persist ownership BEFORE starting so even a fast terminal can update it.
     async with request.app.state.sessionmaker() as s:
         await jobs_repo.create(s, session_id=inp.session_id, user_id=user.id,
-                               mode=mode, kind=kind, source_filename=file.filename)
+                               mode=inp.mode.value, kind=kind,
+                               source_filename=inp.source_filename,
+                               exact_transfer=inp.exact_transfer)
         await s.commit()
     try:
         runner.start(inp, user_id=user.id, section_count=section_count)
@@ -647,6 +659,60 @@ async def cancel_job(session_id: str, request: Request,
     if not runner.cancel(session_id):
         raise HTTPException(404, "job not active")
     return JSONResponse({"ok": True})
+
+
+# Перезапустить можно только то, что не доехало. У done есть «Открыть», и «собрать
+# ещё раз то же самое» — другая фича с другим смыслом.
+_RETRYABLE = {"failed", "cancelled"}
+
+
+@app.post("/api/jobs/{session_id}/retry")
+async def retry_job(session_id: str, request: Request,
+                    user=Depends(get_current_user)) -> JSONResponse:
+    """Перезапустить неудавшуюся сборку из сохранённого исходника (владелец).
+
+    Раньше «Повторить» жила целиком в браузере: скролл к дропзоне + повтор, если
+    файл ещё выбран в <input>. После F5 (а перезагрузка — обычное дело, когда
+    сборка упала) выбор пропадал, и кнопка превращалась в «прокрутить страницу».
+
+    Работает ровно в окне ретеншена — пока жив исходник сессии. Хранить его
+    дольше ради этой кнопки нельзя (это обещание о клиентских данных), поэтому
+    когда файла нет, отвечаем 410 с объяснением, а не молча ничего не делаем."""
+    job = await _owned_or_404(request, session_id, user)
+    if job.kind == "draft":
+        # У черновика своя кнопка «Продолжить» — он правится, а не пересобирается.
+        raise HTTPException(400, "черновик не перезапускается — откройте его в "
+                                 "редакторе")
+    if job.status not in _RETRYABLE:
+        raise HTTPException(
+            409, "перезапустить можно только неудавшуюся или остановленную сборку")
+    source = next(iter(sorted(session_dir(session_id).glob("input.*"))), None)
+    if source is None:
+        raise HTTPException(
+            410, f"Исходник больше не хранится — мы удаляем файлы через "
+                 f"{int(_settings.retention_hours)} часа. Загрузите файл заново.")
+
+    from schemas.session import Mode, SessionInput
+    inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
+                       mode=Mode(job.mode), input_s3_key=None,
+                       source_filename=job.source_filename,
+                       # NULL у строк, созданных до появления колонки: тогда флага
+                       # не существовало, все сборки были обычными.
+                       exact_transfer=bool(job.exact_transfer))
+    dest = session_dir(inp.session_id) / source.name
+    dest.write_bytes(source.read_bytes())
+    inp = inp.model_copy(update={"input_s3_key": str(dest)})
+    return await _start_build(request, inp, user, source=dest)
+
+
+@app.get("/api/models/health")
+async def models_health(user=Depends(get_current_user)) -> JSONResponse:
+    """Доступность сервиса ИИ для плашки на главной — роли, а не имена моделей.
+
+    Кэш с TTL живёт в model_health; ответ мгновенный (stale-while-revalidate),
+    протухшие данные обновляются фоном."""
+    from webapp import model_health
+    return JSONResponse(model_health.snapshot())
 
 
 @app.get("/api/jobs/{session_id}/status")

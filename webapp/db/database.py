@@ -11,13 +11,15 @@ from sqlalchemy.ext.asyncio import (
 
 from webapp.db.models import Base
 
-# Колонки расхода, добавленные к jobs позже. create_all не доращивает
-# существующие таблицы — для старых БД добавляем их вручную (см. _ensure_job_columns).
-_JOB_USAGE_COLUMNS: dict[str, str] = {
+# Колонки, добавленные к jobs позже (расход прогона + флаг точного переноса).
+# create_all не доращивает существующие таблицы — для старых БД добавляем их
+# вручную (см. _ensure_job_columns).
+_JOB_ADDED_COLUMNS: dict[str, str] = {
     "in_tokens": "INTEGER",
     "out_tokens": "INTEGER",
     "cost_rub": "FLOAT",
     "duration_ms": "INTEGER",
+    "exact_transfer": "INTEGER",   # SQLite-представление Boolean
 }
 
 
@@ -30,12 +32,12 @@ def make_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 
 
 def _ensure_job_columns(sync_conn) -> None:
-    """Идемпотентная мини-миграция: доращиваем jobs недостающими колонками
-    расхода. Имена колонок — фиксированные константы (не пользовательский ввод),
+    """Идемпотентная мини-миграция: доращиваем jobs недостающими колонками.
+    Имена колонок — фиксированные константы (не пользовательский ввод),
     поэтому прямой ALTER TABLE безопасен. Все колонки nullable → у старых строк
     значения останутся NULL."""
     existing = {c["name"] for c in inspect(sync_conn).get_columns("jobs")}
-    for name, sql_type in _JOB_USAGE_COLUMNS.items():
+    for name, sql_type in _JOB_ADDED_COLUMNS.items():
         if name not in existing:
             sync_conn.exec_driver_sql(
                 f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")

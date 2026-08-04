@@ -8,7 +8,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (JSON, Boolean, DateTime, Float, ForeignKey, Integer,
+                        String, Text)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -42,6 +43,11 @@ class Job(Base):
     mode: Mapped[str] = mapped_column(String(16))
     kind: Mapped[str] = mapped_column(String(8))  # "html" | "pptx"
     source_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # «Точный перенос» (1-в-1, в обход ИИ). Нужен перезапуску: без него «Повторить»
+    # молча собрало бы обычную деку вместо запрошенного дословного переноса.
+    # NULL у строк, созданных до появления колонки, = False (флага тогда не было).
+    exact_transfer: Mapped[Optional[bool]] = mapped_column(
+        Boolean, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="queued")
     # queued | running | done | failed | cancelled
     result_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

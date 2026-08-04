@@ -279,7 +279,7 @@ function cardActions(it) {
     return `<a class="btn btn-ghost btn-sm" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
       `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
   if (it.state === "failed" || it.state === "cancelled")
-    return `<button class="btn btn-ghost btn-sm" data-retry="1">Повторить</button>`;
+    return `<button class="btn btn-ghost btn-sm" data-retry="${it.id}">Повторить</button>`;
   return "";
 }
 
@@ -411,10 +411,47 @@ async function deleteDraft(id, btn) {
     if (btn) btn.disabled = false;
   }
 }
-function retryUpload() {
-  const smooth = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-  $("#drop").scrollIntoView({ behavior: smooth, block: "start" });
-  if (selectedFile) createJob();  // файл ещё выбран — перезапускаем сразу
+// Отказ запуска — в панель #result (своя визуальная система, не alert).
+function launchError(title, bodyHtml) {
+  const box = $("#result");
+  box.classList.remove("hidden");
+  box.classList.add("error");
+  box.innerHTML = `<h3>${esc(title)}</h3>${bodyHtml}`;
+  updateEmptyState();
+}
+
+// Перезапуск неудавшейся сборки идёт на сервере: он копирует сохранённый исходник
+// сессии в новую и ставит её в очередь. Раньше это жило в браузере (скролл к
+// дропзоне + повтор, если файл ещё выбран) и после F5 не делало ничего.
+async function retryBuild(id, btn) {
+  const prev = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Запускаю…"; }
+  let r;
+  try {
+    r = await fetch(U(`/api/jobs/${id}/retry`), { method: "POST" });
+  } catch (e) {
+    launchError("Не удалось перезапустить сборку",
+      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте ещё раз.</p>");
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
+    return;
+  }
+  if (!r.ok) {
+    const text = await r.text();
+    let detail = "";
+    try { detail = JSON.parse(text).detail; } catch (e) { detail = ""; }
+    // 410 — исходник уже удалён по сроку хранения: серверный текст объясняет, что
+    // делать (загрузить файл заново). 429 — очередь занята.
+    const body = r.status === 429
+      ? "<p>Очередь занята — дождитесь завершения текущих сборок.</p>"
+      : (detail ? `<p>${esc(detail)}</p>`
+                : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`);
+    launchError("Не удалось перезапустить сборку", body);
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
+    return;
+  }
+  const { session_id, kind } = await r.json();
+  $("#result").classList.add("hidden");
+  streamProgress(session_id, kind);
 }
 function toggleCard(id) {
   const card = feedCards.get(id);
@@ -435,7 +472,7 @@ $("#feed").addEventListener("click", (e) => {
   const delEl = e.target.closest("[data-del]");
   if (delEl) { e.stopPropagation(); deleteDraft(delEl.dataset.del, delEl); return; }
   const retryEl = e.target.closest("[data-retry]");
-  if (retryEl) { e.stopPropagation(); retryUpload(); return; }
+  if (retryEl) { e.stopPropagation(); retryBuild(retryEl.dataset.retry, retryEl); return; }
   if (e.target.closest("a, button")) return;          // ссылки/кнопки работают сами
   const card = e.target.closest(".pcard.expandable");
   if (card) toggleCard(card.dataset.id);
@@ -467,8 +504,9 @@ async function autoResumeActive() {
 
 /* ---- create job ---- */
 // Г§8 — extracted so a failed card's «Повторить» can re-run the build directly.
-async function createJob() {
+async function createJob(opts) {
   if (!selectedFile) return;
+  const force = !!(opts && opts.force);
   const ex = document.getElementById("exactTransfer");
   const isExact = !!(ex && ex.checked);
   // Client-side gate: «Точный перенос» works only on slide-structured inputs
@@ -477,29 +515,32 @@ async function createJob() {
   // clear, actionable message, no wasted round-trip or queue slot. The server
   // enforces the same rule (400) as the source of truth.
   if (isExact && !/\.(pptx|md|txt)$/i.test(selectedFile.name || "")) {
-    const box = $("#result");
-    box.classList.remove("hidden");
-    box.classList.add("error");
-    box.innerHTML =
-      `<h3>Не удалось запустить сборку</h3>` +
+    launchError("Не удалось запустить сборку",
       `<p>«Точный перенос» поддерживает .pptx, .md и .txt. ` +
       `Для .docx снимите галочку «Точный перенос» — обычная сборка отлично ` +
-      `переносит Word, — либо сохраните файл как .pptx.</p>`;
-    updateEmptyState();
+      `переносит Word, — либо сохраните файл как .pptx.</p>`);
+    return;
+  }
+  // Сервис ИИ лежал на момент последней пробы — предупреждаем, но не запрещаем:
+  // состояние могло измениться за секунды, и решать должен пользователь.
+  if (!force && mhData && mhData.state === "down") {
+    const age = typeof checkedAgo === "function" ? checkedAgo(mhAgeSec()) : "";
+    launchError("Сервис ИИ сейчас недоступен",
+      `<p>Не отвечают ни основная, ни резервная модель${age ? ` (проверено ${esc(age)})` : ""} — ` +
+      `сборка, скорее всего, оборвётся. Можно подождать пару минут или запустить сейчас.</p>` +
+      `<p><button class="btn btn-ghost btn-sm" id="forceCreate">Всё равно запустить</button></p>`);
+    const f = $("#forceCreate");
+    if (f) f.onclick = () => createJob({ force: true });
+    loadModelHealth();          // заодно перепроверяем — данные явно устарели
     return;
   }
   // Лимит: не больше двух своих сборок одновременно (остальное — дождаться).
   try {
     const act = await (await fetch(U("/api/jobs/active"))).json();
     if (Array.isArray(act) && act.length >= 2) {
-      const box = $("#result");
-      box.classList.remove("hidden");
-      box.classList.add("error");
-      box.innerHTML =
-        `<h3>Дождитесь завершения</h3>` +
+      launchError("Дождитесь завершения",
         `<p>Одновременно можно собирать не больше двух презентаций. ` +
-        `Как только одна закончится — запустите следующую.</p>`;
-      updateEmptyState();
+        `Как только одна закончится — запустите следующую.</p>`);
       return;
     }
   } catch (e) { /* сеть — не блокируем запуск, сервер всё равно поставит лимит */ }
@@ -514,9 +555,6 @@ async function createJob() {
     // not a native alert. 429 = queue full; 400 already carries a Russian
     // detail; anything else falls back to raw text in a collapsed <details>.
     const text = await res.text();
-    const box = $("#result");
-    box.classList.remove("hidden");
-    box.classList.add("error");
     let body;
     if (res.status === 429) {
       body = "<p>Очередь занята — дождитесь завершения текущих сборок.</p>";
@@ -527,8 +565,7 @@ async function createJob() {
         ? `<p>${esc(detail)}</p>`
         : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`;
     }
-    box.innerHTML = `<h3>Не удалось запустить сборку</h3>${body}`;
-    updateEmptyState();
+    launchError("Не удалось запустить сборку", body);
     $("#create").disabled = false;
     return;
   }
@@ -537,7 +574,61 @@ async function createJob() {
   streamProgress(session_id, kind);
   resetFile();                            // дропзона свободна — можно готовить следующую
 }
-$("#create").onclick = createJob;
+// Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
+$("#create").onclick = () => createJob();
+
+/* ---- доступность сервиса ИИ (плашка над кнопкой «Создать») ---- */
+// Пробы стоят вызовов к провайдеру, поэтому в фоне не поллим: спрашиваем при
+// загрузке страницы и при возврате во вкладку, если данным больше TTL. Возраст
+// показываем живым таймером — зелёный индикатор часовой давности иначе читался бы
+// как «сейчас всё хорошо».
+const MH_TTL_MS = 60000;
+let mhData = null;
+let mhCheckedAt = 0;          // локальный момент последней серверной проверки
+let mhUnknownTries = 0;       // холодный старт: не более трёх дозапросов
+
+function mhAgeSec() {
+  return mhCheckedAt ? Math.round((Date.now() - mhCheckedAt) / 1000) : null;
+}
+
+async function loadModelHealth() {
+  let d;
+  try { d = await (await fetch(U("/api/models/health"))).json(); }
+  catch (e) { return; }         // сеть — плашка просто не меняется
+  mhData = d;
+  mhCheckedAt = d.checked_ago_sec == null ? 0 : Date.now() - d.checked_ago_sec * 1000;
+  renderModelHealth();
+  // "unknown" — проба ещё идёт (или клиент не собрался). Дозапрашиваем несколько
+  // раз, а не бесконечно: без ключа API состояние останется неизвестным навсегда.
+  if (d.state === "unknown" && mhUnknownTries < 3) {
+    mhUnknownTries++;
+    setTimeout(loadModelHealth, 3000);
+  }
+}
+
+function renderModelHealth() {
+  const box = $("#modelHealth");
+  if (!box || !mhData || typeof healthLine !== "function") return;
+  const line = healthLine(mhData.state);
+  box.hidden = false;
+  box.dataset.state = line.tone;
+  const prim = $("#mhPrimary");
+  if (prim) prim.dataset.up = mhData.primary_up == null ? "" : String(mhData.primary_up);
+  const fb = $("#mhFallback");
+  if (fb) {                       // резерв не настроен → второго индикатора нет
+    fb.hidden = mhData.fallback_up == null;
+    fb.dataset.up = String(mhData.fallback_up);
+  }
+  $("#mhNote").textContent = line.text;
+  mhTick();
+}
+
+function mhTick() {
+  const el = $("#mhAge");
+  if (!el || !mhData) return;
+  const age = typeof checkedAgo === "function" ? checkedAgo(mhAgeSec()) : "";
+  el.textContent = age ? `Проверено ${age}` : "";
+}
 
 /* If no progress event arrives for this many seconds, warn that the step is
    taking long (helps tell a slow model call apart from a real hang). */
@@ -781,3 +872,12 @@ resetFile();
 loadFeed();
 autoResumeActive();
 setInterval(loadFeed, 2000);
+loadModelHealth();
+setInterval(mhTick, 1000);      // живой возраст проверки (сам опрос — по событию)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (!mhCheckedAt || Date.now() - mhCheckedAt > MH_TTL_MS) {
+    mhUnknownTries = 0;
+    loadModelHealth();
+  }
+});

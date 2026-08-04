@@ -201,6 +201,24 @@ a { color: var(--accent); }
   padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
 .upload-side .btn { align-self: stretch; }
 
+/* Доступность сервиса ИИ над кнопкой «Создать»: два индикатора-роли + пояснение
+   + возраст проверки. Структуру держит хайрлайн, прямые углы (канон v3). */
+.mhealth { display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; border: 1px solid var(--line-soft); background: var(--bg-soft); }
+.mhealth[hidden] { display: none; }
+.mhealth-inds { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.mh-ind { display: inline-flex; align-items: center; gap: 7px;
+  font-size: var(--fs-cap); color: var(--muted); }
+.mh-ind[hidden] { display: none; }
+.mh-ind i { width: 7px; height: 7px; flex: 0 0 auto; background: var(--muted-2); }
+.mh-ind[data-up="true"] i { background: var(--accent); }
+.mh-ind[data-up="false"] i { background: var(--danger); }
+.mhealth-note { font-size: var(--fs-cap); line-height: 1.4; color: var(--muted); }
+.mhealth[data-state="warn"] .mhealth-note { color: var(--warn-ink); }
+.mhealth[data-state="down"] .mhealth-note { color: var(--danger); }
+.mhealth[data-state="down"] { border-color: var(--danger-line); }
+.mhealth-age { font-size: var(--fs-cap); color: var(--muted-2); font-variant-numeric: tabular-nums; }
+
 /* Два способа вручную — вся строка кликабельна; один дивайдер на 60%.
    Сетка (1.5fr 1fr) и отступы дивайдера повторяют .upload-grid/.upload-side,
    поэтому вертикальные дивайдеры всех трёх блоков совпадают по вертикали. */

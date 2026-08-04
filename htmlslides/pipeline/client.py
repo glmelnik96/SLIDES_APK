@@ -212,6 +212,12 @@ class KimiClient:
 
     # ── доступность модели ───────────────────────────────────────────────────
 
+    @property
+    def fallback_model(self) -> str:
+        """Имя резервной модели ("" — резерва нет). Публично, потому что о
+        доступности резерва спрашивает не только сборка (см. webapp/model_health)."""
+        return self._fallback
+
     def preflight(self, notice: Optional[Callable[[str], None]] = None) -> None:
         """Проверить основную модель до начала работы; при отказе — уйти на резерв.
 
@@ -225,19 +231,23 @@ class KimiClient:
         """
         if notice is not None:
             self.on_notice = notice
-        if self._probe(self.model):
+        if self.probe(self.model):
             return
         dead = self.model
         if not self._switch(f"модель {dead} не отвечает"):
             raise ProviderUnavailable(
                 f"сервис ИИ не отвечает (модель {dead}), резервной модели нет")
-        if not self._probe(self.model):
+        if not self.probe(self.model):
             raise ProviderUnavailable(
                 f"сервис ИИ не отвечает: молчат и основная модель ({dead}), "
                 f"и резервная ({self.model})")
 
-    def _probe(self, model: str) -> bool:
-        """Дешёвый вызов «жива ли модель». Любая ошибка API = не жива."""
+    def probe(self, model: str) -> bool:
+        """Дешёвый вызов «жива ли модель». Любая ошибка API = не жива.
+
+        Состояние клиента НЕ меняет (в отличие от preflight, который при отказе
+        липко переезжает на резерв) — поэтому годится и для read-only опроса
+        доступности, показываемого в UI."""
         import openai
         try:
             self._probe_client().chat.completions.create(
