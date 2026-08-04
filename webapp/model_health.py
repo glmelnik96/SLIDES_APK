@@ -72,10 +72,15 @@ async def _refresh() -> None:
         fallback = client.fallback_model
         # Параллельно: последовательные пробы стоили бы двух PROBE_TIMEOUT подряд
         # ровно в том случае, когда лежит всё и ответ нужен быстрее всего.
+        t0 = time.monotonic()
         primary, backup = await asyncio.gather(
             asyncio.to_thread(client.probe, client.model),
             (asyncio.to_thread(client.probe, fallback) if fallback
              else _none()))
+        # Вердикт плашки обязан быть виден в журнале: иначе «у пользователя горит
+        # красное» нечем проверить — проба ходит наружу и её отказ не наш баг.
+        logger.info("model health: primary=%s fallback=%s in %.1fs", primary,
+                    backup, time.monotonic() - t0)
         _primary_up, _fallback_up, _checked_at = primary, backup, time.monotonic()
     except Exception:  # noqa: BLE001
         # Нет ключа API / клиент не собрался — состояние честно остаётся
