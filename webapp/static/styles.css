@@ -1,20 +1,31 @@
 /* ============================================================================
    Cloud.ru Design — единая визуальная система платформы, раздел /slides (App2).
-   Канон-источник: gateway/static/app.css @ 4c8d1f9 (пилот /images). Токены :root
-   и базовые приёмы переиспользованы 1:1 ради бесшовных переходов между разделами:
-   тёмный графит, единственный акцент #26D07C, 1px-хайрлайны как главный
-   структурный приём, СТРОГИЕ прямые углы (border-radius: 0), SB Sans Display,
-   капс-микролейблы. ВАЖНО: имена селекторов и id неизменны — JS/шаблоны на них
+   Канон-источник: gateway/static/app.css @ 759bbb8 (пилот /images, лендинг,
+   /admin). Токены :root и шапка скопированы 1:1 ради бесшовных переходов между
+   разделами. ВАЖНО: имена селекторов и id неизменны — JS/шаблоны на них
    завязаны; меняется только визуальный слой.
+
+   КАНОН v5 «ТИХИЕ ПОВЕРХНОСТИ» (2026-08-05). Отменяет v3 (прямые углы,
+   1px-хайрлайн как главный приём). Правила:
+     • Подложка вместо рамки: блок отделяется фоном чуть светлее полотна
+       (--surface), а не обводкой и не тенью.
+     • 1px var(--accent) — ТОЛЬКО у выбранного/основного элемента.
+     • Радиусы вернулись: 12px карточки (--radius-card), 8px контролы
+       (--radius-ctl), 99px пилюли (чипы, мелкие действия, прогресс).
+     • Акцентная кнопка — var(--accent) / var(--on-accent); вторичная —
+       var(--surface-active) без рамки.
+     • Поля ввода — var(--surface-inset) без рамки.
+     • Без капса, без emoji, без моноширинных. Микролейблы — .eyebrow
+       (12px, letter-spacing .02em, var(--muted-2)).
+   Хайрлайн остаётся только там, где нужен РАЗДЕЛИТЕЛЬ (граница секций,
+   строки таблиц), но не как обводка блока.
 
    ПРАВИЛО СТАТУС-ЛЕЙБЛОВ (бейджи, пилюли, теги состояний): БЕЗ ОБВОДОК. Фон —
    полупрозрачная заливка того же тона, цвет текста задаёт семантику:
      • нейтральный  → background: var(--neutral-dim),  color: var(--muted[-2])
-     • акцент/успех → background: var(--accent-dim),   color: var(--accent)
-     • ошибка       → background: rgba(255,107,107,.10), color: var(--danger)
+     • акцент/успех → background: var(--brand-chip-bg), color: var(--brand-chip-fg)
+     • ошибка       → background: rgba(255,107,107,.10), color: var(--danger-soft)
      • предупрежд.  → background: rgba(236,213,129,.10), color: var(--warn-ink)
-   Никаких border у лейблов. Кнопки — по тому же принципу: заливка того же цвета
-   вместо обводки (см. .pcard-actions .btn-ghost / .btn-stop).
    ============================================================================ */
 @font-face { font-family: "SB Sans Text"; font-weight: 400; font-style: normal; font-display: swap;
   src: url("/static/fonts/sb-sans-text-400.woff2") format("woff2"); }
@@ -26,40 +37,56 @@
   src: url("/static/fonts/sb-sans-display-600.woff2") format("woff2"); }
 
 :root {
-  /* Поверхности — бренд #222222, лестница сохранена (+7 к каждому шагу) */
-  --bg: #222222;          /* было #1b1b1b */
-  --bg-soft: #282828;     /* было #212121 */
-  --panel: #2b2b2b;       /* было #242424 */
-  --panel-2: #353535;     /* было #2e2e2e — hover/press-заливка */
-  --field-bg: var(--panel);  /* К§13 — единая поверхность полей ввода */
-  --stage: #383838;       /* холст-сцена — заметно светлее слайда (#222), чтобы слайд не сливался с фоном */
-  /* Хайрлайны — основной структурный приём бренда */
-  --line: #3b3b3b;        /* было #343434 */
-  --line-soft: #313131;   /* было #2a2a2a */
+  /* Поверхности — лестница шлюза 1:1 (v5). Локальный сдвиг «+7 к каждому шагу»
+     (бренд #222222) отменён: шапка обязана совпадать с соседними разделами
+     попиксельно, а половина шага серого различима именно на её фоне. */
+  --bg: #1b1b1b;
+  --bg-soft: #212121;
+  --panel: #242424;
+  --panel-2: #2e2e2e;     /* hover/press-заливка; она же «пилюля» активного пункта nav */
+  /* «Тихие поверхности» — подложка вместо рамки, главный структурный приём v5 */
+  --surface: #242424;         /* карточка на полотне */
+  --surface-inset: #1b1b1b;   /* утопленное: поля ввода, дорожки прогресса, логи */
+  --surface-active: #2e2e2e;  /* ховер карточки, вторичная кнопка */
+  --brand-surface: #1e2a23;
+  --brand-surface-hover: #243329;
+  --brand-muted: #7ea88f;
+  --brand-chip-bg: #21382b;   /* выбранный чип / успешный статус */
+  --brand-chip-fg: #7ee0a0;
+  --field-bg: var(--surface-inset);  /* К§13 — единая поверхность полей ввода */
+  --stage: #383838;       /* холст-сцена редактора — светлее слайда, чтобы слайд не сливался */
+  /* Хайрлайны — в v5 только разделители (границы секций, строки), не обводка блоков */
+  --line: #343434;
+  --line-soft: #2a2a2a;
   /* Текст */
-  --text: #f2f2f2;        /* бренд; было #f4f4f4. 14.2:1 на --bg */
-  --muted: #9a9a9a;       /* было #989898. 5.2:1 на --bg-soft */
-  --muted-2: #909090;     /* было #707070 (3.5:1 — фейл AA). 4.98:1 на --bg, 4.62:1 на --bg-soft */
+  --text: #f4f4f4;
+  --muted: #989898;
+  --muted-2: #8c8c8c;     /* 5.0:1 на --bg, 4.8:1 на --surface */
   /* Единственный акцент */
-  --accent: #26D07C;      /* 7.9:1 на --bg — ок для лейблов/ссылок; НЕ цвет основного текста */
+  --accent: #26D07C;      /* 8.9:1 на --bg — ок для лейблов/ссылок; НЕ цвет основного текста */
   --accent-2: #1fb06a;    /* hover */
-  --accent-3: #1a9a5c;    /* НОВЫЙ: :active (шаг темнее hover; 5.3:1 с --accent-ink) */
-  --accent-ink: #04130d;
+  --accent-3: #1a9a5c;    /* :active (шаг темнее hover) */
+  --accent-ink: #04130d;  /* легаси-алиас --on-accent (на нём завязаны старые правила) */
+  --on-accent: #04130d;   /* текст на акцентной заливке */
   --accent-dim: rgba(38, 208, 124, .10);
-  --accent-dim-2: rgba(38, 208, 124, .18);  /* НОВЫЙ: hover акцентных плашек */
+  --accent-dim-2: rgba(38, 208, 124, .18);
   --accent-line: rgba(38, 208, 124, .35);
-  --neutral-dim: rgba(255, 255, 255, .06); /* НОВЫЙ: заливка нейтральных статус-лейблов — полупрозрачная, читается на любой поверхности */
+  --neutral-dim: rgba(255, 255, 255, .06); /* заливка нейтральных статус-лейблов */
   /* Семантика состояний */
-  --danger: #ff6b6b;      /* 5.7:1 на --bg */
-  --danger-line: rgba(255, 107, 107, .35);  /* НОВЫЙ: рамки ошибок (симметрия --accent-line) */
+  --danger: #ff6b6b;
+  --danger-soft: #f0a0a0; /* текст ошибки на тёмной подложке (мягче --danger) */
+  --danger-line: rgba(255, 107, 107, .35);
   --warn-bg: #2a2613;
   --warn-line: #46401f;
   --warn-ink: #ecd581;
-  --overlay: rgba(10, 10, 10, .85);         /* НОВЫЙ: единый скрим модалок */
-  /* Геометрия — строгие прямые углы */
-  --r-sm: 0px;
-  --r: 0px;
-  --r-lg: 0px;
+  --overlay: rgba(10, 10, 10, .85);         /* единый скрим модалок */
+  /* Геометрия — v5 вернул радиусы (v3 «все углы 0» отменён) */
+  --r-sm: 8px;
+  --r: 8px;
+  --r-lg: 12px;
+  --radius-card: 12px;
+  --radius-ctl: 8px;
+  --radius-pill: 99px;    /* чипы, мелкие действия, дорожки прогресса */
   --font-display: "SB Sans Display", Verdana, sans-serif;
   --font-text: "SB Sans Text", Verdana, sans-serif;
   /* Типографика (фактическая шкала, токенизирована; 10px запрещён) */
@@ -73,8 +100,10 @@
   --fs-h1: 26px;
   --lh-body: 1.5;
   --lh-tight: 1.2;
-  --track-caps: .12em;    /* К§12 — секционный маяк (12px) */
-  --track-caps-2: .08em;  /* К§12 — микроподпись (11px) */
+  /* v5 отменил капс: трекинг микролейблов сведён к канонным .02em (имена токенов
+     сохранены — на них завязано ~15 правил, включая редактор). */
+  --track-caps: .02em;
+  --track-caps-2: .02em;
   /* Spacing (4px-сетка) */
   --sp-1: 4px;
   --sp-2: 8px;
@@ -108,17 +137,23 @@ a { color: var(--accent); }
 :where(button, a, summary, [tabindex], input, textarea, select):focus-visible {
   outline: var(--focus-ring); outline-offset: var(--focus-offset); }
 
-/* К§12 — капс-микролейблы в ДВУХ ролях: секционный маяк 12px/--track-caps и
-   микроподпись 11px/--track-caps-2 (вместо пяти кеглей и пяти трекингов). */
-.eyebrow { font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
-/* Ч§5 — бейдж режима редактора (капс-микролейбл на хайрлайне) */
-.mode-badge { font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
-  color: var(--muted); background: var(--neutral-dim); padding: 3px 8px; }
+/* Микролейбл v5: 12px, .02em, БЕЗ капса. Единственная роль — тихая подпись
+   секции/поля (капсовый «секционный маяк» из К§12 отменён вместе с v3). */
+.eyebrow { font-size: var(--fs-xs); letter-spacing: var(--track-caps); color: var(--muted-2); }
+/* Ч§5 — бейдж режима редактора (микролейбл на нейтральной подложке) */
+.mode-badge { font-size: var(--fs-cap); letter-spacing: var(--track-caps);
+  color: var(--muted); background: var(--neutral-dim); padding: 3px 8px;
+  border-radius: var(--radius-pill); }
 
-/* ===== Канонная шапка платформы (идентична во всех Apps) ===== */
+/* ===== Канонная шапка платформы — КОПИЯ 1:1 из контракта (v5) =====
+   Единственный элемент, который человек видит при каждом переходе между
+   разделами, поэтому здесь литеральные значения из снипета контракта, а не
+   локальные токены шкалы: расхождение в 1px кегля тут заметно, а токены
+   /slides могут разъехаться со шлюзом. Отличия v5 от v4: нет border-bottom,
+   активный пункт — «пилюля» --panel-2 (НЕ зелёная), «Выйти» без рамки. */
 .topbar { display: flex; align-items: center; gap: 28px; padding: 0 28px; height: 60px;
-  background: var(--bg-soft); border-bottom: 1px solid var(--line); }
-.topbar .brand { display: inline-flex; align-items: center; gap: 9px; font-size: var(--fs-h2);  /* Р§6 — бренд-лого выровнен на 20px */ font-weight: 700;
+  background: var(--bg-soft); }
+.topbar .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 700;
   letter-spacing: 0; text-decoration: none; color: var(--text); }
 /* Угловой зелёный знак-стрелка перед лого — фирменный геометрический штрих */
 .topbar .brand::before { content: ""; width: 16px; height: 16px; flex: 0 0 auto;
@@ -126,18 +161,17 @@ a { color: var(--accent); }
   clip-path: polygon(0 0, 100% 0, 100% 100%, 62% 100%, 62% 38%, 0 38%); }
 .topbar .brand span { color: var(--accent); }
 .topnav { display: flex; gap: 2px; }
-.topnav__link { text-decoration: none; color: var(--muted); font-size: var(--fs-base); padding: 8px 14px;
-  border-radius: var(--r-sm); transition: color var(--dur-fast) var(--ease-productive), background var(--dur-fast) var(--ease-productive); white-space: nowrap; }
+.topnav__link { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 14px;
+  border-radius: var(--r-sm); transition: color .12s, background .12s; white-space: nowrap; }
 .topnav__link:hover { color: var(--text); background: var(--panel-2); }
-.topnav__link.is-active { color: var(--text); background: transparent;
-  box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
+.topnav__link.is-active { color: var(--text); background: var(--panel-2); }
 .topbar__auth { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.topbar__user { color: var(--muted); font-size: var(--fs-sm); }
+.topbar__user { color: var(--muted); font-size: 13px; }
 .logout-form { margin: 0; }
-.logout-form button { cursor: pointer; border: 1px solid var(--line); background: transparent;
-  color: var(--muted); padding: 7px 14px; border-radius: var(--r-sm); font: inherit; font-size: var(--fs-sm);
-  transition: border-color var(--dur-fast) var(--ease-productive), color var(--dur-fast) var(--ease-productive); }
-.logout-form button:hover { border-color: var(--muted); color: var(--text); }
+.logout-form button { cursor: pointer; border: none; background: var(--panel-2);
+  color: var(--muted); padding: 8px 14px; border-radius: var(--r-sm); font: inherit; font-size: 13px;
+  transition: background .12s, color .12s; }
+.logout-form button:hover { background: #383838; color: var(--text); }
 
 /* Канон v4: main 1240px (как /images) на плоской тёмной плоскости.
    Г§2 — радиальные зелёные свечения по углам .wrap удалены (бренд-запрет теней и
@@ -146,7 +180,8 @@ a { color: var(--accent); }
 .wrap { max-width: 1240px; margin: 0 auto; padding: 40px 28px 64px; }
 
 /* ===== Интро-блок: что делает раздел + как готовить исходник ===== */
-.intro { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+/* Разделитель секций — легальный хайрлайн v5 (граница смысловых зон, не обводка) */
+.intro { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line-soft); }
 .intro .eyebrow { margin-bottom: 10px; }
 /* Заголовок интро с фирменным диагональным штрихом-стрелкой слева (как h1 канона) */
 .intro-title { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.14;
@@ -155,14 +190,14 @@ a { color: var(--accent); }
 .intro-lead { color: var(--muted); font-size: var(--fs-base); line-height: 1.6; margin: 0 0 12px; max-width: 62ch; }
 .intro-lead:last-child { margin-bottom: 0; }
 .intro-lead b { color: var(--text); font-weight: 600; }
-.intro-lead code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: var(--fs-xs); color: var(--accent); background: var(--accent-dim);
-  border: 1px solid var(--accent-line); padding: 1px 5px; }
+/* v5 запретил моноширинные: код в тексте — тот же шрифт на акцентной подложке */
+.intro-lead code { font-size: var(--fs-xs); color: var(--brand-chip-fg);
+  background: var(--brand-chip-bg); border-radius: var(--r-sm); padding: 1px 6px; }
 
 /* ===== Подготовка исходника: карточка промпта для LLM =====
-   Стиль наследует .entry-alts: 1px-рамки, плоские панели, без теней (канон). */
+   v5: подложка --surface вместо рамки, радиус карточки. */
 .prep-cards { display: grid; grid-template-columns: 1fr; max-width: 640px; gap: 12px; margin-top: 20px; }
-.prep-card { border: 1px solid var(--line); padding: 16px 20px;
+.prep-card { background: var(--surface); border-radius: var(--radius-card); padding: 18px 20px;
   display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .prep-card__name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
 .prep-card__desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0; }
@@ -171,10 +206,10 @@ a { color: var(--accent); }
   color: var(--accent); font-size: var(--fs-sm);
   transition: color var(--dur-fast) var(--ease-productive); }
 .prep-toggle:hover { color: var(--accent-2); }
+/* Текст промпта — утопленная поверхность внутри карточки, без рамки и моноширинных */
 .prep-prompt { width: 100%; box-sizing: border-box; margin: 4px 0 0; padding: 12px 14px;
-  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: var(--fs-xs); line-height: 1.55; white-space: pre-wrap; }
+  background: var(--surface-inset); border-radius: var(--radius-ctl); color: var(--muted);
+  font-family: var(--font-text); font-size: var(--fs-sm); line-height: 1.6; white-space: pre-wrap; }
 
 /* Ссылка в интро (скачивание скилла): акцентная, с подчёркиванием как у ссылок */
 .intro-link { color: var(--accent); text-decoration: underline; text-underline-offset: 3px;
@@ -189,51 +224,52 @@ a { color: var(--accent); }
 .entry-lead { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 16px; }
 .entry-stack { display: flex; flex-direction: column; gap: 12px; }
 
-/* Основной блок — загрузка: акцентная рамка, шапка + тело через дивайдер */
-.entry-zone--primary { border: 1px solid var(--accent); }
+/* Основной блок — загрузка: единственный носитель акцентной рамки на странице
+   (v5: 1px --accent = «выбранное»; здесь это выбранный по умолчанию способ). */
+.entry-zone--primary { background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius-card); }
+/* Дивайдеры внутри карточки сняты: v5 держит структуру воздухом, а не линиями */
 .entry-zone__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
-  padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  padding: 18px 20px 0; }
 .entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
 .entry-when { color: var(--muted-2); font-size: var(--fs-sm); margin-left: auto; }
-.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: stretch; padding: 20px; }
+.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: stretch;
+  gap: 20px; padding: 16px 20px 20px; }
 .upload-grid .drop { height: 100%; display: grid; place-items: center; }
-.upload-side { display: flex; flex-direction: column; justify-content: flex-start; gap: 14px;
-  padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
+.upload-side { display: flex; flex-direction: column; justify-content: flex-start; gap: 14px; }
 .upload-side .btn { align-self: stretch; }
 
 /* Доступность сервиса ИИ над кнопкой «Создать»: два индикатора-роли + пояснение
-   + возраст проверки. Структуру держит хайрлайн, прямые углы (канон v3). */
+   + возраст проверки. v5: утопленная поверхность внутри карточки, без рамки. */
 .mhealth { display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 12px; border: 1px solid var(--line-soft); background: var(--bg-soft); }
+  padding: 10px 12px; background: var(--surface-inset); border-radius: var(--radius-ctl); }
 .mhealth[hidden] { display: none; }
 .mhealth-inds { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .mh-ind { display: inline-flex; align-items: center; gap: 7px;
   font-size: var(--fs-cap); color: var(--muted); }
 .mh-ind[hidden] { display: none; }
-.mh-ind i { width: 7px; height: 7px; flex: 0 0 auto; background: var(--muted-2); }
+.mh-ind i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--muted-2); }
 .mh-ind[data-up="true"] i { background: var(--accent); }
 .mh-ind[data-up="false"] i { background: var(--danger); }
 .mhealth-note { font-size: var(--fs-cap); line-height: 1.4; color: var(--muted); }
 .mhealth[data-state="warn"] .mhealth-note { color: var(--warn-ink); }
-.mhealth[data-state="down"] .mhealth-note { color: var(--danger); }
-.mhealth[data-state="down"] { border-color: var(--danger-line); }
+.mhealth[data-state="down"] .mhealth-note { color: var(--danger-soft); }
 .mhealth-age { font-size: var(--fs-cap); color: var(--muted-2); font-variant-numeric: tabular-nums; }
 
-/* Два способа вручную — вся строка кликабельна; один дивайдер на 60%.
-   Сетка (1.5fr 1fr) и отступы дивайдера повторяют .upload-grid/.upload-side,
-   поэтому вертикальные дивайдеры всех трёх блоков совпадают по вертикали. */
-.entry-alts { border: 1px solid var(--line); }
-.entry-alt { display: grid; grid-template-columns: 1.5fr 1fr; align-items: start;
+/* Два способа вручную — вся строка кликабельна. v5: каждая альтернатива стала
+   самостоятельной карточкой-подложкой (было — общая рамка с дивайдерами внутри),
+   сетка 1.5fr 1fr сохранена, поэтому колонки совпадают с блоком загрузки. */
+.entry-alts { display: flex; flex-direction: column; gap: 12px; }
+.entry-alt { display: grid; grid-template-columns: 1.5fr 1fr; align-items: start; gap: 20px;
   padding: 16px 20px; cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-productive); }
-.entry-alt:hover { background: var(--panel-2); }
+  background: var(--surface); border: 1px solid transparent; border-radius: var(--radius-card);
+  transition: background var(--dur-fast) var(--ease-productive), border-color var(--dur-fast) var(--ease-productive); }
+.entry-alt:hover { background: var(--surface-active); border-color: var(--accent); }
 .entry-alt:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.entry-alt + .entry-alt { border-top: 1px solid var(--line); }
 .alt-main { display: flex; flex-direction: column; gap: 6px; }
 .alt-name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
 .alt-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0; }
-.alt-aside { display: flex; flex-direction: column; gap: 8px;
-  padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
+.alt-aside { display: flex; flex-direction: column; gap: 8px; }
 .alt-when { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4; }
 
 /* Сдержанная подсказка-действие: клик ловит вся рамка, поэтому ссылка pointer-events:none */
@@ -241,21 +277,21 @@ a { color: var(--accent); }
   color: var(--accent); font-size: var(--fs-sm); white-space: nowrap;
   transition: color var(--dur-fast) var(--ease-productive); }
 .entry-alt:hover .entry-open { color: var(--accent-2); }
-.entry-open.is-error { color: var(--danger); }
+.entry-open.is-error { color: var(--danger-soft); }
 
 /* Отключённые точки входа (фича в разработке): серые, некликабельные, с курсором-стопом.
    Прозрачность вешаем на ВНУТРЕННИЙ контент, а не на всю карточку — иначе opacity
    создаёт stacking context и приглушает саму подсказку [data-tip]::after. */
 .entry-alt.is-disabled { cursor: not-allowed; }
-.entry-alt.is-disabled:hover { background: none; }
+.entry-alt.is-disabled:hover { background: var(--surface); border-color: transparent; }
 .entry-alt.is-disabled .alt-main,
 .entry-alt.is-disabled .alt-aside { opacity: .5; }
 .entry-alt.is-disabled .entry-open { color: var(--muted-2); }
 /* Бейдж «в разработке» — статус-лейбл: без обводки, полупрозрачная нейтральная заливка */
 .soon-badge { display: inline-block; margin-left: 8px; vertical-align: middle;
-  font-size: var(--fs-cap); letter-spacing: var(--track-caps); text-transform: uppercase;
-  font-weight: 600; padding: 2px 7px; background: var(--neutral-dim);
-  color: var(--muted-2); }
+  font-size: var(--fs-cap); letter-spacing: var(--track-caps);
+  font-weight: 600; padding: 2px 8px; background: var(--neutral-dim);
+  color: var(--muted-2); border-radius: var(--radius-pill); }
 
 /* Дружелюбная подсказка при наведении на отключённую фичу: не только курсор-стоп,
    но и текст «фича ещё не готова». Чистый CSS-тултип через [data-tip] + ::after. */
@@ -264,13 +300,13 @@ a { color: var(--accent); }
   content: attr(data-tip);
   position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%);
   width: max-content; max-width: 280px; white-space: normal; text-align: left;
-  padding: 10px 12px; background: var(--bg-soft); color: var(--text);
-  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 10px 12px; background: var(--panel-2); color: var(--text);
+  border-radius: var(--radius-ctl);
   font-family: var(--font-text); font-size: var(--fs-sm); font-weight: 400; line-height: 1.45;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 60; pointer-events: none; }
+  z-index: 60; pointer-events: none; }
 [data-tip]:hover::before {
   content: ""; position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%);
-  border: 6px solid transparent; border-top-color: var(--line);
+  border: 6px solid transparent; border-top-color: var(--panel-2);
   z-index: 61; pointer-events: none; }
 
 .output { margin-top: 32px; display: flex; flex-direction: column; gap: 30px; }
@@ -285,11 +321,7 @@ a { color: var(--accent); }
 
 @media (max-width: 760px) {
   .upload-grid { grid-template-columns: 1fr; }
-  .upload-side { padding-left: 0; margin-left: 0; border-left: 0;
-    border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
   .entry-alt { grid-template-columns: 1fr; gap: 10px; }
-  .alt-aside { padding-left: 0; margin-left: 0; border-left: 0;
-    border-top: 1px solid var(--line-soft); padding-top: 10px; }
   .history-grid.two-col { grid-template-columns: 1fr; }
   .history-grid.two-col > .history:first-child { padding-right: 0; }
   .history-grid.two-col > .history + .history { border-left: 0; padding-left: 0;
@@ -297,11 +329,11 @@ a { color: var(--accent); }
 }
 .entry-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .entry-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-  text-align: left; padding: 18px 18px 16px; background: transparent;
-  border: 1px solid var(--line); border-radius: 0; cursor: pointer;
+  text-align: left; padding: 18px 18px 16px; background: var(--surface);
+  border: 1px solid transparent; border-radius: var(--radius-card); cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-productive), background var(--dur-fast) var(--ease-productive); font: inherit; color: var(--text); }
-.entry-card:hover { border-color: var(--accent); background: var(--panel-2); }
-.entry-card.is-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.entry-card:hover { border-color: var(--accent); background: var(--surface-active); }
+.entry-card.is-active { border-color: var(--accent); }
 /* v4: номер — капс-микролейбл («01 · …»), как card__num на лендинге платформы */
 .entry-num { font-size: var(--fs-xs); letter-spacing: var(--track-caps); color: var(--muted-2);
   font-weight: 600; transition: color var(--dur-med) var(--ease-productive); }
@@ -319,13 +351,13 @@ a { color: var(--accent); }
 /* Главная точка входа: акцентный фон/рамка (приём как у .is-active) + крупнее
    заголовок. Острые углы, цвета из токенов — в общем стиле карточек. */
 .entry-card--primary { padding: 22px 18px 18px; border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-dim); }
+  background: var(--brand-surface); }
 /* Г§6 — hover главной карточки теперь отвечает (плотнее фон), а не повторяет покой */
-.entry-card--primary:hover { background: var(--accent-dim-2); }
+.entry-card--primary:hover { background: var(--brand-surface-hover); }
 .entry-card--primary .entry-title { font-size: var(--fs-h2); }
 /* Г§6 — ошибка старта черновика: CTA-строка в цвете danger, не в зелёном (акцент =
    действие/успех). Автовозврат к исходному CTA снимает класс через 4 с и на pageshow. */
-.entry-card.is-error .entry-cta { color: var(--danger); text-transform: none; letter-spacing: 0; }
+.entry-card.is-error .entry-cta { color: var(--danger-soft); letter-spacing: 0; }
 /* Раскрывашка «Подробнее» под интро */
 .intro-more { margin-top: 6px; }
 .intro-more > summary { cursor: pointer; color: var(--accent); font-size: var(--fs-sm);
@@ -347,14 +379,15 @@ a { color: var(--accent); }
 /* Г§5 — одна система нумерации: цифры 01/02 у шагов сняты (единственная нумерация
    01–03 остаётся у карточек-сценариев); капс-заголовок h2 сам служит лейблом шага. */
 .step-head h2 { font-size: var(--fs-xs); margin: 0; font-weight: 600; font-family: var(--font-text);
-  letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2); }
+  letter-spacing: var(--track-caps); color: var(--muted-2); }
 
-/* ===== Зона загрузки ===== */
+/* ===== Зона загрузки — идиома .dropzone шлюза: подложка + пунктир как аффорданс
+   («сюда можно бросить файл» иначе нечем показать), радиус карточки ===== */
 .drop {
-  display: block; border: 1px dashed var(--line); border-radius: var(--r-lg);
-  background: transparent; cursor: pointer; transition: border-color var(--dur-med) var(--ease-productive), background var(--dur-med) var(--ease-productive);
+  display: block; border: 1px dashed #3d3d3d; border-radius: var(--radius-card);
+  background: var(--surface-inset); cursor: pointer; transition: border-color var(--dur-med) var(--ease-productive), background var(--dur-med) var(--ease-productive);
 }
-.drop.dragover, .drop:hover { border-color: var(--accent); background: var(--bg-soft); }
+.drop.dragover, .drop:hover { border-color: var(--accent); background: var(--surface-active); }
 .drop.has-file { border-style: solid; border-color: var(--accent); }
 .drop-inner { padding: 22px; text-align: center; }
 .drop-icon { font-size: 24px; color: var(--accent); }
@@ -371,14 +404,16 @@ a { color: var(--accent); }
 .opt-row[hidden] { display: none; }
 /* нативный чекбокс прячем, но оставляем доступным с клавиатуры; рисуем свой .opt-box */
 .opt-check { position: absolute; width: 1px; height: 1px; opacity: 0; margin: 0; }
+/* Кастомный чекбокс v5: утопленная поверхность вместо обводки, скруглённый */
 .opt-box {
   position: relative; flex: 0 0 auto; width: 20px; height: 20px; margin-top: 1px;
-  border: 1px solid var(--muted-2); background: transparent;
+  border: 1px solid transparent; border-radius: 6px; background: var(--surface-inset);
   transition: border-color var(--dur-med) var(--ease-productive), background var(--dur-med) var(--ease-productive);
 }
+.opt-row:hover .opt-box { background: var(--surface-active); }
 .opt-box::after {                       /* галочка: угол рамки, повёрнутый на 45° */
   content: ""; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px;
-  border: solid var(--accent-ink); border-width: 0 2px 2px 0;
+  border: solid var(--on-accent); border-width: 0 2px 2px 0;
   transform: rotate(45deg) scale(0); transition: transform var(--dur-fast) var(--ease-productive);
 }
 .opt-check:checked + .opt-box { background: var(--accent); border-color: var(--accent); }
@@ -388,37 +423,39 @@ a { color: var(--accent); }
 .opt-title { font-size: var(--fs-base); font-weight: 600; color: var(--text); }
 .opt-desc { font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
 
-/* ===== Кнопки ===== */
+/* ===== Кнопки (v5) — заливка вместо обводки =====
+   Вторичная — тихая поверхность --surface-active, ховер уводит текст в акцент;
+   единственная акцентная заливка на группу — .btn-accent. */
 .btn {
-  /* Р§4 — дефолт инвертирован в нейтральную обводку; зелёная заливка = одна primary на группу (.btn-accent) */
-  background: transparent; color: var(--text); border: 1px solid var(--line); border-radius: var(--r);
-  padding: 10px 20px; cursor: pointer; font-size: var(--fs-btn); font-weight: 600; line-height: var(--lh-tight);  /* Г§12 — 4px-шкала (было 11px 22px) */
+  background: var(--surface-active); color: var(--text); border: 1px solid transparent;
+  border-radius: var(--radius-ctl);
+  padding: 10px 20px; cursor: pointer; font-size: var(--fs-btn); font-weight: 600; line-height: var(--lh-tight);
   transition: background var(--dur-med) var(--ease-productive), border-color var(--dur-med) var(--ease-productive), color var(--dur-med) var(--ease-productive), transform var(--dur-fast) var(--ease-productive), opacity var(--dur-med) var(--ease-productive);
 }
-.btn:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
+.btn:hover { background: var(--surface-active); color: var(--accent); }
 /* Г§7 — disabled как явное состояние (видимая, но очевидно неактивная кнопка ~4.5:1),
    не почти-невидимая opacity:.4. Общее правило — чинит и #rebuild в тулбаре. */
-.btn:disabled { opacity: 1; background: var(--panel-2); border-color: var(--line);
+.btn:disabled { opacity: 1; background: var(--surface); border-color: transparent;
   color: var(--muted); cursor: not-allowed; }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
 #createHint { margin-top: 8px; }  /* Г§7 — отступ хинта от полноширинной CTA */
-.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }  /* Р§4 — совместимый алиас нового дефолта */
-.btn-ghost:hover { background: transparent; border-color: var(--accent); color: var(--accent); }
-/* Р§4 — единственный носитель заливки акцентом */
-.btn-accent { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
-.btn-accent:hover { background: var(--accent-2); border-color: var(--accent-2); color: var(--accent-ink); }
+.btn-ghost { background: var(--surface-active); color: var(--text); border: 1px solid transparent; }  /* совместимый алиас дефолта */
+.btn-ghost:hover { background: var(--surface-active); color: var(--accent); }
+/* Единственный носитель заливки акцентом */
+.btn-accent { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 700; }
+.btn-accent:hover { background: var(--accent-2); border-color: transparent; color: var(--on-accent); }
 .btn-link { background: none; color: var(--muted); border: 0; cursor: pointer; font-size: var(--fs-sm); }
 .btn-link:hover { color: var(--text); }
-/* С§5/Р§4 — слой :active (пресс): универсальный тактильный push + цвет прижатия по варианту */
+/* С§5 — слой :active (пресс): универсальный тактильный push + цвет прижатия по варианту */
 .btn:active:not(:disabled) { background: var(--panel-2); transform: translateY(1px); }
-.btn-accent:active:not(:disabled) { background: var(--accent-3); border-color: var(--accent-3); }
+.btn-accent:active:not(:disabled) { background: var(--accent-3); border-color: transparent; }
 .btn-ghost:active { background: var(--panel-2); }
-.entry-card:active, .thumb:active, .picker-item:active { background: var(--panel-2); }
+.entry-card:active, .thumb:active, .picker-item:active { background: var(--surface-active); }
 
-/* ===== Панель (прогресс / результат) — прозрачная, на хайрлайне ===== */
+/* ===== Панель (прогресс / результат) — карточка-подложка ===== */
 .panel {
-  margin-top: 4px; padding: 20px; border: 1px solid var(--line);
-  border-radius: var(--r-lg); background: transparent;
+  margin-top: 4px; padding: 20px; border: 1px solid transparent;
+  border-radius: var(--radius-card); background: var(--surface);
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1);
 }
 @starting-style { .panel { opacity: 0; } }
@@ -428,28 +465,30 @@ a { color: var(--accent); }
 /* Г§10 — табличные цифры для всех живых индикаторов: счётчик, очередь, стадия·%,
    heartbeat, таймер правки — чтобы цифры не прыгали по ширине при каждом тике. */
 .field-hint, .queue-cap, .hist-meta, .heartbeat, .msg { font-variant-numeric: tabular-nums; }
-.bar { height: 3px; background: var(--line-soft); border-radius: 0; overflow: hidden; }
-#barfill { height: 100%; width: 0; background: var(--accent); transition: width var(--dur-bar) var(--ease-productive); }
+.bar { height: 4px; background: var(--surface-inset); border-radius: var(--radius-pill); overflow: hidden; }
+#barfill { height: 100%; width: 0; background: var(--accent); border-radius: var(--radius-pill);
+  transition: width var(--dur-bar) var(--ease-productive); }
 .stage-detail { margin-top: 10px; color: var(--muted); font-size: var(--fs-sm); min-height: 18px; word-break: break-word; }
-/* Ч§2 — стоп-кнопка: прозрачный фон + красная рамка (не красное-на-зелёном) */
-.btn.btn-stop { background: transparent; border-color: var(--danger); color: var(--danger); margin-left: 0; }
-.btn.btn-stop:hover { background: rgba(255, 107, 107, .08); border-color: var(--danger); }
+/* Ч§2 — стоп-кнопка: тихая красная подложка (не красное-на-зелёном и не обводка) */
+.btn.btn-stop { background: rgba(255, 107, 107, .10); border-color: transparent; color: var(--danger-soft); margin-left: 0; }
+.btn.btn-stop:hover { background: rgba(255, 107, 107, .18); border-color: transparent; color: var(--danger-soft); }
 .btn-stop:focus-visible { outline: 2px solid var(--danger); outline-offset: var(--focus-offset); }
-.btn-link.btn-stop { margin-left: 12px; color: var(--danger); }
+.btn-link.btn-stop { margin-left: 12px; background: none; color: var(--danger-soft); }
 .heartbeat { margin-top: 6px; color: var(--muted-2); font-size: var(--fs-xs); }
 .heartbeat.stale { color: var(--warn-ink); }
 .progress-log {
   margin-top: 12px; max-height: 150px; overflow-y: auto;
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg-soft);
-  padding: 8px 10px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: var(--fs-xs); line-height: 1.5; color: var(--muted);
+  border-radius: var(--radius-ctl); background: var(--surface-inset);
+  padding: 8px 10px; font-family: var(--font-text);
+  font-size: var(--fs-xs); line-height: 1.6; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .progress-log:empty { display: none; }
 .progress-log .log-time { color: var(--muted-2); margin-right: 8px; }
-/* Г§13 — единый брендовый индикатор «идёт работа»: плоский акцентный квадрат с
-   резкой мигалкой (step-end), а не круглый спиннер — в системе строго прямые углы. */
+/* Г§13 — единый брендовый индикатор «идёт работа»: плоская акцентная точка с
+   резкой мигалкой (step-end), а не крутящийся спиннер. */
 .spinner {
-  width: 10px; height: 10px; border: 0; border-radius: 0; background: var(--accent);
+  width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--accent);
   animation: loader-blink 1.2s step-end infinite;
 }
 @keyframes loader-blink { 50% { opacity: .2; } }
@@ -459,28 +498,27 @@ a { color: var(--accent); }
 .result h3 { margin: 0 0 6px; font-size: var(--fs-h3); font-weight: 600; }
 .result p { font-size: var(--fs-base); color: var(--muted); max-width: 62ch; }
 .result .res-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-.result.error { border-color: #4a2222; }
-.result.error h3 { color: var(--danger); }
+.result.error h3 { color: var(--danger-soft); }
 
 /* ===== История ===== */
 .history { margin-top: 40px; }  /* Г§12 — 4px-шкала (было 44) */
 .hist-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;
   padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.hist-head h2 { font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--muted-2);
+.hist-head h2 { font-size: var(--fs-xs); letter-spacing: var(--track-caps); color: var(--muted-2);
   margin: 0; font-family: var(--font-text); font-weight: 600; }
 .histlist { list-style: none; padding: 0; margin: 0; }
 .histlist li {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: var(--r); margin-bottom: 8px; background: transparent;
-  transition: border-color var(--dur-fast) var(--ease-productive);
+  border-radius: var(--radius-card); margin-bottom: 8px; background: var(--surface);
+  transition: background var(--dur-fast) var(--ease-productive);
 }
-.histlist li:hover { border-color: var(--accent-line); }
+.histlist li:hover { background: var(--surface-active); }
 .hist-mode { font-weight: 600; font-size: var(--fs-sm); }
 .hist-meta { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 .hist-spacer { flex: 1; }
 /* Исход незавершённой сборки в истории (вместо «Открыть») — капс-микролейбл */
-.hist-status { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
-.hist-status--failed { color: var(--danger); }
+.hist-status { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); color: var(--muted-2); }
+.hist-status--failed { color: var(--danger-soft); }
 .hist-status--cancelled { color: var(--warn-ink); }
 /* История сборок — карточка: иконка инструмента + имя файла + статус-лейбл, строка расхода */
 .hist-main { flex: 1; min-width: 0; }
@@ -489,16 +527,16 @@ a { color: var(--accent); }
 .hist-tool svg { display: block; }
 .hist-name { font-weight: 600; font-size: var(--fs-base); color: var(--text);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hist-tag { flex: none; font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
-  font-weight: 600; padding: 2px 6px; line-height: 1.5; }
-.hist-tag--done { color: var(--accent); background: var(--accent-dim); }
-.hist-tag--failed { color: var(--danger); background: rgba(255, 107, 107, .10); }
+.hist-tag { flex: none; font-size: var(--fs-cap); letter-spacing: var(--track-caps);
+  font-weight: 600; padding: 2px 8px; line-height: 1.5; border-radius: var(--radius-pill); }
+.hist-tag--done { color: var(--brand-chip-fg); background: var(--brand-chip-bg); }
+.hist-tag--failed { color: var(--danger-soft); background: rgba(255, 107, 107, .10); }
 .hist-tag--cancelled { color: var(--warn-ink); background: rgba(236, 213, 129, .10); }
 .hist-row2 { color: var(--muted-2); font-size: var(--fs-xs); font-variant-numeric: tabular-nums;
   margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hist-row2 .sep { opacity: .5; margin: 0 6px; }
 .hist-row2 .cost { color: var(--muted); }
-.hist-row2 .err { color: var(--danger); }
+.hist-row2 .err { color: var(--danger-soft); }
 .hist-empty { color: var(--muted); font-size: var(--fs-sm); padding: 6px 2px; }
 .queue-cap { color: var(--muted-2); font-size: var(--fs-sm); font-weight: 400; }
 
@@ -507,22 +545,24 @@ a { color: var(--accent); }
 .feed-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .feed-head h2 { font-size: var(--fs-h2); font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .feed-sub { color: var(--muted-2); font-size: var(--fs-sm); margin: 0 0 18px; }
-/* Фильтры: плоские плашки заливкой (без обводок), активная — акцентная */
+/* Фильтры — канонный .chip шлюза: пилюля-подложка, выбранный на бренд-плашке */
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 18px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
-  border: 0; border-radius: 0; background: var(--bg-soft); color: var(--muted); font: inherit; font-size: var(--fs-sm);
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 15px;
+  border: 0; border-radius: var(--radius-pill); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-sm);
   cursor: pointer; transition: color var(--dur-fast) var(--ease-productive), background var(--dur-fast) var(--ease-productive); }
-.chip:hover { color: var(--text); background: var(--panel-2); }
+.chip:hover { color: var(--text); background: var(--surface-active); }
 .chip .n { font-size: var(--fs-xs); color: var(--muted-2); font-variant-numeric: tabular-nums; }
-.chip.on { background: var(--accent-dim); color: var(--accent); }
-.chip.on:hover { background: var(--accent-dim-2); color: var(--accent); }
-.chip.on .n { color: var(--accent); }
+.chip.on { background: var(--brand-chip-bg); color: var(--brand-chip-fg); }
+.chip.on:hover { background: var(--brand-surface-hover); color: var(--brand-chip-fg); }
+.chip.on .n { color: var(--brand-muted); }
 /* Карточка сборки: одна и та же для всех состояний — эволюционирует на месте */
 .feed { display: flex; flex-direction: column; }
-.pcard { border: 1px solid var(--line); margin-bottom: 11px; padding: 15px 17px;
-  transition: border-color var(--dur-fast) var(--ease-productive); }
+/* Карточка сборки — подложка --surface без рамки (идиома .job шлюза) */
+.pcard { background: var(--surface); border: 1px solid transparent; border-radius: var(--radius-card);
+  margin-bottom: 11px; padding: 15px 17px;
+  transition: background var(--dur-fast) var(--ease-productive), border-color var(--dur-fast) var(--ease-productive); }
 .pcard.expandable { cursor: pointer; }
-.pcard.expandable:hover { border-color: var(--accent-line); }
+.pcard.expandable:hover { background: var(--surface-active); }
 /* Идёт сборка — рамка карточки остаётся серой по умолчанию (как у всех).
    Признак активности перенесён на зелёную полосу прогресса: по ней плавно
    бежит одна серая тень (на шаг светлее дорожки бара) — мягко и равномерно,
@@ -539,15 +579,16 @@ a { color: var(--accent); }
 .pcard[data-state="running"] .pcard-loglines {
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
   mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
-  background: var(--bg-soft);
+  background: var(--surface-inset); border-radius: var(--radius-ctl);
   padding: 8px 10px;
 }
 @media (prefers-reduced-motion: reduce) {
   .pcard[data-state="running"] .pcard-bar > i { animation: none; }
 }
 .pcard-head { display: flex; align-items: center; gap: 15px; }
+/* Иконка инструмента — утопленный квадрат: на подложке карточки --panel слился бы с ней */
 .pcard-tool { width: 38px; height: 38px; flex: 0 0 38px; display: flex; align-items: center; justify-content: center;
-  background: var(--panel); color: var(--muted); }
+  background: var(--surface-inset); border-radius: var(--radius-ctl); color: var(--muted); }
 .pcard-tool svg { display: block; }
 .pcard-main { flex: 1; min-width: 0; }
 .pcard-trow { display: flex; align-items: center; gap: 11px; }
@@ -559,17 +600,19 @@ a { color: var(--accent); }
 .pcard-meta .sep { color: var(--line); margin: 0 8px; }
 .pcard-meta .cost { color: var(--warn-ink); }
 .pcard-meta .est-warn { color: var(--warn-ink); font-weight: 600; }
-.pcard-meta .err { color: var(--danger); }
+.pcard-meta .err { color: var(--danger-soft); }
 .pcard-actions { display: flex; gap: 8px; flex: 0 0 auto; align-items: center; }
-/* Кнопки карточки — заливкой того же цвета вместо обводок */
-.pcard-actions .btn-ghost { background: var(--panel-2); border-color: transparent; color: var(--text); }
-.pcard-actions .btn-ghost:hover { background: var(--accent-dim); border-color: transparent; color: var(--accent); }
-.pcard-actions .btn-stop { background: rgba(255, 107, 107, .10); border-color: transparent; color: var(--danger); }
+/* Кнопки карточки — пилюли-подложки (идиома .job__actions .btn шлюза) */
+.pcard-actions .btn { border-radius: var(--radius-pill); padding: 7px 14px; font-size: var(--fs-sm); }
+.pcard-actions .btn-ghost { background: var(--surface-active); border-color: transparent; color: var(--text); }
+.pcard-actions .btn-ghost:hover { background: var(--surface-active); border-color: transparent; color: var(--accent); }
+.pcard-actions .btn-stop { background: rgba(255, 107, 107, .10); border-color: transparent; color: var(--danger-soft); }
 .pcard-actions .btn-stop:hover { background: rgba(255, 107, 107, .18); border-color: transparent; }
 /* Прогресс-бар — только пока идёт сборка (JS снимает .hidden) */
-.pcard-bar { height: 4px; background: var(--line-soft); margin-top: 12px; overflow: hidden; }
+.pcard-bar { height: 4px; background: var(--surface-inset); border-radius: var(--radius-pill);
+  margin-top: 12px; overflow: hidden; }
 .pcard-bar > i { display: block; height: 100%; width: 0; background: var(--accent);
-  transition: width var(--dur-bar) var(--ease-productive); }
+  border-radius: var(--radius-pill); transition: width var(--dur-bar) var(--ease-productive); }
 /* Аккордеон-лог: свёрнут по умолчанию, раскрывается на .open (Вариант A) */
 .pcard-log { display: none; margin-top: 13px; border-top: 1px solid var(--line-soft); padding-top: 12px; }
 .pcard.open .pcard-log { display: block; }
@@ -586,14 +629,14 @@ a { color: var(--accent); }
 .pcard-loglines .cur { color: var(--text); }
 .pcard-loglines .cur .live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   display: inline-block; margin-right: 8px; vertical-align: middle; }
-/* Статус-пилюли: капс-микролейбл заливкой того же цвета (без обводок) */
-.st { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px;
-  border-radius: 0; border: 0; white-space: nowrap; flex: none; }
-.st-run { color: var(--accent); background: var(--accent-dim); }
+/* Статус-пилюли: микролейбл заливкой того же тона (без обводок и без капса) */
+.st { font-size: var(--fs-cap); letter-spacing: var(--track-caps); padding: 3px 10px;
+  border-radius: var(--radius-pill); border: 0; white-space: nowrap; flex: none; }
+.st-run { color: var(--brand-chip-fg); background: var(--brand-chip-bg); }
 .st-queue { color: var(--muted); background: var(--neutral-dim); }
-.st-done { color: var(--accent); background: var(--accent-dim); }
+.st-done { color: var(--brand-chip-fg); background: var(--brand-chip-bg); }
 .st-draft { color: var(--muted); background: var(--neutral-dim); }
-.st-fail { color: var(--danger); background: rgba(255, 107, 107, .10); }
+.st-fail { color: var(--danger-soft); background: rgba(255, 107, 107, .10); }
 .st-cancel { color: var(--warn-ink); background: rgba(236, 213, 129, .10); }
 .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   display: inline-block; margin-right: 5px; vertical-align: middle; }
@@ -603,7 +646,7 @@ a { color: var(--accent); }
 .editor { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }  /* К§8 — высота от видимого вьюпорта; тулбар-шапка + ряд из трёх колонок */
 .editor-main { display: flex; flex: 1; min-height: 0; }  /* ряд под тулбаром: миниатюры | сцена | правая панель */
 .thumbs { width: 176px; flex-shrink: 0; overflow-y: auto; padding: 12px; border-right: 1px solid var(--line); background: var(--bg-soft); }  /* К§11 — рейл под превью-миниатюры */
-.thumbs-title { font-size: var(--fs-cap); text-transform: uppercase; letter-spacing: var(--track-caps-2); color: var(--muted-2); margin-bottom: 10px; }
+.thumbs-title { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); color: var(--muted-2); margin-bottom: 10px; }
 .thumb { position: relative; border: 1px solid var(--line); border-radius: var(--r-sm); margin-bottom: 8px; cursor: pointer; background: transparent; overflow: hidden;
   transition: border-color var(--dur-med) var(--ease-productive); }
 .thumb:hover { border-color: var(--muted-2); }
@@ -652,9 +695,9 @@ a { color: var(--accent); }
 .toolbar-menu > summary::-webkit-details-marker { display: none; }
 .toolbar-menu__list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10;
   min-width: 230px; display: flex; flex-direction: column; gap: 2px; padding: 4px;
-  background: var(--panel); border: 1px solid var(--line); }
-.toolbar-menu__list .btn { border-color: transparent; text-align: left; }
-.toolbar-menu__list .btn:hover { background: var(--panel-2); border-color: transparent; color: var(--text); }
+  background: var(--panel); border-radius: var(--radius-ctl); }
+.toolbar-menu__list .btn { background: transparent; border-color: transparent; text-align: left; }
+.toolbar-menu__list .btn:hover { background: var(--surface-active); border-color: transparent; color: var(--text); }
 /* готовый экспорт сигналит на закрытом меню: зелёный КВАДРАТ 6×6 (не круг — углы прямые) */
 .toolbar-menu:has(.is-ready) > summary::after { content: ""; display: inline-block;
   width: 6px; height: 6px; margin-left: 8px; background: var(--accent); }
@@ -713,7 +756,7 @@ a { color: var(--accent); }
   background: var(--bg-soft); overflow-y: auto; }
 .builder-head { padding: 6px 16px 0; display: flex; align-items: center; justify-content: flex-end; min-height: 0; }
 .btn-sm { padding: 6px 10px; font-size: var(--fs-xs); }  /* Г§12 — 4px-шкала (было 5px 9px) */
-.btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: rgba(255, 107, 107, .10); color: var(--danger-soft); }
 .builder-tpl { padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
   display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tpl-name { font-size: var(--fs-xs); color: var(--muted); }
@@ -723,8 +766,10 @@ a { color: var(--accent); }
 .field { display: flex; flex-direction: column; gap: 5px; }
 /* К§12 — форм-лейблы: рабочий текст, не декор → нижний регистр, 12px, muted */
 .field > label { font-size: var(--fs-xs); text-transform: none; letter-spacing: 0; color: var(--muted); }
+/* Поля ввода v5: утопленная поверхность --surface-inset без рамки; рамка
+   появляется только на фокусе (акцент) — «граница у выбранного». */
 .field input, .field textarea { width: 100%; background: var(--field-bg); color: var(--text);
-  border: 1px solid var(--muted-2); border-radius: 0; padding: 8px 10px; font: inherit; font-size: var(--fs-sm); }
+  border: 1px solid transparent; border-radius: var(--radius-ctl); padding: 9px 11px; font: inherit; font-size: var(--fs-sm); }
 .field textarea { min-height: 60px; resize: vertical; }
 .field input:focus, .field textarea:focus { border-color: var(--accent); }
 .field input:focus:not(:focus-visible), .field textarea:focus:not(:focus-visible) { outline: none; }
@@ -741,13 +786,13 @@ a { color: var(--accent); }
 .save-status--saving { color: var(--muted-2); opacity: 1; }
 .save-status--saved { color: var(--accent); opacity: 1; }
 .save-status--retrying { color: var(--muted-2); opacity: 1; }
-.save-status--error { color: var(--danger); opacity: 1; }
+.save-status--error { color: var(--danger-soft); opacity: 1; }
 /* К§5 — кликабельное «Повторить» в статусе автосейва после исчерпания ретраев */
-.save-status .btn-link { font-size: var(--fs-cap); color: var(--danger); }
-.save-status .btn-link:hover { color: var(--danger); text-decoration: underline; }
+.save-status .btn-link { font-size: var(--fs-cap); color: var(--danger-soft); }
+.save-status .btn-link:hover { color: var(--danger-soft); text-decoration: underline; }
 /* Текст ошибки под полем и красный счётчик при переполнении */
-.field-hint--error { color: var(--danger); }
-.field-hint--over { color: var(--danger); }
+.field-hint--error { color: var(--danger-soft); }
+.field-hint--over { color: var(--danger-soft); }
 .field-list { display: flex; flex-direction: column; gap: 8px; }
 .field-item { display: flex; gap: 6px; align-items: center; }
 .field-item input { flex: 1; }
@@ -760,7 +805,7 @@ a { color: var(--accent); }
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1); }
 @starting-style { .picker { opacity: 0; } }
 .picker-card { width: min(1060px, 100%); max-height: 84vh; max-height: 84dvh; display: flex; flex-direction: column;
-  background: var(--bg-soft); border: 1px solid var(--line); }
+  background: var(--bg-soft); border-radius: var(--radius-card); }
 .picker-head { display: flex; align-items: center; justify-content: space-between;
   padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .picker-head h3 { margin: 0; font-size: var(--fs-btn); font-weight: 600; }  /* Р§6 — единая ось панельных h3: 15px/600 */
@@ -773,8 +818,8 @@ a { color: var(--accent); }
    real content height and scrolling. The child .picker-prev clips the iframe itself,
    so the item doesn't need to clip anything. */
 .picker-item { display: flex; flex-direction: column; gap: 0; text-align: left;
-  padding: 0; background: transparent; border: 1px solid var(--line);
-  border-radius: 0; cursor: pointer; color: var(--text); font: inherit;
+  padding: 0; background: var(--surface); border: 1px solid transparent;
+  border-radius: var(--radius-card); cursor: pointer; color: var(--text); font: inherit;
   transition: border-color var(--dur-fast) var(--ease-productive), background var(--dur-fast) var(--ease-productive); }
 .picker-item:hover { border-color: var(--accent); }
 /* 16:9 preview holding a 1920x1080 deck iframe scaled down. The columns are a fixed
@@ -785,8 +830,11 @@ a { color: var(--accent); }
    height does NOT contribute to the grid row's intrinsic size, so the grid under-reserves
    space, clips the rows and never scrolls. A fixed height feeds the grid a real number,
    and align-content:start keeps the rows at that height so the whole grid scrolls. */
+/* Скруглены только верхние углы: overflow:hidden на .picker-item запрещён (см. выше),
+   поэтому превью само подрезает себя под радиус карточки. */
 .picker-prev { position: relative; width: 100%; height: 179px; flex: none;
-  background: var(--stage); overflow: hidden; border-bottom: 1px solid var(--line); pointer-events: none; }
+  background: var(--stage); overflow: hidden; pointer-events: none;
+  border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0; }
 .picker-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
   border: 0; transform: scale(0.165625); transform-origin: top left; }  /* 318/1920 */
 /* Master index badge — a flush top-right tab (catalog order), revealed on hover only.
@@ -806,7 +854,7 @@ a { color: var(--accent); }
   display: grid; place-items: center; padding: 24px;
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1); }
 @starting-style { .dialog { opacity: 0; } }
-.dialog-card { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line);
+.dialog-card { width: min(420px, 100%); background: var(--panel); border-radius: var(--radius-card);
   padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .dialog-text { margin: 0; font-size: var(--fs-base); line-height: 1.5; color: var(--text); }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -818,18 +866,18 @@ a { color: var(--accent); }
 .chat-head p { margin: 0; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
 .chat-log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .msg { padding: 10px 12px; border-radius: var(--r); font-size: var(--fs-sm); max-width: 90%; white-space: pre-wrap; word-break: break-word; }
-.msg.user { align-self: flex-end; background: var(--accent); color: var(--accent-ink); }
-.msg.bot { align-self: flex-start; background: transparent; border: 1px solid var(--line); }
-.msg.err { align-self: flex-start; background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.msg.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); }
+.msg.bot { align-self: flex-start; background: var(--surface); }
+.msg.err { align-self: flex-start; background: rgba(255, 107, 107, .10); color: var(--danger-soft); }
 .chat-empty { color: var(--muted); font-size: var(--fs-xs); text-align: left; margin-top: 10px; line-height: 1.5; }
 .chat-input { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
 .chat-input textarea {
   resize: none; height: 64px; background: var(--field-bg); color: var(--text);
-  border: 1px solid var(--muted-2); border-radius: var(--r); padding: 8px 10px; font: inherit; font-size: var(--fs-sm);
+  border: 1px solid transparent; border-radius: var(--radius-ctl); padding: 9px 11px; font: inherit; font-size: var(--fs-sm);
 }
 .chat-input textarea:focus { border-color: var(--accent); }
 .chat-input textarea:focus:not(:focus-visible) { outline: none; }
-.chat-target { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
+.chat-target { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); color: var(--muted-2); }
 
 /* Правки в чате — фича в разработке: контролы серые/некликабельные, подсказка [data-tip]
    висит на самом .chat-input (его прозрачность НЕ трогаем — иначе приглушится и тултип). */
@@ -841,37 +889,37 @@ a { color: var(--accent); }
 
 /* ===== Живой аутлайн (chat mode) ===== */
 .outline { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
-.outline-head { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase; color: var(--muted-2); }
+.outline-head { font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); color: var(--muted-2); }
 .outline-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
 .outline-list li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--text); }
 .outline-num { flex: 0 0 auto; min-width: 16px; text-align: right; font-size: var(--fs-xs); color: var(--muted-2); }
 .outline-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.outline-badge { flex: 0 0 auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps-2); text-transform: uppercase;
+.outline-badge { flex: 0 0 auto; font-size: var(--fs-cap); letter-spacing: var(--track-caps-2);
   padding: 2px 7px; }
-.outline-badge.is-plan { color: var(--muted); background: var(--neutral-dim); }
-.outline-badge.is-ready { color: var(--accent); background: var(--accent-dim); }
-.outline-badge.is-typed { color: var(--accent); background: var(--accent-dim); }
+.outline-badge.is-plan { color: var(--muted); background: var(--neutral-dim); border-radius: var(--radius-pill); }
+.outline-badge.is-ready { color: var(--brand-chip-fg); background: var(--brand-chip-bg); border-radius: var(--radius-pill); }
+.outline-badge.is-typed { color: var(--brand-chip-fg); background: var(--brand-chip-bg); border-radius: var(--radius-pill); }
 #buildDeck { width: 100%; }
 .outline-hint { margin-top: 4px; font-size: var(--fs-cap); line-height: 1.4; color: var(--muted-2); }
 
 /* Typed field-cards + raw actions inside the live outline */
 .outline-list li.outline-item { flex-direction: column; align-items: stretch; gap: 6px;
-  padding: 8px; border: 1px solid var(--line); border-radius: var(--r); }
+  padding: 8px; background: var(--surface); border-radius: var(--radius-ctl); }
 .outline-item .outline-head { display: flex; align-items: center; gap: 8px;
   font-size: var(--fs-sm); letter-spacing: 0; text-transform: none; color: var(--text); }
 .field-card { display: flex; flex-direction: column; gap: 6px; }
 .field-row { display: flex; flex-direction: column; gap: 3px; }
 .field-cap { font-size: var(--fs-xs); letter-spacing: 0; text-transform: none; color: var(--muted); }
-.field-input { width: 100%; box-sizing: border-box; padding: 8px 10px; font-size: var(--fs-sm);
-  color: var(--text); background: var(--field-bg); border: 1px solid var(--muted-2); border-radius: var(--r); }
+.field-input { width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: var(--fs-sm);
+  color: var(--text); background: var(--field-bg); border: 1px solid transparent; border-radius: var(--radius-ctl); }
 .field-input:focus { border-color: var(--accent); }
 .field-input:focus:not(:focus-visible) { outline: none; }
 .field-hint { font-size: var(--fs-cap); line-height: 1.4; color: var(--muted-2); font-variant-numeric: tabular-nums; }
 .outline-raw { display: flex; }
-.outline-propose { font-size: var(--fs-xs); padding: 5px 10px; color: var(--accent);
-  background: var(--accent-dim); border: 1px solid var(--accent-line); border-radius: var(--r); cursor: pointer; }
-.outline-propose:hover { background: var(--accent-dim-2); border-color: var(--accent); }
-.outline-propose:active { background: var(--accent-line); }
+.outline-propose { font-size: var(--fs-xs); padding: 6px 12px; color: var(--brand-chip-fg);
+  background: var(--brand-chip-bg); border: 0; border-radius: var(--radius-pill); cursor: pointer; }
+.outline-propose:hover { background: var(--brand-surface-hover); }
+.outline-propose:active { background: var(--brand-surface); }
 
 /* ============================================================================
    Канон v4 (layout): двухколоночный workspace — как /images @ 6791254.
@@ -894,16 +942,16 @@ a { color: var(--accent); }
 .workspace__output > * { margin-top: 0; }
 .workspace__output .history { margin-top: 0; }
 
-/* Empty-state первой загрузки: панель на 1px-хайрлайне, капс-заголовок.
-   Г§2 — радиальное свечение убрано; остаётся только плоская светлая плёнка. */
-.empty { padding: 30px 34px; border: 1px solid var(--line); border-radius: var(--r-lg);
-  color: var(--muted); background: rgba(255, 255, 255, .015); }
-.empty h2 { margin: 0 0 14px; font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase;
-  color: var(--muted-2); font-family: var(--font-text); font-weight: 600; }
+/* Empty-state первой загрузки — карточка-подложка. v5 снял капс-заголовок:
+   это обычный заголовок панели, а не «маяк». */
+.empty { padding: 30px 34px; border-radius: var(--radius-card);
+  color: var(--muted); background: var(--surface); }
+.empty h2 { margin: 0 0 14px; font-size: var(--fs-h3); letter-spacing: -0.01em;
+  color: var(--text); font-family: var(--font-display); font-weight: 600; }
 /* Г§4 — мини-превью настоящего слайда (фикс-высота + scale, как в пикере: aspect-ratio
    тут сознательно не работает). iframe грузится lazy, без интеракции. */
 .empty-prev { position: relative; width: min(100%, 480px); height: 270px; overflow: hidden;
-  border: 1px solid var(--line); background: #222; pointer-events: none; }
+  border-radius: var(--radius-ctl); background: var(--surface-inset); pointer-events: none; }
 .empty-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
   border: 0; transform: scale(0.25); transform-origin: top left; }
 .empty-cap { margin-top: 10px; }

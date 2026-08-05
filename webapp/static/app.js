@@ -256,8 +256,9 @@ function cardMeta(it) {
   if (it.state === "done") {
     const seg = [];
     if (when) seg.push(esc(when));
-    if (it.duration_ms != null) seg.push(`⏱ ${histDur(it.duration_ms)}`);
-    if (it.out_tokens != null) seg.push(`↓ ${histInt(it.out_tokens)}`);
+    // v5 запретил emoji: пиктограммы ⏱/↓ заменены словами-подписями
+    if (it.duration_ms != null) seg.push(`за ${histDur(it.duration_ms)}`);
+    if (it.out_tokens != null) seg.push(`${histInt(it.out_tokens)} токенов`);
     if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
     return seg.join(SEP);
   }

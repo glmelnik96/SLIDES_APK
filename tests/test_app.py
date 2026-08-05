@@ -309,7 +309,7 @@ def test_history_includes_error_for_failed(monkeypatch, tmp_path):
 
 def test_history_includes_usage_stats(monkeypatch, tmp_path):
     """История отдаёт расход прогона (токены/стоимость/время), чтобы фронт показал
-    строку ⏱ … · ↑ … · ↓ … · ≈ … ₽. Гоним через терминальный хук — он проверяет
+    строку «за … · … токенов · ≈ … ₽». Гоним через терминальный хук — он проверяет
     и маппинг имён с провода в БД (prompt_tokens→in_tokens), и выдачу в JSON."""
     _no_run(monkeypatch)
     with _client(monkeypatch, tmp_path) as c:
