@@ -15,9 +15,11 @@ from __future__ import annotations
 import asyncio
 import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from sqlalchemy import delete, select, update
 
+from webapp import archive
 from webapp.db import models
 from webapp.paths import session_dir
 
@@ -28,6 +30,15 @@ _TERMINAL = ("done", "failed", "cancelled")
 # continuous editing on one draft is implausible.
 _PURGEABLE = _TERMINAL + ("draft",)
 _INTERVAL_SEC = 10 * 60
+# Job columns copied into the archive sidecar: everything that describes the run
+# (what was asked, what came out, what it cost) minus the FK to the user row —
+# the archive holds raw content, so it stays as anonymous as it usefully can.
+_META_COLS = (models.Job.session_id, models.Job.mode, models.Job.kind,
+              models.Job.source_filename, models.Job.exact_transfer,
+              models.Job.status, models.Job.error, models.Job.created_at,
+              models.Job.finished_at, models.Job.in_tokens,
+              models.Job.out_tokens, models.Job.cost_rub,
+              models.Job.duration_ms)
 
 
 async def reconcile_interrupted(sessionmaker) -> int:
@@ -42,32 +53,52 @@ async def reconcile_interrupted(sessionmaker) -> int:
     return res.rowcount or 0
 
 
-async def purge_once(sessionmaker, *, ttl_hours: int) -> int:
+async def purge_once(sessionmaker, *, ttl_hours: int,
+                     archive_dir: Path | None = None) -> int:
     """Delete TERMINAL Job rows (and their session dirs) older than ttl_hours.
     Results are kept for the full TTL measured from job START (created_at). An
     in-flight run (queued/running) is never purged, even if it somehow predates
     the cutoff, so retention can't pull the row out from under a live build.
+
+    With archive_dir set, each session is packed there (inputs + outputs + the
+    row's metrics) right before the rmtree — the last moment that content
+    exists, and the one that captures its FINAL state after any edits.
     Returns the number of rows removed."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
     cond = (models.Job.created_at < cutoff) & models.Job.status.in_(_PURGEABLE)
     async with sessionmaker() as s:
-        rows = await s.execute(select(models.Job.session_id).where(cond))
-        session_ids = [r[0] for r in rows.all()]
-        if session_ids:
+        rows = await s.execute(select(*_META_COLS).where(cond))
+        records = [dict(r) for r in rows.mappings().all()]
+        if records:
             await s.execute(delete(models.Job).where(cond))
             await s.commit()
-    for sid in session_ids:
+    for rec in records:
+        sid = rec["session_id"]
         d = session_dir(sid)
+        if archive_dir is not None:
+            try:
+                await asyncio.to_thread(
+                    archive.archive_session, archive_dir, sid, d, rec)
+            except Exception:  # noqa: BLE001 — see below
+                pass  # archiving must never block the delete (else disk fills)
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)
-    return len(session_ids)
+    return len(records)
 
 
-async def retention_loop(sessionmaker, *, ttl_hours: int) -> None:
+async def retention_loop(sessionmaker, *, ttl_hours: int,
+                         archive_dir: Path | None = None,
+                         archive_ttl_days: int = 14,
+                         archive_max_bytes: int = 0) -> None:
     while True:
         await asyncio.sleep(_INTERVAL_SEC)
         try:
-            await purge_once(sessionmaker, ttl_hours=ttl_hours)
+            await purge_once(sessionmaker, ttl_hours=ttl_hours,
+                             archive_dir=archive_dir)
+            if archive_dir is not None:
+                await asyncio.to_thread(
+                    archive.purge_archive, archive_dir,
+                    ttl_days=archive_ttl_days, max_bytes=archive_max_bytes)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001 — retention must never crash the app

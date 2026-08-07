@@ -55,6 +55,19 @@ class Settings(BaseSettings):
     # Result retention (sessions + Job rows older than this are purged).
     retention_hours: int = Field(24, alias="RETENTION_HOURS")
 
+    # Временный архив сессий: перед удалением по retention складываем вход и
+    # выход прогона (см. webapp/archive.py) — это фактура для доработки движка.
+    # ПУСТО = выключено: локалка и тесты ничего не пишут, включает только прод.
+    archive_dir: str = Field("", alias="ARCHIVE_DIR")
+    archive_ttl_days: int = Field(14, alias="ARCHIVE_TTL_DAYS")
+    # Жёсткий потолок на диск: сверх него вытесняем самые старые архивы, чтобы
+    # всплеск нагрузки не забил раздел (архив не важнее работы приложения).
+    archive_max_mb: int = Field(4096, alias="ARCHIVE_MAX_MB")
+
+    def archive_root(self) -> Path | None:
+        p = self.archive_dir.strip()
+        return Path(p) if p else None
+
     # Общий с платформой секрет для машинного чтения GET /internal/stats
     # (заголовок X-Ingest-Token). Имя переменной историческое — раньше тем же
     # секретом подписывался пуш на шлюз; App1 попросил переиспользовать её, а не

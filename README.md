@@ -203,7 +203,9 @@ journalctl -u app2 -f
 | `QUEUE_MAX_ACTIVE` | общий потолок задач в системе (running + waiting), предохранитель |
 | `USER_QUEUE_LIMIT` | сколько задач один пользователь может держать в очереди           |
 | `CLOUDRU_MODEL`    | переопределить модель по умолчанию (`MiniMaxAI/MiniMax-M3`) для A/B|
+| `SLIDESBOT_WORKDIR`| каталог сессий; **в проде обязателен**: юнит с `PrivateTmp` сносит `/tmp` при каждой остановке |
 | `RETENTION_HOURS`  | TTL результатов (сессии + строки Job старше — удаляются)          |
+| `ARCHIVE_DIR`      | архив фактуры перед удалением; пусто = выключено (см. `ARCHIVE_TTL_DAYS`, `ARCHIVE_MAX_MB`) |
 | `DEV_USER_ID`      | **в проде пусто** (иначе отсутствие `X-User-Id` не даст 401)      |
 
 **Egress.** Приложению нужен исходящий доступ только к Cloud.ru FM

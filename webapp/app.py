@@ -139,8 +139,12 @@ async def _startup() -> None:
     from webapp import retention
     await retention.reconcile_interrupted(app.state.sessionmaker)
     app.state._retention_task = asyncio.create_task(
-        retention.retention_loop(app.state.sessionmaker,
-                                 ttl_hours=settings.retention_hours),
+        retention.retention_loop(
+            app.state.sessionmaker,
+            ttl_hours=settings.retention_hours,
+            archive_dir=settings.archive_root(),
+            archive_ttl_days=settings.archive_ttl_days,
+            archive_max_bytes=settings.archive_max_mb * 1024 * 1024),
         name="retention-loop")
 
 
