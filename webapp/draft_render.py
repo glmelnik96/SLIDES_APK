@@ -27,7 +27,8 @@ _EMPTY_SUBTITLE = "Добавьте слайд или попросите асс�
 
 def render_draft(session_id: str, plan: DraftPlan) -> Path:
     """Render the draft to deck.html (derived artifact) and return its path."""
-    html = assemble(_to_deck_plan(plan))
+    theme = plan.theme if plan.theme in deck_edit.THEMES else "dark"
+    html = assemble(_to_deck_plan(plan), theme=theme)
     return deck_edit.save_deck(session_id, html)
 
 

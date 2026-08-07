@@ -32,6 +32,9 @@ class DraftSlide(BaseModel):
 class DraftPlan(BaseModel):
     title: str = ""
     slides: list[DraftSlide] = Field(default_factory=list)
+    # Тема деки (dark|light). Живёт в плане, а не только в deck.html: deck.html —
+    # производный артефакт и пересобирается из плана при каждой правке формы.
+    theme: str = "dark"
 
 
 def plan_path(session_id: str) -> Path:

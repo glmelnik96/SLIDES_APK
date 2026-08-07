@@ -505,6 +505,65 @@ def test_post_deck_rejects_non_utf8_and_empty(monkeypatch, tmp_path):
         assert de.deck_path(sid).read_text("utf-8") == '<section class="slide">A</section>'
 
 
+def test_theme_endpoint_repaints_built_deck(monkeypatch, tmp_path):
+    """Перекрас собранной деки — один флип data-theme в deck.html; freeform-слайды
+    с литеральными цветами возвращаются в check_slides для визуальной проверки."""
+    _no_run(monkeypatch)
+    import webapp.deck_edit as de
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        de.deck_path(sid).parent.mkdir(parents=True, exist_ok=True)
+        de.deck_path(sid).write_text(
+            '<html data-theme="dark"><body>'
+            '<section class="slide">ok</section>'
+            '<section class="slide"><p style="color:#fff">custom</p></section>'
+            '</body></html>', encoding="utf-8")
+        # non-owner: 404, deck untouched
+        assert c.post(f"/api/jobs/{sid}/theme", json={"theme": "light"},
+                      headers=H("u2")).status_code == 404
+        # bad theme: 400
+        assert c.post(f"/api/jobs/{sid}/theme", json={"theme": "sepia"},
+                      headers=H("u1")).status_code == 400
+        r = c.post(f"/api/jobs/{sid}/theme", json={"theme": "light"},
+                   headers=H("u1"))
+        assert r.status_code == 200
+        assert r.json() == {"ok": True, "theme": "light", "check_slides": [2]}
+        assert 'data-theme="light"' in de.deck_path(sid).read_text("utf-8")
+
+
+def test_theme_endpoint_404_without_deck(monkeypatch, tmp_path):
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("a.md", b"# a", "text/markdown")},
+                     headers=H("u1")).json()["session_id"]
+        assert c.post(f"/api/jobs/{sid}/theme", json={"theme": "light"},
+                      headers=H("u1")).status_code == 404
+
+
+def test_theme_survives_draft_rerender(monkeypatch, tmp_path):
+    """У черновика deck.html — производный артефакт (пересобирается из plan.json
+    при каждой правке), поэтому тема обязана жить в плане: перекрасили → правка
+    формы → перерендер всё ещё светлый."""
+    import webapp.draft as dr
+    import webapp.draft_render as drr
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/drafts", json={"mode": "manual"},
+                     headers=H("u1")).json()["session_id"]
+        r = c.post(f"/api/jobs/{sid}/theme", json={"theme": "light"},
+                   headers=H("u1"))
+        assert r.status_code == 200
+        assert dr.load_plan(sid).theme == "light"
+        assert 'data-theme="light"' in \
+            (tmp_path / "sessions" / sid / "deck.html").read_text("utf-8")
+        # a later form-edit re-render must keep the choice (theme from the plan)
+        drr.render_draft(sid, dr.load_plan(sid))
+        assert 'data-theme="light"' in \
+            (tmp_path / "sessions" / sid / "deck.html").read_text("utf-8")
+
+
 def test_chat_rewrite_preserves_concurrent_save(monkeypatch, tmp_path):
     """The LLM rewrite runs unlocked for seconds; if another tab saves the deck
     meanwhile, the chat result must be spliced into the FRESH deck — the stale

@@ -795,6 +795,35 @@ async def post_deck(session_id: str, request: Request,
     return JSONResponse({"ok": True})
 
 
+@app.post("/api/jobs/{session_id}/theme")
+async def post_theme(session_id: str, request: Request,
+                     user=Depends(get_current_user)) -> JSONResponse:
+    """Repaint the saved deck (dark|light). Free: every component color in
+    deck.css resolves from tokens keyed by <html data-theme>, so this is one
+    attribute flip in deck.html — no engine/LLM pass; PNG/PPTX exports re-render
+    from deck.html on demand and pick the theme up automatically."""
+    await _owned_or_404(request, session_id, user)
+    data = await _json_body(request)
+    theme = data.get("theme")
+    if theme not in deck_edit.THEMES:
+        raise HTTPException(400, "theme must be 'dark' or 'light'")
+    async with _deck_lock(session_id):
+        deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+        if deck is None:
+            raise HTTPException(404, "deck not found")
+        html = deck.read_text("utf-8")
+        deck.write_text(deck_edit.set_theme(html, theme), encoding="utf-8")
+        # Drafts re-derive deck.html from plan.json on every form edit, which
+        # would silently revert the flip — persist the choice in the plan too.
+        if draft.plan_path(session_id).is_file():
+            plan = draft.load_plan(session_id)
+            draft.save_plan(session_id, plan.model_copy(update={"theme": theme}))
+    # Freeform slides (chat-edit/autofix) may carry literal colors authored
+    # against the old background — surface them so the UI can suggest a check.
+    check = deck_edit.slides_with_hardcoded_colors(html)
+    return JSONResponse({"ok": True, "theme": theme, "check_slides": check})
+
+
 @app.post("/api/jobs/{session_id}/chat")
 async def post_chat(session_id: str, request: Request,
                     user=Depends(get_current_user)) -> JSONResponse:

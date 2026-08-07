@@ -21,10 +21,59 @@ _CONTENTEDITABLE_RE = re.compile(r'\s+contenteditable(?:\s*=\s*"[^"]*")?',
 # animation selectors in the embedded <style>, which must stay intact.
 _SECTION_CLASS_RE = re.compile(r'(<section\b[^>]*\bclass=")([^"]*)(")',
                                re.IGNORECASE)
+# Recoloring a built deck is one attribute: deck.css resolves every component
+# color from tokens keyed by <html data-theme="dark|light">, so flipping the
+# attribute repaints the whole deck; PNG/PPTX exports re-render from deck.html
+# and pick the new theme up with no engine involvement.
+THEMES = ("dark", "light")
+_THEME_ATTR_RE = re.compile(r'(<html\b[^>]*?\bdata-theme=")([^"]*)(")',
+                            re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r'<html\b[^>]*>', re.IGNORECASE)
+# Theme tokens are var(--…); a LITERAL hex/rgb inside a slide's markup (freeform
+# slide from chat-edit/autofix) was authored against one background and may not
+# survive a repaint — flag such slides so the UI can suggest a visual check.
+# Attribute context (style=/fill=/…) keeps template comments and deck.js out.
+_HARDCODED_COLOR_RE = re.compile(
+    r'\b(?:style|fill|stroke|color|bgcolor)\s*=\s*"[^"]*'
+    r'(?:#[0-9a-fA-F]{3,8}\b|rgba?\s*\()',
+    re.IGNORECASE)
 
 
 def count_slides(html: str) -> int:
     return len(_SLIDE_RE.findall(html))
+
+
+def get_theme(html: str) -> str:
+    m = _THEME_ATTR_RE.search(html)
+    return m.group(2) if m and m.group(2) in THEMES else "dark"
+
+
+def set_theme(html: str, theme: str) -> str:
+    if theme not in THEMES:
+        raise ValueError(f"unknown theme: {theme!r} (dark|light)")
+    if _THEME_ATTR_RE.search(html):
+        return _THEME_ATTR_RE.sub(
+            lambda m: m.group(1) + theme + m.group(3), html, count=1)
+    # No attribute (e.g. a deck saved by an old editor build) — add it, else the
+    # CSS token blocks wouldn't match and the deck would render unthemed.
+    return _HTML_TAG_RE.sub(
+        lambda m: m.group(0)[:-1] + f' data-theme="{theme}">', html, count=1)
+
+
+def slides_with_hardcoded_colors(html: str) -> list[int]:
+    """1-based indices of slides whose markup carries literal colors (see
+    _HARDCODED_COLOR_RE) — candidates for a visual check after a repaint."""
+    starts = [m.start() for m in _SLIDE_RE.finditer(html)]
+    flagged = []
+    for i, start in enumerate(starts):
+        # Bound at the section's close, not the next slide: the tail after the
+        # LAST slide holds the embedded deck.js, which must not leak into scan.
+        close = html.find("</section>", start)
+        end = close if close != -1 else (
+            starts[i + 1] if i + 1 < len(starts) else len(html))
+        if _HARDCODED_COLOR_RE.search(html[start:end]):
+            flagged.append(i + 1)
+    return flagged
 
 
 def strip_contenteditable(html: str) -> str:

@@ -219,6 +219,7 @@ function handleFrameLoad(loaded) {
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
+  syncThemeToggle();  // ярлык перекраса — по теме только что загруженного кадра
   // К§6 — показать подготовленный буфер, спрятать прежний (без чёрного кадра).
   loaded.classList.remove("hidden");
   (loaded === frameA ? frameB : frameA).classList.add("hidden");
@@ -452,6 +453,51 @@ document.getElementById("save").onclick = async () => {
   const ok = await saveDeck();
   flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
+
+// Перекрас деки (тёмная ↔ светлая). Тема — атрибут data-theme на <html> деки:
+// сервер флипает его в deck.html (и в plan.json у черновика), все токены deck.css
+// пересчитываются сами, экспорт перерендерит из deck.html. Ярлык кнопки — ЦЕЛЬ
+// («Светлая тема» = во что перекрасим), синкается с темой загруженного кадра.
+const themeToggle = document.getElementById("themeToggle");
+function deckTheme() {
+  const t = frame.contentDocument?.documentElement?.getAttribute("data-theme");
+  return t === "light" ? "light" : "dark";
+}
+function syncThemeToggle() {
+  if (!themeToggle) return;
+  themeToggle.textContent =
+    deckTheme() === "dark" ? "Светлая тема" : "Тёмная тема";
+  themeToggle.classList.remove("hidden");
+}
+themeToggle?.addEventListener("click", async () => {
+  const next = deckTheme() === "dark" ? "light" : "dark";
+  themeToggle.disabled = true;
+  try {
+    // Несохранённые правки прямо на слайде собранной деки живут только в
+    // iframe-DOM; релоад после перекраса их потерял бы — сначала тихий сейв.
+    // (У черновика правки синкаются на blur, который клик уже вызвал.)
+    if (!isDraft) {
+      try { await saveDeck(true); } catch (_) { /* кадр не готов — не блокируем */ }
+    }
+    const r = await fetch(U(`/api/jobs/${sessionId}/theme`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: next }),
+    });
+    if (!r.ok) {
+      await alertDialog("Не получилось перекрасить — попробуйте ещё раз");
+      return;
+    }
+    const data = await r.json();
+    loadDeck(); // релоад превью с новой темой; заодно пометит экспорт устаревшим
+    // Freeform-слайды (правки чата/автофикса) могут нести собственные цвета,
+    // подобранные под старый фон, — честно показать, какие слайды проверить.
+    if (Array.isArray(data.check_slides) && data.check_slides.length) {
+      await alertDialog(
+        `Проверьте слайды ${data.check_slides.join(", ")}: у них есть свои цвета ` +
+        "(правки в чате или автоисправления), перекрас мог их не затронуть.");
+    }
+  } finally { themeToggle.disabled = false; }
+});
 
 // Export (PNG-ZIP / PPTX) is async: screenshotting every slide via Chromium takes
 // seconds, so we don't block on it. Click "Экспорт" → start the render and show a

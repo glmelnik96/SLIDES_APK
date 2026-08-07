@@ -98,3 +98,64 @@ def test_ensure_deck_keeps_existing_edits(monkeypatch, tmp_path):
 def test_ensure_deck_none_when_no_source(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
     assert deck_edit.ensure_deck("s1", None) is None
+
+
+# ── theme repaint: one attribute flip recolors the whole deck ────────────────
+_DECK = ('<!DOCTYPE html><html lang="ru" data-theme="dark"><head>'
+         '<style>html[data-theme="dark"]{--bg:#222}</style></head>'
+         '<body><section class="slide">A</section></body></html>')
+
+
+def test_get_theme_reads_attribute():
+    assert deck_edit.get_theme(_DECK) == "dark"
+    assert deck_edit.get_theme(_DECK.replace('"dark"', '"light"', 1)) == "light"
+
+
+def test_get_theme_defaults_to_dark():
+    # missing attribute (old editor build) or garbage value → dark
+    assert deck_edit.get_theme("<html><body></body></html>") == "dark"
+    assert deck_edit.get_theme('<html data-theme="sepia"></html>') == "dark"
+
+
+def test_set_theme_flips_only_the_html_attribute():
+    out = deck_edit.set_theme(_DECK, "light")
+    assert '<html lang="ru" data-theme="light">' in out
+    # the embedded stylesheet's [data-theme="dark"] selector must stay intact —
+    # it's the token block, not state
+    assert 'html[data-theme="dark"]{--bg:#222}' in out
+    # round-trip back
+    assert deck_edit.set_theme(out, "dark") == _DECK
+
+
+def test_set_theme_injects_attribute_when_missing():
+    out = deck_edit.set_theme('<html lang="ru"><body>x</body></html>', "light")
+    assert '<html lang="ru" data-theme="light">' in out
+
+
+def test_set_theme_rejects_unknown():
+    import pytest
+    with pytest.raises(ValueError):
+        deck_edit.set_theme(_DECK, "sepia")
+
+
+def test_hardcoded_colors_flags_freeform_slide_only():
+    html = ('<html data-theme="dark"><body>'
+            # slide 1 — token-driven markup: never flagged
+            '<section class="slide"><h3 style="width:40px">A</h3>'
+            '<svg><path fill="var(--accent)"/></svg></section>'
+            # slide 2 — freeform with a literal color baked for the dark bg
+            '<section class="slide"><p style="color:#fff">B</p></section>'
+            # slide 3 — literal rgb() in an SVG attr
+            '<section class="slide"><svg><rect fill="rgb(34,34,34)"/></svg>'
+            '</section>'
+            # embedded deck.js after the last slide must not leak into the scan
+            '<script>el.setAttribute("style", "color:#26D07C");</script>'
+            '</body></html>')
+    assert deck_edit.slides_with_hardcoded_colors(html) == [2, 3]
+
+
+def test_hardcoded_colors_ignores_comment_text():
+    # template comments mention hexes in prose («фон #222222») — not markup
+    html = ('<section class="slide"><!-- фон #222222, полностью непрозрачный -->'
+            '<p>A</p></section>')
+    assert deck_edit.slides_with_hardcoded_colors(html) == []
