@@ -2,6 +2,8 @@ import asyncio
 import threading
 import time
 import types
+from concurrent.futures import ThreadPoolExecutor
+
 import webapp.runner as runner
 
 
@@ -226,7 +228,11 @@ async def test_cancel_running_job_aborts_at_next_event(monkeypatch):
 
     def run(inp):
         prog.publish(_Event(stage="parsing"))
-        while "s1" not in r._cancel:      # wait for the stop request
+        # Ждём стоп-сигнала, но с дедлайном: без него поток пула (non-daemon)
+        # крутился бы вечно, если сигнал не придёт, — и вешал бы выход из
+        # интерпретатора уже после подсчёта итогов сюиты.
+        deadline = time.monotonic() + 5
+        while "s1" not in r._cancel and time.monotonic() < deadline:
             time.sleep(0.005)
         prog.publish(_Event(stage="classifying"))  # sink raises JobCancelled here
 
@@ -442,3 +448,37 @@ def test_section_count_accessor():
     r._meta["s1"] = {"section_count": 42}
     assert r.section_count("s1") == 42
     assert r.section_count("nope") is None
+
+
+# ── защита изоляции тестов (conftest.drain_pool) ──────────────────────────
+# work() читает runner._pipeline_run ЛЕНИВО, уже внутри потока пула. Тест,
+# закончившийся раньше своего воркера, оставляет поток, который стартует, когда
+# monkeypatch уже подставил подделку СЛЕДУЮЩЕГО теста; события всех тестов идут
+# с одним session_id "s1", поэтому чужой ивент попадал в чужую очередь и ронял
+# ассерты. На 2-ядерной VM это давало 5 падений на 100 прогонов.
+
+def test_drain_pool_joins_finished_worker(pool_drainer):
+    """Отработавший воркер дренируется и не числится застрявшим."""
+    pool = ThreadPoolExecutor(max_workers=1)
+    done = threading.Event()
+    pool.submit(done.set)
+    assert pool_drainer(pool, timeout=5) == []
+    assert done.is_set()
+
+
+def test_drain_pool_reports_stuck_worker_instead_of_hanging(pool_drainer):
+    """Зависший воркер ВОЗВРАЩАЕТСЯ списком, а не вешает дренаж навсегда.
+
+    Ровно этот сценарий (non-daemon поток в бесконечном цикле) подвесил прогон
+    на VM: pytest досчитал итог, а интерпретатор навсегда встал в _python_exit →
+    join. Дренаж обязан упереться в таймаут и назвать виновника."""
+    pool = ThreadPoolExecutor(max_workers=1)
+    never = threading.Event()
+    pool.submit(never.wait)
+    try:
+        started = time.monotonic()
+        stuck = pool_drainer(pool, timeout=0.2)
+        assert len(stuck) == 1
+        assert time.monotonic() - started < 3     # уперлось в таймаут, не висит
+    finally:
+        never.set()                               # отпускаем поток
