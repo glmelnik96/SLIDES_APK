@@ -76,6 +76,45 @@ def test_save_deck_strips_stale_is_active(monkeypatch, tmp_path):
     assert '<section class="slide">two</section>' in saved
 
 
+def test_strip_no_motion_removes_from_body():
+    html = '<body class="no-motion"><section class="slide">A</section></body>'
+    out = deck_edit.strip_no_motion(html)
+    assert "no-motion" not in out
+    assert ">A<" in out  # content intact
+
+
+def test_strip_no_motion_keeps_other_body_classes():
+    html = '<body class="foo no-motion bar">x</body>'
+    assert '<body class="foo bar">' in deck_edit.strip_no_motion(html)
+
+
+def test_strip_no_motion_preserves_css_selectors():
+    # The editor preview loads the deck with &editor=1, and deck.js puts
+    # "no-motion" on <body> (quiet-preview mode). The SAME token names the
+    # kill-switch selectors in the embedded motion.css — stripping must touch
+    # only the body attribute, never the stylesheet.
+    html = ('<style>.no-motion .m-enter{opacity:1 !important}</style>'
+            '<body class="no-motion"><section class="slide">A</section></body>')
+    out = deck_edit.strip_no_motion(html)
+    assert ".no-motion .m-enter{opacity:1 !important}" in out  # CSS untouched
+    assert '<body>' in out or '<body class="">' in out
+
+
+def test_save_deck_strips_editor_no_motion(monkeypatch, tmp_path):
+    # Reproduces the "animations disappeared" bug: the editor serializes the
+    # live iframe DOM, whose body carries the runtime quiet-preview class, so
+    # every save baked <body class="no-motion"> into deck.html and motion.css
+    # silenced all entrances/loops/charts in the downloaded deck.
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
+    path = deck_edit.save_deck(
+        "sess1",
+        '<style>.no-motion .m-enter{animation:none !important}</style>'
+        '<body class="no-motion"><section class="slide">A</section></body>')
+    saved = path.read_text("utf-8")
+    assert ".no-motion .m-enter{animation:none !important}" in saved  # CSS intact
+    assert saved.count("no-motion") == 1  # only the CSS selector remains
+
+
 def test_ensure_deck_seeds_from_source(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path))
     src = tmp_path / "report.html"

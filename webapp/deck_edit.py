@@ -21,6 +21,14 @@ _CONTENTEDITABLE_RE = re.compile(r'\s+contenteditable(?:\s*=\s*"[^"]*")?',
 # animation selectors in the embedded <style>, which must stay intact.
 _SECTION_CLASS_RE = re.compile(r'(<section\b[^>]*\bclass=")([^"]*)(")',
                                re.IGNORECASE)
+# The editor preview loads the deck with &editor=1, and deck.js puts "no-motion"
+# on <body> (quiet preview: entrances/loops shown in their final state so
+# repeated saves don't restart the show). Serializing the live DOM bakes that
+# runtime class into deck.html, and motion.css's .no-motion rules then kill ALL
+# animations in the saved/downloaded deck. Strip the token from the <body> class
+# attribute only — the identical token names the kill-switch selectors in the
+# embedded motion.css, which must stay intact.
+_BODY_CLASS_RE = re.compile(r'(<body\b[^>]*\bclass=")([^"]*)(")', re.IGNORECASE)
 # Recoloring a built deck is one attribute: deck.css resolves every component
 # color from tokens keyed by <html data-theme="dark|light">, so flipping the
 # attribute repaints the whole deck; PNG/PPTX exports re-render from deck.html
@@ -88,6 +96,14 @@ def strip_is_active(html: str) -> str:
     return _SECTION_CLASS_RE.sub(_clean, html)
 
 
+def strip_no_motion(html: str) -> str:
+    def _clean(m: "re.Match[str]") -> str:
+        classes = [c for c in m.group(2).split() if c != "no-motion"]
+        return m.group(1) + " ".join(classes) + m.group(3)
+
+    return _BODY_CLASS_RE.sub(_clean, html)
+
+
 def deck_path(session_id: str) -> Path:
     return session_dir(session_id) / "deck.html"
 
@@ -96,7 +112,9 @@ def save_deck(session_id: str, html: str) -> Path:
     if not html or not html.strip():
         raise ValueError("empty deck HTML")
     path = deck_path(session_id)
-    path.write_text(strip_is_active(strip_contenteditable(html)), encoding="utf-8")
+    path.write_text(
+        strip_no_motion(strip_is_active(strip_contenteditable(html))),
+        encoding="utf-8")
     return path
 
 
