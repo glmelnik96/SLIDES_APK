@@ -285,3 +285,28 @@ def test_worst_case_spec_fits_slot_cap():
                        for i in range(12)}}
     s = spec_json(raw)
     assert len(s) < 8000, f"канонический JSON {len(s)} симв. не влезает в слот"
+
+
+def test_node_outside_the_graph_is_rejected():
+    """Живой прогон: модель забыла ребро «Подготовка → Услуга подключена», и
+    узел молча сел в нулевой ранг рядом со стартом — на слайде это выглядело
+    поломкой раскладки. Претензия переводит потерю в ретрай филлера."""
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "flowchart",
+                       "nodes": [{"id": "a", "label": "Заявка"},
+                                 {"id": "b", "label": "Проверка"},
+                                 {"id": "end", "label": "Подключено"}],
+                       "edges": [{"from": "a", "to": "b"}]})
+    claim = [e for e in ei.value.errors if "вне схемы" in e]
+    assert len(claim) == 1 and "'end'" in claim[0]
+
+
+def test_edgeless_kinds_keep_their_nodes():
+    """Порядок-по-списку — законный режим: у process/swimlanes без рёбер все
+    узлы «одиночки», и претензия там была бы ложной."""
+    parse_diagram({"kind": "process",
+                   "nodes": [{"id": "a", "label": "Раз"},
+                             {"id": "b", "label": "Два"}]})
+    parse_diagram({"kind": "swimlanes",
+                   "nodes": [{"id": "a", "label": "Раз", "lane": "Продажи"},
+                             {"id": "b", "label": "Два", "lane": "Юристы"}]})

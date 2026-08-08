@@ -435,3 +435,46 @@ test("layout: битый спек — null, редактор тащит узел
   assert.ok(D.layout({ kind: "process",
     nodes: [{ id: "a", label: "А" }, null] }).a);
 });
+
+test("fitFont: длинная подпись ужимается под плашку, короткая — нет", () => {
+  // swimlanes режет ширину под число колонок: 166×108 — реальный размер из
+  // живого прогона, на котором «Развёртывание инфраструктуры» обрезалось.
+  const tight = D.fitFont("Развёртывание инфраструктуры", 166, 108);
+  assert.ok(tight < 28, `ожидалось уменьшение кегля, получено ${tight}`);
+  assert.strictEqual(D.fitFont("Сбор данных", 300, 110), 28);
+  assert.strictEqual(D.fitFont("", 40, 20), 28);
+});
+
+test("fitFont: слово шире плашки не оставляют крупным", () => {
+  const word = "Электроэнцефалография";
+  const fs = D.fitFont(word, 150, 100);
+  assert.ok(fs * 0.6 * word.length <= 150 - 24 || fs === 16,
+    `слово всё ещё шире плашки при кегле ${fs}`);
+});
+
+test("fitFont: перенос считается по словам, а не делением длины", () => {
+  // 250×110 — плашка flowchart. По символам подпись «влезала» в две строки, по
+  // словам их три: на этой разнице низ и обрезался в живом прогоне.
+  assert.ok(D.fitFont("Проверка данных менеджером", 250, 110) <= 24);
+});
+
+test("render: кегль подписи попадает в разметку", () => {
+  const host = fakeHost();
+  D.render(host, { kind: "swimlanes",
+    nodes: [{ id: "a", label: "Развёртывание инфраструктуры", lane: "Тех" },
+            { id: "b", label: "Сбор", lane: "Продажи" }] });
+  assert.ok(/font-size:\d+px/.test(host.innerHTML), "кегль не проставлен");
+});
+
+test("render: кегль подписей общий на всю схему", () => {
+  const host = fakeHost();
+  D.render(host, { kind: "swimlanes", nodes: [
+    { id: "a", label: "Развёртывание инфраструктуры", lane: "Тех" },
+    { id: "b", label: "Сбор", lane: "Продажи" },
+    { id: "c", label: "Проверка договора", lane: "Юристы" },
+  ] });
+  // подписи дорожек рисует декор — считаем только кегли внутри карточек
+  const sizes = new Set(host.innerHTML.split("data-node-id").slice(1)
+    .map((chunk) => (chunk.match(/font-size:(\d+)px/) || [])[1]));
+  assert.strictEqual(sizes.size, 1, `разнобой кеглей: ${[...sizes].join(", ")}`);
+});

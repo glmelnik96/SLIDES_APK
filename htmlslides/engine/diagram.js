@@ -560,13 +560,47 @@
   function nodeFill(n) { return n.accent ? "var(--accent)" : "var(--bg-card)"; }
   function nodeText(n) { return n.accent ? "var(--cl-graphite)" : "var(--fg-body)"; }
 
+  /* Кегль подписи под размер плашки. Без этого длинный label в узкой плашке
+   * (swimlanes/comparison режут ширину под число колонок) молча обрезался
+   * overflow:hidden — на слайде оставалось «звёртывание фраструктур». Меряем
+   * без DOM: раскладки чистые и гоняются в node --test, а рендер обязан быть
+   * детерминированным (сейв запекает SVG). 0.6 кегля — ширина символа Inter
+   * по кириллице с запасом (замер canvas.measureText дал 0.56–0.60 на живых
+   * подписях), 1.16 — межстрочный интервал плюс поле. */
+  function fitFont(label, w, h, base) {
+    var text = String(label == null ? "" : label).trim();
+    var max = base || 28;
+    if (!text) return max;
+    var inner = Math.max(24, w - 24), box = Math.max(24, h - 24);
+    var words = text.split(/\s+/);
+    var longest = 0;
+    words.forEach(function (word) { longest = Math.max(longest, word.length); });
+    for (var fs = max; fs > 15; fs -= 2) {
+      var perLine = Math.max(1, Math.floor(inner / (fs * 0.6)));
+      if (longest > perLine) continue;            // слово шире строки — не влезет
+      /* Перенос по словам, а не делением длины на ширину: «Проверка данных
+       * менеджером» — 26 символов и 14 на строку, то есть «две строки» по
+       * счёту, но три по словам. Именно на этой разнице подпись и обрезалась. */
+      var lines = 1, cur = 0;
+      for (var i = 0; i < words.length; i++) {
+        var len = words[i].length;
+        if (!cur) cur = len;
+        else if (cur + 1 + len <= perLine) cur += 1 + len;
+        else { lines += 1; cur = len; }
+      }
+      if (lines * fs * 1.16 <= box) return fs;
+    }
+    return 16;
+  }
+
   function labelFO(p, n, color, fontSize) {
     var pad = 10;
     return '<foreignObject x="' + (p.x - p.w / 2 + pad) + '" y="' + (p.y - p.h / 2 + pad) +
       '" width="' + (p.w - 2 * pad) + '" height="' + (p.h - 2 * pad) + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;' +
       'align-items:center;justify-content:center;text-align:center;overflow:hidden;' +
-      'font-size:' + (fontSize || 28) + 'px;line-height:1.15;letter-spacing:-.3px;' +
+      'font-size:' + fitFont(n.label, p.w, p.h, fontSize) + 'px;line-height:1.15;' +
+      'letter-spacing:-.3px;word-break:break-word;' +
       'color:' + color + ';">' + esc(n.label) + "</div></foreignObject>";
   }
 
@@ -811,10 +845,18 @@
     if (custom) {
       parts.push(custom(spec, result.nodes));
     } else {
+      /* Кегль общий на всю схему — по самой тесной плашке. Подбор в каждой
+       * плашке отдельно давал «Сбор данных» 28-м рядом с «Коммерческие условия»
+       * 20-м: подписи перестали резаться, но разнобой читался как небрежность. */
+      var fs = 28;
+      spec.nodes.forEach(function (n) {
+        var p = result.nodes[n.id];
+        fs = Math.min(fs, fitFont(n.label, p.w, p.h));
+      });
       spec.nodes.forEach(function (n) {
         var p = result.nodes[n.id];
         parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
-          shapePath(n, p) + labelFO(p, n, nodeText(n)) + "</g>");
+          shapePath(n, p) + labelFO(p, n, nodeText(n), fs) + "</g>");
       });
     }
     parts.push("</svg>");
@@ -849,7 +891,7 @@
     layoutMatrix: layoutMatrix, layoutPyramid: layoutPyramid,
     layoutHubSpoke: layoutHubSpoke, layoutComparison: layoutComparison,
     layoutVenn: layoutVenn, layoutSwimlanes: layoutSwimlanes,
-    laneList: laneList, trimSegment: trimSegment,
+    laneList: laneList, trimSegment: trimSegment, fitFont: fitFont,
     CANVAS: { W: W, H: H },
   };
 

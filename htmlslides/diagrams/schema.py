@@ -140,6 +140,24 @@ class _BaseSpec(BaseModel):
             del self.offsets[k]
         return errors
 
+    def isolated_errors(self) -> list[str]:
+        """Претензия к узлам, до которых не ведёт и от которых не идёт ни одно
+        ребро — для типов, где раскладку задают именно рёбра.
+
+        Модель регулярно забывает последнюю связь («…→ Услуга подключена»), и
+        схема формально валидна: узел просто выпадает из потока и садится в
+        нулевой ранг рядом со стартом — на слайде это выглядит поломкой, а не
+        недосказанностью. Пустой список рёбер не трогаем: там свои правила.
+        """
+        if not self.edges:
+            return []
+        linked = {e.from_ for e in self.edges} | {e.to for e in self.edges}
+        lone = [n.id for n in self.nodes if n.id not in linked]
+        if not lone:
+            return []
+        return ["узлы вне схемы — к ним не ведёт ни одно ребро: "
+                + ", ".join(repr(i) for i in lone[:5])]
+
 
 class FlowchartSpec(_BaseSpec):
     """Блок-схема: процесс с ветвлениями. Рёбра обязательны при ≥2 узлах."""
@@ -149,7 +167,7 @@ class FlowchartSpec(_BaseSpec):
         errors = super().semantic_errors()
         if len(self.nodes) >= 2 and not self.edges:
             errors.append("flowchart с несколькими узлами требует хотя бы одно ребро")
-        return errors
+        return errors + self.isolated_errors()
 
 
 class ProcessSpec(_BaseSpec):
@@ -199,7 +217,7 @@ class HierarchySpec(_BaseSpec):
                 if hops > MAX_NODES:
                     errors.append(f"цикл родительских связей вокруг узла {nid!r}")
                     break
-        return errors
+        return errors + self.isolated_errors()
 
 
 def _lanes(nodes) -> list[str]:
@@ -286,7 +304,7 @@ class SwimlanesSpec(_BaseSpec):
         elif not 2 <= len(_lanes(self.nodes)) <= MAX_GROUPS:
             errors.append(f"swimlanes требует 2–{MAX_GROUPS} дорожек (разных "
                           f"lane), сейчас {len(_lanes(self.nodes))}")
-        return errors
+        return errors + self.isolated_errors()
 
 
 DiagramSpec = Annotated[
