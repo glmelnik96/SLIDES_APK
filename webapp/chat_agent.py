@@ -501,7 +501,12 @@ def build_outline(session_id: str, *, client: Any | None = None) -> None:
                                       template_id=tid)
         except Exception:  # noqa: BLE001 — keep template only, never crash
             plan = draft.update_slide(plan, i, template_id=tid)
-        plan.slides[i - 1].filled = True
+        # Вопрос стеклянной сборки снимаем: слайд уже заполнен здесь, и карточка
+        # «ИИ сомневается в макете» относилась бы к содержимому, которого нет.
+        # Черновик у обоих путей общий — автор может уйти из степпера в чат.
+        slide = plan.slides[i - 1]
+        slide.filled = True
+        slide.status = slide.question = slide.candidates = None
         draft.save_plan(session_id, plan)  # save after EACH slide (resilience)
     draft_render.render_draft(session_id, plan)  # final render
 

@@ -695,6 +695,19 @@ async def glass_start(session_id: str, request: Request,
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in _ALLOWED["htmlnew"]:
         raise HTTPException(400, f"bad file type {suffix}")
+    # Стеклянная сборка идёт мимо очереди раннера, а с ней и мимо его лимита
+    # MAX_PER_USER. Свой потолок считаем по недозаполненным аутлайнам автора:
+    # именно они держат вызовы модели и место на диске.
+    async with request.app.state.sessionmaker() as s:
+        drafts = await jobs_repo.list_drafts_for_user(
+            s, user.id, limit=glass.MAX_ACTIVE_PER_USER + 1)
+    busy = await run_in_threadpool(
+        glass.unfinished_outlines,
+        [j.session_id for j in drafts if j.session_id != session_id])
+    if busy >= glass.MAX_ACTIVE_PER_USER:
+        raise HTTPException(429, f"у вас {busy} незавершённых сборок — "
+                                 "дособерите или удалите их, прежде чем "
+                                 "начинать новую")
     raw = await file.read()
     from htmlslides.parsers.base import decode_smart as _decode_smart
     if not raw.strip() or (suffix in (".md", ".txt")

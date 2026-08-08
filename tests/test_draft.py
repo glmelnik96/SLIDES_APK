@@ -63,6 +63,30 @@ def test_load_save_roundtrip(monkeypatch, tmp_path):
     assert draft.load_plan("nope").slides == []
 
 
+def test_save_failure_leaves_previous_plan_readable(monkeypatch, tmp_path):
+    """Обрыв на записи не должен стоить черновика: план — единственная истина,
+    а обрезанный JSON её уничтожает. Пишем во временный файл и переименовываем."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    good = draft.DraftPlan(title="Было", slides=[
+        draft.DraftSlide(template_id="cover", content={"title": "X"})])
+    draft.save_plan("sid-crash", good)
+
+    def boom(self, data, **kw):
+        self.write_bytes(data.encode("utf-8")[:20])   # успели половину
+        raise OSError("диск кончился")
+
+    with monkeypatch.context() as mp:       # снять только этот патч, не setenv
+        mp.setattr(draft.Path, "write_text", boom)
+        try:
+            draft.save_plan("sid-crash", draft.DraftPlan(title="Стало"))
+            assert False, "ожидали пробрасывания OSError"
+        except OSError:
+            pass
+    assert draft.load_plan("sid-crash").title == "Было"
+    # мусор за собой не оставляем
+    assert not list(draft.plan_path("sid-crash").parent.glob("*.tmp"))
+
+
 def test_draftslide_typed_fields_roundtrip(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     p = draft.DraftPlan(slides=[draft.DraftSlide(

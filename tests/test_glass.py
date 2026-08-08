@@ -445,3 +445,69 @@ def test_answer_over_api_reports_conflict_not_bad_request(monkeypatch, tmp_path)
         r = client.post(f"/api/drafts/{sid}/glass/answer",
                         json={"index": 1, "message": "мимо"}, headers=H())
     assert r.status_code == 409
+
+
+def test_chat_build_outline_clears_open_glass_questions(monkeypatch, tmp_path):
+    """Черновик у степпера и чат-агента общий: автор может уйти из стеклянной
+    сборки и дособрать деку кнопкой чата. Заполненный там слайд не должен
+    остаться с карточкой «ИИ сомневается в макете» — вопрос уже неактуален."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    from webapp import chat_agent, draft_render
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    monkeypatch.setattr(chat_agent, "_pick_template", lambda *a, **kw: "three-col")
+    monkeypatch.setattr(draft_render, "render_draft", lambda *a, **kw: None)
+    draft.save_plan("cb1", _outline_plan())
+
+    chat_agent.build_outline("cb1", client=FakeClient([]))
+
+    plan = draft.load_plan("cb1")
+    assert all(s.filled for s in plan.slides)
+    assert [s.status for s in plan.slides] == [None] * 4
+    assert plan.slides[1].question is None and plan.slides[1].candidates is None
+
+
+def test_glass_start_refuses_past_the_per_user_ceiling(monkeypatch, tmp_path):
+    """Стеклянная сборка идёт мимо очереди раннера, значит и мимо его лимита:
+    без своего потолка автор держал бы сколько угодно недозаполненных аутлайнов."""
+    monkeypatch.setattr(glass, "MAX_ACTIVE_PER_USER", 2)
+    client = _client_app(monkeypatch, tmp_path)
+    doc = tmp_path / "d.md"
+    doc.write_text("# Т\n\n## Раздел\n\nТекст раздела.\n", encoding="utf-8")
+    with client:
+        for _ in range(2):                       # два аутлайна «в работе»
+            sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+            draft.save_plan(sid, _outline_plan())
+        sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+        r = client.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                        files={"file": ("d.md", doc.read_bytes(), "text/markdown")})
+    assert r.status_code == 429
+
+
+def test_unfinished_outlines_counts_only_pending(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    draft.save_plan("u1", _outline_plan())                       # есть незаполненные
+    draft.save_plan("u2", draft.DraftPlan(slides=[               # всё заполнено
+        draft.DraftSlide(template_id="cover", brief="т", filled=True)]))
+    assert glass.unfinished_outlines(["u1", "u2", "нет-такой"]) == 1
+
+
+def test_start_glass_caps_sections_and_says_so(monkeypatch, tmp_path):
+    """Потолок разделов ниже, чем у чёрного ящика: стеклянную деку автор
+    дособирает по слайду. Обрезку не молчим — иначе автор гадает, куда делись
+    разделы (уведомление живёт в плане: ответ /glass/start до панели не доживает,
+    страница уходит в редактор)."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    monkeypatch.setattr(glass, "MAX_GLASS_SLIDES", 3)
+    src = tmp_path / "big.md"
+    src.write_text("# Док\n\n" + "".join(
+        f"## Раздел {i}\n\nТекст раздела {i} про метрики.\n\n" for i in range(5)),
+        encoding="utf-8")
+    fake = FakeClient([SectionChoice(candidates=[
+        Candidate(template_id="stats-row", confidence=0.9)]) for _ in range(5)])
+
+    plan = glass.start_glass("cap1", src, client=fake, workers=1)
+
+    assert len(plan.slides) == 4              # обложка + 3 раздела
+    assert len(fake.calls) == 3               # лишние разделы даже не скорим
+    assert "3" in plan.notice and "2" in plan.notice

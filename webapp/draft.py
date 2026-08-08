@@ -12,6 +12,8 @@ safe to render; persistence here never validates.
 """
 from __future__ import annotations
 
+import os
+import threading
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -41,6 +43,10 @@ class DraftPlan(BaseModel):
     # Тема деки (dark|light). Живёт в плане, а не только в deck.html: deck.html —
     # производный артефакт и пересобирается из плана при каждой правке формы.
     theme: str = "dark"
+    # Что сборка сделала за спиной автора (пока только «документ обрезан по
+    # потолку»). В плане, а не в ответе /glass/start: старт редиректит в редактор,
+    # и ответ до панели не доживает. Пустая строка = сказать нечего.
+    notice: str = ""
 
 
 def plan_path(session_id: str) -> Path:
@@ -56,8 +62,23 @@ def load_plan(session_id: str) -> DraftPlan:
 
 
 def save_plan(session_id: str, plan: DraftPlan) -> None:
-    plan_path(session_id).write_text(
-        plan.model_dump_json(), encoding="utf-8")
+    """Записать план атомарно: временный файл рядом + rename.
+
+    plan.json — единственная истина черновика, и переписывался он на месте:
+    обрыв на записи (рестарт юнита, полный диск) оставлял обрезанный JSON, то
+    есть потерянный черновик. Стеклянная сборка пишет план на каждом шаге, так
+    что окно стало заметным. Временный файл — в том же каталоге: rename атомарен
+    только внутри одной файловой системы."""
+    path = plan_path(session_id)
+    # Имя временного файла уникально по потоку: степпер стеклянной сборки пишет
+    # из пула, редактор — из петли событий, и общий tmp они бы затирали.
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        tmp.write_text(plan.model_dump_json(), encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 # ── pure slide operations (index is 1-based, matching the editor/UI) ─────────

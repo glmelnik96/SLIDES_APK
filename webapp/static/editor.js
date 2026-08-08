@@ -2795,6 +2795,9 @@ function renderGlassPanel(out) {
       `${plural(broke, "заполнился", "заполнились", "заполнились")} — ` +
       "текст остался темой в заголовке, допишите в редакторе.";
   }
+  // Что сборка сделала за спиной автора (документ обрезан по потолку) — говорим
+  // сразу, а не оставляем гадать, куда делись разделы.
+  if (draftPlan.notice) status.textContent += " " + draftPlan.notice;
   renderGlassQuestions(open);
   done?.classList.toggle("hidden", !glassLoopDone);
 }

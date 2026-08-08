@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,16 @@ from webapp import draft, draft_render
 # Порог сомнения: слабая уверенность топ-1 ИЛИ топ-1 и топ-2 почти неразличимы.
 CONFIDENCE_FLOOR = 0.6
 GAP_FLOOR = 0.15
+
+# Потолок разделов. Ниже, чем у чёрного ящика (MAX_DECK_SLIDES=100): стеклянная
+# сборка ручная — слайды идут по одному, и деку в сотню слайдов автор так не
+# дособерёт, а старт скорил бы все сто разделов параллельными вызовами.
+MAX_GLASS_SLIDES = 40
+
+# Стеклянная сборка идёт мимо очереди раннера, то есть и мимо его лимита
+# MAX_PER_USER: без своего потолка один автор мог держать сколько угодно
+# недозаполненных аутлайнов, каждый со своими вызовами модели.
+MAX_ACTIVE_PER_USER = 10
 
 # Эти шаблоны ставит система (обложку — start_glass), в меню раздела им не место.
 _EXCLUDED = {"cover", "cover-image", "contacts", "back-cover",
@@ -115,6 +126,21 @@ def _doubtful(choice: SectionChoice) -> bool:
     return False
 
 
+def unfinished_outlines(session_ids: Iterable[str]) -> int:
+    """Сколько из этих черновиков ещё ждут дозаполнения (есть слайд с темой, но
+    без содержимого). Считаем по плану, а не по флагу в базе: аутлайн — это
+    состояние черновика, и оно живёт в plan.json."""
+    n = 0
+    for sid in session_ids:
+        try:
+            plan = draft.load_plan(sid)
+        except Exception:  # noqa: BLE001 — битый/чужой план в счёт не берём
+            continue
+        if any(s.brief and not s.filled for s in plan.slides):
+            n += 1
+    return n
+
+
 def start_glass(session_id: str, source: Path, *, client: Any | None = None,
                 workers: int = 4) -> draft.DraftPlan:
     """Документ → прозрачный аутлайн: обложка + слайд на раздел с кандидатами.
@@ -132,6 +158,8 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     title = (doc.title or source.stem or "Презентация").strip()
     sections = [s for s in doc.sections
                 if _has_content(s) and not _is_part_title(s)]
+    dropped = max(0, len(sections) - MAX_GLASS_SLIDES)
+    sections = sections[:MAX_GLASS_SLIDES]
 
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     try:
@@ -151,7 +179,9 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
             question=(choice.question or _DEFAULT_QUESTION) if doubt else None,
             candidates=[c.template_id for c in choice.candidates],
         ))
-    plan = draft.DraftPlan(title=title, slides=slides)
+    plan = draft.DraftPlan(title=title, slides=slides, notice=(
+        f"Документ длиннее потолка: взяли первые {MAX_GLASS_SLIDES} разделов, "
+        f"ещё {dropped} не вошли — соберите их отдельной декой." if dropped else ""))
     draft.save_plan(session_id, plan)
     draft_render.render_draft(session_id, plan)
     return plan
