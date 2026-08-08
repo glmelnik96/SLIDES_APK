@@ -669,14 +669,30 @@ a { color: var(--accent); }
 .thumb-del:hover { color: var(--danger); border-color: var(--danger); }
 /* Перетаскивание миниатюр для смены порядка (порт из main) */
 .thumb[draggable="true"] { cursor: grab; }
-/* Жест неочевиден — подпись под лентой; тихая, не конкурирует с миниатюрами */
+/* Жест неочевиден — подпись под лентой; тихая, не конкурирует с миниатюрами.
+   Мышь тянет саму миниатюру, палец — рукоятку: показываем ту подсказку, чей жест
+   на этом устройстве вообще есть. */
 .thumbs-hint { margin-top: 10px; font-size: var(--fs-cap); line-height: 1.4; color: var(--muted-2); }
+.thumbs-hint .only-coarse { display: none; }
+/* Рукоятка перестановки для пальца: HTML5-перетаскивание касанием не работает.
+   touch-action:none только здесь — рейл миниатюр остаётся пролистываемым. */
+.thumb-grip { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; z-index: 2;
+  display: none; place-items: center; padding: 0; font-size: 12px; line-height: 1;
+  color: var(--muted-2); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm);
+  cursor: grab; touch-action: none; }
+@media (pointer: coarse) {
+  .thumb-grip { display: grid; }
+  .thumbs-hint .only-fine { display: none; }
+  .thumbs-hint .only-coarse { display: inline; }
+}
 .thumb.dragging { opacity: .5; }
 .thumb.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .thumb.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
-/* К§11 — на узком рейле (координация с правкой 8) превью и заголовок прячем: остаётся номер */
+/* К§11 — на узком рейле (координация с правкой 8) превью и заголовок прячем: остаётся номер.
+   Рукоятку прячем там же: миниатюра ужимается до номера (~25px), кнопка накрыла бы её
+   целиком и отняла тап «выбрать слайд». Перестановка пальцем — на широких тач-экранах. */
 @media (max-width: 1024px) {
-  .thumb-prev, .thumb-title, .thumbs-hint { display: none; }
+  .thumb-prev, .thumb-title, .thumbs-hint, .thumb-grip { display: none; }
   .thumb-cap { justify-content: center; }
 }
 .addslide { width: 100%; margin: 6px 0 14px; font-size: var(--fs-xs); padding: 9px 8px; color: var(--accent); border-color: var(--accent); }

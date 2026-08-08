@@ -452,16 +452,47 @@ function buildThumbs() {
       t.addEventListener("dragleave", onThumbDragLeave);
       t.addEventListener("drop", onThumbDrop);
       t.addEventListener("dragend", onThumbDragEnd);
+      t.appendChild(thumbGrip(i));
     }
     box.appendChild(t);
   });
   // Жест неочевиден — говорим о нём прямо в ленте, один раз на весь список.
+  // Мышь тянет саму миниатюру, палец — рукоятку (см. thumbGrip): подсказку
+  // выбирает CSS по типу указателя, чтобы не звать в жест, которого тут нет.
   if (reorderable && slides.length > 1) {
     const tip = document.createElement("div");
     tip.className = "thumbs-hint";
-    tip.textContent = "Перетащите миниатюру, чтобы поменять слайды местами";
+    tip.appendChild(hintVariant("only-fine",
+      "Перетащите миниатюру, чтобы поменять слайды местами"));
+    tip.appendChild(hintVariant("only-coarse",
+      "Порядок меняется перетаскиванием за рукоятку в углу миниатюры"));
     box.appendChild(tip);
   }
+}
+
+function hintVariant(cls, text) {
+  const s = document.createElement("span");
+  s.className = cls;
+  s.textContent = text;
+  return s;
+}
+
+/* Рукоятка перестановки для пальца. HTML5-перетаскивание касанием не работает,
+   а отдать всей миниатюре touch-action:none нельзя — рейл перестанет
+   пролистываться. Поэтому жест начинается со своей маленькой зоны, и только
+   она не скроллит. Мышь рукоятку не видит (CSS: pointer coarse) — там DnD. */
+function thumbGrip(i) {
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.className = "thumb-grip";
+  grip.setAttribute("aria-label", `Перетащить слайд ${i + 1}`);
+  grip.textContent = "⠿";
+  grip.addEventListener("click", (e) => e.stopPropagation()); // не листаем деку
+  grip.addEventListener("pointerdown", onGripDown);
+  grip.addEventListener("pointermove", onGripMove);
+  grip.addEventListener("pointerup", onGripUp);
+  grip.addEventListener("pointercancel", onGripUp);
+  return grip;
 }
 
 // К§3 — на превью помечаем пустые текст-слоты (и пустые ОБЯЗАТЕЛЬНЫЕ list-слоты)
@@ -1926,12 +1957,25 @@ function onThumbDragStart(e) {
   try { e.dataTransfer.setData("text/plain", String(dragFromIndex)); } catch {}
 }
 
+/* Половина миниатюры под курсором = «вставить после». Ось определяем по соседу,
+   а не по размеру контейнера: на узком экране лента становится горизонтальной
+   полосой (CSS ≤900px), и тогда «до/после» — это лево/право. Сосед честнее —
+   он показывает, куда реально растёт список. */
+function dropAfter(thumb, e) {
+  const r = thumb.getBoundingClientRect();
+  const sib = thumb.previousElementSibling || thumb.nextElementSibling;
+  const s = sib && sib.classList.contains("thumb") ? sib.getBoundingClientRect() : null;
+  const horizontal = s && Math.abs(s.left - r.left) > Math.abs(s.top - r.top);
+  return horizontal
+    ? (e.clientX - r.left) > r.width / 2
+    : (e.clientY - r.top) > r.height / 2;
+}
+
 function onThumbDragOver(e) {
   if (dragFromIndex === null) return;
   e.preventDefault(); // разрешаем drop
   e.dataTransfer.dropEffect = "move";
-  const rect = this.getBoundingClientRect();
-  const after = (e.clientY - rect.top) > rect.height / 2;
+  const after = dropAfter(this, e);
   this.classList.toggle("drop-after", after);
   this.classList.toggle("drop-before", !after);
 }
@@ -1943,11 +1987,14 @@ function onThumbDragLeave() {
 async function onThumbDrop(e) {
   e.preventDefault();
   const from = dragFromIndex;
-  const over = Number(this.dataset.index);
-  const rect = this.getBoundingClientRect();
-  const after = (e.clientY - rect.top) > rect.height / 2;
+  const after = dropAfter(this, e);
   this.classList.remove("drop-before", "drop-after");
   if (from === null) return;
+  await commitThumbMove(from, Number(this.dataset.index), after);
+}
+
+// Куда встанет слайд — общее для мыши (HTML5 DnD) и пальца (рукоятка).
+async function commitThumbMove(from, over, after) {
   // Позиция вставки в исходной нумерации (0-based, «перед элементом insertBefore»).
   const insertBefore = over + (after ? 1 : 0);
   // No-op: бросили на то же место.
@@ -1957,6 +2004,50 @@ async function onThumbDrop(e) {
   const target0 = insertBefore > from ? insertBefore - 1 : insertBefore;
   if (isDraft) await moveSlide(from, target0 + 1); // moveSlide ждёт 1-based позицию
   else await moveSlideBuilt(from, target0);
+}
+
+/* ---- перетаскивание пальцем за рукоятку ---- */
+let gripDrag = null;
+
+function onGripDown(e) {
+  const thumb = this.closest(".thumb");
+  if (!thumb) return;
+  e.preventDefault();   // жест наш: рейл под пальцем не скроллится
+  e.stopPropagation();
+  gripDrag = { from: Number(thumb.dataset.index), thumb: thumb, over: null, after: false };
+  thumb.classList.add("dragging");
+  try { this.setPointerCapture(e.pointerId); } catch (_) {}
+}
+
+function onGripMove(e) {
+  if (!gripDrag) return;
+  e.preventDefault();
+  clearDropMarks();
+  gripDrag.over = null;
+  // Захват указателя увёл события на рукоятку — цель ищем по координате.
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const over = el && el.closest && el.closest(".thumb");
+  if (!over || over === gripDrag.thumb) return;
+  const after = dropAfter(over, e);
+  over.classList.toggle("drop-after", after);
+  over.classList.toggle("drop-before", !after);
+  gripDrag.over = Number(over.dataset.index);
+  gripDrag.after = after;
+}
+
+async function onGripUp() {
+  if (!gripDrag) return;
+  const d = gripDrag;
+  gripDrag = null;
+  d.thumb.classList.remove("dragging");
+  clearDropMarks();
+  if (d.over === null) return;   // отпустили мимо ленты — порядок не трогаем
+  await commitThumbMove(d.from, d.over, d.after);
+}
+
+function clearDropMarks() {
+  document.querySelectorAll(".thumb.drop-before, .thumb.drop-after")
+    .forEach((t) => t.classList.remove("drop-before", "drop-after"));
 }
 
 // Собранная дека — HTML-as-truth: переставляем секцию в DOM кадра и сохраняем
@@ -1982,8 +2073,7 @@ async function moveSlideBuilt(from, to0) {
 
 function onThumbDragEnd() {
   this.classList.remove("dragging");
-  document.querySelectorAll(".thumb.drop-before, .thumb.drop-after")
-    .forEach((t) => t.classList.remove("drop-before", "drop-after"));
+  clearDropMarks();
   dragFromIndex = null;
 }
 
