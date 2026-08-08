@@ -108,7 +108,19 @@
   </div>
 </div>
 
+<!-- Пикер типов схем (второй шаг после мастера «Схема») -->
+<div class="picker hidden" id="dgmPicker">
+  <div class="picker-card">
+    <div class="picker-head">
+      <h3>Выберите тип схемы</h3>
+      <button class="btn btn-ghost btn-sm" id="dgmPickerClose" title="Закрыть" aria-label="Закрыть выбор типа схемы">&#10005;</button>
+    </div>
+    <div class="picker-grid" id="dgmPickerGrid"></div>
+  </div>
+</div>
+
 <script src="/static/errtext.js"></script>
+<script src="/static/diagram_editor.js"></script>
 <script src="/static/editor.js"></script>
 </body>
 </html>

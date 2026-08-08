@@ -174,10 +174,14 @@ def sample_spec(kind: str) -> dict:
 
 
 def catalog_for_ui() -> list[dict]:
-    """Полный каталог для «большого блока выбора типов» в редакторе."""
+    """Полный каталог для «большого блока выбора типов» в редакторе.
+
+    ``sample`` (None у нереализованных) нужен клиенту, чтобы сразу материализовать
+    выбранный тип в поля слайда — пользователь правит пример, а не пустоту."""
     return [{
         "kind": t.kind,
         "display_name": t.display_name,
         "when_to_use": t.when_to_use,
         "available": t.available,
+        "sample": copy.deepcopy(t.sample),
     } for t in CATALOG]

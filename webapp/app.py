@@ -369,6 +369,34 @@ def template_preview(template_id: str, static: bool = False,
     return HTMLResponse(html)
 
 
+@app.get("/api/diagrams/catalog")
+def diagrams_catalog(user=Depends(get_current_user)) -> JSONResponse:
+    """Каталог типов диаграмм для «большого блока выбора» в редакторе:
+    все карточки, будущие волны — с available=false («скоро»)."""
+    from webapp import diagrams_api
+    return JSONResponse(diagrams_api.catalog())
+
+
+@app.get("/api/diagrams/{kind}/preview", response_class=HTMLResponse)
+def diagram_kind_preview(kind: str, static: bool = False,
+                         user=Depends(get_current_user)):
+    """Однослайдовая дека-превью конкретного ТИПА диаграммы (пикер типов).
+    Тот же движок, что и боевой рендер, — превью совпадает с результатом 1:1."""
+    from htmlslides.assembler import assemble
+    from htmlslides.models import DeckPlan, SlidePlan
+    from webapp import diagrams_api
+    try:
+        content = diagrams_api.preview_content(kind)
+    except KeyError:
+        raise HTTPException(404, "unknown or unimplemented diagram kind")
+    plan = DeckPlan(title="", slides=[SlidePlan(
+        index=1, type="content", template_id="diagram", content=content)])
+    html = assemble(plan)
+    if static:
+        html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return HTMLResponse(html)
+
+
 def _validation_errors(template_id: str, content: dict) -> list[dict]:
     from htmlslides.library import TemplateLibrary
     errs = TemplateLibrary.load().validate_content(template_id, content)

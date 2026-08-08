@@ -183,6 +183,9 @@ function handleFrameLoad(loaded) {
   // (user clicks the preview, then clicks elsewhere) must NOT convert the slide
   // to freeform — that used to wipe the builder form/template on a mere click.
   slides.forEach((s, i) => s.querySelectorAll("*").forEach((el) => {
+    // Узлы схемы не редактируются на слайде: текст — в боковой панели, а
+    // единственный жест на диаграмме — перетаскивание узла (drag-раскладка).
+    if (el.closest && el.closest(".diagram-host")) return;
     if (el.children.length === 0 && el.textContent.trim()) {
       el.setAttribute("contenteditable", "true");
       if (isDraft) {
@@ -216,6 +219,7 @@ function handleFrameLoad(loaded) {
   }));
   }
   suppressDeckNavOnEdit(doc);
+  attachDiagramDrag(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
@@ -296,6 +300,50 @@ function suppressDeckNavOnEdit(doc) {
   }, true);
 }
 
+// Drag узлов схемы в превью — только черновики ручного режима (built-деки: фаза 4).
+// Слушатели вешает DiagramDrag (diagram_editor.js) на .diagram-host; коммит
+// перетаскивания пишет offsets в fields и уходит обычным дебаунс-сейвом.
+function attachDiagramDrag(doc) {
+  if (!isDraft || mode !== "manual" || !window.DiagramDrag) return;
+  const sections = doc.querySelectorAll(".slide");
+  const eng = doc.defaultView && doc.defaultView.DiagramEngine;
+  if (!eng) return;
+  let any = false;
+  (draftPlan.slides || []).forEach((slide, i) => {
+    if (!slide || slide.slide_type !== "diagram" || !slide.fields) return;
+    const host = sections[i] && sections[i].querySelector(".diagram-host");
+    if (!host) return;
+    any = true;
+    DiagramDrag.attach(host, {
+      engine: eng,
+      getSpec: () => slide.fields.diagram
+        ? JSON.parse(JSON.stringify(slide.fields.diagram)) : null,
+      onCommit: (spec) => {
+        slide.fields.diagram = spec;
+        // После первого сдвига в панели должна появиться «Сбросить раскладку»:
+        // пересобираем форму, предварительно сняв несейвленный ввод из DOM.
+        if (i === current && builtFormFor === i) {
+          const form = byId("builderForm");
+          if (form && !form.querySelector("#dgmResetLayout")) {
+            const fresh = collectDiagramFields();
+            if (fresh) slide.fields = fresh;   // diagram уже с новыми offsets (база)
+            builtFormFor = -1;
+            renderBuilderForm();
+          }
+        }
+        scheduleSave();
+      },
+    });
+  });
+  // Клик по зоне схемы не должен листать деку (обработчики deck.js на document).
+  if (any && !doc.__dgmNavGuard) {
+    doc.__dgmNavGuard = true;
+    doc.addEventListener("click", (e) => {
+      if (e.target.closest && e.target.closest(".diagram-host")) e.stopPropagation();
+    }, true);
+  }
+}
+
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
@@ -364,7 +412,8 @@ function markPlaceholders() {
   const sections = doc.querySelectorAll(".slide");
   (draftPlan.slides || []).forEach((slide, i) => {
     const section = sections[i];
-    if (!section || !slide || slide.freeform) return;
+    // Typed-слайды (slide_type) рендерятся из fields, а не из content — рыбы нет.
+    if (!section || !slide || slide.freeform || slide.slide_type) return;
     const tpl = tplOf(slide.template_id);
     if (!tpl) return;
     const content = slide.content || {};
@@ -926,13 +975,18 @@ function renderBuilderForm() {
     }
     return;
   }
+  // Диаграммный typed-слайд: вместо формы слотов — панель узлов/связей.
+  if (slide.slide_type === "diagram" && slide.fields) {
+    renderDiagramPanel(slide);
+    return;
+  }
   const tpl = tplOf(slide.template_id);
   const tplIdx = catalog.findIndex((t) => t.id === slide.template_id);
   const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
   tplBox.innerHTML =
     `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
-  byId("changeTpl").onclick = () => openPicker((tid) => changeTemplate(tid));
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind));
 
   form.innerHTML = "";
   if (!tpl) return;
@@ -1133,6 +1187,345 @@ function charCounter(el, max) {
   return h;
 }
 
+/* ---- панель диаграммного слайда (узлы/связи; drag — на самом слайде) ---- */
+const DGM_SHAPES = [["start", "Начало"], ["process", "Шаг"], ["decision", "Условие"],
+                    ["io", "Ввод/вывод"], ["end", "Финал"]];
+const DGM_EDGE_KINDS = ["flowchart", "hierarchy"];   // типы с редактируемыми рёбрами
+const DGM_MAX_NODES = 12, DGM_MAX_EDGES = 20;        // капы схемы (schema.py)
+
+function renderDiagramPanel(slide) {
+  const form = byId("builderForm");
+  const tplBox = byId("builderTpl");
+  const f = slide.fields;
+  const spec = f.diagram || {};
+  const t0 = dgmType(spec.kind);
+  tplBox.innerHTML =
+    `<span class="tpl-name">Схема: ${t0 ? t0.display_name : spec.kind || ""}</span>` +
+    `<button type="button" class="btn btn-ghost btn-sm" id="changeDgmKind">Сменить тип</button>` +
+    `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
+  if (!t0) fetchDgmCatalog().then(() => {   // имя типа догружаем при первом заходе
+    const t = dgmType(spec.kind);
+    const nameEl = tplBox.querySelector(".tpl-name");
+    if (t && nameEl) nameEl.textContent = `Схема: ${t.display_name}`;
+  });
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind));
+  byId("changeDgmKind").onclick = () => openDiagramPicker(async (kind) => {
+    if (kind === spec.kind) return;
+    const ok = await confirmDialog(
+      "Смена типа заменит узлы и связи примером выбранного типа. Заголовок сохранится. Продолжить?",
+      "Сменить", "Отмена");
+    if (!ok) return;
+    clearTimeout(putTimer); putTimer = null;  // форму старого типа не сейвим
+    pushUndo();
+    await applyDiagramKind(current + 1, kind, collectDiagramFields() || f);
+    await reloadDraft(current);
+  });
+
+  form.innerHTML = "";
+  form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54));
+  form.appendChild(dgmTextField("Подзаголовок", "subtitle", f.subtitle, 70));
+
+  // Узлы
+  const nodesWrap = document.createElement("div");
+  nodesWrap.className = "field";
+  const nLabel = document.createElement("label");
+  nLabel.textContent = "Узлы";
+  nodesWrap.appendChild(nLabel);
+  nodesWrap.appendChild(hint("Текст узлов — здесь, положение — перетаскиванием прямо на слайде"));
+  const nodeList = document.createElement("div");
+  nodeList.className = "field-list";
+  nodeList.id = "dgmNodeList";
+  (spec.nodes || []).forEach((n) => nodeList.appendChild(dgmNodeRow(spec.kind, n)));
+  nodesWrap.appendChild(nodeList);
+  const addNode = document.createElement("button");
+  addNode.type = "button"; addNode.className = "btn btn-ghost btn-sm";
+  addNode.textContent = "+ узел";
+  addNode.onclick = () => {
+    if (nodeList.children.length >= DGM_MAX_NODES) return;
+    const row = dgmNodeRow(spec.kind, { id: dgmNewId(), label: "" });
+    nodeList.appendChild(row);
+    refreshDgmEdgeSelects();
+    row.querySelector('[data-dgm="label"]')?.focus(); // сейв — на первый ввод
+  };
+  nodesWrap.appendChild(addNode);
+  nodesWrap.appendChild(hint(`до ${DGM_MAX_NODES} узлов`));
+  form.appendChild(nodesWrap);
+
+  // Связи — только у типов, где рёбра задаются руками
+  if (DGM_EDGE_KINDS.includes(spec.kind)) {
+    const edgesWrap = document.createElement("div");
+    edgesWrap.className = "field";
+    const eLabel = document.createElement("label");
+    eLabel.textContent = spec.kind === "hierarchy"
+      ? "Связи (родитель → подчинённый)" : "Связи (стрелки)";
+    edgesWrap.appendChild(eLabel);
+    const edgeList = document.createElement("div");
+    edgeList.className = "field-list";
+    edgeList.id = "dgmEdgeList";
+    (spec.edges || []).forEach((e) => edgeList.appendChild(dgmEdgeRow(spec.kind, e)));
+    edgesWrap.appendChild(edgeList);
+    const addEdge = document.createElement("button");
+    addEdge.type = "button"; addEdge.className = "btn btn-ghost btn-sm";
+    addEdge.textContent = "+ связь";
+    addEdge.onclick = () => {
+      if (edgeList.children.length >= DGM_MAX_EDGES) return;
+      const ids = [...nodeList.querySelectorAll(".dgm-node-row")]
+        .map((r) => r.dataset.nodeId);
+      edgeList.appendChild(dgmEdgeRow(spec.kind, { from: ids[0] || "", to: ids[1] || "" }));
+      refreshDgmEdgeSelects();
+      scheduleSave();
+    };
+    edgesWrap.appendChild(addEdge);
+    edgesWrap.appendChild(hint(`до ${DGM_MAX_EDGES} связей`));
+    form.appendChild(edgesWrap);
+    refreshDgmEdgeSelects();
+  }
+
+  // Сбросить ручную раскладку — только когда сдвиги есть
+  if (spec.offsets && Object.keys(spec.offsets).length) {
+    form.appendChild(dgmResetLayoutButton(f));
+  }
+}
+
+function dgmResetLayoutButton(f) {
+  const reset = document.createElement("button");
+  reset.type = "button"; reset.className = "btn btn-ghost btn-sm";
+  reset.id = "dgmResetLayout";
+  reset.textContent = "Сбросить раскладку";
+  reset.title = "Убрать ручные сдвиги узлов — вернуть авто-расстановку";
+  reset.onclick = () => {
+    f.diagram = { ...(f.diagram || {}), offsets: {} };
+    liveRenderDiagram(current);
+    scheduleSave();
+    reset.remove();
+  };
+  return reset;
+}
+
+function dgmTextField(labelText, key, value, max) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  const label = document.createElement("label");
+  label.textContent = labelText;
+  wrap.appendChild(label);
+  const el = document.createElement("input");
+  el.maxLength = max;
+  el.value = value == null ? "" : String(value);
+  el.dataset.dgm = key;
+  el.addEventListener("input", scheduleSave);
+  wrap.appendChild(el);
+  wrap.appendChild(charCounter(el, max));
+  return wrap;
+}
+
+function dgmNodeRow(kind, n) {
+  const row = document.createElement("div");
+  row.className = "field-item dgm-node-row";
+  row.dataset.nodeId = n.id;
+  if (kind === "flowchart") {
+    const sel = document.createElement("select");
+    sel.dataset.dgm = "shape";
+    sel.title = "Форма узла";
+    DGM_SHAPES.forEach(([v, name]) => sel.add(new Option(name, v)));
+    sel.value = n.shape || "process";
+    sel.onchange = scheduleSave;
+    row.appendChild(sel);
+  }
+  const label = document.createElement("input");
+  label.placeholder = "текст узла *";
+  label.maxLength = 60;
+  label.value = n.label == null ? "" : String(n.label);
+  label.dataset.dgm = "label";
+  label.oninput = () => { refreshDgmEdgeSelects(); scheduleSave(); };
+  row.appendChild(label);
+  if (kind === "funnel") {
+    const val = document.createElement("input");
+    val.placeholder = "число";
+    val.maxLength = 12;
+    val.className = "dgm-val";
+    val.value = n.value == null ? "" : String(n.value);
+    val.dataset.dgm = "value";
+    val.oninput = scheduleSave;
+    row.appendChild(val);
+  }
+  const acc = document.createElement("label");
+  acc.className = "dgm-acc";
+  acc.title = "Акцентный узел — выделить цветом акцента темы";
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!n.accent;
+  cb.dataset.dgm = "accent";
+  cb.onchange = scheduleSave;
+  acc.appendChild(cb);
+  acc.appendChild(document.createTextNode("акцент"));
+  row.appendChild(acc);
+  const del = document.createElement("button");
+  del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
+  del.textContent = "✕";
+  del.title = "Удалить узел";
+  del.onclick = () => { row.remove(); refreshDgmEdgeSelects(); scheduleSave(); };
+  row.appendChild(del);
+  return row;
+}
+
+function dgmEdgeRow(kind, e) {
+  const row = document.createElement("div");
+  row.className = "field-item dgm-edge-row";
+  const from = document.createElement("select");
+  from.dataset.dgm = "from";
+  from.dataset.want = e.from || "";   // выбор применяется при заполнении options
+  from.onchange = scheduleSave;
+  const arrow = document.createElement("span");
+  arrow.className = "dgm-arrow";
+  arrow.textContent = "→";
+  const to = document.createElement("select");
+  to.dataset.dgm = "to";
+  to.dataset.want = e.to || "";
+  to.onchange = scheduleSave;
+  row.appendChild(from);
+  row.appendChild(arrow);
+  row.appendChild(to);
+  if (kind === "flowchart") {
+    const label = document.createElement("input");
+    label.placeholder = "подпись";
+    label.maxLength = 30;
+    label.className = "dgm-edge-label";
+    label.value = e.label == null ? "" : String(e.label);
+    label.dataset.dgm = "label";
+    label.oninput = scheduleSave;
+    row.appendChild(label);
+  }
+  const del = document.createElement("button");
+  del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
+  del.textContent = "✕";
+  del.title = "Удалить связь";
+  del.onclick = () => { row.remove(); scheduleSave(); };
+  row.appendChild(del);
+  return row;
+}
+
+// Пересобрать options селектов связей из текущих строк узлов (id стабилен,
+// подпись — живой текст узла). Выбор сохраняется, пока узел существует.
+function refreshDgmEdgeSelects() {
+  const form = byId("builderForm");
+  if (!form) return;
+  const opts = [...form.querySelectorAll(".dgm-node-row")].map((row) => ({
+    id: row.dataset.nodeId,
+    label: (row.querySelector('[data-dgm="label"]')?.value.trim()
+            || row.dataset.nodeId).slice(0, 24),
+  }));
+  form.querySelectorAll(".dgm-edge-row select").forEach((sel) => {
+    const want = sel.value || sel.dataset.want || "";
+    sel.innerHTML = "";
+    opts.forEach((o) => sel.add(new Option(o.label, o.id)));
+    if (opts.some((o) => o.id === want)) sel.value = want;
+    sel.dataset.want = sel.value;
+  });
+}
+
+function dgmNewId() {
+  const used = new Set([...document.querySelectorAll("#dgmNodeList .dgm-node-row")]
+    .map((r) => r.dataset.nodeId));
+  let i = 1;
+  while (used.has("n" + i)) i++;
+  return "n" + i;
+}
+
+// Живая перерисовка схемы слайда i в превью (drag-сброс, без ожидания сейва).
+function liveRenderDiagram(i) {
+  const doc = frame.contentDocument;
+  const slide = draftPlan.slides[i];
+  if (!doc || !slide || !slide.fields || !slide.fields.diagram) return;
+  const host = doc.querySelectorAll(".slide")[i]?.querySelector(".diagram-host");
+  const eng = doc.defaultView && doc.defaultView.DiagramEngine;
+  if (host && eng) eng.render(host, JSON.parse(JSON.stringify(slide.fields.diagram)));
+}
+
+// Собрать typed-поля диаграммы из панели. База — последний слепок fields (offsets,
+// direction, meta и не показанные в панели свойства узлов переживают сбор); DOM
+// панели главнее для узлов/связей/шапки. null — панель не построена (гонка).
+function collectDiagramFields() {
+  const form = byId("builderForm");
+  const slide = draftPlan.slides[current];
+  if (!form || !slide || !slide.fields) return null;
+  const headEl = form.querySelector('[data-dgm="heading"]');
+  if (!headEl) return null;
+  const base = slide.fields.diagram || {};
+  const baseNodes = {};
+  (base.nodes || []).forEach((n) => { baseNodes[n.id] = n; });
+  const nodes = [];
+  form.querySelectorAll(".dgm-node-row").forEach((row) => {
+    const id = row.dataset.nodeId;
+    const label = (row.querySelector('[data-dgm="label"]')?.value || "").trim();
+    if (!label) return;   // пустой узел не пишем — как пустые пункты списков
+    const n = { ...(baseNodes[id] || {}), id, label };
+    const shape = row.querySelector('[data-dgm="shape"]');
+    if (shape) n.shape = shape.value;
+    const val = row.querySelector('[data-dgm="value"]');
+    if (val) n.value = val.value.trim();
+    const acc = row.querySelector('[data-dgm="accent"]');
+    if (acc) n.accent = acc.checked;
+    nodes.push(n);
+  });
+  const ids = new Set(nodes.map((n) => n.id));
+  const diagram = { ...base, nodes };
+  if (form.querySelector("#dgmEdgeList")) {
+    const edges = [];
+    form.querySelectorAll(".dgm-edge-row").forEach((row) => {
+      const fromId = row.querySelector('[data-dgm="from"]')?.value || "";
+      const toId = row.querySelector('[data-dgm="to"]')?.value || "";
+      // связь на удалённый узел или петля — молча пропускаем (транзиент правки)
+      if (!fromId || !toId || fromId === toId || !ids.has(fromId) || !ids.has(toId)) return;
+      const e = { from: fromId, to: toId };
+      const lbl = row.querySelector('[data-dgm="label"]');
+      if (lbl && lbl.value.trim()) e.label = lbl.value.trim();
+      edges.push(e);
+    });
+    diagram.edges = edges;
+  }
+  return {
+    heading: headEl.value.trim(),
+    subtitle: (form.querySelector('[data-dgm="subtitle"]')?.value || "").trim(),
+    diagram,
+  };
+}
+
+// Сейв диаграммного слайда: PUT /fields (typed-контракт) вместо PUT content.
+// 400 = транзиентно невалидная схема (например, остался один узел у flowchart) —
+// не ретраим, ждём следующую правку; сеть/5xx — бэкофф как у обычного сейва.
+async function saveDiagramSlide(idx, attempt) {
+  const fields = collectDiagramFields();
+  if (!fields) return;
+  const slide = draftPlan.slides[idx];
+  slide.fields = fields;   // optimistic local update
+  setSaveStatus(attempt ? "retrying" : "saving");
+  let r;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/fields`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slide_type: "diagram", fields }),
+    });
+  } catch (_) { r = null; }
+  if (r && r.ok) {
+    setSaveStatus("saved");
+    loadDeck();  // SVG живёт в data-атрибуте — точечный текст-патч не применим
+    return;
+  }
+  if (r && r.status === 400) { setSaveStatus("error"); return; }
+  if (r && r.status === 409) {
+    try { await reloadDraft(idx); } catch (_) { /* оставить локальный ввод виден */ }
+    setSaveStatus("error");
+    return;
+  }
+  if (attempt < SAVE_RETRY_MS.length) {
+    setSaveStatus("retrying");
+    clearTimeout(saveRetryTimer);
+    saveRetryTimer = setTimeout(() => saveCurrentSlide(attempt + 1), SAVE_RETRY_MS[attempt]);
+    return;
+  }
+  setSaveStatusRetry();
+}
+
 function collectContent() {
   const form = byId("builderForm");
   const content = {};
@@ -1222,6 +1615,10 @@ async function saveCurrentSlide(attempt = 0) {
   putTimer = null;
   const slide = draftPlan.slides[idx];
   if (!slide || slide.freeform) return;
+  // Диаграммный typed-слайд сейвится по своему контракту (PUT /fields).
+  if (slide.slide_type === "diagram" && slide.fields) {
+    return saveDiagramSlide(idx, attempt);
+  }
   const content = collectContent();
   slide.content = content; // optimistic local update
   setSaveStatus(attempt ? "retrying" : "saving");
@@ -1327,16 +1724,20 @@ function markFieldErrors(errors) {
 }
 
 /* ---- slide actions ---- */
-async function changeTemplate(templateId) {
+async function changeTemplate(templateId, dgmKind) {
   // Drop any pending debounced save — we take the freshest form values directly.
   clearTimeout(putTimer); putTimer = null;
   pushUndo();
   const slide = draftPlan.slides[current];
+  const wasDiagram = !!(slide && slide.slide_type === "diagram" && slide.fields);
   // Merge: plan content keeps slots the current form doesn't render (so a swap
   // A→B→A restores A's slots), form values win for the slots the user can see.
-  const content = slide && !slide.freeform
-    ? { ...(slide.content || {}), ...collectContent() }
-    : (slide && slide.content) || {};
+  // Диаграммный typed-слайд живёт в fields, а не в content — переносим шапку.
+  const content = wasDiagram
+    ? { title: slide.fields.heading || "", subtitle: slide.fields.subtitle || "" }
+    : slide && !slide.freeform
+      ? { ...(slide.content || {}), ...collectContent() }
+      : (slide && slide.content) || {};
   // template change = delete + re-add at the same position with the new template.
   // The content rides along: overlapping slots (title, items, …) carry over; the
   // rest stays in plan.json (draft_render ignores unknown slots), so switching
@@ -1346,13 +1747,17 @@ async function changeTemplate(templateId) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ template_id: templateId, at: current + 1, content }),
   });
+  if (dgmKind) {
+    await applyDiagramKind(current + 1, dgmKind,
+      wasDiagram ? slide.fields : { heading: content.title || "" });
+  }
   await reloadDraft(current);
 }
 
 // К§4 — общий обработчик добавления слайда: кнопка рейла (#addSlide), кнопка пустой
 // панели (#builderAdd) и клик по заглушке пустого драфта ведут в один пикер.
 function addSlideViaPicker() {
-  openPicker(async (tid) => {
+  openPicker(async (tid, dgmKind) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
     pushUndo();
     // Вставляем новый слайд сразу после активного (1-based позиция at).
@@ -1361,6 +1766,8 @@ function addSlideViaPicker() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template_id: tid, at }),
     });
+    // Мастер «Схема»: сразу материализуем выбранный тип примером (typed-поля).
+    if (dgmKind) await applyDiagramKind(at, dgmKind, null);
     await reloadDraft(at - 1); // переходим на только что добавленный слайд
   });
 }
@@ -1568,13 +1975,97 @@ function openPicker(onPick) {
       (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
     card.appendChild(prev);
     card.appendChild(meta);
-    card.onclick = () => { picker.classList.add("hidden"); onPick(t.id); };
+    card.onclick = () => {
+      picker.classList.add("hidden");
+      // Мастер «Схема» — двухшаговый выбор: сначала макет, затем тип диаграммы.
+      // onPick получает вторым аргументом kind — вызывающий материализует пример.
+      if (t.id === "diagram") openDiagramPicker((kind) => onPick(t.id, kind));
+      else onPick(t.id);
+    };
     grid.appendChild(card);
   });
   picker.classList.remove("hidden");
 }
 byId("pickerClose")?.addEventListener("click", () =>
   byId("picker").classList.add("hidden"));
+
+/* ---- diagram type picker (второй шаг мастера «Схема») ---- */
+let dgmCatalog = null;   // [{kind, display_name, when_to_use, available, sample}]
+
+async function fetchDgmCatalog() {
+  if (dgmCatalog) return dgmCatalog;
+  try {
+    const r = await fetch(U("/api/diagrams/catalog"));
+    if (r.ok) dgmCatalog = await r.json();
+  } catch (_) { /* сеть — пикер покажет пустую сетку, не упадёт */ }
+  return dgmCatalog || [];
+}
+
+function dgmType(kind) {
+  return (dgmCatalog || []).find((t) => t.kind === kind) || null;
+}
+
+// Большой блок выбора типа схемы: доступные — с живым превью (тот же рендер, что
+// боевой слайд), будущие волны — приглушённые карточки с пометкой «скоро».
+async function openDiagramPicker(onKind) {
+  const cat = await fetchDgmCatalog();
+  const picker = byId("dgmPicker");
+  const grid = byId("dgmPickerGrid");
+  if (!picker || !grid) return;
+  grid.innerHTML = "";
+  cat.forEach((t) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "picker-item" + (t.available ? "" : " picker-item--soon");
+    const prev = document.createElement("div");
+    prev.className = "picker-prev";
+    if (t.available) {
+      const ifr = document.createElement("iframe");
+      ifr.loading = "lazy";
+      ifr.tabIndex = -1;
+      ifr.src = U(`/api/diagrams/${t.kind}/preview?static=1`);
+      prev.appendChild(ifr);
+    } else {
+      const soon = document.createElement("span");
+      soon.className = "picker-soon";
+      soon.textContent = "скоро";
+      prev.appendChild(soon);
+    }
+    const meta = document.createElement("div");
+    meta.className = "picker-meta";
+    meta.innerHTML = `<span class="picker-id">${t.display_name}</span>` +
+      `<span class="picker-intent">${t.when_to_use}</span>`;
+    card.appendChild(prev);
+    card.appendChild(meta);
+    if (t.available) {
+      card.onclick = () => { picker.classList.add("hidden"); onKind(t.kind); };
+    } else {
+      card.disabled = true;
+    }
+    grid.appendChild(card);
+  });
+  picker.classList.remove("hidden");
+}
+byId("dgmPickerClose")?.addEventListener("click", () =>
+  byId("dgmPicker").classList.add("hidden"));
+
+// Материализовать тип: записать typed-поля слайда (heading + пример спека) через
+// PUT /fields — пользователь сразу правит живой пример, а не пустоту. prev
+// (старые fields) сохраняет заголовок/подзаголовок при смене типа.
+async function applyDiagramKind(index1, kind, prev) {
+  await fetchDgmCatalog();
+  const t = dgmType(kind);
+  if (!t || !t.sample) return;
+  const fields = {
+    heading: (prev && prev.heading) || t.display_name,
+    subtitle: (prev && prev.subtitle) || "",
+    diagram: JSON.parse(JSON.stringify(t.sample)),
+  };
+  await fetch(U(`/api/drafts/${sessionId}/slides/${index1}/fields`), {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slide_type: "diagram", fields }),
+  });
+}
 
 async function initDraftBuilder() {
   byId("rebuild")?.classList.remove("hidden");   // «Проверить и улучшить слайды» — в обоих режимах
@@ -1583,6 +2074,7 @@ async function initDraftBuilder() {
     byId("builder")?.classList.remove("hidden");
     const r = await fetch(U("/api/templates"));
     if (r.ok) catalog = await r.json();
+    fetchDgmCatalog(); // типы схем — заранее: имя типа в панели, пикер без ожидания
   }
   if (mode === "chat") setupChatMode();
   await fetchPlan();
