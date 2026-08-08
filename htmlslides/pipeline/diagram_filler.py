@@ -16,7 +16,8 @@ import json
 from pydantic import BaseModel, Field
 
 from ..diagrams.catalog import CATALOG
-from ..diagrams.schema import (MAX_EDGES, MAX_LABEL, MAX_NODES,
+from ..diagrams.schema import (MAX_EDGE_LABEL, MAX_EDGES, MAX_ID, MAX_LABEL,
+                               MAX_LANE, MAX_NODES, MAX_VALUE,
                                DiagramValidationError, parse_diagram)
 from ..library import TemplateLibrary
 from ..models import SlidePlan
@@ -75,13 +76,16 @@ DIAGRAM_SYSTEM = f"""\
 
 Контракт diagram:
 - kind — строго из списка выше; узлов 2–{MAX_NODES}, рёбер ≤{MAX_EDGES}.
-- nodes: [{{"id","label","shape","accent","value","lane"}}]; id — короткая
-  латиница (n1, check…); label ≤{MAX_LABEL} символов, по-русски, без выдумок;
+- nodes: [{{"id","label","shape","accent","value","lane"}}] — других ключей у
+  узла НЕ бывает; id — короткая латиница ≤{MAX_ID} символов (n1, check…);
+  label обязателен и непустой, ≤{MAX_LABEL} символов, по-русски, без выдумок;
   accent:true — у 1–2 ключевых узлов; value — только для funnel/pyramid
-  (число слоя, напр. "1200"); lane — только для comparison/swimlanes.
+  (число слоя, напр. "1200", ≤{MAX_VALUE} символов); lane — только для
+  comparison/swimlanes, ≤{MAX_LANE} символов.
 - shape — только для flowchart: start|end|process|decision|io; у decision
   подписывай исходящие рёбра («да»/«нет»).
-- edges: [{{"from","to","label"}}] — только ссылки на существующие id, без петель.
+- edges: [{{"from","to","label"}}] — других ключей нет, label ≤{MAX_EDGE_LABEL}
+  символов; только ссылки на существующие id, без петель.
   Для process/cycle/funnel/pyramid/matrix/venn рёбра НЕ нужны (порядок задаёт
   список узлов); для hierarchy ребро = родитель→ребёнок, у узла один родитель.
 - direction: "right" (по умолчанию) или "down" — для flowchart.
@@ -94,8 +98,8 @@ DIAGRAM_SYSTEM = f"""\
   swimlanes — у каждого узла lane = исполнитель шага (2–5 дорожек); рёбра
   задают порядок шагов.
   venn — 2–3 узла-множества; подпись пересечения — meta: {{"center_label"}}.
-- НЕ добавляй offsets и groups — раскладку считает движок; meta — только там,
-  где разрешено выше.
+- НЕ добавляй offsets, groups, version и любые не названные здесь ключи —
+  раскладку считает движок; meta — только там, где разрешено выше.
 - title ≤54 симв. — заголовок ЭТОГО слайда (из брифа), не всей деки;
   subtitle ≤70 симв., можно пустой.
 
@@ -160,12 +164,16 @@ def _to_content(library: TemplateLibrary,
                                  ensure_ascii=False, separators=(",", ":"))
     except DiagramValidationError as exc:
         errors.extend(exc.errors)
+    spec_failed = bool(errors)
     content = {"title": reply.title.strip(),
                "subtitle": reply.subtitle.strip(),
                "diagram": diagram_raw}
     # Слот-контракт шаблона держит капы title/subtitle (и required title).
+    # Пустой слот diagram — следствие непрошедшего спека, а не отдельная беда:
+    # претензию к слоту глушим, чтобы модель чинила настоящую причину. Флаг
+    # считаем ДО цикла — иначе первая же добавленная претензия глушила вторую.
     for e in library.validate_content("diagram", content):
-        if e.slot != "diagram" or not errors:
+        if e.slot != "diagram" or not spec_failed:
             errors.append(f"{e.code}:{e.slot} {e.detail}".strip())
     return content, errors
 

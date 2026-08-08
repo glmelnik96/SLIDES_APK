@@ -113,10 +113,24 @@ def test_self_loop_rejected():
 def test_flowchart_needs_edges_for_multi_nodes():
     with pytest.raises(DiagramValidationError) as ei:
         parse_diagram({"kind": "flowchart",
-                       "nodes": [{"id": "a"}, {"id": "b"}]})
+                       "nodes": [{"id": "a", "label": "Раз"},
+                                 {"id": "b", "label": "Два"}]})
     assert any("ребро" in e for e in ei.value.errors)
     # один узел — можно без рёбер
-    parse_diagram({"kind": "flowchart", "nodes": [{"id": "a"}]})
+    parse_diagram({"kind": "flowchart",
+                   "nodes": [{"id": "a", "label": "Раз"}]})
+
+
+def test_nodes_without_label_are_rejected():
+    """Пустой label проходит по форме (у поля есть дефолт), но на слайде это
+    пустая плашка. Претензия нужна, чтобы филлер починил её ретраем."""
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "process",
+                       "nodes": [{"id": "a", "label": "Раз"},
+                                 {"id": "b"},
+                                 {"id": "c", "label": "   "}]})
+    claim = [e for e in ei.value.errors if "без подписи" in e]
+    assert len(claim) == 1 and "'b'" in claim[0] and "'c'" in claim[0]
 
 
 def test_cycle_min_three():

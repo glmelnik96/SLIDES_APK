@@ -382,3 +382,56 @@ test("relink: у всех типов со связями рёбра догоня
     });
   });
 });
+
+/* --- устойчивость движка: битые данные не должны ронять слайд ------------- */
+
+function fakeHost() {
+  return { innerHTML: "", getAttribute: () => null };
+}
+
+test("render: битые узлы и рёбра в никуда отсекаются, схема всё равно рисуется", () => {
+  // В собранной деке истина — HTML: data-diagram переживает ручную правку, а
+  // редактор зовёт render на промежуточных состояниях (узел удалён — ребро ещё
+  // нет). Раньше такие данные роняли раскладку, и вместе с ней renderAll.
+  const cases = {
+    "узел без id": { kind: "process", nodes: [{ id: "a", label: "А" }, null] },
+    "ребро в никуда": { kind: "flowchart",
+      nodes: [{ id: "a", label: "А" }, { id: "b", label: "Б" }],
+      edges: [{ from: "a", to: "b" }, { from: "a", to: "ghost" }] },
+    "петля": { kind: "flowchart", nodes: [{ id: "a", label: "А" }],
+      edges: [{ from: "a", to: "a" }] },
+    "дубль id": { kind: "process",
+      nodes: [{ id: "a", label: "А" }, { id: "a", label: "Ещё А" }] },
+  };
+  Object.keys(cases).forEach((name) => {
+    const host = fakeHost();
+    D.render(host, cases[name]);
+    assert.ok(host.innerHTML.startsWith("<svg"), `${name}: вместо схемы заглушка`);
+  });
+});
+
+test("render: нечего рисовать — заглушка, а не исключение", () => {
+  ["", null, { kind: "process", nodes: [] }, { kind: "нет такого", nodes: [{ id: "a" }] },
+   { kind: "process", nodes: [null] }].forEach((spec) => {
+    const host = fakeHost();
+    D.render(host, spec);
+    assert.ok(host.innerHTML.includes("данные недоступны"),
+      `${JSON.stringify(spec)}: ожидалась заглушка`);
+  });
+});
+
+test("render: спек вызывающего не мутируется", () => {
+  const spec = { kind: "flowchart",
+    nodes: [{ id: "a", label: "А" }, { id: "b", label: "Б" }],
+    edges: [{ from: "a", to: "b" }, { from: "a", to: "ghost" }] };
+  const before = JSON.stringify(spec);
+  D.render(fakeHost(), spec);
+  assert.strictEqual(JSON.stringify(spec), before);
+});
+
+test("layout: битый спек — null, редактор тащит узел без магнита", () => {
+  assert.strictEqual(D.layout({ kind: "process", nodes: [null] }), null);
+  assert.strictEqual(D.layout(null), null);
+  assert.ok(D.layout({ kind: "process",
+    nodes: [{ id: "a", label: "А" }, null] }).a);
+});

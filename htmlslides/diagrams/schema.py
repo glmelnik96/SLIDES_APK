@@ -32,6 +32,12 @@ MAX_NODES = 12
 MAX_EDGES = 20
 MAX_GROUPS = 5
 MAX_LABEL = 60
+# Капы полей вынесены в имена, чтобы промпт филлера называл ТЕ ЖЕ числа: молчащее
+# расхождение стоило лишнего ретрая на 8192 токена там, где хватало строки.
+MAX_ID = 24
+MAX_EDGE_LABEL = 30
+MAX_VALUE = 12
+MAX_LANE = 40
 
 
 class DiagramValidationError(Exception):
@@ -45,30 +51,30 @@ class DiagramValidationError(Exception):
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=24)
+    id: str = Field(min_length=1, max_length=MAX_ID)
     label: str = Field("", max_length=MAX_LABEL)
     # shape осмыслен для flowchart; остальные типы его игнорируют.
     shape: Literal["start", "end", "process", "decision", "io"] = "process"
     accent: bool = False
-    value: str = Field("", max_length=12)      # величина (funnel), опционально
-    lane: str = Field("", max_length=40)       # дорожка (swimlanes, фаза 2)
+    value: str = Field("", max_length=MAX_VALUE)   # величина (funnel), опционально
+    lane: str = Field("", max_length=MAX_LANE)     # дорожка (swimlanes, фаза 2)
     level: int | None = Field(None, ge=0, le=11)  # подсказка уровня (pyramid)
 
 
 class Edge(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    from_: str = Field(alias="from", min_length=1, max_length=24)
-    to: str = Field(min_length=1, max_length=24)
-    label: str = Field("", max_length=30)
+    from_: str = Field(alias="from", min_length=1, max_length=MAX_ID)
+    to: str = Field(min_length=1, max_length=MAX_ID)
+    label: str = Field("", max_length=MAX_EDGE_LABEL)
     style: Literal["solid", "dashed"] = "solid"
 
 
 class Group(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=24)
-    label: str = Field("", max_length=40)
+    id: str = Field(min_length=1, max_length=MAX_ID)
+    label: str = Field("", max_length=MAX_LANE)
 
 
 class Meta(BaseModel):
@@ -116,6 +122,12 @@ class _BaseSpec(BaseModel):
             if nid in seen:
                 errors.append(f"дублирующийся id узла: {nid!r}")
             seen.add(nid)
+        # label по форме необязателен (у него есть дефолт), но узел без подписи —
+        # пустая плашка на слайде: молча пропустить хуже, чем попросить переделать.
+        blank = [n.id for n in self.nodes if not n.label.strip()]
+        if blank:
+            errors.append("узлы без подписи (label): "
+                          + ", ".join(repr(i) for i in blank[:5]))
         for e in self.edges:
             for ref in (e.from_, e.to):
                 if ref not in seen:

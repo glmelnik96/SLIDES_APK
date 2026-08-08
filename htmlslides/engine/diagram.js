@@ -748,11 +748,51 @@
       }
     }
     host.innerHTML = "";   // идемпотентность: запечённый сейвом SVG стираем
-    if (!spec || !LAYOUTS[spec.kind] || !Array.isArray(spec.nodes) || !spec.nodes.length) {
-      host.innerHTML = '<div style="font-size:28px;color:var(--fg-muted);padding:24px 0;">' +
-        "Схема: данные недоступны</div>";
+    spec = sanitize(spec);
+    if (!spec) {
+      host.innerHTML = PLACEHOLDER;
       return;
     }
+    try {
+      host.innerHTML = build(spec);
+    } catch (e) {
+      // Раскладки рассчитаны на спек, прошедший схему, но в собранной деке
+      // истина — HTML: data-diagram мог пережить ручную правку, а редактор зовёт
+      // render на промежуточных состояниях. Один такой слайд не должен уносить
+      // с собой ни свою страницу, ни соседние (renderAll идёт циклом).
+      host.innerHTML = PLACEHOLDER;
+    }
+  }
+
+  var PLACEHOLDER = '<div style="font-size:28px;color:var(--fg-muted);' +
+    'padding:24px 0;">Схема: данные недоступны</div>';
+
+  /* Отсечь то, на чём раскладки спотыкаются: узлы без id и рёбра в никуда.
+     Схема такое не пропускает, но в собранной деке истина — HTML, а в редакторе
+     render зовут на промежуточных состояниях (узел уже удалён, ребро ещё нет).
+     Лучше нарисовать схему без одной стрелки, чем плашку «данные недоступны».
+     Возвращает копию (исходный спек — чужой объект) или null, если рисовать
+     нечего. */
+  function sanitize(spec) {
+    if (!spec || !LAYOUTS[spec.kind] || !Array.isArray(spec.nodes)) return null;
+    var ids = {};
+    var nodes = spec.nodes.filter(function (n) {
+      if (!n || typeof n.id !== "string" || !n.id || ids[n.id]) return false;
+      ids[n.id] = true;
+      return true;
+    });
+    if (!nodes.length) return null;
+    var edges = (Array.isArray(spec.edges) ? spec.edges : []).filter(function (e) {
+      return e && ids[e.from] && ids[e.to] && e.from !== e.to;
+    });
+    var out = {};
+    Object.keys(spec).forEach(function (k) { out[k] = spec[k]; });
+    out.nodes = nodes;
+    out.edges = edges;
+    return out;
+  }
+
+  function build(spec) {
     var result = LAYOUTS[spec.kind](spec);
     var auto = snapshot(result.nodes);
     applyOffsets(result.nodes, spec.offsets);
@@ -778,15 +818,19 @@
       });
     }
     parts.push("</svg>");
-    host.innerHTML = parts.join("");
+    return parts.join("");
   }
 
   /* Позиции узлов без отрисовки (x,y — центр, w,h — габарит, уже со сдвигами):
      редактор считает по ним магнитное выравнивание при перетаскивании. */
   function computeLayout(spec) {
-    if (!spec || !LAYOUTS[spec.kind] ||
-        !Array.isArray(spec.nodes) || !spec.nodes.length) return null;
-    return applyOffsets(LAYOUTS[spec.kind](spec).nodes, spec.offsets);
+    var clean = sanitize(spec);
+    if (!clean) return null;
+    try {
+      return applyOffsets(LAYOUTS[clean.kind](clean).nodes, clean.offsets);
+    } catch (e) {
+      return null;   // нет раскладки — редактор просто тащит узел без магнита
+    }
   }
 
   function renderAll(root) {
