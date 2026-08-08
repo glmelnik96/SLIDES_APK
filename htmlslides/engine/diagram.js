@@ -713,6 +713,14 @@
     host.innerHTML = parts.join("");
   }
 
+  /* Позиции узлов без отрисовки (x,y — центр, w,h — габарит, уже со сдвигами):
+     редактор считает по ним магнитное выравнивание при перетаскивании. */
+  function computeLayout(spec) {
+    if (!spec || !LAYOUTS[spec.kind] ||
+        !Array.isArray(spec.nodes) || !spec.nodes.length) return null;
+    return applyOffsets(LAYOUTS[spec.kind](spec).nodes, spec.offsets);
+  }
+
   function renderAll(root) {
     var scope = root || document;
     var hosts = scope.querySelectorAll(".diagram-host");
@@ -720,7 +728,7 @@
   }
 
   var api = {
-    render: render, renderAll: renderAll,
+    render: render, renderAll: renderAll, layout: computeLayout,
     LAYOUTS: LAYOUTS, applyOffsets: applyOffsets, num: num,
     layoutFlowchart: layoutFlowchart, layoutProcess: layoutProcess,
     layoutCycle: layoutCycle, layoutFunnel: layoutFunnel,

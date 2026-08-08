@@ -389,8 +389,12 @@ function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
   if (isDraft && !draftPlan.slides.length) return; // К§4 — пустой драфт: тумб нет, только «+ Добавить слайд»
-  // Управление слайдами (удаление/перетаскивание) — только в ручном режиме сборки.
+  // Удаление слайда — только в ручном режиме сборки (у чата структурой правит агент).
   const editable = mode === "manual";
+  // Порядок слайдов меняется перетаскиванием миниатюры: в ручном черновике — через
+  // план (DeckPlan-as-truth, POST /slides/{i}/move), в собранной деке — перестановкой
+  // секций в DOM кадра и полным сейвом (HTML-as-truth).
+  const reorderable = editable || !isDraft;
   slides.forEach((s, i) => {
     const t = document.createElement("div");
     t.className = "thumb";
@@ -438,6 +442,8 @@ function buildThumbs() {
       del.innerHTML = "&#10005;";
       del.addEventListener("click", (e) => { e.stopPropagation(); deleteSlideAt(i); });
       t.appendChild(del);
+    }
+    if (reorderable) {
       // Перетаскивание миниатюры меняет порядок слайдов
       t.draggable = true;
       t.addEventListener("dragstart", onThumbDragStart);
@@ -1940,7 +1946,29 @@ async function onThumbDrop(e) {
   // Бэкенд reorder = pop(from), затем insert(target). После удаления исходного
   // слайда индексы правее сдвигаются на 1 — корректируем цель.
   const target0 = insertBefore > from ? insertBefore - 1 : insertBefore;
-  await moveSlide(from, target0 + 1); // moveSlide ждёт 1-based позицию
+  if (isDraft) await moveSlide(from, target0 + 1); // moveSlide ждёт 1-based позицию
+  else await moveSlideBuilt(from, target0);
+}
+
+// Собранная дека — HTML-as-truth: переставляем секцию в DOM кадра и сохраняем
+// деку целиком (номера слайдов — CSS-счётчик, пересчитаются сами). Кадр
+// перезагружаем только после успешного сейва: иначе перестановка «прыгнет»
+// обратно, скрыв ошибку сохранения.
+async function moveSlideBuilt(from, to0) {
+  const doc = frame.contentDocument;
+  const sections = doc ? [...doc.querySelectorAll(".slide")] : [];
+  const moving = sections[from];
+  if (!moving) return;
+  const rest = sections.filter((_, i) => i !== from);
+  const ref = rest[to0] || (rest.length ? rest[rest.length - 1].nextSibling : null);
+  moving.parentNode.insertBefore(moving, ref);
+  setSaveStatus("saving");
+  let ok = false;
+  try { ok = await saveDeck(); } catch (_) { /* сеть — покажем error */ }
+  setSaveStatus(ok ? "saved" : "error");
+  if (!ok) return;
+  pendingGoTo = to0;
+  loadDeck();
 }
 
 function onThumbDragEnd() {
