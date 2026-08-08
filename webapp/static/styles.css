@@ -805,6 +805,8 @@ a { color: var(--accent); }
 .save-status--saved { color: var(--accent); opacity: 1; }
 .save-status--retrying { color: var(--muted-2); opacity: 1; }
 .save-status--error { color: var(--danger-soft); opacity: 1; }
+/* Схема не прошла контракт — не сетевая беда, поэтому предупреждающий тон */
+.save-status--invalid { color: var(--warn-ink); opacity: 1; }
 /* К§5 — кликабельное «Повторить» в статусе автосейва после исчерпания ретраев */
 .save-status .btn-link { font-size: var(--fs-cap); color: var(--danger-soft); }
 .save-status .btn-link:hover { color: var(--danger-soft); text-decoration: underline; }
@@ -895,6 +897,15 @@ a { color: var(--accent); }
 .dgm-acc { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
   font-size: var(--fs-cap); color: var(--muted); cursor: pointer; user-select: none; }
 .dgm-acc input { width: auto; accent-color: var(--accent); margin: 0; }
+/* Претензии к схеме над формой: жёлтый — наша проверка до сейва, красный —
+   сервер отверг правку. Плашки-состояния канона: подложка 10% + цветной текст */
+.dgm-claims { padding: 10px 12px; margin-bottom: 14px; font-size: var(--fs-cap);
+  line-height: 1.45; border-radius: var(--radius-ctl); }
+.dgm-claims-head { font-weight: 600; }
+.dgm-claims ul { margin: 6px 0 0; padding-left: 18px; }
+.dgm-claims li + li { margin-top: 4px; }
+.dgm-claims--warn { background: rgba(236, 213, 129, .10); color: var(--warn-ink); }
+.dgm-claims--error { background: rgba(255, 107, 107, .10); color: var(--danger-soft); }
 
 /* ===== К§17 — бренд-диалог (замена нативных alert/confirm), стиль .picker ===== */
 .dialog { position: fixed; inset: 0; background: var(--overlay); z-index: 30;

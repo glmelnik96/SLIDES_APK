@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { errText, SAVE_STATUS, REBUILD_LABEL, plural, estimateLine,
-  healthLine, checkedAgo } = require("../../webapp/static/errtext.js");
+  healthLine, checkedAgo, diagramClaims } = require("../../webapp/static/errtext.js");
 
 test("missing_required → просьба заполнить", () => {
   assert.strictEqual(errText("missing_required", ""), "Заполните обязательное поле");
@@ -23,9 +23,80 @@ test("too_long без разбираемого detail → общий текст"
   assert.strictEqual(errText("too_long", "—"), "Слишком длинно");
 });
 
-test("SAVE_STATUS содержит четыре состояния (+retrying)", () => {
+test("SAVE_STATUS содержит пять состояний (+retrying, +invalid)", () => {
   assert.deepStrictEqual(Object.keys(SAVE_STATUS).sort(),
-    ["error", "retrying", "saved", "saving"]);
+    ["error", "invalid", "retrying", "saved", "saving"]);
+});
+
+/* ── diagramClaims: зеркало семантики schema.py, проверка ДО сейва ────────── */
+test("diagramClaims: валидная схема — молчит", () => {
+  assert.deepStrictEqual(diagramClaims({
+    kind: "flowchart",
+    nodes: [{ id: "a", label: "Заявка" }, { id: "b", label: "Проверка" }],
+    edges: [{ from: "a", to: "b" }],
+  }), []);
+});
+
+test("diagramClaims: удалили последнюю связь блок-схемы", () => {
+  const out = diagramClaims({ kind: "flowchart",
+    nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" }], edges: [] });
+  assert.strictEqual(out.length, 1);
+  assert.match(out[0], /хотя бы одну связь|хотя бы одна связь/);
+});
+
+test("diagramClaims: узел без связей называется подписью, а не id", () => {
+  const out = diagramClaims({ kind: "flowchart",
+    nodes: [{ id: "a", label: "Заявка" }, { id: "b", label: "Проверка" },
+            { id: "n7", label: "Услуга подключена" }],
+    edges: [{ from: "a", to: "b" }] });
+  assert.strictEqual(out.length, 1);
+  assert.match(out[0], /«Услуга подключена»/);
+  assert.ok(!out[0].includes("n7"), out[0]);
+});
+
+test("diagramClaims: у типов без рёбер одиночные узлы — норма", () => {
+  assert.deepStrictEqual(diagramClaims({ kind: "process",
+    nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" }] }), []);
+});
+
+test("diagramClaims: счётные капы типов", () => {
+  const only = (spec) => diagramClaims(spec)[0] || "";
+  assert.match(only({ kind: "cycle", nodes: [{ id: "a", label: "Раз" }] }),
+    /минимум 3 шага — сейчас 1/);
+  assert.match(only({ kind: "matrix",
+    nodes: [1, 2, 3].map((i) => ({ id: "n" + i, label: "У" + i })) }),
+    /ровно 4 квадранта — сейчас 3/);
+  assert.strictEqual(diagramClaims({ kind: "venn",
+    nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" }] }).length, 0);
+});
+
+test("diagramClaims: дорожки и стороны", () => {
+  const noLane = diagramClaims({ kind: "swimlanes",
+    nodes: [{ id: "a", label: "Раз", lane: "Продажи" }, { id: "b", label: "Два" }] });
+  assert.match(noLane[0], /«исполнитель» у узлов «Два»/);
+  const oneLane = diagramClaims({ kind: "swimlanes",
+    nodes: [{ id: "a", label: "Раз", lane: "Продажи" },
+            { id: "b", label: "Два", lane: "Продажи" }] });
+  assert.match(oneLane[0], /от 2 до 5 — сейчас 1/);
+  const sides = diagramClaims({ kind: "comparison",
+    nodes: [{ id: "a", label: "Раз", lane: "Мы" }, { id: "b", label: "Два", lane: "Они" },
+            { id: "c", label: "Три", lane: "Третьи" }] });
+  assert.match(sides[0], /ровно 2 стороны — сейчас 3/);
+});
+
+test("diagramClaims: два родителя в оргсхеме", () => {
+  const out = diagramClaims({ kind: "hierarchy",
+    nodes: [{ id: "a", label: "Директор" }, { id: "b", label: "Зам" },
+            { id: "c", label: "Отдел" }],
+    edges: [{ from: "a", to: "c" }, { from: "b", to: "c" }, { from: "a", to: "b" }] });
+  assert.strictEqual(out.length, 1);
+  assert.match(out[0], /один руководитель.*«Отдел»/);
+});
+
+test("diagramClaims: пустая схема и незнакомый спек", () => {
+  assert.match(diagramClaims({ kind: "flowchart", nodes: [] })[0], /ни одного узла/);
+  assert.deepStrictEqual(diagramClaims(null), []);
+  assert.deepStrictEqual(diagramClaims({}), []);
 });
 
 test("REBUILD_LABEL — одно имя кнопки в двух состояниях", () => {

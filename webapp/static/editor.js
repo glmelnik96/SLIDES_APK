@@ -1639,13 +1639,51 @@ function collectDiagramFields() {
   };
 }
 
+// Блок претензий к схеме над формой. tone "warn" — наша проверка ДО сейва,
+// "error" — сервер отверг правку. Пустой список убирает блок.
+function dgmShowClaims(claims, tone) {
+  const form = byId("builderForm");
+  if (!form) return;
+  let box = byId("dgmClaims");
+  if (!claims || !claims.length) { if (box) box.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "dgmClaims";
+    form.prepend(box);   // над полями: иначе претензия уезжает под список узлов
+  }
+  box.className = "dgm-claims dgm-claims--" + tone;
+  box.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "dgm-claims-head";
+  head.textContent = "Правка не сохранена — схема не сходится:";
+  box.appendChild(head);
+  const ul = document.createElement("ul");
+  claims.forEach((c) => {
+    const li = document.createElement("li");
+    li.textContent = c;      // текст с сервера — только textContent, без innerHTML
+    ul.appendChild(li);
+  });
+  box.appendChild(ul);
+}
+
 // Сейв диаграммного слайда: PUT /fields (typed-контракт) вместо PUT content.
-// 400 = транзиентно невалидная схема (например, остался один узел у flowchart) —
-// не ретраим, ждём следующую правку; сеть/5xx — бэкофф как у обычного сейва.
+// Схему проверяем ДО запроса (diagramClaims — зеркало schema.py): сервер
+// отвергает невалидный спек целиком, и без объяснения это читалось как
+// «редактор сломался». 400 не ретраим — чинить должен пользователь; сеть/5xx —
+// бэкофф как у обычного сейва.
 async function saveDiagramSlide(idx, attempt) {
   const fields = collectDiagramFields();
   if (!fields) return;
   const slide = draftPlan.slides[idx];
+  const accepted = slide.fields;   // последнее состояние, принятое сервером
+  const claims = window.diagramClaims ? diagramClaims(fields.diagram) : [];
+  if (claims.length) {
+    // Заведомо невалидная правка: запрос вернул бы 400 и не изменил план.
+    // Ни план, ни сервер не трогаем — ввод в форме остаётся, чинить его тут же.
+    dgmShowClaims(claims, "warn");
+    setSaveStatus("invalid");
+    return;
+  }
   slide.fields = fields;   // optimistic local update
   setSaveStatus(attempt ? "retrying" : "saving");
   let r;
@@ -1656,11 +1694,22 @@ async function saveDiagramSlide(idx, attempt) {
     });
   } catch (_) { r = null; }
   if (r && r.ok) {
+    dgmShowClaims([], "warn");
     setSaveStatus("saved");
     loadDeck();  // SVG живёт в data-атрибуте — точечный текст-патч не применим
     return;
   }
-  if (r && r.status === 400) { setSaveStatus("error"); return; }
+  if (r && r.status === 400) {
+    // План не изменился — откатываем и локальную модель, иначе уход со слайда и
+    // возврат покажут невалидную схему как сохранённую (а drag и «Сбросить
+    // раскладку» продолжат строиться на спеке, которого на сервере нет).
+    slide.fields = accepted;
+    let srv = [];
+    try { srv = ((await r.json()).detail || {}).errors || []; } catch (_) { /* пусто */ }
+    dgmShowClaims(srv.length ? srv : ["Схема не прошла проверку"], "error");
+    setSaveStatus("invalid");
+    return;
+  }
   if (r && r.status === 409) {
     try { await reloadDraft(idx); } catch (_) { /* оставить локальный ввод виден */ }
     setSaveStatus("error");

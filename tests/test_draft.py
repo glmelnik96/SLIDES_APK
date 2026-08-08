@@ -365,6 +365,29 @@ def test_update_slide_fields_endpoint(monkeypatch, tmp_path):
                      headers=H("intruder")).status_code == 404
 
 
+def test_broken_diagram_edit_is_rejected_with_claims(monkeypatch, tmp_path):
+    """Ручная правка может сломать схему по смыслу — 400 обязан объяснить чем,
+    иначе панель показывает молчаливый «error», а слайд остаётся прежним."""
+    from htmlslides.diagrams import sample_spec
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        good = {"heading": "Как проходит заявка", "diagram": sample_spec("flowchart")}
+        assert c.put(f"/api/drafts/{sid}/slides/1/fields",
+                     json={"slide_type": "diagram", "fields": good},
+                     headers=H()).status_code == 200
+        broken = {"heading": "Как проходит заявка",
+                  "diagram": {**sample_spec("flowchart"), "edges": []}}
+        r = c.put(f"/api/drafts/{sid}/slides/1/fields",
+                  json={"slide_type": "diagram", "fields": broken}, headers=H())
+        assert r.status_code == 400
+        claims = r.json()["detail"]["errors"]
+        assert any("ребро" in x for x in claims), claims
+        # слайд не тронут: план всё ещё несёт принятую схему
+        r = c.get(f"/api/drafts/{sid}", headers=H())
+        assert r.json()["slides"][0]["fields"]["diagram"]["edges"]
+
+
 def test_build_guard_ignores_typed_only_deck(monkeypatch, tmp_path):
     # a deck whose only slide is typed has nothing to LLM-build → 400 guard.
     with _client(monkeypatch, tmp_path) as c:

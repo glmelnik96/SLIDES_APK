@@ -561,14 +561,19 @@ async def update_draft_slide_fields(session_id: str, index: int, request: Reques
                                     user=Depends(get_current_user)) -> JSONResponse:
     """Set a slide's typed structured content (slide_type + fields). Validated
     against the type contract; on success the slide renders deterministically
-    (no LLM). Invalid fields → 400 (the slide is left untouched)."""
+    (no LLM). Invalid fields → 400 (the slide is left untouched), with the list
+    of readable claims in the body: this endpoint answers a человек, and a bare
+    400 left the diagram panel with a silent «error» — правку отвергли, а что
+    именно сломано (узел без связей, одна дорожка вместо двух) не сказали."""
     from webapp import slide_types
     plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     slide_type = data.get("slide_type")
-    norm = slide_types.validate_fields(slide_type, data.get("fields"))
+    norm, claims = slide_types.validate_fields_verbose(slide_type,
+                                                       data.get("fields"))
     if norm is None:
-        raise HTTPException(400, "invalid slide_type or fields")
+        raise HTTPException(400, {"error": "invalid slide_type or fields",
+                                  "errors": claims})
     if not 1 <= index <= len(plan.slides):
         raise HTTPException(404, "slide not found")
     plan.slides[index - 1] = plan.slides[index - 1].model_copy(

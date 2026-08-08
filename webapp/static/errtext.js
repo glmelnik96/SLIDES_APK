@@ -11,6 +11,9 @@
     saved: "Сохранено ✓",
     retrying: "Не сохранено — повторяю…",
     error: "Не сохранилось — проверьте интернет",
+    // Схема не прошла контракт: интернет ни при чём, чинить надо саму схему —
+    // перечень претензий печатается блоком над формой.
+    invalid: "Не сохранено — схема не сходится",
   };
 
   // Ч§3: единое имя rebuild-кнопки во всех состояниях (без «движка»).
@@ -49,6 +52,96 @@
                        : "Слишком много пунктов";
     }
     return "";
+  }
+
+  // ── Претензии к схеме до сейва (зеркало htmlslides/diagrams/schema.py) ──
+  // Сервер отвергает невалидный спек ЦЕЛИКОМ: панель успешно правится, а план
+  // не меняется. Проверка на клиенте ловит это до запроса и говорит, что именно
+  // сломано, пока правка на глазах. Тексты — про смысл схемы, а не про поля.
+  // Форма (капы длин, дубли id, петли) здесь не проверяется: её держат maxLength
+  // и сборщик панели, повторять их — растить второе место правды.
+  var DGM_COUNT = {
+    cycle: { min: 3, text: "В цикле должно быть минимум 3 шага" },
+    funnel: { min: 2, text: "В воронке должно быть минимум 2 слоя" },
+    pyramid: { min: 3, text: "В пирамиде должно быть минимум 3 уровня" },
+    hub_spoke: { min: 3, text: "Хабу нужен центр и минимум два луча" },
+    matrix: { min: 4, max: 4, text: "У матрицы ровно 4 квадранта" },
+    venn: { min: 2, max: 3, text: "У диаграммы Венна 2 или 3 множества" },
+  };
+  var DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes"];
+  var DGM_LANE_FIELD = { comparison: "сторона", swimlanes: "исполнитель" };
+
+  function diagramClaims(spec) {
+    if (!spec || !spec.kind) return [];
+    var nodes = spec.nodes || [], edges = spec.edges || [], out = [];
+    var label = function (id) {
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return nodes[i].label || id;
+      }
+      return id;
+    };
+    // Узлы называем подписями, а не id: пользователь видел «Заявка», а не «n3».
+    var names = function (ids) {
+      var head = ids.slice(0, 3).map(function (i) { return "«" + label(i) + "»"; });
+      return head.join(", ") + (ids.length > 3 ? " и ещё " + (ids.length - 3) : "");
+    };
+    if (!nodes.length) return ["В схеме не осталось ни одного узла с текстом"];
+
+    var cnt = DGM_COUNT[spec.kind];
+    if (cnt && (nodes.length < cnt.min || (cnt.max && nodes.length > cnt.max))) {
+      out.push(cnt.text + " — сейчас " + nodes.length);
+    }
+    if (spec.kind === "flowchart" && nodes.length >= 2 && !edges.length) {
+      out.push("В блок-схеме нужна хотя бы одна связь между узлами");
+    }
+    var laneField = DGM_LANE_FIELD[spec.kind];
+    if (laneField) {
+      var blank = nodes.filter(function (n) { return !(n.lane || "").trim(); });
+      var lanes = [];
+      nodes.forEach(function (n) {
+        if (lanes.indexOf(n.lane) < 0) lanes.push(n.lane);
+      });
+      if (blank.length) {
+        out.push("Заполните «" + laneField + "» у узлов " +
+                 names(blank.map(function (n) { return n.id; })));
+      } else if (spec.kind === "comparison" && lanes.length !== 2) {
+        out.push("В сравнении ровно 2 стороны — сейчас " + lanes.length);
+      } else if (spec.kind === "swimlanes" && (lanes.length < 2 || lanes.length > 5)) {
+        out.push("Дорожек должно быть от 2 до 5 — сейчас " + lanes.length);
+      }
+    }
+    if (spec.kind === "hierarchy") {
+      var parent = {}, twice = [], ring = [];
+      edges.forEach(function (e) {
+        if (parent[e.to]) { if (twice.indexOf(e.to) < 0) twice.push(e.to); }
+        else parent[e.to] = e.from;
+      });
+      if (twice.length) {
+        out.push("В оргсхеме у узла один руководитель, а у " + names(twice) +
+                 " их несколько");
+      }
+      Object.keys(parent).forEach(function (id) {
+        var hops = 0, cur = id;
+        while (parent[cur]) {
+          cur = parent[cur];
+          if (++hops > 12) { ring.push(id); return; }
+        }
+      });
+      if (ring.length) out.push("Связи замкнулись в кольцо вокруг " + names(ring));
+    }
+    // Узел без единой связи там, где раскладку задают именно рёбра: он не
+    // «ещё не подключён», а сядет в нулевой ранг рядом со стартом.
+    if (edges.length && DGM_EDGE_KINDS.indexOf(spec.kind) >= 0) {
+      var linked = {};
+      edges.forEach(function (e) { linked[e.from] = 1; linked[e.to] = 1; });
+      var lone = nodes.filter(function (n) { return !linked[n.id]; })
+        .map(function (n) { return n.id; });
+      if (lone.length) {
+        out.push("Ни одна связь не ведёт к " + names(lone) +
+                 " — на схеме такой узел выпадает из потока");
+      }
+    }
+    return out;
   }
 
   // Оценка времени сборки по числу разделов исходника (~30 с на слайд, замер
@@ -103,13 +196,14 @@
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
   root.plural = plural;
   root.errText = errText;
+  root.diagramClaims = diagramClaims;
   root.estimateLine = estimateLine;
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
-      estimateLine: estimateLine, healthLine: healthLine,
-      checkedAgo: checkedAgo };
+      diagramClaims: diagramClaims, estimateLine: estimateLine,
+      healthLine: healthLine, checkedAgo: checkedAgo };
   }
 })(typeof window !== "undefined" ? window : globalThis);

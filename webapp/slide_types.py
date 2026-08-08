@@ -14,7 +14,21 @@ import json
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-from htmlslides.diagrams import validate_diagram
+from htmlslides.diagrams import DiagramValidationError, parse_diagram
+
+
+class FieldsError(ValueError):
+    """Ошибка контракта полей со СПИСКОМ читаемых претензий.
+
+    Pydantic заворачивает ValueError из field_validator в ValidationError, но
+    кладёт сам объект в ``ctx['error']`` — так перечень претензий диаграммы
+    доезжает до эндпоинта, а не схлопывается в одно «invalid diagram spec».
+    Без этого правка, ломающая схему по смыслу (удалили последнее ребро,
+    свели дорожки к одной), давала пользователю молчаливый статус «error»."""
+
+    def __init__(self, errors):
+        self.errors = list(errors)
+        super().__init__("; ".join(self.errors))
 
 
 class TitleFields(BaseModel):
@@ -57,10 +71,11 @@ class DiagramFields(BaseModel):
     @field_validator("diagram")
     @classmethod
     def _valid_spec(cls, v: dict) -> dict:
-        norm = validate_diagram(v)
-        if norm is None:
-            raise ValueError("invalid diagram spec")
-        return norm
+        try:
+            spec = parse_diagram(v)
+        except DiagramValidationError as exc:
+            raise FieldsError(exc.errors) from exc
+        return spec.model_dump(by_alias=True)
 
 
 # slide_type → (Pydantic model, engine template id)
@@ -78,14 +93,38 @@ SLIDE_TYPES = tuple(_SPECS)
 def validate_fields(slide_type, raw) -> dict | None:
     """Normalise ``raw`` for ``slide_type``; None if the type is unknown or the
     fields don't satisfy the contract (missing required heading, wrong shape)."""
+    return validate_fields_verbose(slide_type, raw)[0]
+
+
+def _readable(exc: ValidationError) -> list[str]:
+    """Претензии Pydantic — по строке на ошибку; вложенный FieldsError
+    (диаграмма) разворачивается в свой список: он уже написан по-русски."""
+    out: list[str] = []
+    for err in exc.errors():
+        inner = (err.get("ctx") or {}).get("error")
+        if isinstance(inner, FieldsError):
+            out.extend(inner.errors)
+            continue
+        loc = ".".join(str(p) for p in err["loc"])
+        out.append(f"{loc or 'fields'}: {err['msg']}")
+    return out
+
+
+def validate_fields_verbose(slide_type, raw) -> tuple[dict | None, list[str]]:
+    """``(нормализованные поля, [])`` либо ``(None, список претензий)``.
+
+    Отдельная verbose-форма нужна эндпоинту правки: он единственный отвечает
+    человеку, а не машине, и обязан сказать, ЧТО именно не так со схемой."""
     spec = _SPECS.get(slide_type)
-    if spec is None or not isinstance(raw, dict):
-        return None
+    if spec is None:
+        return None, [f"неизвестный тип слайда: {slide_type!r}"]
+    if not isinstance(raw, dict):
+        return None, ["поля слайда должны быть объектом"]
     model, _ = spec
     try:
-        return model.model_validate(raw).model_dump()
-    except ValidationError:
-        return None
+        return model.model_validate(raw).model_dump(), []
+    except ValidationError as exc:
+        return None, _readable(exc)
 
 
 def _clean(items) -> list[str]:

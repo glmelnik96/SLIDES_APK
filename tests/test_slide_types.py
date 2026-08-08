@@ -96,6 +96,30 @@ def test_validate_diagram_bad_spec_returns_none():
     assert st.validate_fields("diagram", fields) is None
 
 
+def test_verbose_keeps_diagram_claims():
+    """Претензии схемы обязаны доехать до эндпоинта: ручная правка ломает схему
+    по смыслу (удалили последнюю связь), и «invalid fields» без деталей —
+    молчаливый «error» в панели, из которого не видно, что чинить."""
+    fields = _diagram_fields()
+    fields["diagram"] = {"kind": "flowchart",
+                         "nodes": [{"id": "a", "label": "Раз"},
+                                   {"id": "b", "label": "Два"}],
+                         "edges": []}
+    norm, claims = st.validate_fields_verbose("diagram", fields)
+    assert norm is None
+    assert any("ребро" in c for c in claims), claims
+
+
+def test_verbose_names_the_broken_field_for_plain_types():
+    norm, claims = st.validate_fields_verbose("bullets", {"bullets": ["a"]})
+    assert norm is None
+    assert any(c.startswith("heading:") for c in claims), claims
+    assert st.validate_fields_verbose("quote", {})[1] == [
+        "неизвестный тип слайда: 'quote'"]
+    assert st.validate_fields_verbose("title", "nope")[1] == [
+        "поля слайда должны быть объектом"]
+
+
 def test_map_diagram_serialises_compact_json():
     import json
     tid, content = st.map_typed("diagram", _diagram_fields())
