@@ -6,6 +6,9 @@ const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
 const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built deck)
 const isDraft = mode === "manual" || mode === "chat";
+// «Стеклянная» сборка поверх ручного черновика: клиент крутит цикл /glass/step,
+// лента тамбов растёт, сомнительные слайды ждут ответа в панели вопросов.
+const isGlass = params.get("glass") === "1" && mode === "manual";
 // К§6 — двойная буферизация превью: два iframe'а на одном месте. loadDeck() грузит
 // следующий кадр в СКРЫТЫЙ буфер, по load меняет их местами классом .hidden и
 // переключает указатель frame — между сейвами нет чёрного кадра. deckT — единый
@@ -175,7 +178,10 @@ function handleFrameLoad(loaded) {
       if (mode === "manual") addSlideViaPicker();
       else chatText?.focus();
     });
-  } else {
+  } else if (!glassRunning) {
+  // Пока идёт стеклянная сборка, contenteditable не вешаем: blur-синк слайда
+  // гонялся бы с сейвами степпера за plan.json (потеря правок). После выхода
+  // из glass-режима loadDeck() перерисует кадр уже с редактированием.
   // In-place text editing works everywhere. Built decks are HTML-as-truth, so
   // edits persist via saveDeck(). Drafts are DeckPlan-as-truth, so an inline edit
   // converts that slide to a freeform slide in the plan (synced on blur).
@@ -379,6 +385,14 @@ function buildThumbs() {
     }
     t.appendChild(prev);
     t.appendChild(cap);
+    // Стеклянная сборка: слайд ждёт ответа автора — метка «?» на миниатюре.
+    if (isDraft && draftPlan.slides[i] && draftPlan.slides[i].status === "needs_input") {
+      const qm = document.createElement("span");
+      qm.className = "thumb-quest";
+      qm.title = "ИИ ждёт вашего ответа по этому слайду";
+      qm.textContent = "?";
+      t.appendChild(qm);
+    }
     t.onclick = () => goTo(i);
     if (editable) {
       // Крестик удаления — виден по наведению (CSS .thumb:hover .thumb-del)
@@ -2437,6 +2451,233 @@ async function sendAgent() {
   }
 }
 
+/* ===================== GLASS BUILD (?glass=1) ===================== */
+// Клиент-управляемый степпинг: POST /glass/step заполняет ОДИН слайд и
+// возвращает план — лента тамбов растёт без SSE. Слайды с вопросами ИИ
+// (needs_input) степпер пропускает; ответ (чип-кандидат и/или текст) уходит
+// через /glass/answer в любой момент. Все запросы сериализованы одной
+// очередью glassChain: step и answer оба пишут plan.json — параллель бы
+// теряла обновления.
+let glassRunning = false;   // весь режим (гасит contenteditable на превью)
+let glassLoopDone = false;  // степпер дошёл до конца (вопросы могли остаться)
+let glassChain = Promise.resolve();
+const glassCards = {};      // 1-based index слайда → карточка вопроса
+
+function glassEnqueue(fn) {
+  const p = glassChain.then(fn);
+  glassChain = p.catch(() => {}); // ошибка одного запроса не рвёт очередь
+  return p;
+}
+
+function startGlassMode() {
+  glassRunning = true;
+  const badge = byId("modeBadge");
+  if (badge) badge.textContent = "Прозрачная сборка";
+  byId("rpanelTabs")?.classList.add("hidden");
+  byId("builder")?.classList.add("hidden");
+  document.querySelector(".chat")?.classList.add("hidden");
+  byId("rebuild")?.classList.add("hidden"); // улучшение — после сборки
+  byId("glassPanel")?.classList.remove("hidden");
+  byId("glassFinish")?.addEventListener("click", exitGlassMode);
+  byId("glassRetry")?.addEventListener("click", () => {
+    byId("glassRetry").classList.add("hidden");
+    byId("glassDone").classList.add("hidden");
+    glassLoop();
+  });
+  renderGlassPanel(null);
+  glassLoop();
+}
+
+async function glassLoop() {
+  glassLoopDone = false;
+  let failures = 0;
+  for (;;) {
+    let out;
+    try {
+      out = await glassEnqueue(async () => {
+        const r = await fetch(U(`/api/drafts/${sessionId}/glass/step`),
+                              { method: "POST" });
+        if (!r.ok) throw new Error(await r.text());
+        return r.json();
+      });
+    } catch (e) {
+      if (++failures >= 3) { glassFail(); return; }
+      await new Promise((res) => setTimeout(res, 4000));
+      continue;
+    }
+    failures = 0;
+    if (out.plan) draftPlan = out.plan;
+    if (out.index) pendingGoTo = out.index - 1; // показываем свежий слайд
+    loadDeck();
+    if (out.done) { glassLoopDone = true; renderGlassPanel(out); break; }
+    renderGlassPanel(out);
+  }
+  // всё заполнено и вопросов нет → сразу в обычный редактор
+  if (!openGlassQuestions().length) exitGlassMode();
+}
+
+function openGlassQuestions() {
+  return (draftPlan.slides || [])
+    .map((s, i) => (s && s.status === "needs_input" ? i + 1 : 0))
+    .filter(Boolean);
+}
+
+function renderGlassPanel(out) {
+  const status = byId("glassStatus");
+  const bar = byId("glassBarFill");
+  const done = byId("glassDone");
+  if (!status) return;
+  const targets = (draftPlan.slides || []).filter((s) => s && s.brief);
+  const filled = targets.filter((s) => s.filled).length;
+  const total = targets.length;
+  const open = openGlassQuestions();
+  if (bar) bar.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
+  if (!glassLoopDone) {
+    status.textContent = total
+      ? `Заполняю слайды по одному: готово ${filled} из ${total}…`
+      : "Раскладываю документ…";
+  } else if (open.length) {
+    status.textContent = `Готово ${filled} из ${total}. ` +
+      `Остал${open.length === 1 ? "ся" : "ось"} ${open.length} ` +
+      `${plural(open.length, "вопрос", "вопроса", "вопросов")} — ответьте ` +
+      `или переходите к редактированию.`;
+  } else {
+    status.textContent = "Все слайды заполнены.";
+  }
+  renderGlassQuestions(open);
+  done?.classList.toggle("hidden", !glassLoopDone);
+}
+
+function glassFail() {
+  const status = byId("glassStatus");
+  if (status) status.textContent =
+    "Сборка прервалась — проверьте соединение и продолжите.";
+  byId("glassRetry")?.classList.remove("hidden");
+  byId("glassDone")?.classList.remove("hidden");
+}
+
+// Карточки вопросов живут между перерисовками (в textarea печатают!):
+// добавляем новые, убираем отвеченные, остальные не трогаем.
+function renderGlassQuestions(open) {
+  const box = byId("glassQuestions");
+  if (!box) return;
+  Object.keys(glassCards).forEach((k) => {
+    if (!open.includes(+k)) { glassCards[k].remove(); delete glassCards[k]; }
+  });
+  open.forEach((idx) => {
+    if (!glassCards[idx]) glassCards[idx] = box.appendChild(makeGlassCard(idx));
+  });
+}
+
+function makeGlassCard(idx) {
+  const s = draftPlan.slides[idx - 1] || {};
+  const card = document.createElement("div");
+  card.className = "glass-q";
+  const num = document.createElement("div");
+  num.className = "glass-q__num";
+  num.textContent = `Слайд ${idx}`;
+  card.appendChild(num);
+  const q = document.createElement("p");
+  q.className = "glass-q__text";
+  q.textContent = s.question || "Какой макет выбрать для этого слайда?";
+  card.appendChild(q);
+
+  // Чипы-кандидаты: живое превью макета (тот же рендер, что боевой слайд).
+  const chips = document.createElement("div");
+  chips.className = "glass-chips";
+  let picked = null;
+  (s.candidates || []).forEach((tid) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "glass-chip";
+    const prev = document.createElement("span");
+    prev.className = "glass-chip__prev";
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.tabIndex = -1;
+    ifr.setAttribute("aria-hidden", "true");
+    ifr.src = U(`/api/templates/${tid}/preview?static=1`);
+    prev.appendChild(ifr);
+    chip.appendChild(prev);
+    const name = document.createElement("span");
+    name.className = "glass-chip__name";
+    name.textContent = (tplOf(tid) || {}).display_name || tid;
+    chip.appendChild(name);
+    chip.onclick = () => {
+      picked = picked === tid ? null : tid; // повторный клик снимает выбор
+      chips.querySelectorAll(".glass-chip").forEach((c) =>
+        c.classList.toggle("is-picked", c === chip && picked !== null));
+    };
+    chips.appendChild(chip);
+  });
+  card.appendChild(chips);
+
+  const ta = document.createElement("textarea");
+  ta.className = "glass-q__input";
+  ta.placeholder = "Уточнение для ИИ (необязательно)";
+  card.appendChild(ta);
+
+  const row = document.createElement("div");
+  row.className = "glass-q__actions";
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.className = "btn btn-accent btn-sm";
+  apply.textContent = "Ответить";
+  const skip = document.createElement("button");
+  skip.type = "button";
+  skip.className = "btn btn-ghost btn-sm";
+  skip.textContent = "На усмотрение ИИ";
+  const send = (tid, msg) => {
+    apply.disabled = skip.disabled = true;
+    apply.textContent = "Заполняю…";
+    glassEnqueue(() => glassAnswer(idx, tid, msg)).catch(() => {
+      apply.disabled = skip.disabled = false;
+      apply.textContent = "Ответить";
+      setSaveStatus("error");
+    });
+  };
+  apply.onclick = () => send(picked, ta.value.trim());
+  skip.onclick = () => send(null, "");
+  row.appendChild(apply);
+  row.appendChild(skip);
+  card.appendChild(row);
+  return card;
+}
+
+async function glassAnswer(idx, templateId, message) {
+  const body = { index: idx };
+  if (templateId) body.template_id = templateId;
+  if (message) body.message = message;
+  const r = await fetch(U(`/api/drafts/${sessionId}/glass/answer`), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  const out = await r.json();
+  if (out.plan) draftPlan = out.plan;
+  pendingGoTo = idx - 1;
+  loadDeck();
+  renderGlassPanel(null);
+  // степпер уже финишировал и вопросов больше нет → в редактор
+  if (glassLoopDone && !openGlassQuestions().length) exitGlassMode();
+}
+
+function exitGlassMode() {
+  glassRunning = false;
+  byId("glassPanel")?.classList.add("hidden");
+  byId("rebuild")?.classList.remove("hidden");
+  const badge = byId("modeBadge");
+  if (badge) badge.textContent = "Конструктор";
+  setupPanelTabs();      // вернуть обычную правую панель («Поля» по умолчанию)
+  builtFormFor = -1;
+  renderBuilderForm();
+  loadDeck();            // перерисовать превью уже с contenteditable
+  // F5 после выхода — обычный конструктор, а не перезапуск степпера
+  const url = new URL(location.href);
+  url.searchParams.delete("glass");
+  history.replaceState(null, "", url);
+}
+
 /* init */
 const homeLink = document.querySelector("a.home");
 if (homeLink) homeLink.href = U("/");
@@ -2487,10 +2728,15 @@ const MODE_BADGE = { "": "Готовая презентация", manual: "Ко�
   }
 })();
 
-setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode, нужны ли табы)
+// В glass-режиме табы не показываем на старте — их вернёт exitGlassMode().
+if (!isGlass) setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode)
 disableChatEditing(); // сразу гасим чат-контролы, чтобы не мелькали активными
 
 // Повторно после инициализации: в chat-режиме setupChatMode() возвращает чату
 // активный вид — .finally перекрывает его обратно в «в разработке» (и на ошибке init).
-if (isDraft) { initDraftBuilder().then(initEditor).finally(disableChatEditing); }
+if (isDraft) {
+  initDraftBuilder().then(initEditor)
+    .then(() => { if (isGlass) startGlassMode(); })
+    .finally(disableChatEditing);
+}
 else { Promise.resolve(initEditor()).finally(disableChatEditing); }

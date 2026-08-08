@@ -676,6 +676,76 @@ async def build_draft(session_id: str, request: Request,
     return JSONResponse(draft.load_plan(session_id).model_dump())
 
 
+# ── «Стеклянная сборка» — прозрачный конвейер черновика (webapp/glass.py).
+# Клиент-управляемый степпинг вместо раннера: каждый /glass/step заполняет ОДИН
+# слайд (~15-60с, как /agent), лента растёт без SSE; сомнительные слайды ждут
+# /glass/answer, не блокируя остальные шаги.
+
+@app.post("/api/drafts/{session_id}/glass/start")
+async def glass_start(session_id: str, request: Request,
+                      file: UploadFile = File(...),
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Документ → прозрачный аутлайн (обложка + слайд на раздел с кандидатами
+    макета и вопросами ИИ). Быстрый: parse + лёгкий скоринг, без заполнения."""
+    from webapp import glass
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    if plan.slides:
+        raise HTTPException(409, "черновик не пуст — стеклянная сборка "
+                                 "начинается с чистой сессии")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _ALLOWED["htmlnew"]:
+        raise HTTPException(400, f"bad file type {suffix}")
+    raw = await file.read()
+    from htmlslides.parsers.base import decode_smart as _decode_smart
+    if not raw.strip() or (suffix in (".md", ".txt")
+                           and not _decode_smart(raw).strip()):
+        raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
+    dest = session_dir(session_id) / f"input{suffix}"
+    dest.write_bytes(raw)
+    try:
+        out = await run_in_threadpool(glass.start_glass, session_id, dest)
+    except Exception as exc:  # noqa: BLE001 — parse/скоринг: причина пользователю
+        logger.exception("glass start failed (session %s)", session_id)
+        raise HTTPException(500, "не удалось разобрать документ — попробуйте "
+                                 "другой файл") from exc
+    return JSONResponse(out.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/glass/step")
+async def glass_step(session_id: str, request: Request,
+                     user=Depends(get_current_user)) -> JSONResponse:
+    """Один шаг: заполнить следующий слайд (needs_input пропускается)."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    return JSONResponse(await run_in_threadpool(glass.step_fill, session_id))
+
+
+@app.post("/api/drafts/{session_id}/glass/answer")
+async def glass_answer(session_id: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
+    """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или текст уточнения;
+    слайд доводится сразу."""
+    from htmlslides.library import SlotValidationError
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    data = await _json_body(request)
+    try:
+        index = int(data.get("index") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "index required")
+    template_id = (data.get("template_id") or "").strip() or None
+    message = str(data.get("message") or "")
+    try:
+        out = await run_in_threadpool(
+            lambda: glass.answer(session_id, index,
+                                 template_id=template_id, message=message))
+    except IndexError as exc:
+        raise HTTPException(400, str(exc))
+    except SlotValidationError:
+        raise HTTPException(400, f"unknown template: {template_id}")
+    return JSONResponse(out)
+
+
 @app.get("/api/jobs/active")
 def active_jobs(user=Depends(get_current_user)) -> JSONResponse:
     """The current user's jobs still building, with live stage/pct."""

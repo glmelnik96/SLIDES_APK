@@ -1028,3 +1028,47 @@ a { color: var(--accent); }
     animation: none !important; opacity: 1 !important;
   }
 }
+
+/* ===== Прозрачная сборка (?glass=1): статус степпера + вопросы ИИ ===== */
+/* Панель живёт в .rpanel вместо табов «Поля | Чат»; канон v5 — поверхности без
+   рамок: карточка вопроса --surface, чипы и поле уточнения --surface-inset. */
+.glass { flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--bg-soft); overflow-y: auto; }
+.glass-head { flex: 0 0 auto; padding: 16px; border-bottom: 1px solid var(--line-soft); }
+.glass-head h3 { margin: 0 0 6px; font-size: var(--fs-btn); font-weight: 600; }
+.glass-status { margin: 0 0 10px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; }
+.glass-bar { height: 6px; border-radius: 999px; background: var(--surface-inset); overflow: hidden; }
+.glass-bar i { display: block; height: 100%; width: 0; background: var(--accent);
+  border-radius: 999px; transition: width var(--dur-med) var(--ease-productive); }
+.glass-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.glass-q { background: var(--surface); border-radius: var(--radius-card); padding: 12px; }
+.glass-q__num { font-size: var(--fs-cap); color: var(--accent);
+  letter-spacing: .04em; text-transform: uppercase; }
+.glass-q__text { margin: 6px 0 10px; font-size: var(--fs-sm); line-height: 1.45; }
+.glass-chips { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.glass-chip { display: flex; align-items: center; gap: 10px; padding: 6px;
+  background: var(--surface-inset); border: 1px solid transparent;
+  border-radius: var(--radius-ctl); cursor: pointer; color: var(--text);
+  font: inherit; text-align: left;
+  transition: background var(--dur-fast) var(--ease-productive),
+              border-color var(--dur-fast) var(--ease-productive); }
+.glass-chip:hover { background: var(--surface-active); }
+.glass-chip.is-picked { border-color: var(--accent); }  /* v5: 1px accent = выбранное */
+/* превью макета 96×54 — тот же приём масштабированного iframe, что .thumb-prev */
+.glass-chip__prev { position: relative; flex: 0 0 auto; width: 96px; height: 54px;
+  border-radius: 6px; overflow: hidden; background: var(--stage); pointer-events: none; }
+.glass-chip__prev iframe { position: absolute; top: 0; left: 0; width: 1920px;
+  height: 1080px; border: 0; transform: scale(0.05); transform-origin: top left; }
+.glass-chip__name { font-size: var(--fs-sm); min-width: 0; }
+.glass-q__input { width: 100%; box-sizing: border-box; min-height: 54px; resize: vertical;
+  background: var(--field-bg); border: none; border-radius: var(--radius-ctl);
+  color: var(--text); font: inherit; font-size: var(--fs-sm); padding: 8px 10px;
+  margin-bottom: 10px; }
+.glass-q__actions { display: flex; gap: 8px; }
+.glass-foot { flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft);
+  display: flex; gap: 8px; }
+/* Метка «слайд ждёт ответа» на миниатюре ленты */
+.thumb { position: relative; }
+.thumb-quest { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px;
+  display: grid; place-items: center; border-radius: 50%; background: var(--accent);
+  color: var(--on-accent); font-size: 12px; font-weight: 700; pointer-events: none; }

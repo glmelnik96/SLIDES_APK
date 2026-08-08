@@ -27,6 +27,12 @@ class DraftSlide(BaseModel):
     filled: bool = False         # прогнан ли через fill_slide (только для сырых)
     slide_type: str | None = None  # типизированный слайд: title|bullets|stats|two_col
     fields: dict | None = None     # структурированные поля под slide_type
+    # ── стеклянная сборка (glass) — все поля опциональны: старые plan.json
+    # валидны без миграции. status="needs_input" — ИИ сомневается в макете:
+    # степпер такой слайд пропускает, вопрос ждёт ответа в любой момент.
+    status: str | None = None      # None | "needs_input"
+    question: str | None = None    # вопрос ИИ пользователю (при needs_input)
+    candidates: list[str] | None = None  # top-3 template_id для чипов-кандидатов
 
 
 class DraftPlan(BaseModel):

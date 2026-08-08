@@ -507,6 +507,10 @@ async function autoResumeActive() {
 // Г§8 — extracted so a failed card's «Повторить» can re-run the build directly.
 async function createJob(opts) {
   if (!selectedFile) return;
+  // «Прозрачная сборка» — свой путь: черновик + /glass/start вместо очереди
+  // раннера; слайды заполняются по одному уже в редакторе.
+  const glass = document.getElementById("glassMode");
+  if (glass && glass.checked) return createGlass();
   const force = !!(opts && opts.force);
   const ex = document.getElementById("exactTransfer");
   const isExact = !!(ex && ex.checked);
@@ -577,6 +581,43 @@ async function createJob(opts) {
 }
 // Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
 $("#create").onclick = () => createJob();
+
+/* ---- прозрачная сборка: черновик + /glass/start → редактор со степпером ---- */
+let glassStarting = false;
+async function createGlass() {
+  if (!selectedFile || glassStarting) return;
+  glassStarting = true;
+  const btn = $("#create");
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Раскладываю документ на слайды…";
+  try {
+    const r = await fetch(U("/api/drafts"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "manual" }),
+    });
+    if (!r.ok) throw new Error("не удалось создать черновик");
+    const { session_id } = await r.json();
+    const fd = new FormData();
+    fd.append("file", selectedFile);
+    const g = await fetch(U(`/api/drafts/${session_id}/glass/start`),
+                          { method: "POST", body: fd });
+    if (!g.ok) {
+      let detail = "";
+      try { detail = JSON.parse(await g.text()).detail; } catch (e) { detail = ""; }
+      throw new Error(detail || "не удалось разобрать документ");
+    }
+    location.href = U(`/editor?session=${session_id}&mode=manual&glass=1`);
+    return; // уходим со страницы — кнопку не воскрешаем
+  } catch (e) {
+    launchError("Не удалось начать прозрачную сборку",
+      `<p>${esc(e && e.message ? e.message : String(e))}</p>`);
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  } finally {
+    glassStarting = false;
+  }
+}
 
 /* ---- доступность сервиса ИИ (плашка над кнопкой «Создать») ---- */
 // Пробы стоят вызовов к провайдеру, поэтому в фоне не поллим: спрашиваем при
