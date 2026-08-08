@@ -741,6 +741,10 @@ async def glass_answer(session_id: str, request: Request,
                                  template_id=template_id, message=message))
     except IndexError as exc:
         raise HTTPException(400, str(exc))
+    except glass.AnswerNotExpected:
+        # Вкладка отстала: вопрос уже снят (отвечено с другой вкладки или слайд
+        # заполнился сам). 409, а не 400 — запрос корректный, изменилось состояние.
+        raise HTTPException(409, "вопрос уже закрыт — обновите страницу")
     except SlotValidationError:
         raise HTTPException(400, f"unknown template: {template_id}")
     return JSONResponse(out)

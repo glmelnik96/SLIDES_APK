@@ -2785,6 +2785,16 @@ function renderGlassPanel(out) {
   } else {
     status.textContent = "Все слайды заполнены.";
   }
+  // Сорвавшийся шаг честно называем сорвавшимся: слайд стоит заглушкой с темой
+  // в заголовке, и автор должен знать, что дописать его придётся руками.
+  const broke = (draftPlan.slides || [])
+    .filter((s) => s && s.status === "failed").length;
+  if (broke && glassLoopDone) {
+    status.textContent += ` ${broke} ` +
+      `${plural(broke, "слайд", "слайда", "слайдов")} не ` +
+      `${plural(broke, "заполнился", "заполнились", "заполнились")} — ` +
+      "текст остался темой в заголовке, допишите в редакторе.";
+  }
   renderGlassQuestions(open);
   done?.classList.toggle("hidden", !glassLoopDone);
 }
@@ -2893,6 +2903,10 @@ async function glassAnswer(idx, templateId, message) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  // 409 — вопрос уже закрыт (ответили с другой вкладки, слайд заполнился сам):
+  // карточка просто устарела, повторять ответ нечего. Подтягиваем план и
+  // убираем её, вместо того чтобы показывать «ошибка».
+  if (r.status === 409) { await fetchPlan(); renderGlassPanel(null); return; }
   if (!r.ok) throw new Error(await r.text());
   const out = await r.json();
   if (out.plan) draftPlan = out.plan;

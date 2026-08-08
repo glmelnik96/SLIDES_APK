@@ -14,6 +14,7 @@ filler.fill_slide, что у чёрного ящика и чат-агента. D
 """
 from __future__ import annotations
 
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,10 @@ _GLASS_SYSTEM = """\
 
 МЕНЮ:
 {menu}"""
+
+
+class AnswerNotExpected(Exception):
+    """Ответ пришёл слайду, который его не ждёт (устаревшая вкладка, повтор)."""
 
 
 class Candidate(BaseModel):
@@ -152,10 +157,31 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     return plan
 
 
-def _next_index(plan: draft.DraftPlan) -> int | None:
-    """1-based индекс следующего слайда для шага; needs_input пропускаем."""
+# Шаг и ответ — два писателя одного plan.json, и оба держат снимок плана всё
+# время вызова LLM (десятки секунд). Замок закрывает только чтение-запись вокруг
+# него, сам вызов идёт без замка (приём из app.post_chat). Заявки на слайд живут
+# в памяти, а не в плане: процесс умер — заявка исчезла вместе с ним, и слайд не
+# останется «вечно в работе».
+_PLAN_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
+_INFLIGHT: dict[str, set[int]] = {}
+
+
+def _plan_lock(session_id: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        lock = _PLAN_LOCKS.get(session_id)
+        if lock is None:
+            lock = _PLAN_LOCKS[session_id] = threading.Lock()
+    return lock
+
+
+def _next_index(plan: draft.DraftPlan, busy: set[int] | None = None) -> int | None:
+    """1-based индекс следующего слайда для шага.
+
+    Пропускаем всё, что уже помечено (needs_input — ждёт автора, failed — не
+    крутим осечку по кругу за токены) и всё, что сейчас заполняет соседний шаг."""
     for i, s in enumerate(plan.slides, start=1):
-        if s.brief and not s.filled and s.status != "needs_input":
+        if s.brief and not s.filled and not s.status and i not in (busy or ()):
             return i
     return None
 
@@ -164,49 +190,78 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
               client: Any) -> draft.DraftPlan:
     """Заполнить ОДИН слайд через тот же fill_slide, что и чёрный ящик.
 
-    Осечка модели не роняет шаг: слайд остаётся аутлайном с выбранным макетом
-    (паттерн chat_agent.build_outline), сборка едет дальше."""
+    Осечка модели не роняет шаг: слайд деградирует на blank с темой в заголовке
+    (ровно как в чёрном ящике) и помечается failed. Пустой content оставлять
+    нельзя — draft_render дорисовывает пустые слоты образцами из каталога, и
+    автор принял бы выдуманную схему за свою."""
     from htmlslides.library import TemplateLibrary
     from htmlslides.models import SlidePlan
-    from htmlslides.pipeline.filler import fill_slide
+    from htmlslides.pipeline.filler import _fallback_title, fill_slide
 
     library = TemplateLibrary.load()
     s = plan.slides[index - 1]
     tid = s.template_id or "blank"
-    spec = library.get(tid)
-    sp = SlidePlan(index=index, type=spec.type, template_id=tid,
-                   content={"brief": s.brief})
+    brief = s.brief
+    sp = SlidePlan(index=index, type=library.get(tid).type, template_id=tid,
+                   content={"brief": brief})
+    failed = False
     try:
         sp = fill_slide(client, library, sp, deck_title=plan.title)
-        plan = draft.update_slide(plan, index, content=sp.content,
-                                  template_id=tid)
-    except Exception:  # noqa: BLE001 — макет сохранён, контент добьют позже
-        plan = draft.update_slide(plan, index, template_id=tid)
-    slide = plan.slides[index - 1]
-    slide.filled = True
-    slide.status = None
-    slide.question = None
-    draft.save_plan(session_id, plan)
-    draft_render.render_draft(session_id, plan)
-    return plan
+        content, out_tid = sp.content, tid
+    except Exception:  # noqa: BLE001 — честная заглушка вместо выдумки
+        failed = True
+        content, out_tid = {"title": _fallback_title(brief)}, "blank"
+
+    # Вызов выше шёл БЕЗ замка: за это время автор мог ответить на вопрос, а
+    # соседний шаг — заполнить другие слайды. Вклеиваем ТОЛЬКО свой слайд в
+    # свежий план, чтобы не откатить чужую работу нашим устаревшим снимком.
+    with _plan_lock(session_id):
+        fresh = draft.load_plan(session_id)
+        if not 1 <= index <= len(fresh.slides):
+            return fresh                      # слайд удалили, пока мы работали
+        if fresh.slides[index - 1].brief != brief:
+            return fresh                      # автор уточнил слайд — его ответ доведёт сам
+        fresh = draft.update_slide(fresh, index, content=content,
+                                   template_id=out_tid)
+        slide = fresh.slides[index - 1]
+        slide.filled = True
+        slide.status = "failed" if failed else None
+        slide.question = None
+        draft.save_plan(session_id, fresh)
+        draft_render.render_draft(session_id, fresh)
+    return fresh
+
+
+def _marked(plan: draft.DraftPlan, status: str) -> list[int]:
+    return [i for i, s in enumerate(plan.slides, start=1) if s.status == status]
+
+
+def _result(plan: draft.DraftPlan, index: int | None, done: bool) -> dict:
+    return {"done": done, "index": index,
+            "open_questions": _marked(plan, "needs_input"),
+            "failed": _marked(plan, "failed"),
+            "plan": plan.model_dump()}
 
 
 def step_fill(session_id: str, *, client: Any | None = None) -> dict:
     """Один шаг сборки: заполнить следующий незаполненный слайд (кроме
     needs_input). Возвращает индекс шага и остаток — клиент крутит цикл."""
-    plan = draft.load_plan(session_id)
-    index = _next_index(plan)
-    if index is None:
-        open_questions = [i for i, s in enumerate(plan.slides, start=1)
-                          if s.status == "needs_input"]
-        return {"done": True, "index": None,
-                "open_questions": open_questions,
-                "plan": plan.model_dump()}
-    plan = _fill_one(session_id, plan, index, client or _kimi())
-    return {"done": _next_index(plan) is None, "index": index,
-            "open_questions": [i for i, s in enumerate(plan.slides, start=1)
-                               if s.status == "needs_input"],
-            "plan": plan.model_dump()}
+    lock = _plan_lock(session_id)
+    with lock:
+        plan = draft.load_plan(session_id)
+        busy = _INFLIGHT.setdefault(session_id, set())
+        index = _next_index(plan, busy)
+        if index is None:
+            return _result(plan, None, True)
+        # Заявка на слайд: без неё второй шаг (вторая вкладка, F5 в середине
+        # шага) брал тот же индекс и оплачивал вызов модели дважды.
+        busy.add(index)
+    try:
+        plan = _fill_one(session_id, plan, index, client or _kimi())
+    finally:
+        with lock:
+            _INFLIGHT.get(session_id, set()).discard(index)
+    return _result(plan, index, _next_index(plan) is None)
 
 
 def answer(session_id: str, index: int, *, template_id: str | None = None,
@@ -217,22 +272,28 @@ def answer(session_id: str, index: int, *, template_id: str | None = None,
     добавленное в brief, идут через обычный fill_slide."""
     from htmlslides.library import TemplateLibrary
 
-    plan = draft.load_plan(session_id)
-    if not 1 <= index <= len(plan.slides):
-        raise IndexError(f"slide {index} out of range (1..{len(plan.slides)})")
-    slide = plan.slides[index - 1]
-    if template_id:
-        TemplateLibrary.load().get(template_id)   # KeyError на чужом id
-        slide.template_id = template_id
-    if message.strip():
-        slide.brief = (slide.brief + "\n\nУточнение автора: "
-                       + message.strip()).strip()
-    slide.status = None
-    slide.question = None
-    slide.filled = False                          # перезаполняем с учётом ответа
-    draft.save_plan(session_id, plan)
+    with _plan_lock(session_id):
+        plan = draft.load_plan(session_id)
+        if not 1 <= index <= len(plan.slides):
+            raise IndexError(f"slide {index} out of range (1..{len(plan.slides)})")
+        slide = plan.slides[index - 1]
+        # Ответ адресован слайду, который его ждёт. Без проверки устаревшая
+        # вкладка (индексы «плывут» при правке состава слайдов) перезаполняла
+        # готовый слайд или обложку — та уходила в модель с пустым брифом, и
+        # титул сочинялся с нуля.
+        if slide.status not in ("needs_input", "failed"):
+            raise AnswerNotExpected(
+                f"slide {index} is not waiting for an answer")
+        if template_id:
+            TemplateLibrary.load().get(template_id)   # KeyError на чужом id
+            slide.template_id = template_id
+        if message.strip():
+            slide.brief = (slide.brief + "\n\nУточнение автора: "
+                           + message.strip()).strip()
+        # Вопрос и кандидатов гасит только успешное заполнение (_fill_one):
+        # раньше их стирали здесь, и сбой на следующей строке терял вопрос
+        # навсегда — отвечать было уже не на что.
+        slide.filled = False                      # перезаполняем с учётом ответа
+        draft.save_plan(session_id, plan)
     plan = _fill_one(session_id, plan, index, client or _kimi())
-    return {"index": index,
-            "open_questions": [i for i, s in enumerate(plan.slides, start=1)
-                               if s.status == "needs_input"],
-            "plan": plan.model_dump()}
+    return _result(plan, index, _next_index(plan) is None)

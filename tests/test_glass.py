@@ -185,7 +185,12 @@ def test_step_fill_skips_needs_input_and_finishes(monkeypatch, tmp_path):
 
 
 def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
-    """Осечка модели не роняет шаг: слайд остаётся аутлайном с макетом."""
+    """Осечка модели не роняет шаг, но и не выдаёт себя за успех.
+
+    Пустой content нельзя оставлять: draft_render дорисовывает пустые слоты
+    образцами из каталога (для diagram — целой блок-схемой), и автор принял бы
+    выдумку за свой текст. Деградируем на blank с темой в заголовке — ровно как
+    чёрный ящик — и помечаем слайд failed, чтобы шаг был виден в панели."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
 
@@ -196,8 +201,11 @@ def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
 
     out = glass.step_fill("s4", client=FakeClient([]))
     assert out["index"] == 3
+    assert out["failed"] == [3]
     s = draft.load_plan("s4").slides[2]
-    assert s.filled and s.template_id == "stats-row" and s.content == {}
+    assert s.filled and s.status == "failed"
+    assert s.template_id == "blank" and s.content.get("title")
+    assert s.brief                       # тема цела — слайд можно дописать руками
 
 
 # ── answer ───────────────────────────────────────────────────────────────────
@@ -326,3 +334,114 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
                       json={"index": 99}).status_code == 400
         assert c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
                       json={"index": 2, "template_id": "ghost"}).status_code == 400
+
+
+# ── конкурентность: два писателя plan.json вокруг долгого вызова LLM ─────────
+# Типовой триггер — не «две вкладки», а F5 в середине 30-секундного шага:
+# соединение рвётся, а серверный поток продолжает работать и дописывает свой
+# снимок поверх нового. Гейт ниже воспроизводит перехлёст детерминированно.
+def _gated_fill(gate, released):
+    """fill_slide, который замирает на входе, пока тест не отпустит гейт."""
+    def _fill(client, library, sp, *, deck_title="", extra=""):
+        released.set()
+        gate.wait(5)
+        return _fake_fill(client, library, sp, deck_title=deck_title)
+    return _fill
+
+
+def test_step_does_not_clobber_answer_written_during_llm_call(monkeypatch, tmp_path):
+    """Ответ автора, пришедший во время шага, не откатывается снимком шага."""
+    import threading
+
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    gate, entered = threading.Event(), threading.Event()
+    monkeypatch.setattr(filler, "fill_slide", _gated_fill(gate, entered))
+    draft.save_plan("c1", _outline_plan())
+
+    step = threading.Thread(target=glass.step_fill,
+                            kwargs={"session_id": "c1", "client": FakeClient([])})
+    step.start()
+    assert entered.wait(5)                      # шаг взял слайд 3 и завис в LLM
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    glass.answer("c1", 2, template_id="timeline", message="покажи этапы",
+                 client=FakeClient([]))         # автор ответил на вопрос слайда 2
+    gate.set()
+    step.join(5)
+
+    s2 = draft.load_plan("c1").slides[1]
+    assert s2.template_id == "timeline" and s2.filled and s2.status is None
+    assert "Уточнение автора: покажи этапы" in s2.brief
+
+
+def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
+    """Параллельные шаги берут разные слайды — вызов модели не оплачивается дважды."""
+    import threading
+
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    seen, guard = [], threading.Lock()
+    ready = threading.Barrier(2, timeout=5)
+
+    def _fill(client, library, sp, *, deck_title="", extra=""):
+        with guard:
+            seen.append(sp.index)
+        ready.wait()                             # оба шага заняты одновременно
+        return _fake_fill(client, library, sp, deck_title=deck_title)
+
+    monkeypatch.setattr(filler, "fill_slide", _fill)
+    draft.save_plan("c2", _outline_plan())
+
+    threads = [threading.Thread(target=glass.step_fill,
+                                kwargs={"session_id": "c2", "client": FakeClient([])})
+               for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+
+    assert sorted(seen) == [3, 4]
+    plan = draft.load_plan("c2")
+    assert plan.slides[2].filled and plan.slides[3].filled
+
+
+def test_answer_refuses_a_slide_that_is_not_waiting(monkeypatch, tmp_path):
+    """Устаревшая вкладка не перезаполняет обложку и готовые слайды."""
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    draft.save_plan("c3", _outline_plan())
+
+    with pytest.raises(glass.AnswerNotExpected):
+        glass.answer("c3", 1, message="перезаполни", client=FakeClient([]))
+    assert draft.load_plan("c3").slides[0].content == {"title": "Т"}
+
+
+def test_answer_keeps_the_question_when_filling_blows_up(monkeypatch, tmp_path):
+    """Сбой на заполнении не стирает вопрос: отвечать по-прежнему есть на что."""
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    draft.save_plan("c4", _outline_plan())
+
+    def _boom(*a, **kw):
+        raise RuntimeError("провайдер недоступен")
+    monkeypatch.setattr(glass, "_kimi", _boom)
+
+    with pytest.raises(RuntimeError):
+        glass.answer("c4", 2, template_id="timeline", message="этапы")
+    s2 = draft.load_plan("c4").slides[1]
+    assert s2.status == "needs_input" and s2.question == "Какой макет?"
+    assert s2.candidates == ["three-col", "timeline"]
+    assert s2.template_id == "timeline"          # выбор чипа сохранён
+
+
+def test_answer_over_api_reports_conflict_not_bad_request(monkeypatch, tmp_path):
+    import htmlslides.pipeline.filler as filler
+    client = _client_app(monkeypatch, tmp_path)
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    with client:
+        sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+        draft.save_plan(sid, _outline_plan())
+        r = client.post(f"/api/drafts/{sid}/glass/answer",
+                        json={"index": 1, "message": "мимо"}, headers=H())
+    assert r.status_code == 409
