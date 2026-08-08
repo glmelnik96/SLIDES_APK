@@ -669,12 +669,14 @@ a { color: var(--accent); }
 .thumb-del:hover { color: var(--danger); border-color: var(--danger); }
 /* Перетаскивание миниатюр для смены порядка (порт из main) */
 .thumb[draggable="true"] { cursor: grab; }
+/* Жест неочевиден — подпись под лентой; тихая, не конкурирует с миниатюрами */
+.thumbs-hint { margin-top: 10px; font-size: var(--fs-cap); line-height: 1.4; color: var(--muted-2); }
 .thumb.dragging { opacity: .5; }
 .thumb.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
 .thumb.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
 /* К§11 — на узком рейле (координация с правкой 8) превью и заголовок прячем: остаётся номер */
 @media (max-width: 1024px) {
-  .thumb-prev, .thumb-title { display: none; }
+  .thumb-prev, .thumb-title, .thumbs-hint { display: none; }
   .thumb-cap { justify-content: center; }
 }
 .addslide { width: 100%; margin: 6px 0 14px; font-size: var(--fs-xs); padding: 9px 8px; color: var(--accent); border-color: var(--accent); }

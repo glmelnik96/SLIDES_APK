@@ -26,7 +26,11 @@
      центра с чужим краем — визуальный шум, а не выравнивание. */
   function anchors(p, axis) {
     var c = axis === "x" ? p.x : p.y;
-    var half = (axis === "x" ? p.w : p.h) / 2;
+    // Трапеции (воронка, пирамида) шире по нижней грани: габарит по широкой
+    // стороне, иначе край-магнит целился бы в невидимую линию.
+    var size = axis === "y" ? p.h
+      : (p.wBottom == null ? p.w : Math.max(p.w, p.wBottom));
+    var half = size / 2;
     return [{ k: "c", v: c }, { k: "min", v: c - half }, { k: "max", v: c + half }];
   }
 
@@ -36,16 +40,28 @@
   function snapAxis(want, from, to, tol) {
     var best = null;
     // «Домой»: рядом с авто-местом магнит возвращает узел ровно на него.
-    if (Math.abs(want) <= tol) best = { adj: -want, at: from[0].v };
+    if (Math.abs(want) <= tol) best = { adj: -want, at: from[0].v, k: "c" };
     for (var i = 0; i < from.length; i++) {
       for (var j = 0; j < to.length; j++) {
         if (from[i].k !== to[j].k) continue;
         var d = to[j].v - (from[i].v + want);
         if (Math.abs(d) > tol) continue;
-        if (!best || Math.abs(d) < Math.abs(best.adj)) best = { adj: d, at: to[j].v };
+        var cand = { adj: d, at: to[j].v, k: from[i].k };
+        if (!best || better(cand, best)) best = cand;
       }
     }
     return best;
+  }
+
+  /* Кто победил при равном расстоянии. У узлов одного размера центр и края
+     совпадают одновременно — тогда направляющую ведём по центрам: она
+     объясняет выравнивание, а линия по краю выглядит случайной. Допуск EPS —
+     от плавающей точки: без него «равные» доводки решал порядок перебора. */
+  function better(a, b) {
+    var da = Math.abs(a.adj), db = Math.abs(b.adj);
+    if (da < db - 1e-6) return true;
+    if (db < da - 1e-6) return false;
+    return a.k === "c" && b.k !== "c";
   }
 
   /* want: {dx,dy} — сдвиг «как тянет мышь». ctx: {auto, others, tol}, где auto —
@@ -101,6 +117,10 @@
     host.__dgmDrag = true;
     host.style.touchAction = "none"; // жест целиком наш, без скролла страницы
     host.style.cursor = "grab";
+    // Подсказка там, где жест: курсор-«рука» говорит «можно тянуть», тултип — что
+    // именно произойдёт. Правка текста живёт в панели, здесь про неё не врём.
+    host.title = "Перетащите узел, чтобы сдвинуть. Узел выравнивается по соседям " +
+      "и центру, Alt — без выравнивания. Текст узлов правится в панели справа.";
     var drag = null;
 
     host.addEventListener("pointerdown", function (e) {

@@ -446,6 +446,7 @@ function buildThumbs() {
     if (reorderable) {
       // Перетаскивание миниатюры меняет порядок слайдов
       t.draggable = true;
+      t.title = "Перетащите, чтобы изменить порядок слайдов";
       t.addEventListener("dragstart", onThumbDragStart);
       t.addEventListener("dragover", onThumbDragOver);
       t.addEventListener("dragleave", onThumbDragLeave);
@@ -454,6 +455,13 @@ function buildThumbs() {
     }
     box.appendChild(t);
   });
+  // Жест неочевиден — говорим о нём прямо в ленте, один раз на весь список.
+  if (reorderable && slides.length > 1) {
+    const tip = document.createElement("div");
+    tip.className = "thumbs-hint";
+    tip.textContent = "Перетащите миниатюру, чтобы поменять слайды местами";
+    box.appendChild(tip);
+  }
 }
 
 // К§3 — на превью помечаем пустые текст-слоты (и пустые ОБЯЗАТЕЛЬНЫЕ list-слоты)
@@ -1306,6 +1314,7 @@ function renderDiagramPanel(slide) {
   nLabel.textContent = "Узлы";
   nodesWrap.appendChild(nLabel);
   nodesWrap.appendChild(hint("Текст узлов — здесь, положение — перетаскиванием прямо на слайде"));
+  nodesWrap.appendChild(hint("Узел сам выравнивается по соседям и центру — совпавшая ось подсвечивается. Alt — без выравнивания."));
   const nodeList = document.createElement("div");
   nodeList.className = "field-list";
   nodeList.id = "dgmNodeList";
