@@ -36,7 +36,8 @@ from webapp.paths import session_dir
 _TEMPLATE_HINT = (
     "Выбор макета по смыслу: числа/метрики → stats-row/kpi; проценты → donut-chart; "
     "перечисление 2–6 пунктов → cards-6/grid-2x2/three-col; сравнение → two-col-cards; "
-    "этапы → timeline; акцентная мысль → statement; титул → cover; контакты → contacts."
+    "этапы с датами → timeline; процесс с ветвлениями/цикл/воронка/оргсхема → diagram; "
+    "акцентная мысль → statement; титул → cover; контакты → contacts."
 )
 
 

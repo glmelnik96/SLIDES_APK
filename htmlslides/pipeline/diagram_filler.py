@@ -1,0 +1,170 @@
+"""Роль 2c — Diagram Filler: строгий DiagramSpec по брифу раздела.
+
+Отличие от слот-филла: ответ модели — не текст по контракту слотов, а СТРУКТУРА
+(узлы/связи), которую рисует детерминированный движок diagram.js. Валидация
+двухслойная (schema.parse_diagram: Pydantic + семантика) возвращает СПИСОК
+претензий — ретраим один раз с полным перечнем, дальше DiagramFillError
+(filler переводит его в FillError → фолбэк на blank, дека не падает).
+
+Каталог доступных типов и «когда брать» приходит из diagrams.catalog — новый
+реализованный тип попадает в промпт автоматически.
+"""
+from __future__ import annotations
+
+import json
+
+from pydantic import BaseModel, Field
+
+from ..diagrams.catalog import CATALOG
+from ..diagrams.schema import (MAX_EDGES, MAX_LABEL, MAX_NODES,
+                               DiagramValidationError, parse_diagram)
+from ..library import TemplateLibrary
+from ..models import SlidePlan
+from .client import KimiClient
+
+# Синхронно с filler._FILL_MAX_TOKENS/_FILL_NO_THINK (импорт оттуда — цикл:
+# filler импортирует нас). JSON диаграммы крупнее слот-филла, но в 8192 влезает
+# с запасом; глубокое рассуждение структуре из 12 узлов не нужно.
+_FILL_MAX_TOKENS = 8192
+_FILL_NO_THINK = {"thinking": {"type": "disabled"}}
+
+
+class DiagramFillError(RuntimeError):
+    """Диаграмма не прошла контракт после ретрая."""
+
+
+class DiagramSlideReply(BaseModel):
+    title: str = ""
+    subtitle: str = ""
+    diagram: dict = Field(default_factory=dict)
+
+
+def _kinds_menu() -> str:
+    return "\n".join(f"- {t.kind}: {t.when_to_use}"
+                     for t in CATALOG if t.available)
+
+
+_EXAMPLE = json.dumps({
+    "title": "Как проходит заявка",
+    "subtitle": "От обращения до подключения услуги",
+    "diagram": {
+        "kind": "flowchart", "direction": "right",
+        "nodes": [
+            {"id": "start", "label": "Заявка клиента", "shape": "start"},
+            {"id": "check", "label": "Проверка данных", "shape": "process"},
+            {"id": "ok", "label": "Данные полные?", "shape": "decision"},
+            {"id": "done", "label": "Услуга подключена", "shape": "end",
+             "accent": True},
+        ],
+        "edges": [
+            {"from": "start", "to": "check"},
+            {"from": "check", "to": "ok"},
+            {"from": "ok", "to": "done", "label": "да"},
+            {"from": "ok", "to": "check", "label": "нет"},
+        ],
+    },
+}, ensure_ascii=False)
+
+DIAGRAM_SYSTEM = f"""\
+Ты строишь СТРУКТУРУ схемы для слайда презентации Cloud.ru: узлы и связи,
+которые нарисует детерминированный движок. Верни ТОЛЬКО JSON вида
+{{"title": "...", "subtitle": "...", "diagram": {{...}}}} — без текста вокруг.
+
+Типы диаграмм (kind) — выбери ОДИН по смыслу раздела:
+{_kinds_menu()}
+
+Контракт diagram:
+- kind — строго из списка выше; узлов 2–{MAX_NODES}, рёбер ≤{MAX_EDGES}.
+- nodes: [{{"id","label","shape","accent","value"}}]; id — короткая латиница
+  (n1, check…); label ≤{MAX_LABEL} символов, по-русски, без выдумок; accent:true —
+  у 1–2 ключевых узлов; value — только для funnel (число слоя, напр. "1200").
+- shape — только для flowchart: start|end|process|decision|io; у decision
+  подписывай исходящие рёбра («да»/«нет»).
+- edges: [{{"from","to","label"}}] — только ссылки на существующие id, без петель.
+  Для process/cycle/funnel рёбра НЕ нужны (порядок задаёт список узлов);
+  для hierarchy ребро = родитель→ребёнок, у узла один родитель.
+- direction: "right" (по умолчанию) или "down" — для flowchart.
+- НЕ добавляй offsets, groups, meta — раскладку считает движок.
+- title ≤54 симв. — заголовок ЭТОГО слайда (из брифа), не всей деки;
+  subtitle ≤70 симв., можно пустой.
+
+Пример ответа:
+{_EXAMPLE}
+
+Пиши по-русски, кратко и фактично: только сущности и связи из брифа."""
+
+
+def fill_diagram(client: KimiClient, library: TemplateLibrary,
+                 slide: SlidePlan, *, deck_title: str = "",
+                 extra: str = "") -> SlidePlan:
+    """Заполнить диаграммный слайд. Контент слайда: title/subtitle + канонический
+    JSON DiagramSpec в слоте diagram (строка — по слот-контракту шаблона)."""
+    # Детерминированно готовый слайд (пикер редактора уже положил валидный спек)
+    # не гоняем через LLM — симметрично скип-пути _fill_template.
+    if not extra and "brief" not in slide.content and not _content_errors(
+            library, slide.content):
+        return slide
+    user = f"Заголовок деки: {deck_title}\n\nБриф слайда:\n{_brief(slide)}"
+    if extra:
+        user += "\n\n" + extra
+    messages = [{"role": "system", "content": DIAGRAM_SYSTEM},
+                {"role": "user", "content": user}]
+    reply = client.chat_json(messages, DiagramSlideReply,
+                             max_tokens=_FILL_MAX_TOKENS,
+                             extra_body=_FILL_NO_THINK)
+    content, errors = _to_content(library, reply)
+    if errors:
+        listed = "; ".join(errors)
+        retry = messages + [
+            {"role": "assistant",
+             "content": reply.model_dump_json()},
+            {"role": "user",
+             "content": f"Схема не прошла контракт: {listed}. Исправь все "
+                        "претензии и верни ТОЛЬКО валидный JSON того же вида."}]
+        reply = client.chat_json(retry, DiagramSlideReply,
+                                 max_tokens=_FILL_MAX_TOKENS,
+                                 extra_body=_FILL_NO_THINK)
+        content, errors = _to_content(library, reply)
+        if errors:
+            # Без префикса "slide N" — его добавит fill_slide при переводе
+            # в FillError (иначе номер задваивался в warn-прогрессе).
+            raise DiagramFillError("диаграмма не прошла контракт после "
+                                   f"ретрая: {'; '.join(errors)}")
+    return slide.model_copy(update={"content": content})
+
+
+def _brief(slide: SlidePlan) -> str:
+    return str(slide.content.get("brief", "")) or json.dumps(
+        slide.content, ensure_ascii=False)
+
+
+def _to_content(library: TemplateLibrary,
+                reply: DiagramSlideReply) -> tuple[dict, list[str]]:
+    """Ответ модели → контент слайда + список претензий (пустой = валидно)."""
+    errors: list[str] = []
+    diagram_raw = ""
+    try:
+        spec = parse_diagram(reply.diagram)
+        diagram_raw = json.dumps(spec.model_dump(by_alias=True),
+                                 ensure_ascii=False, separators=(",", ":"))
+    except DiagramValidationError as exc:
+        errors.extend(exc.errors)
+    content = {"title": reply.title.strip(),
+               "subtitle": reply.subtitle.strip(),
+               "diagram": diagram_raw}
+    # Слот-контракт шаблона держит капы title/subtitle (и required title).
+    for e in library.validate_content("diagram", content):
+        if e.slot != "diagram" or not errors:
+            errors.append(f"{e.code}:{e.slot} {e.detail}".strip())
+    return content, errors
+
+
+def _content_errors(library: TemplateLibrary, content: dict) -> list[str]:
+    """Претензии к уже готовому контенту (скип-путь): слоты + сам спек."""
+    errors = [f"{e.code}:{e.slot}" for e in
+              library.validate_content("diagram", content)]
+    try:
+        parse_diagram(content.get("diagram", ""))
+    except DiagramValidationError as exc:
+        errors.extend(exc.errors)
+    return errors

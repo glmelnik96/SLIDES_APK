@@ -18,6 +18,7 @@ from ..library import TemplateLibrary
 from ..models import DeckPlan, SlidePlan
 from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
                      ProviderUnavailable, degradation_is_total)
+from .diagram_filler import DiagramFillError, fill_diagram
 from .linter import ALLOWED_CLASSES
 from .planner import slot_brief
 
@@ -114,9 +115,14 @@ def fill_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *
     try:
         if slide.freeform:
             return _fill_freeform(client, slide, deck_title=deck_title, extra=extra)
+        if slide.template_id == "diagram":
+            # Схема — структура, не текст: свой филлер со строгим DiagramSpec
+            # (единая точка входа: fill_deck-параллель, chat-агент, rewrite).
+            return fill_diagram(client, library, slide,
+                                deck_title=deck_title, extra=extra)
         return _fill_template(client, library, slide,
                               deck_title=deck_title, extra=extra)
-    except LLMFormatError as exc:
+    except (LLMFormatError, DiagramFillError) as exc:
         raise FillError(f"slide {slide.index}: {exc}") from exc
 
 
