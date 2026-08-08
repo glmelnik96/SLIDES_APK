@@ -867,6 +867,11 @@ a { color: var(--accent); }
 .picker-intent { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
 .picker-code { font-size: var(--fs-cap); color: var(--muted-2); }  /* К§2 — сырой id макета, приглушённо */
 
+/* Каталог не приехал: окно уже открыто, поэтому пустоту объясняем словами —
+   молчащая сетка читалась как «кнопка не сработала». */
+.picker-empty { grid-column: 1 / -1; margin: 0; padding: 32px 8px; text-align: center;
+  font-size: var(--fs-sm); color: var(--muted-2); }
+
 /* ===== Пикер типов схем (второй шаг мастера «Схема») ===== */
 /* Будущие волны каталога: карточка видна (расширяемость на витрине), но приглушена. */
 .picker-item--soon { opacity: .5; cursor: default; }

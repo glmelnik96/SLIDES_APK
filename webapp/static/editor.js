@@ -673,12 +673,22 @@ function triggerDownload(fmt) {
 
 // К§3 — предэкспортная проверка: не выпустить пример-текст молча. В chat-режиме
 // каталог не загружен — дозапрашиваем лениво. Возвращает true, если можно экспортировать.
+// Загрузка одна на всех: кнопка «+ Добавить слайд» видна раньше, чем приходит
+// каталог, и её клик догонял ту же загрузку — без общего промиса получалось два
+// запроса и гонка «кто последний записал».
+let catalogLoad = null;
 async function ensureCatalog() {
   if (catalog.length) return;
-  try {
-    const r = await fetch(U("/api/templates"));
-    if (r.ok) catalog = await r.json();
-  } catch (_) { /* сеть — не блокируем экспорт */ }
+  if (!catalogLoad) {
+    catalogLoad = (async () => {
+      try {
+        const r = await fetch(U("/api/templates"));
+        if (r.ok) catalog = await r.json();
+      } catch (_) { /* сеть — вызывающий покажет пустое состояние */ }
+      catalogLoad = null;
+    })();
+  }
+  await catalogLoad;
 }
 function countPlaceholderSlides() {
   let n = 0;
@@ -2168,10 +2178,23 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ---- template picker ---- */
-function openPicker(onPick) {
+let pickerSeq = 0;
+
+async function openPicker(onPick) {
   const picker = byId("picker");
   const grid = byId("pickerGrid");
+  const seq = ++pickerSeq;
   grid.innerHTML = "";
+  picker.classList.remove("hidden");   // окно сразу: клик всегда отвечает
+  // Каталог мог ещё не приехать (кнопка появляется раньше) — тогда пикер
+  // открывался пустым и «не работал с первого раза». Ждём ту же загрузку.
+  await ensureCatalog();
+  if (seq !== pickerSeq) return;       // пикер успели открыть заново
+  if (!catalog.length) {
+    grid.innerHTML = '<p class="picker-empty">Не удалось загрузить макеты — ' +
+      "проверьте соединение и откройте список ещё раз.</p>";
+    return;
+  }
   catalog.forEach((t, i) => {
     const card = document.createElement("button");
     card.type = "button"; card.className = "picker-item";
@@ -2204,7 +2227,6 @@ function openPicker(onPick) {
     };
     grid.appendChild(card);
   });
-  picker.classList.remove("hidden");
 }
 byId("pickerClose")?.addEventListener("click", () =>
   byId("picker").classList.add("hidden"));
@@ -2212,12 +2234,19 @@ byId("pickerClose")?.addEventListener("click", () =>
 /* ---- diagram type picker (второй шаг мастера «Схема») ---- */
 let dgmCatalog = null;   // [{kind, display_name, when_to_use, available, sample}]
 
+let dgmCatalogLoad = null;
 async function fetchDgmCatalog() {
   if (dgmCatalog) return dgmCatalog;
-  try {
-    const r = await fetch(U("/api/diagrams/catalog"));
-    if (r.ok) dgmCatalog = await r.json();
-  } catch (_) { /* сеть — пикер покажет пустую сетку, не упадёт */ }
+  if (!dgmCatalogLoad) {                 // предзагрузка и клик — один запрос
+    dgmCatalogLoad = (async () => {
+      try {
+        const r = await fetch(U("/api/diagrams/catalog"));
+        if (r.ok) dgmCatalog = await r.json();
+      } catch (_) { /* сеть — пикер покажет пустое состояние, не упадёт */ }
+      dgmCatalogLoad = null;
+    })();
+  }
+  await dgmCatalogLoad;
   return dgmCatalog || [];
 }
 
@@ -2228,11 +2257,19 @@ function dgmType(kind) {
 // Большой блок выбора типа схемы: доступные — с живым превью (тот же рендер, что
 // боевой слайд), будущие волны — приглушённые карточки с пометкой «скоро».
 async function openDiagramPicker(onKind) {
-  const cat = await fetchDgmCatalog();
   const picker = byId("dgmPicker");
   const grid = byId("dgmPickerGrid");
   if (!picker || !grid) return;
+  const seq = ++pickerSeq;
   grid.innerHTML = "";
+  picker.classList.remove("hidden");   // окно сразу, список — как приедет
+  const cat = await fetchDgmCatalog();
+  if (seq !== pickerSeq) return;
+  if (!cat.length) {
+    grid.innerHTML = '<p class="picker-empty">Не удалось загрузить типы схем — ' +
+      "проверьте соединение и откройте список ещё раз.</p>";
+    return;
+  }
   cat.forEach((t) => {
     const card = document.createElement("button");
     card.type = "button";
@@ -2264,7 +2301,6 @@ async function openDiagramPicker(onKind) {
     }
     grid.appendChild(card);
   });
-  picker.classList.remove("hidden");
 }
 byId("dgmPickerClose")?.addEventListener("click", () =>
   byId("dgmPicker").classList.add("hidden"));
@@ -2292,8 +2328,7 @@ async function initDraftBuilder() {
   if (mode === "manual") {
     byId("addSlide")?.classList.remove("hidden");
     byId("builder")?.classList.remove("hidden");
-    const r = await fetch(U("/api/templates"));
-    if (r.ok) catalog = await r.json();
+    await ensureCatalog();   // тот же промис, что ждёт клик по «+ Добавить слайд»
     fetchDgmCatalog(); // типы схем — заранее: имя типа в панели, пикер без ожидания
   }
   if (mode === "chat") setupChatMode();

@@ -291,3 +291,94 @@ test("CANVAS синхронизирован со схемой (1800×720)", () =
   assert.strictEqual(W, 1800);
   assert.strictEqual(H, 720);
 });
+
+/* ---- стрелки следуют за сдвинутым узлом (гибридная раскладка) ---- */
+
+// Сдвиг узла раньше двигал только карточку: стрелки оставались на авто-местах
+// и схема разъезжалась. relink перекладывает ТОЛЬКО задетые рёбра.
+function moveNode(spec, id, dx, dy) {
+  const off = {}; off[id] = { dx: dx, dy: dy };
+  const s = Object.assign({}, spec, { offsets: off });
+  const auto = D.LAYOUTS[s.kind](s);            // геометрия до сдвигов
+  const res = D.LAYOUTS[s.kind](s);
+  const snap = {};
+  Object.keys(res.nodes).forEach((k) => { snap[k] = Object.assign({}, res.nodes[k]); });
+  D.applyOffsets(res.nodes, off);
+  D.relink(res, snap);
+  return { res: res, auto: auto };
+}
+
+function endsOnBox(pts, box) {                   // конец ломаной лежит на грани карточки
+  const p = pts[pts.length - 1];
+  const dx = Math.abs(p[0] - box.x), dy = Math.abs(p[1] - box.y);
+  return dx <= box.w / 2 + 12 && dy <= box.h / 2 + 12;
+}
+
+test("relink: стрелка догоняет сдвинутый узел (flowchart)", () => {
+  const { res } = moveNode(FLOW, "check", 0, 120);
+  const link = res.links.find((l) => l.to === "check");
+  assert.ok(endsOnBox(link.points, res.nodes.check),
+    "конец стрелки должен сидеть на сдвинутой карточке");
+});
+
+test("relink: нетронутые рёбра сохраняют геометрию раскладки", () => {
+  const spec = { kind: "flowchart", nodes: [
+    { id: "a", label: "А" }, { id: "b", label: "Б" }, { id: "c", label: "В" },
+  ], edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }] };
+  const { res, auto } = moveNode(spec, "a", 0, 90);
+  const untouched = res.links.find((l) => l.from === "b" && l.to === "c");
+  const before = auto.links.find((l) => l.from === "b" && l.to === "c");
+  assert.deepStrictEqual(untouched.points, before.points);
+});
+
+test("relink: дуга цикла становится прямой — окружности больше нет", () => {
+  const spec = { kind: "cycle", nodes: [
+    { id: "a", label: "А" }, { id: "b", label: "Б" }, { id: "c", label: "В" },
+  ] };
+  const { res } = moveNode(spec, "a", 200, 60);
+  const link = res.links.find((l) => l.from === "a");
+  assert.strictEqual(link.arc, undefined);
+  assert.strictEqual(link.points.length, 2);
+  assert.ok(endsOnBox(link.points, res.nodes.b));
+});
+
+test("relink: обратное ребро остаётся обходом (обе стыковки в одну грань)", () => {
+  const spec = { kind: "flowchart", nodes: [
+    { id: "a", label: "А" }, { id: "b", label: "Б" },
+  ], edges: [{ from: "a", to: "b" }, { from: "b", to: "a" }] };
+  const { res } = moveNode(spec, "b", 0, 80);
+  const back = res.links.find((l) => l.from === "b" && l.to === "a");
+  assert.strictEqual(back.points.length, 4);
+  // обход идёт ниже обеих карточек, а не сквозь них
+  const laneY = back.points[1][1];
+  assert.ok(laneY > res.nodes.a.y + res.nodes.a.h / 2);
+});
+
+test("relink: у всех типов со связями рёбра догоняют узел", () => {
+  const N4 = [{ id: "a", label: "А" }, { id: "b", label: "Б" },
+              { id: "c", label: "В" }, { id: "d", label: "Г" }];
+  const specs = {
+    flowchart: { kind: "flowchart", nodes: N4,
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "d" }] },
+    process: { kind: "process", nodes: N4 },
+    cycle: { kind: "cycle", nodes: N4 },
+    hierarchy: { kind: "hierarchy", nodes: N4,
+      edges: [{ from: "a", to: "b" }, { from: "a", to: "c" }, { from: "c", to: "d" }] },
+    hub_spoke: { kind: "hub_spoke", nodes: N4 },
+    swimlanes: { kind: "swimlanes",
+      nodes: N4.map((n, i) => Object.assign({ lane: i % 2 ? "Y" : "X" }, n)),
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "d" }] },
+  };
+  Object.keys(specs).forEach((kind) => {
+    const { res } = moveNode(specs[kind], "b", 90, 70);
+    res.links.filter((l) => l.from === "b" || l.to === "b").forEach((l) => {
+      const box = res.nodes[l.to === "b" ? "b" : "b"];
+      const pts = l.points;
+      pts.forEach((p) => assert.ok(Number.isFinite(p[0]) && Number.isFinite(p[1]),
+        `${kind}: координата не число`));
+      const near = l.to === "b" ? endsOnBox(pts, box)
+        : endsOnBox([pts[0]], box);
+      assert.ok(near, `${kind}: ребро ${l.from}→${l.to} не догнало узел`);
+    });
+  });
+});

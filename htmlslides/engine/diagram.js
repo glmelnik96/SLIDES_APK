@@ -487,6 +487,72 @@
     return pos;
   }
 
+  /* Снимок авто-позиций ДО сдвигов: по нему видно, какие узлы двигали руками,
+     и на какой грани карточки сидел конец стрелки. */
+  function snapshot(pos) {
+    var out = {};
+    Object.keys(pos).forEach(function (id) {
+      var p = pos[id];
+      out[id] = { x: p.x, y: p.y, w: p.w, h: p.h };
+    });
+    return out;
+  }
+
+  function shifted(a, b) {
+    return Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5;
+  }
+
+  /* Ближайшая грань карточки к точке — так узнаём, куда стрелка была
+     пристыкована в авто-раскладке. */
+  function sideOf(pt, box) {
+    var d = { l: Math.abs(pt[0] - (box.x - box.w / 2)),
+              r: Math.abs(pt[0] - (box.x + box.w / 2)),
+              t: Math.abs(pt[1] - (box.y - box.h / 2)),
+              b: Math.abs(pt[1] - (box.y + box.h / 2)) };
+    var best = "l";
+    ["r", "t", "b"].forEach(function (k) { if (d[k] < d[best]) best = k; });
+    return best;
+  }
+
+  /* Проложить стрелку заново после ручного сдвига узла, сохранив её характер:
+     прямая остаётся прямой, «колено» — коленом на тех же гранях, обратное ребро
+     (стыковка обоими концами в одну грань) — обходом. Дуга цикла становится
+     прямой: окружности, вокруг которой она шла, больше нет. */
+  function reroute(link, sAuto, tAuto, s, t) {
+    var pts = link.points || [];
+    if (link.arc || pts.length < 4) {
+      delete link.arc;
+      link.points = trimSegment(s, t);
+      return;
+    }
+    var a = sideOf(pts[0], sAuto), b = sideOf(pts[pts.length - 1], tAuto);
+    var vertical = a === "t" || a === "b";
+    if (a === b) { link.points = backRoute(s, t, !vertical); return; }
+    var sx = a === "l" ? s.x - s.w / 2 : a === "r" ? s.x + s.w / 2 : s.x;
+    var sy = a === "t" ? s.y - s.h / 2 : a === "b" ? s.y + s.h / 2 : s.y;
+    var tx = b === "l" ? t.x - t.w / 2 : b === "r" ? t.x + t.w / 2 : t.x;
+    var ty = b === "t" ? t.y - t.h / 2 : b === "b" ? t.y + t.h / 2 : t.y;
+    var mid = vertical ? (sy + ty) / 2 : (sx + tx) / 2;
+    link.points = vertical
+      ? [[sx, sy], [sx, mid], [tx, mid], [tx, ty]]
+      : [[sx, sy], [mid, sy], [mid, ty], [tx, ty]];
+  }
+
+  /* Стрелки строятся внутри раскладки по авто-координатам, а сдвиги
+     прикладываются после — без этого прохода линии оставались бы на месте, и
+     схема разъезжалась. Нетронутые рёбра НЕ пересчитываем: их геометрию знает
+     раскладка, и она точнее общего правила. */
+  function relink(result, auto) {
+    (result.links || []).forEach(function (l) {
+      var s = result.nodes[l.from], t = result.nodes[l.to];
+      var a = auto[l.from], b = auto[l.to];
+      if (!s || !t || !a || !b) return;
+      if (!shifted(s, a) && !shifted(t, b)) return;
+      reroute(l, a, b, s, t);
+    });
+    return result;
+  }
+
   /* ---------------- отрисовка ---------------- */
 
   var uid = 0;   // инстанс-уникальные id маркеров (два слайда = дубли id — нельзя)
@@ -688,7 +754,9 @@
       return;
     }
     var result = LAYOUTS[spec.kind](spec);
+    var auto = snapshot(result.nodes);
     applyOffsets(result.nodes, spec.offsets);
+    relink(result, auto);
 
     var markerId = "dgm-arrow-" + (++uid);
     var parts = ['<svg class="diagram-svg m-enter" viewBox="0 0 ' + W + " " + H +
@@ -730,6 +798,7 @@
   var api = {
     render: render, renderAll: renderAll, layout: computeLayout,
     LAYOUTS: LAYOUTS, applyOffsets: applyOffsets, num: num,
+    relink: relink, reroute: reroute, sideOf: sideOf,
     layoutFlowchart: layoutFlowchart, layoutProcess: layoutProcess,
     layoutCycle: layoutCycle, layoutFunnel: layoutFunnel,
     layoutHierarchy: layoutHierarchy, flowRanks: flowRanks,
