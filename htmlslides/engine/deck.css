@@ -326,6 +326,14 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
    в хвосте, правило ≤3 хроматических цвета), трек var(--bg-card), подписи var(--fg-body). */
 .bar-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
 
+/* ---- diagram (не из Figma; платформа диаграмм, рисует engine/diagram.js) ----
+   host в контент-зоне как .freeform-zone (left60/top300/1800×720); JS кладёт
+   внутрь SVG viewBox 0 0 1800 720 — холст синхронизирован со схемой
+   (diagrams/schema.py CANVAS_W/H). Узлы var(--bg-card)/var(--accent), связи
+   var(--fg-muted), воронка var(--chart-1..6) — всё перекрашивается темой. */
+.diagram-host{position:absolute;left:60px;top:300px;width:1800px;height:720px;}
+.diagram-host svg{display:block;width:100%;height:100%;overflow:visible;}
+
 /* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах
    (viewBox 0 0 1800 620): кольцо cx=310 cy=310 r=225 толщина 70 (дырка → донат),

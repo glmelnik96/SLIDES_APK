@@ -10,7 +10,11 @@ This module is pure: no I/O, no engine imports beyond the template *ids* it name
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, ValidationError
+import json
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
+
+from htmlslides.diagrams import validate_diagram
 
 
 class TitleFields(BaseModel):
@@ -39,12 +43,33 @@ class TwoColFields(BaseModel):
     right: list[str] = Field(default_factory=list)
 
 
+class DiagramFields(BaseModel):
+    """Диаграмма: heading + строгий DiagramSpec (htmlslides/diagrams/schema.py).
+
+    ``diagram`` нормализуется валидатором схемы: невалидный спек = невалидные
+    fields целиком (validate_fields → None, слайд остаётся «сырым» — как и для
+    остальных типов). Дальше map_typed сериализует спек в компактный JSON для
+    слота шаблона; рисует его детерминированный engine/diagram.js без LLM."""
+    heading: str
+    subtitle: str = ""
+    diagram: dict
+
+    @field_validator("diagram")
+    @classmethod
+    def _valid_spec(cls, v: dict) -> dict:
+        norm = validate_diagram(v)
+        if norm is None:
+            raise ValueError("invalid diagram spec")
+        return norm
+
+
 # slide_type → (Pydantic model, engine template id)
 _SPECS: dict[str, tuple[type[BaseModel], str]] = {
     "title":   (TitleFields,   "cover"),
     "bullets": (BulletsFields, "cards-6"),
     "stats":   (StatsFields,   "stats-row"),
     "two_col": (TwoColFields,  "three-col"),
+    "diagram": (DiagramFields, "diagram"),
 }
 
 SLIDE_TYPES = tuple(_SPECS)
@@ -88,4 +113,11 @@ def map_typed(slide_type, fields) -> tuple[str | None, dict]:
         columns = [{"text": " • ".join(_clean(norm["left"]))},
                    {"text": " • ".join(_clean(norm["right"]))}]
         return "three-col", {"title": norm["heading"], "columns": columns}
+    if slide_type == "diagram":
+        # Компактный JSON: слот diagram капится max_chars=8000, капы схемы
+        # (12 узлов / 20 рёбер / 60 симв.) держат худший случай ~4К — запас x2.
+        spec = json.dumps(norm["diagram"], ensure_ascii=False,
+                          separators=(",", ":"))
+        return "diagram", {"title": norm["heading"], "subtitle": norm["subtitle"],
+                           "diagram": spec}
     return None, {}

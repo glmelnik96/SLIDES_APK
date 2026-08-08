@@ -59,7 +59,7 @@ def test_templatespec_display_name_defaults_empty():
 
 def test_library_every_template_has_display_name():
     lib = TemplateLibrary.load()
-    assert len(lib.templates) == 25
+    assert len(lib.templates) == 26  # 25 + diagram («Схема»)
     for t in lib.templates:
         assert t.display_name, f"{t.id}: пустой display_name"
 

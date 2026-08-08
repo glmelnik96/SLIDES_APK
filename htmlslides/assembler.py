@@ -38,6 +38,9 @@ _PAGE = """<!DOCTYPE html>
 <script>
 {deck_js}
 </script>
+<script>
+{diagram_js}
+</script>
 </body>
 </html>
 """
@@ -220,5 +223,6 @@ def assemble(plan: DeckPlan, *, theme: str = "dark") -> str:
         deck_css=_read_pkg("engine/deck.css"),
         motion_css=_read_pkg("engine/motion.css"),
         deck_js=_read_pkg("engine/deck.js"),
+        diagram_js=_read_pkg("engine/diagram.js"),
         slides=slides_html,
     )

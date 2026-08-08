@@ -409,6 +409,18 @@
         "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"}
       }
+    },
+    {
+      "id": "diagram",
+      "type": "content",
+      "file": "diagram.html",
+      "display_name": "Схема",
+      "intent": "Схема связей и структуры: блок-схема процесса с ветвлениями, этапы, цикл, воронка, оргсхема. Бери, когда важна СТРУКТУРА и связи между элементами (кто за кем, кто кому подчинён), а не числа. Слот diagram — строгий JSON DiagramSpec, рисует детерминированный движок.",
+      "slots": {
+        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
+        "diagram":  {"kind": "text", "required": true,  "max_chars": 8000, "label": "Данные схемы", "hint": "JSON DiagramSpec — заполняется пикером типов/ИИ, не руками"}
+      }
     }
   ]
 }

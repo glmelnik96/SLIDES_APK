@@ -72,3 +72,40 @@ def test_map_invalid_returns_none_template():
     tid, content = st.map_typed("bullets", {"bullets": ["a"]})  # no heading
     assert tid is None and content == {}
     assert st.map_typed("quote", {"heading": "h"}) == (None, {})
+
+
+# ── diagram ──────────────────────────────────────────────────────────────────
+def _diagram_fields():
+    from htmlslides.diagrams import sample_spec
+    return {"heading": "Как проходит заявка", "subtitle": "Путь клиента",
+            "diagram": sample_spec("flowchart")}
+
+
+def test_validate_diagram_ok_normalises_spec():
+    out = st.validate_fields("diagram", _diagram_fields())
+    assert out["heading"] == "Как проходит заявка"
+    assert out["diagram"]["kind"] == "flowchart"
+    assert "from" in out["diagram"]["edges"][0]   # алиас, не from_
+
+
+def test_validate_diagram_bad_spec_returns_none():
+    fields = _diagram_fields()
+    fields["diagram"] = {"kind": "flowchart", "nodes": []}
+    assert st.validate_fields("diagram", fields) is None
+    fields["diagram"] = "не спек"
+    assert st.validate_fields("diagram", fields) is None
+
+
+def test_map_diagram_serialises_compact_json():
+    import json
+    tid, content = st.map_typed("diagram", _diagram_fields())
+    assert tid == "diagram"
+    assert content["title"] == "Как проходит заявка"
+    assert content["subtitle"] == "Путь клиента"
+    spec = json.loads(content["diagram"])
+    assert spec["kind"] == "flowchart" and len(spec["nodes"]) == 6
+    assert ": " not in content["diagram"]         # компактные сепараторы
+
+
+def test_map_diagram_invalid_falls_back():
+    assert st.map_typed("diagram", {"heading": "H", "diagram": {}}) == (None, {})

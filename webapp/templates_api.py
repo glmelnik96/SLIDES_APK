@@ -6,6 +6,7 @@ item_slots) so the frontend can render and pre-validate the right fields.
 """
 from __future__ import annotations
 
+from htmlslides.diagrams import sample_spec, spec_json
 from htmlslides.library import SlotSpec, TemplateLibrary
 
 # Section dividers / back-cover aren't user-fillable content slides.
@@ -93,6 +94,10 @@ def _sample_value(name: str, spec: SlotSpec, idx: int = 0):
     if spec.kind == "text":
         if name in _TEMPLATE_OWNED or name in _FALLBACK_EMPTY:
             return ""  # let the template supply its own default / computed fallback
+        if name == "diagram":
+            # Слот-носитель JSON DiagramSpec: превью мастера «Схема» рисует
+            # реальную блок-схему из каталога, а не строку-заглушку.
+            return spec_json(sample_spec("flowchart"))
         if name == "value":
             return str(_SERIES[idx % len(_SERIES)])  # vary per item → non-flat charts
         if name == "num":
