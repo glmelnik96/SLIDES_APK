@@ -291,12 +291,188 @@
     return { nodes: pos, links: links };
   }
 
+  /* ---------------- волна 2 ---------------- */
+
+  /* Дорожки в порядке первого появления — зеркалит schema._lanes. */
+  function laneList(nodes) {
+    var lanes = [];
+    nodes.forEach(function (n) {
+      var l = n.lane || "";
+      if (lanes.indexOf(l) === -1) lanes.push(l);
+    });
+    return lanes;
+  }
+
+  /* Отрезать сегмент центр→центр по границам карточек узлов (+8px зазор),
+   * чтобы стрелка была видна, а не пряталась под карточкой. */
+  function trimSegment(s, t) {
+    var dx = t.x - s.x, dy = t.y - s.y;
+    function cut(box) {
+      var tx = dx ? (box.w / 2 + 8) / Math.abs(dx) : Infinity;
+      var ty = dy ? (box.h / 2 + 8) / Math.abs(dy) : Infinity;
+      return Math.min(tx, ty, 0.49);
+    }
+    var t0 = cut(s), t1 = 1 - cut(t);
+    return [[s.x + dx * t0, s.y + dy * t0], [s.x + dx * t1, s.y + dy * t1]];
+  }
+
+  /* Матрица 2×2: ровно 4 карточки по квадрантам (порядок: верх-лево,
+   * верх-право, низ-лево, низ-право); оси рисует decorMatrix. */
+  function layoutMatrix(spec) {
+    var pos = {};
+    var cxs = [W * 0.26, W * 0.74], cys = [H * 0.26, H * 0.74];
+    spec.nodes.forEach(function (n, i) {
+      pos[n.id] = { x: cxs[i % 2], y: cys[i < 2 ? 0 : 1], w: 560, h: 220 };
+    });
+    return { nodes: pos, links: [] };
+  }
+
+  /* Пирамида: слои сверху вниз, вершина первой; ширины растут линейно.
+   * Структура pos совместима с renderFunnel (w = верх, wBottom = низ). */
+  function layoutPyramid(spec) {
+    var nodes = spec.nodes, n = nodes.length;
+    var gap = 8;
+    var layerH = Math.min(150, (H - gap * (n - 1)) / n);
+    var total = layerH * n + gap * (n - 1);
+    var top = (H - total) / 2;
+    var wTop = 240, wBase = 1150;
+    function wAt(t) { return wTop + (wBase - wTop) * t; }
+    var pos = {};
+    nodes.forEach(function (nd, i) {
+      pos[nd.id] = {
+        x: W / 2, y: top + i * (layerH + gap) + layerH / 2,
+        w: wAt(i / n), h: layerH, wBottom: wAt((i + 1) / n),
+      };
+    });
+    return { nodes: pos, links: [] };
+  }
+
+  /* Хаб и лучи: первый узел в центре, остальные по эллипсу вокруг; рёбра
+   * опциональны (без них — центр соединяется с каждым лучом). */
+  function layoutHubSpoke(spec) {
+    var nodes = spec.nodes;
+    var hub = nodes[0], spokes = nodes.slice(1), m = spokes.length || 1;
+    var pos = {};
+    pos[hub.id] = { x: W / 2, y: H / 2, w: 400, h: 150 };
+    var rx = 630, ry = 255;
+    spokes.forEach(function (n, i) {
+      var a = -Math.PI / 2 + (2 * Math.PI * i) / m;
+      pos[n.id] = { x: W / 2 + rx * Math.cos(a), y: H / 2 + ry * Math.sin(a), w: 310, h: 104 };
+    });
+    var edges = (spec.edges && spec.edges.length) ? spec.edges
+      : spokes.map(function (n) { return { from: hub.id, to: n.id }; });
+    var links = edges.map(function (e) {
+      return { from: e.from, to: e.to, label: e.label || "", style: e.style || "solid",
+               points: trimSegment(pos[e.from], pos[e.to]) };
+    });
+    return { nodes: pos, links: links };
+  }
+
+  /* Сравнение сторон: две колонки карточек, заголовки колонок — decorComparison. */
+  function layoutComparison(spec) {
+    var lanes = laneList(spec.nodes);
+    var cols = [W * 0.27, W * 0.73];
+    var gap = 18, topY = 120;
+    var pos = {};
+    lanes.forEach(function (lane, li) {
+      var items = spec.nodes.filter(function (n) { return (n.lane || "") === lane; });
+      var itemH = Math.min(130,
+        (H - topY - 20 - gap * (items.length - 1)) / Math.max(1, items.length));
+      items.forEach(function (n, i) {
+        pos[n.id] = { x: cols[Math.min(li, 1)], y: topY + itemH / 2 + i * (itemH + gap),
+                      w: 660, h: itemH };
+      });
+    });
+    return { nodes: pos, links: [], lanes: lanes };
+  }
+
+  /* Венн: 2–3 полупрозрачных круга; метка оттянута от общего центра наружу
+   * (labelDx/labelDy — ОТНОСИТЕЛЬНЫЕ, переживают drag-offsets). */
+  function layoutVenn(spec) {
+    var nodes = spec.nodes, n = nodes.length;
+    var r = n === 3 ? 235 : 255;
+    var centers = n === 3
+      ? [[W / 2, H / 2 - 115], [W / 2 - 195, H / 2 + 115], [W / 2 + 195, H / 2 + 115]]
+      : [[W / 2 - 165, H / 2], [W / 2 + 165, H / 2]];
+    var cx0 = 0, cy0 = 0, used = Math.min(n, centers.length);
+    centers.slice(0, used).forEach(function (c) { cx0 += c[0] / used; cy0 += c[1] / used; });
+    var pos = {};
+    nodes.forEach(function (nd, i) {
+      var c = centers[i] || centers[centers.length - 1];
+      var dx = c[0] - cx0, dy = c[1] - cy0;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      pos[nd.id] = {
+        x: c[0], y: c[1], w: 2 * r, h: 2 * r, r: r,
+        labelDx: (dx / len) * r * 0.45, labelDy: (dy / len) * r * 0.45,
+      };
+    });
+    return { nodes: pos, links: [] };
+  }
+
+  /* Дорожки процесса: ряды по исполнителям (lane), колонки по рангам шагов.
+   * Коллизии (ранг, дорожка) разводим вправо, чтобы шаги не слипались. */
+  function layoutSwimlanes(spec) {
+    var nodes = spec.nodes, edges = spec.edges || [];
+    var lanes = laneList(nodes);
+    var laneH = H / lanes.length;
+    var labelW = 230;
+    var rank = {};
+    if (edges.length) {
+      rank = flowRanks(nodes, edges);
+    } else {
+      nodes.forEach(function (n, i) { rank[n.id] = i; });
+    }
+    var used = {};
+    nodes.forEach(function (n) {
+      var li = Math.max(0, lanes.indexOf(n.lane || ""));
+      var r = rank[n.id];
+      while (used[r + ":" + li]) r += 1;
+      used[r + ":" + li] = true;
+      rank[n.id] = r;
+    });
+    var maxRank = 0;
+    nodes.forEach(function (n) { maxRank = Math.max(maxRank, rank[n.id]); });
+    var colW = (W - labelW - 20) / (maxRank + 1);
+    var w = Math.min(290, colW - 28), h = Math.min(108, laneH - 32);
+    var pos = {};
+    nodes.forEach(function (n) {
+      var li = Math.max(0, lanes.indexOf(n.lane || ""));
+      pos[n.id] = { x: labelW + rank[n.id] * colW + colW / 2,
+                    y: li * laneH + laneH / 2, w: w, h: h };
+    });
+    var linkDefs = edges.length ? edges
+      : nodes.slice(1).map(function (n, i) { return { from: nodes[i].id, to: n.id }; });
+    var links = linkDefs.map(function (e) {
+      var s = pos[e.from], t = pos[e.to];
+      var points;
+      if (Math.abs(s.y - t.y) < 1) {
+        points = s.x < t.x
+          ? [[s.x + s.w / 2, s.y], [t.x - t.w / 2, t.y]]
+          : backRoute(s, t, false);
+      } else if (t.x > s.x) {
+        var midX = (s.x + s.w / 2 + t.x - t.w / 2) / 2;
+        points = [[s.x + s.w / 2, s.y], [midX, s.y], [midX, t.y], [t.x - t.w / 2, t.y]];
+      } else {
+        points = backRoute(s, t, false);
+      }
+      return { from: e.from, to: e.to, points: points,
+               label: e.label || "", style: e.style || "solid" };
+    });
+    return { nodes: pos, links: links, lanes: lanes, laneH: laneH, labelW: labelW };
+  }
+
   var LAYOUTS = {
     flowchart: layoutFlowchart,
     process: layoutProcess,
     cycle: layoutCycle,
     funnel: layoutFunnel,
     hierarchy: layoutHierarchy,
+    matrix: layoutMatrix,
+    pyramid: layoutPyramid,
+    hub_spoke: layoutHubSpoke,
+    comparison: layoutComparison,
+    venn: layoutVenn,
+    swimlanes: layoutSwimlanes,
   };
 
   /* Гибрид: ручные сдвиги поверх авто-раскладки + кламп центра в холст. */
@@ -373,7 +549,9 @@
       var p0 = pts[1] || pts[0], p1 = pts[2] || pts[1] || p0;
       var lx = (p0[0] + p1[0]) / 2, ly = (p0[1] + p1[1]) / 2 - 12;
       var anchor = "middle";
-      if (Math.abs(p0[0] - p1[0]) < 1) {   // вертикальный сегмент: метку вбок
+      if (pts.length === 2) {              // прямой сегмент (hub_spoke): середина
+        lx = (pts[0][0] + pts[1][0]) / 2; ly = (pts[0][1] + pts[1][1]) / 2 - 12;
+      } else if (Math.abs(p0[0] - p1[0]) < 1) { // вертикальный сегмент: метку вбок
         lx += 14; ly += 12; anchor = "start";
       }
       out += '<text x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '" font-size="24" ' +
@@ -402,6 +580,98 @@
     return parts.join("");
   }
 
+  function renderPyramid(spec, pos) {
+    /* Слои-трапеции: структура pos как у funnel (w = верх, wBottom = низ). */
+    return renderFunnel(spec, pos);
+  }
+
+  function renderVenn(spec, pos) {
+    var parts = [];
+    spec.nodes.forEach(function (n, i) {
+      var p = pos[n.id];
+      var fill = n.accent ? "var(--accent)" : "var(--chart-" + (Math.min(i, 5) + 1) + ")";
+      parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
+        '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + p.r + '" fill="' + fill +
+        '" fill-opacity="0.45"/>' +
+        labelFO({ x: p.x + (p.labelDx || 0), y: p.y + (p.labelDy || 0),
+                  w: p.r * 1.1, h: 130 }, n, "var(--fg-body)") +
+        "</g>");
+    });
+    var cl = spec.meta && spec.meta.center_label;
+    if (cl) {
+      var cx = 0, cy = 0, n = spec.nodes.length;
+      spec.nodes.forEach(function (nd) { cx += pos[nd.id].x / n; cy += pos[nd.id].y / n; });
+      parts.push('<text x="' + cx + '" y="' + cy + '" text-anchor="middle" ' +
+        'dominant-baseline="middle" font-size="26" font-weight="500" ' +
+        'fill="var(--fg-body)">' + esc(cl) + "</text>");
+    }
+    return parts.join("");
+  }
+
+  /* ---- декор фона (оси, разделители, дорожки) — рисуется ПОД узлами ---- */
+
+  function decorMatrix(spec, layout, markerId) {
+    var m = spec.meta || {};
+    var out = '<line x1="40" y1="' + H / 2 + '" x2="' + (W - 40) + '" y2="' + H / 2 +
+      '" stroke="var(--fg-muted)" stroke-width="2.5" marker-end="url(#' + markerId + ')"/>' +
+      '<line x1="' + W / 2 + '" y1="' + (H - 16) + '" x2="' + W / 2 + '" y2="26" ' +
+      'stroke="var(--fg-muted)" stroke-width="2.5" marker-end="url(#' + markerId + ')"/>';
+    if (m.x_axis) {
+      out += '<text x="' + (W - 44) + '" y="' + (H / 2 + 40) + '" text-anchor="end" ' +
+        'font-size="26" fill="var(--fg-muted)">' + esc(m.x_axis) + "</text>";
+    }
+    if (m.y_axis) {
+      out += '<text x="' + (W / 2 + 18) + '" y="44" font-size="26" ' +
+        'fill="var(--fg-muted)">' + esc(m.y_axis) + "</text>";
+    }
+    return out;
+  }
+
+  function decorComparison(spec, layout) {
+    var out = '<line x1="' + W / 2 + '" y1="20" x2="' + W / 2 + '" y2="' + (H - 20) +
+      '" stroke="var(--fg-muted)" stroke-width="2" stroke-dasharray="10 8" opacity="0.6"/>';
+    var cols = [W * 0.27, W * 0.73];
+    (layout.lanes || []).slice(0, 2).forEach(function (lane, i) {
+      if (!lane) return;
+      out += '<text x="' + cols[i] + '" y="64" text-anchor="middle" font-size="34" ' +
+        'font-weight="500" fill="var(--fg-body)">' + esc(lane) + "</text>";
+    });
+    return out;
+  }
+
+  function decorSwimlanes(spec, layout) {
+    var lanes = layout.lanes || [], laneH = layout.laneH || H, labelW = layout.labelW || 0;
+    var out = "";
+    lanes.forEach(function (lane, i) {
+      if (i % 2 === 1) {
+        out += '<rect x="0" y="' + (i * laneH) + '" width="' + W + '" height="' + laneH +
+          '" fill="var(--bg-card)" fill-opacity="0.5"/>';
+      }
+      if (i) {
+        out += '<line x1="0" y1="' + (i * laneH) + '" x2="' + W + '" y2="' + (i * laneH) +
+          '" stroke="var(--fg-muted)" stroke-width="1.5" opacity="0.35"/>';
+      }
+      out += '<foreignObject x="16" y="' + (i * laneH + 10) + '" width="' + (labelW - 40) +
+        '" height="' + (laneH - 20) + '">' +
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;' +
+        'display:flex;align-items:center;overflow:hidden;font-size:26px;' +
+        'line-height:1.15;color:var(--fg-muted);">' + esc(lane) + "</div></foreignObject>";
+    });
+    return out;
+  }
+
+  var DECOR = {
+    matrix: decorMatrix,
+    comparison: decorComparison,
+    swimlanes: decorSwimlanes,
+  };
+
+  var NODE_RENDERERS = {
+    funnel: renderFunnel,
+    pyramid: renderPyramid,
+    venn: renderVenn,
+  };
+
   function render(host, specArg) {
     var spec = specArg;
     if (!spec) {
@@ -426,9 +696,12 @@
     parts.push('<defs><marker id="' + markerId + '" viewBox="0 0 10 10" refX="8.5" refY="5" ' +
       'markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
       '<path d="M0 0L10 5L0 10z" fill="var(--fg-muted)"/></marker></defs>');
+    var decor = DECOR[spec.kind];
+    if (decor) parts.push(decor(spec, result, markerId));
     result.links.forEach(function (link) { parts.push(linkPath(link, markerId)); });
-    if (spec.kind === "funnel") {
-      parts.push(renderFunnel(spec, result.nodes));
+    var custom = NODE_RENDERERS[spec.kind];
+    if (custom) {
+      parts.push(custom(spec, result.nodes));
     } else {
       spec.nodes.forEach(function (n) {
         var p = result.nodes[n.id];
@@ -452,6 +725,10 @@
     layoutFlowchart: layoutFlowchart, layoutProcess: layoutProcess,
     layoutCycle: layoutCycle, layoutFunnel: layoutFunnel,
     layoutHierarchy: layoutHierarchy, flowRanks: flowRanks,
+    layoutMatrix: layoutMatrix, layoutPyramid: layoutPyramid,
+    layoutHubSpoke: layoutHubSpoke, layoutComparison: layoutComparison,
+    layoutVenn: layoutVenn, layoutSwimlanes: layoutSwimlanes,
+    laneList: laneList, trimSegment: trimSegment,
     CANVAS: { W: W, H: H },
   };
 

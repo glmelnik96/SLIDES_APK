@@ -306,15 +306,34 @@ function suppressDeckNavOnEdit(doc) {
   }, true);
 }
 
-// Drag узлов схемы в превью — только черновики ручного режима (built-деки: фаза 4).
-// Слушатели вешает DiagramDrag (diagram_editor.js) на .diagram-host; коммит
-// перетаскивания пишет offsets в fields и уходит обычным дебаунс-сейвом.
+// Drag узлов схемы в превью. Черновики ручного режима: offsets в fields →
+// обычный дебаунс-сейв (PUT /fields, DeckPlan-as-truth). Собранные деки:
+// HTML-as-truth — спек живёт в data-diagram хоста, коммит пишет атрибут и
+// дебаунс-сейвит всю деку (saveDeck запечёт и атрибут, и свежий SVG).
 function attachDiagramDrag(doc) {
-  if (!isDraft || mode !== "manual" || !window.DiagramDrag) return;
-  const sections = doc.querySelectorAll(".slide");
+  if (!window.DiagramDrag) return;
   const eng = doc.defaultView && doc.defaultView.DiagramEngine;
   if (!eng) return;
   let any = false;
+  if (!isDraft) {
+    doc.querySelectorAll(".diagram-host").forEach((host) => {
+      any = true;
+      DiagramDrag.attach(host, {
+        engine: eng,
+        getSpec: () => {
+          try { return JSON.parse(host.getAttribute("data-diagram") || "null"); }
+          catch (_) { return null; }
+        },
+        onCommit: (spec) => {
+          host.setAttribute("data-diagram", JSON.stringify(spec));
+          scheduleBuiltDeckSave();
+        },
+      });
+    });
+  } else if (mode !== "manual") {
+    return;
+  } else {
+  const sections = doc.querySelectorAll(".slide");
   (draftPlan.slides || []).forEach((slide, i) => {
     if (!slide || slide.slide_type !== "diagram" || !slide.fields) return;
     const host = sections[i] && sections[i].querySelector(".diagram-host");
@@ -341,6 +360,7 @@ function attachDiagramDrag(doc) {
       },
     });
   });
+  }
   // Клик по зоне схемы не должен листать деку (обработчики deck.js на document).
   if (any && !doc.__dgmNavGuard) {
     doc.__dgmNavGuard = true;
@@ -348,6 +368,21 @@ function attachDiagramDrag(doc) {
       if (e.target.closest && e.target.closest(".diagram-host")) e.stopPropagation();
     }, true);
   }
+}
+
+// Дебаунс-сейв собранной деки после drag'а узла: текстовые правки built-дек
+// сохраняются кнопкой, но у перетаскивания нет своего «blur»-момента — молча
+// терять сдвиг при уходе со страницы нельзя.
+let builtDeckSaveTimer = null;
+function scheduleBuiltDeckSave() {
+  clearTimeout(builtDeckSaveTimer);
+  builtDeckSaveTimer = setTimeout(async () => {
+    builtDeckSaveTimer = null;
+    setSaveStatus("saving");
+    let ok = false;
+    try { ok = await saveDeck(); } catch (_) { /* сеть — покажем error */ }
+    setSaveStatus(ok ? "saved" : "error");
+  }, 800);
 }
 
 function buildThumbs() {
@@ -1204,8 +1239,18 @@ function charCounter(el, max) {
 /* ---- панель диаграммного слайда (узлы/связи; drag — на самом слайде) ---- */
 const DGM_SHAPES = [["start", "Начало"], ["process", "Шаг"], ["decision", "Условие"],
                     ["io", "Ввод/вывод"], ["end", "Финал"]];
-const DGM_EDGE_KINDS = ["flowchart", "hierarchy"];   // типы с редактируемыми рёбрами
+const DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes"]; // редактируемые рёбра
 const DGM_MAX_NODES = 12, DGM_MAX_EDGES = 20;        // капы схемы (schema.py)
+const DGM_VALUE_KINDS = ["funnel", "pyramid"];       // узлы с числом
+// lane у узла: подпись поля зависит от типа
+const DGM_LANE_KINDS = { comparison: "сторона", swimlanes: "исполнитель" };
+// капы узлов и подсказки, отличные от общих (matrix: ровно 4, без добавления)
+const DGM_NODE_RULES = {
+  matrix: { min: 4, max: 4, hint: "ровно 4 узла: верх-лево, верх-право, низ-лево, низ-право" },
+  venn: { min: 2, max: 3, hint: "2–3 множества" },
+  pyramid: { min: 3, max: DGM_MAX_NODES, hint: "уровни сверху вниз, вершина первой" },
+  hub_spoke: { min: 3, max: DGM_MAX_NODES, hint: "первый узел — центр, остальные — лучи" },
+};
 
 function renderDiagramPanel(slide) {
   const form = byId("builderForm");
@@ -1239,6 +1284,15 @@ function renderDiagramPanel(slide) {
   form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54));
   form.appendChild(dgmTextField("Подзаголовок", "subtitle", f.subtitle, 70));
 
+  // Подписи, специфичные для типа (meta) — matrix: оси, venn: пересечение
+  const meta = spec.meta || {};
+  if (spec.kind === "matrix") {
+    form.appendChild(dgmTextField("Ось X (горизонталь)", "x_axis", meta.x_axis, 40));
+    form.appendChild(dgmTextField("Ось Y (вертикаль)", "y_axis", meta.y_axis, 40));
+  } else if (spec.kind === "venn") {
+    form.appendChild(dgmTextField("Подпись пересечения", "center_label", meta.center_label, 60));
+  }
+
   // Узлы
   const nodesWrap = document.createElement("div");
   nodesWrap.className = "field";
@@ -1251,18 +1305,21 @@ function renderDiagramPanel(slide) {
   nodeList.id = "dgmNodeList";
   (spec.nodes || []).forEach((n) => nodeList.appendChild(dgmNodeRow(spec.kind, n)));
   nodesWrap.appendChild(nodeList);
-  const addNode = document.createElement("button");
-  addNode.type = "button"; addNode.className = "btn btn-ghost btn-sm";
-  addNode.textContent = "+ узел";
-  addNode.onclick = () => {
-    if (nodeList.children.length >= DGM_MAX_NODES) return;
-    const row = dgmNodeRow(spec.kind, { id: dgmNewId(), label: "" });
-    nodeList.appendChild(row);
-    refreshDgmEdgeSelects();
-    row.querySelector('[data-dgm="label"]')?.focus(); // сейв — на первый ввод
-  };
-  nodesWrap.appendChild(addNode);
-  nodesWrap.appendChild(hint(`до ${DGM_MAX_NODES} узлов`));
+  const rules = DGM_NODE_RULES[spec.kind] || { min: 1, max: DGM_MAX_NODES };
+  if (rules.max > (spec.nodes || []).length || rules.max > rules.min) {
+    const addNode = document.createElement("button");
+    addNode.type = "button"; addNode.className = "btn btn-ghost btn-sm";
+    addNode.textContent = "+ узел";
+    addNode.onclick = () => {
+      if (nodeList.children.length >= rules.max) return;
+      const row = dgmNodeRow(spec.kind, { id: dgmNewId(), label: "" });
+      nodeList.appendChild(row);
+      refreshDgmEdgeSelects();
+      row.querySelector('[data-dgm="label"]')?.focus(); // сейв — на первый ввод
+    };
+    nodesWrap.appendChild(addNode);
+  }
+  nodesWrap.appendChild(hint(rules.hint || `до ${rules.max} узлов`));
   form.appendChild(nodesWrap);
 
   // Связи — только у типов, где рёбра задаются руками
@@ -1352,7 +1409,7 @@ function dgmNodeRow(kind, n) {
   label.dataset.dgm = "label";
   label.oninput = () => { refreshDgmEdgeSelects(); scheduleSave(); };
   row.appendChild(label);
-  if (kind === "funnel") {
+  if (DGM_VALUE_KINDS.includes(kind)) {
     const val = document.createElement("input");
     val.placeholder = "число";
     val.maxLength = 12;
@@ -1361,6 +1418,16 @@ function dgmNodeRow(kind, n) {
     val.dataset.dgm = "value";
     val.oninput = scheduleSave;
     row.appendChild(val);
+  }
+  if (DGM_LANE_KINDS[kind]) {
+    const lane = document.createElement("input");
+    lane.placeholder = DGM_LANE_KINDS[kind] + " *";
+    lane.maxLength = 40;
+    lane.className = "dgm-lane";
+    lane.value = n.lane == null ? "" : String(n.lane);
+    lane.dataset.dgm = "lane";
+    lane.oninput = scheduleSave;
+    row.appendChild(lane);
   }
   const acc = document.createElement("label");
   acc.className = "dgm-acc";
@@ -1373,12 +1440,14 @@ function dgmNodeRow(kind, n) {
   acc.appendChild(cb);
   acc.appendChild(document.createTextNode("акцент"));
   row.appendChild(acc);
-  const del = document.createElement("button");
-  del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
-  del.textContent = "✕";
-  del.title = "Удалить узел";
-  del.onclick = () => { row.remove(); refreshDgmEdgeSelects(); scheduleSave(); };
-  row.appendChild(del);
+  if (kind !== "matrix") {   // у матрицы ровно 4 квадранта — удалять нечего
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
+    del.textContent = "✕";
+    del.title = "Удалить узел";
+    del.onclick = () => { row.remove(); refreshDgmEdgeSelects(); scheduleSave(); };
+    row.appendChild(del);
+  }
   return row;
 }
 
@@ -1477,12 +1546,22 @@ function collectDiagramFields() {
     if (shape) n.shape = shape.value;
     const val = row.querySelector('[data-dgm="value"]');
     if (val) n.value = val.value.trim();
+    const lane = row.querySelector('[data-dgm="lane"]');
+    if (lane) n.lane = lane.value.trim();
     const acc = row.querySelector('[data-dgm="accent"]');
     if (acc) n.accent = acc.checked;
     nodes.push(n);
   });
   const ids = new Set(nodes.map((n) => n.id));
   const diagram = { ...base, nodes };
+  // meta-поля панели (оси матрицы, пересечение венна) — если построены
+  const metaPatch = {};
+  let metaTouched = false;
+  ["x_axis", "y_axis", "center_label"].forEach((k) => {
+    const el = form.querySelector(`[data-dgm="${k}"]`);
+    if (el) { metaPatch[k] = el.value.trim(); metaTouched = true; }
+  });
+  if (metaTouched) diagram.meta = { ...(base.meta || {}), ...metaPatch };
   if (form.querySelector("#dgmEdgeList")) {
     const edges = [];
     form.querySelectorAll(".dgm-edge-row").forEach((row) => {

@@ -133,8 +133,10 @@ def test_fill_slide_routes_diagram_and_maps_error_to_fill_error(library):
 
 def test_system_prompt_lists_only_available_kinds():
     """Промпт собирается из каталога: реализованные типы в меню, будущие — нет
-    (иначе модель выбирала бы matrix, которого движок не нарисует)."""
+    (иначе модель выбирала бы gantt_lite, которого движок не нарисует)."""
     s = diagram_filler.DIAGRAM_SYSTEM
-    for kind in ("flowchart", "process", "cycle", "funnel", "hierarchy"):
+    for kind in ("flowchart", "process", "cycle", "funnel", "hierarchy",
+                 "matrix", "pyramid", "hub_spoke", "comparison", "venn",
+                 "swimlanes"):
         assert f"- {kind}:" in s
-    assert "matrix" not in s and "venn" not in s
+    assert "gantt_lite" not in s and "mindmap" not in s

@@ -10,9 +10,10 @@ from htmlslides.diagrams import (AVAILABLE_KINDS, CANVAS_H, CANVAS_W,
 
 
 # ── сэмплы каталога = живой контракт ─────────────────────────────────────────
-def test_available_kinds_wave1():
+def test_available_kinds_waves_1_2():
     assert AVAILABLE_KINDS == ("flowchart", "process", "cycle", "funnel",
-                               "hierarchy")
+                               "hierarchy", "matrix", "pyramid", "hub_spoke",
+                               "comparison", "venn", "swimlanes")
 
 
 @pytest.mark.parametrize("kind", AVAILABLE_KINDS)
@@ -29,7 +30,7 @@ def test_sample_spec_returns_copy():
 
 def test_sample_spec_unimplemented_raises():
     with pytest.raises(KeyError):
-        sample_spec("matrix")     # волна 2 — карточка есть, сэмпла нет
+        sample_spec("gantt_lite")  # волна 3 — карточка есть, сэмпла нет
     with pytest.raises(KeyError):
         sample_spec("nonsense")
 
@@ -40,7 +41,8 @@ def test_catalog_for_ui_shape():
     by_kind = {c["kind"]: c for c in cat}
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
-    assert by_kind["matrix"]["available"] is False
+    assert by_kind["matrix"]["available"] is True
+    assert by_kind["gantt_lite"]["available"] is False
     assert all(c["when_to_use"] for c in cat)
 
 
@@ -143,6 +145,61 @@ def test_hierarchy_parent_cycle_rejected():
                        "edges": [{"from": "a", "to": "b"},
                                  {"from": "b", "to": "a"}]})
     assert any("цикл" in e for e in ei.value.errors)
+
+
+def test_matrix_requires_exactly_four_nodes():
+    raw = sample_spec("matrix")
+    raw["nodes"] = raw["nodes"][:3]
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram(raw)
+    assert any("ровно 4" in e for e in ei.value.errors)
+
+
+def test_pyramid_min_three():
+    with pytest.raises(DiagramValidationError):
+        parse_diagram({"kind": "pyramid", "nodes": [{"id": "a"}, {"id": "b"}]})
+
+
+def test_hub_spoke_min_three():
+    with pytest.raises(DiagramValidationError):
+        parse_diagram({"kind": "hub_spoke", "nodes": [{"id": "a"}, {"id": "b"}]})
+
+
+def test_comparison_lane_rules():
+    # без lane — ошибка
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "comparison",
+                       "nodes": [{"id": "a", "lane": "Слева"}, {"id": "b"}]})
+    assert any("lane" in e for e in ei.value.errors)
+    # три стороны — ошибка
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "comparison",
+                       "nodes": [{"id": "a", "lane": "X"},
+                                 {"id": "b", "lane": "Y"},
+                                 {"id": "c", "lane": "Z"}]})
+    assert any("ровно 2 стороны" in e for e in ei.value.errors)
+
+
+def test_venn_two_or_three():
+    with pytest.raises(DiagramValidationError):
+        parse_diagram({"kind": "venn", "nodes": [{"id": "a"}]})
+    raw = sample_spec("venn")
+    raw["nodes"] = [{"id": f"v{i}"} for i in range(4)]
+    with pytest.raises(DiagramValidationError):
+        parse_diagram(raw)
+
+
+def test_swimlanes_lane_rules():
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "swimlanes",
+                       "nodes": [{"id": "a", "lane": "Инженер"}, {"id": "b"}]})
+    assert any("lane" in e for e in ei.value.errors)
+    # одна дорожка — мало
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "swimlanes",
+                       "nodes": [{"id": "a", "lane": "X"},
+                                 {"id": "b", "lane": "X"}]})
+    assert any("дорожек" in e for e in ei.value.errors)
 
 
 def test_flowchart_sample_contains_back_edge():

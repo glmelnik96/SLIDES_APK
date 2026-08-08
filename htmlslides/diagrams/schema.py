@@ -190,8 +190,97 @@ class HierarchySpec(_BaseSpec):
         return errors
 
 
+def _lanes(nodes) -> list[str]:
+    """Дорожки в порядке первого появления (порядок = порядок колонок/рядов)."""
+    seen: list[str] = []
+    for n in nodes:
+        if n.lane not in seen:
+            seen.append(n.lane)
+    return seen
+
+
+class MatrixSpec(_BaseSpec):
+    """Матрица 2×2: ровно 4 узла-квадранта в порядке верх-лево, верх-право,
+    низ-лево, низ-право; подписи осей — meta.x_axis / meta.y_axis."""
+    kind: Literal["matrix"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if len(self.nodes) != 4:
+            errors.append("matrix требует ровно 4 узла (по одному на квадрант: "
+                          "верх-лево, верх-право, низ-лево, низ-право)")
+        return errors
+
+
+class PyramidSpec(_BaseSpec):
+    """Пирамида: узлы сверху вниз (вершина первой), минимум 3 уровня."""
+    kind: Literal["pyramid"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if len(self.nodes) < 3:
+            errors.append("pyramid требует минимум 3 уровня")
+        return errors
+
+
+class HubSpokeSpec(_BaseSpec):
+    """Хаб и лучи: первый узел — центр, остальные — вокруг. Рёбра опциональны
+    (без них движок сам соединяет центр с каждым лучом)."""
+    kind: Literal["hub_spoke"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if len(self.nodes) < 3:
+            errors.append("hub_spoke требует минимум 3 узла (центр и два луча)")
+        return errors
+
+
+class ComparisonSpec(_BaseSpec):
+    """Сравнение сторон: у каждого узла lane = название стороны, сторон ровно 2."""
+    kind: Literal["comparison"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if any(not n.lane for n in self.nodes):
+            errors.append("comparison: у каждого узла должен быть lane — "
+                          "название его стороны")
+        elif len(_lanes(self.nodes)) != 2:
+            errors.append("comparison требует ровно 2 стороны "
+                          f"(разных lane), сейчас {len(_lanes(self.nodes))}")
+        return errors
+
+
+class VennSpec(_BaseSpec):
+    """Венн: 2–3 узла-множества; подпись пересечения — meta.center_label."""
+    kind: Literal["venn"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if not 2 <= len(self.nodes) <= 3:
+            errors.append("venn требует 2 или 3 узла-множества")
+        return errors
+
+
+class SwimlanesSpec(_BaseSpec):
+    """Дорожки процесса: lane = исполнитель шага (2–5 дорожек); рёбра задают
+    порядок шагов (без них порядок = список узлов)."""
+    kind: Literal["swimlanes"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if any(not n.lane for n in self.nodes):
+            errors.append("swimlanes: у каждого узла должен быть lane — "
+                          "исполнитель шага")
+        elif not 2 <= len(_lanes(self.nodes)) <= MAX_GROUPS:
+            errors.append(f"swimlanes требует 2–{MAX_GROUPS} дорожек (разных "
+                          f"lane), сейчас {len(_lanes(self.nodes))}")
+        return errors
+
+
 DiagramSpec = Annotated[
-    Union[FlowchartSpec, ProcessSpec, CycleSpec, FunnelSpec, HierarchySpec],
+    Union[FlowchartSpec, ProcessSpec, CycleSpec, FunnelSpec, HierarchySpec,
+          MatrixSpec, PyramidSpec, HubSpokeSpec, ComparisonSpec, VennSpec,
+          SwimlanesSpec],
     Field(discriminator="kind"),
 ]
 

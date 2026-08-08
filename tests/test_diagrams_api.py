@@ -27,10 +27,12 @@ def test_catalog_lists_all_types_with_availability(monkeypatch, tmp_path):
     by_kind = {t["kind"]: t for t in cat}
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
-    assert by_kind["matrix"]["available"] is False       # волна 2 — «скоро»
+    assert by_kind["matrix"]["available"] is True        # волна 2 реализована
+    assert by_kind["gantt_lite"]["available"] is False   # волна 3 — «скоро»
     # sample питает материализацию типа в поля слайда на клиенте
     assert by_kind["flowchart"]["sample"]["kind"] == "flowchart"
-    assert by_kind["matrix"]["sample"] is None
+    assert by_kind["matrix"]["sample"]["kind"] == "matrix"
+    assert by_kind["gantt_lite"]["sample"] is None
     for t in cat:
         assert t["display_name"] and t["when_to_use"]
 
@@ -56,6 +58,6 @@ def test_kind_preview_404_on_unknown_and_unimplemented(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/api/diagrams/nope/preview",
                      headers=H()).status_code == 404
-        # matrix есть в каталоге, но ещё не реализована — превью нет
-        assert c.get("/api/diagrams/matrix/preview",
+        # gantt_lite есть в каталоге, но ещё не реализована — превью нет
+        assert c.get("/api/diagrams/gantt_lite/preview",
                      headers=H()).status_code == 404

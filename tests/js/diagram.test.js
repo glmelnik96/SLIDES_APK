@@ -179,9 +179,112 @@ test("applyOffsets: без offsets — только кламп, позиции �
   assert.strictEqual(pos.a.y, 360);
 });
 
-test("LAYOUTS покрывает все типы волны 1", () => {
+/* ---------------- волна 2 ---------------- */
+
+test("layoutMatrix: 4 карточки по квадрантам в порядке чтения", () => {
+  const spec = { kind: "matrix", nodes: ["q1", "q2", "q3", "q4"].map((id) => ({ id })) };
+  const { nodes: pos, links } = D.layoutMatrix(spec);
+  inCanvas(pos);
+  assert.strictEqual(links.length, 0);
+  assert.ok(pos.q1.x < W / 2 && pos.q1.y < H / 2);   // верх-лево
+  assert.ok(pos.q2.x > W / 2 && pos.q2.y < H / 2);   // верх-право
+  assert.ok(pos.q3.x < W / 2 && pos.q3.y > H / 2);   // низ-лево
+  assert.ok(pos.q4.x > W / 2 && pos.q4.y > H / 2);   // низ-право
+});
+
+test("layoutPyramid: ширины растут сверху вниз, совместимо с renderFunnel", () => {
+  const spec = { kind: "pyramid", nodes: [{ id: "p1" }, { id: "p2" }, { id: "p3" }] };
+  const { nodes: pos } = D.layoutPyramid(spec);
+  inCanvas(pos);
+  assert.ok(pos.p1.y < pos.p2.y && pos.p2.y < pos.p3.y);   // вершина сверху
+  assert.ok(pos.p1.w < pos.p2.w && pos.p2.w < pos.p3.w);
+  // каждый слой — трапеция, низ шире верха; стыки слоёв сходятся
+  assert.ok(pos.p1.wBottom > pos.p1.w);
+  assert.ok(Math.abs(pos.p1.wBottom - pos.p2.w) < 1);
+});
+
+test("layoutHubSpoke: первый узел в центре, лучи вокруг, авто-линки", () => {
+  const spec = { kind: "hub_spoke",
+    nodes: [{ id: "hub" }, { id: "a" }, { id: "b" }, { id: "c" }] };
+  const { nodes: pos, links } = D.layoutHubSpoke(spec);
+  inCanvas(pos);
+  assert.strictEqual(pos.hub.x, W / 2);
+  assert.strictEqual(pos.hub.y, H / 2);
+  assert.deepStrictEqual(links.map((l) => l.from + "→" + l.to).sort(),
+    ["hub→a", "hub→b", "hub→c"]);
+  // стрелка обрезана по границам карточек: не начинается в самом центре хаба
+  links.forEach((l) => {
+    assert.strictEqual(l.points.length, 2);
+    const [x0, y0] = l.points[0];
+    assert.ok(Math.abs(x0 - W / 2) > 1 || Math.abs(y0 - H / 2) > 1);
+  });
+});
+
+test("layoutComparison: две колонки по lane, элементы стопкой", () => {
+  const spec = { kind: "comparison", nodes: [
+    { id: "a1", lane: "До" }, { id: "a2", lane: "До" },
+    { id: "b1", lane: "После" }, { id: "b2", lane: "После" },
+  ] };
+  const out = D.layoutComparison(spec);
+  inCanvas(out.nodes);
+  assert.deepStrictEqual(out.lanes, ["До", "После"]);
+  assert.ok(out.nodes.a1.x < W / 2 && out.nodes.b1.x > W / 2);
+  assert.strictEqual(out.nodes.a1.x, out.nodes.a2.x);       // колонка
+  assert.ok(out.nodes.a1.y < out.nodes.a2.y);               // стопка
+});
+
+test("layoutVenn: 2 и 3 круга, метки оттянуты от центра относительно", () => {
+  const two = { kind: "venn", nodes: [{ id: "v1" }, { id: "v2" }] };
+  const p2 = D.layoutVenn(two).nodes;
+  assert.ok(p2.v1.x < p2.v2.x && p2.v1.r > 0);
+  assert.ok(p2.v1.labelDx < 0 && p2.v2.labelDx > 0);        // наружу
+  // круги пересекаются: расстояние центров меньше суммы радиусов
+  assert.ok(p2.v2.x - p2.v1.x < p2.v1.r + p2.v2.r);
+
+  const three = { kind: "venn", nodes: [{ id: "a" }, { id: "b" }, { id: "c" }] };
+  const p3 = D.layoutVenn(three).nodes;
+  assert.ok(p3.a.y < p3.b.y && Math.abs(p3.b.y - p3.c.y) < 1);
+});
+
+test("layoutSwimlanes: ряды по lane, ранги по рёбрам, коллизии разведены", () => {
+  const spec = { kind: "swimlanes", nodes: [
+    { id: "w1", lane: "Клиент" }, { id: "w2", lane: "Инженер" },
+    { id: "w3", lane: "Инженер" }, { id: "w4", lane: "Клиент" },
+  ], edges: [
+    { from: "w1", to: "w2" }, { from: "w2", to: "w3" }, { from: "w3", to: "w4" },
+  ] };
+  const out = D.layoutSwimlanes(spec);
+  inCanvas(out.nodes);
+  assert.deepStrictEqual(out.lanes, ["Клиент", "Инженер"]);
+  assert.strictEqual(out.nodes.w1.y, out.nodes.w4.y);       // одна дорожка
+  assert.strictEqual(out.nodes.w2.y, out.nodes.w3.y);
+  assert.ok(out.nodes.w1.y !== out.nodes.w2.y);
+  assert.ok(out.nodes.w1.x < out.nodes.w2.x && out.nodes.w2.x < out.nodes.w3.x);
+  assert.strictEqual(out.links.length, 3);
+});
+
+test("layoutSwimlanes: без рёбер — порядок списка, последовательные линки", () => {
+  const spec = { kind: "swimlanes", nodes: [
+    { id: "a", lane: "X" }, { id: "b", lane: "Y" }, { id: "c", lane: "X" },
+  ] };
+  const out = D.layoutSwimlanes(spec);
+  assert.ok(out.nodes.a.x < out.nodes.b.x && out.nodes.b.x < out.nodes.c.x);
+  assert.deepStrictEqual(out.links.map((l) => l.from + "→" + l.to), ["a→b", "b→c"]);
+});
+
+test("layoutSwimlanes: одинаковый ранг в одной дорожке не слипается", () => {
+  // ветвление: b и c оба ранга 1, обе в дорожке Y — вторую разводим вправо
+  const spec = { kind: "swimlanes", nodes: [
+    { id: "a", lane: "X" }, { id: "b", lane: "Y" }, { id: "c", lane: "Y" },
+  ], edges: [{ from: "a", to: "b" }, { from: "a", to: "c" }] };
+  const out = D.layoutSwimlanes(spec);
+  assert.ok(out.nodes.b.x !== out.nodes.c.x);
+});
+
+test("LAYOUTS покрывает все типы волн 1–2", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
-    ["cycle", "flowchart", "funnel", "hierarchy", "process"]);
+    ["comparison", "cycle", "flowchart", "funnel", "hierarchy", "hub_spoke",
+     "matrix", "process", "pyramid", "swimlanes", "venn"]);
 });
 
 test("CANVAS синхронизирован со схемой (1800×720)", () => {
