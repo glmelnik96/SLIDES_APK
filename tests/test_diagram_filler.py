@@ -95,7 +95,7 @@ def test_still_invalid_after_retry_raises_diagram_fill_error(library):
     client = FakeClient([bad, bad])
     with pytest.raises(DiagramFillError) as err:
         fill_diagram(client, library, _slide(), deck_title="Дека")
-    assert "3 узла" in str(err.value) or "узл" in str(err.value)
+    assert "от 3 до" in str(err.value) and "стадий" in str(err.value)
 
 
 def test_title_cap_violation_also_retried(library):

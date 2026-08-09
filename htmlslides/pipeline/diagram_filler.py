@@ -16,9 +16,9 @@ import json
 from pydantic import BaseModel, Field
 
 from ..diagrams.catalog import CATALOG
-from ..diagrams.schema import (MAX_DURATION, MAX_EDGE_LABEL, MAX_EDGES,
-                               MAX_GANTT_ROWS, MAX_ID, MAX_LABEL, MAX_LANE,
-                               MAX_NODES, MAX_STEPS, MAX_VALUE,
+from ..diagrams.schema import (MAX_CYCLE, MAX_DURATION, MAX_EDGE_LABEL,
+                               MAX_EDGES, MAX_GANTT_ROWS, MAX_ID, MAX_LABEL,
+                               MAX_LANE, MAX_NODES, MAX_STEPS, MAX_VALUE,
                                DiagramValidationError, parse_diagram)
 from ..library import TemplateLibrary
 from ..models import SlidePlan
@@ -96,6 +96,7 @@ DIAGRAM_SYSTEM = f"""\
 - Правила отдельных типов:
   matrix — ровно 4 узла в порядке квадрантов (верх-лево, верх-право, низ-лево,
   низ-право); подписи осей — meta: {{"x_axis","y_axis"}}.
+  cycle — 3–{MAX_CYCLE} стадий по кругу, стрелки идут по порядку списка.
   pyramid — узлы сверху вниз, вершина первой (3+ уровней).
   hub_spoke — ПЕРВЫЙ узел = центр, остальные — лучи; рёбра не нужны.
   comparison — у каждого узла lane = название одной из ДВУХ сторон.

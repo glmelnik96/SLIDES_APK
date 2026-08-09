@@ -7,6 +7,7 @@ from htmlslides.diagrams import (AVAILABLE_KINDS, CANVAS_H, CANVAS_W,
                                  DiagramValidationError, catalog_for_ui,
                                  get_type, parse_diagram, sample_spec,
                                  spec_json, validate_diagram)
+from htmlslides.diagrams.schema import MAX_CYCLE
 
 
 # ── сэмплы каталога = живой контракт ─────────────────────────────────────────
@@ -137,6 +138,22 @@ def test_nodes_without_label_are_rejected():
 def test_cycle_min_three():
     with pytest.raises(DiagramValidationError):
         parse_diagram({"kind": "cycle", "nodes": [{"id": "a"}, {"id": "b"}]})
+
+
+def test_cycle_max_eight():
+    """Каталог обещает пикеру и промпту «3–8 стадий по кругу», а схема пускала
+    все 12 — и кольцо разваливалось молча: дуга между соседними плашками на
+    эллипсе 1800×720 сжимается с 76px (восемь стадий) до 19px (двенадцать), а
+    наконечник стрелки — 21px. На слайде оставались оторванные треугольники без
+    древка, будто часть связей потерялась."""
+    def stages(count):
+        return [{"id": f"n{i}", "label": f"Стадия {i}"} for i in range(count)]
+
+    assert len(parse_diagram({"kind": "cycle",
+                              "nodes": stages(MAX_CYCLE)}).nodes) == MAX_CYCLE
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "cycle", "nodes": stages(MAX_CYCLE + 1)})
+    assert any(f"от 3 до {MAX_CYCLE}" in e for e in ei.value.errors)
 
 
 def test_funnel_min_two():

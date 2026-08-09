@@ -93,8 +93,15 @@ test("diagramClaims: у типов без рёбер одиночные узлы
 
 test("diagramClaims: счётные капы типов", () => {
   const only = (spec) => diagramClaims(spec)[0] || "";
-  assert.match(only({ kind: "cycle", nodes: [{ id: "a", label: "Раз" }] }),
-    /минимум 3 шага — сейчас 1/);
+  const stages = (n) => Array.from({ length: n },
+    (_, i) => ({ id: "n" + i, label: "Стадия " + i }));
+  assert.match(only({ kind: "cycle", nodes: stages(1) }),
+    /от 3 до 8 шагов — сейчас 1/);
+  // Верхний кап цикла тоже счётный: с девяти стадий дуга между плашками короче
+  // наконечника стрелки, кольцо рассыпается на оторванные треугольники.
+  assert.match(only({ kind: "cycle", nodes: stages(9) }),
+    /от 3 до 8 шагов — сейчас 9/);
+  assert.strictEqual(diagramClaims({ kind: "cycle", nodes: stages(8) }).length, 0);
   assert.match(only({ kind: "matrix",
     nodes: [1, 2, 3].map((i) => ({ id: "n" + i, label: "У" + i })) }),
     /ровно 4 квадранта — сейчас 3/);
