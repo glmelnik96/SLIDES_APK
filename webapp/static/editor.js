@@ -8,7 +8,8 @@ const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built d
 const isDraft = mode === "manual" || mode === "chat";
 // «Стеклянная» сборка поверх ручного черновика: клиент крутит цикл /glass/step,
 // лента тамбов растёт, сомнительные слайды ждут ответа в панели вопросов.
-const isGlass = params.get("glass") === "1" && mode === "manual";
+// Не const: степпер включается ещё и по СОСТОЯНИЮ плана — см. resumeGlassIfUnfinished().
+let isGlass = params.get("glass") === "1" && mode === "manual";
 // К§6 — двойная буферизация превью: два iframe'а на одном месте. loadDeck() грузит
 // следующий кадр в СКРЫТЫЙ буфер, по load меняет их местами классом .hidden и
 // переключает указатель frame — между сейвами нет чёрного кадра. deckT — единый
@@ -1341,7 +1342,9 @@ function charCounter(el, max) {
   const h = hint("");
   const upd = () => {
     const n = (el.value || "").length;
-    h.textContent = `${n}/${max}`;
+    // Красного числа мало: сервер режет текст ЖЁСТКО по символу, и человек видит
+    // на слайде обрубок посреди слова, не связывая его со счётчиком.
+    h.textContent = n > max ? `${n}/${max} — на слайде обрежется` : `${n}/${max}`;
     h.classList.toggle("field-hint--over", n > max);
   };
   el.addEventListener("input", upd);
@@ -3403,9 +3406,24 @@ disableChatEditing(); // сразу гасим чат-контролы, чтоб
 
 // Повторно после инициализации: в chat-режиме setupChatMode() возвращает чату
 // активный вид — .finally перекрывает его обратно в «в разработке» (и на ошибке init).
+/* Аутлайн, который ещё не дозаполнен: слайд знает свою тему, но пуст. Ровно этот
+   признак сервер считает «незавершённой сборкой» (glass.unfinished_outlines).
+   Чат-режим сюда не попадает: там аутлайн доводит кнопка «Заполнить слайды». */
+function hasUnfinishedOutline() {
+  return mode === "manual" && !!draftPlan && Array.isArray(draftPlan.slides)
+    && draftPlan.slides.some((s) => s.brief && !s.filled);
+}
+
 if (isDraft) {
   initDraftBuilder().then(initEditor)
-    .then(() => { if (isGlass) startGlassMode(); })
+    .then(() => {
+      // «Продолжить» в списке проектов ведёт на /editor?session=…&mode=manual —
+      // БЕЗ ?glass=1. Раньше это открывало мёртвый черновик: «?» на миниатюре
+      // есть, слайды пустые, а степпера нет и дозаполнить нечем. Решаем по плану,
+      // а не по адресу: сборка продолжается с любого входа, включая закладку.
+      if (!isGlass && hasUnfinishedOutline()) isGlass = true;
+      if (isGlass) startGlassMode();
+    })
     .finally(disableChatEditing);
 }
 else { Promise.resolve(initEditor()).finally(disableChatEditing); }

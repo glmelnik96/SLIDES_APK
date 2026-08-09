@@ -154,6 +154,26 @@ def test_start_glass_builds_outline_without_filling(monkeypatch, tmp_path):
     assert (session_dir("s1") / "deck.html").is_file()
 
 
+def test_cover_keeps_the_whole_document_title(monkeypatch, tmp_path):
+    """Длинное название не режется посреди слова: заголовок обложки узкий, хвост
+    уходит в подзаголовок (иначе первый слайд деки — обрубок и текст-рыба)."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    long_title = "Программа модернизации логистического оператора «Северный путь»"
+    src.write_text(f"# {long_title}\n\n## Раздел\n\nТекст про метрики.\n",
+                   encoding="utf-8")
+    plan = glass.start_glass("cov", src, client=FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                            confidence=0.9)])]), workers=1)
+
+    from htmlslides.library import TemplateLibrary
+    cap = TemplateLibrary.load().get("cover").slots["title"].max_chars
+    cover = plan.slides[0].content
+    assert len(cover["title"]) <= cap
+    assert long_title[len(cover["title"])] == " "   # разрез по границе слова
+    assert cover["title"] + " " + cover["subtitle"] == long_title
+
+
 def test_start_glass_names_the_scoring_failure(monkeypatch, tmp_path):
     """Сбой скоринга не маскируется под вопрос ИИ: у слайда честный текст про
     осечку модели, а не «раздел ложится в несколько макетов» при одном чипе."""

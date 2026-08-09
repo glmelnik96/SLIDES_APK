@@ -192,6 +192,32 @@ def unfinished_outlines(session_ids: Iterable[str]) -> int:
     return n
 
 
+def _cover_content(title: str, library: Any) -> dict:
+    """Название документа → слоты обложки.
+
+    Слот заголовка узкий (у «Обложки» 20 симв. — он рисуется огромным капсом), а
+    названия документов длинные, и раньше сюда клался весь заголовок целиком:
+    рендер резал его ЖЁСТКО по символу («ПРОГРАММА МОДЕРНИЗАЦ»), а подзаголовок
+    оставался пустым и подставлялся примером — первый слайд деки выходил
+    обрубленным и с текстом-рыбой. Режем по границе слова, хвост уводим в
+    подзаголовок: обложка читается как две строки и ничего не теряет."""
+    slots = library.get("cover").slots
+    cap = slots["title"].max_chars or 0
+    sub_cap = slots["subtitle"].max_chars or 0
+    text = " ".join((title or "").split())
+    if not (cap and len(text) > cap):
+        return {"title": text}
+    cut = text[:cap]
+    if " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    head = cut or text[:cap]
+    tail = text[len(head):].strip()
+    out = {"title": head}
+    if tail:
+        out["subtitle"] = tail[:sub_cap] if sub_cap else tail
+    return out
+
+
 def start_glass(session_id: str, source: Path, *, client: Any | None = None,
                 workers: int = 4) -> draft.DraftPlan:
     """Документ → прозрачный аутлайн: обложка + слайд на раздел с кандидатами.
@@ -220,7 +246,7 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
         pool.shutdown()
 
     slides = [draft.DraftSlide(template_id="cover",
-                               content={"title": title}, filled=True)]
+                               content=_cover_content(title, library), filled=True)]
     for section, choice in zip(sections, choices):
         doubt = _doubtful(choice)
         slides.append(draft.DraftSlide(
