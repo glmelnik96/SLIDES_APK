@@ -506,6 +506,52 @@ test("render: подписи связей графа не заезжают на 
   });
 });
 
+test("render: подписи ветвей карты не заезжают на плашки и не мельчают в огрызок", () => {
+  // Ветвь карты идёт из края родителя в край ребёнка, между ними — просвет
+  // колонки в 40px против блока метки в 200: «при положит…» съедала ветвь,
+  // «…решении» — родитель. Лечение двухслойное, и проверяем ОБА слоя:
+  // раскладка сужает плашки, освобождая просвет под подпись, а сама подпись
+  // ограничена шириной просвета и потому физически не может лечь на плашку.
+  const spec = {
+    kind: "mindmap",
+    nodes: [{ id: "core", label: "Платформа" },
+            { id: "inf", label: "Инфраструктура" }, { id: "data", label: "Данные" },
+            { id: "team", label: "Команда" }, { id: "sec", label: "Безопасность" },
+            { id: "k8s", label: "Kubernetes" }, { id: "db", label: "Хранилища" }],
+    edges: [{ from: "core", to: "inf" }, { from: "core", to: "data" },
+            { from: "core", to: "team" }, { from: "core", to: "sec" },
+            { from: "inf", to: "k8s" }, { from: "data", to: "db" }]
+      .map((e) => ({ ...e, label: "при положительном решении" })),
+  };
+  const host = fakeHost();
+  D.render(host, spec);
+  const out = D.layoutMindmap(spec);
+  const texts = host.innerHTML.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
+  assert.strictEqual(texts.length, spec.edges.length, "подписи ветвей потерялись");
+  texts.forEach((t, i) => {
+    const link = out.links[i];
+    const x = Number(t.match(/x="([\d.-]+)"/)[1]);
+    const y = Number(t.match(/y="([\d.-]+)"/)[1]);
+    const fs = Number(t.match(/font-size="([\d.-]+)"/)[1]);
+    const lines = (t.match(/<tspan[^>]*>([^<]*)<\/tspan>/g) || [])
+      .map((s) => s.replace(/<[^>]*>/g, ""));
+    // Просвет должен быть заложен в раскладке: подпись обязана уместиться
+    // ЦЕЛИКОМ. Без запаса она честно оборвётся многоточием — тоже не ложь, но
+    // читателю от «при…» на ветви никакой пользы.
+    assert.strictEqual(lines.join(" "), "при положительном решении",
+                       "подпись ветви усохла до огрызка");
+    const w = Math.max(...lines.map((s) => s.length)) * fs * 0.6;
+    const lead = Math.round(fs * 1.16);
+    const box = { x0: x - w / 2, x1: x + w / 2,
+                  y0: y - fs, y1: y + (lines.length - 1) * lead };
+    [out.nodes[link.from], out.nodes[link.to]].forEach((p) => {
+      const over = box.x0 < p.x + p.w / 2 && box.x1 > p.x - p.w / 2 &&
+                   box.y0 < p.y + p.h / 2 && box.y1 > p.y - p.h / 2;
+      assert.ok(!over, `подпись «${lines.join(" ")}» легла на плашку`);
+    });
+  });
+});
+
 test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
     ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",
