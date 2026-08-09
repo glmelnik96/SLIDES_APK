@@ -78,14 +78,6 @@
                 <span class="opt-desc">Весь текст переносится дословно &mdash; меняется только оформление.</span>
               </span>
             </label>
-            <label class="opt-row">
-              <input type="checkbox" id="glassMode" class="opt-check">
-              <span class="opt-box" aria-hidden="true"></span>
-              <span class="opt-text">
-                <span class="opt-title">Прозрачная сборка</span>
-                <span class="opt-desc">Слайды заполняются по одному у вас на глазах. Там, где ИИ сомневается, он задаст вопрос &mdash; сборка при этом не остановится.</span>
-              </span>
-            </label>
             <!-- доступность сервиса ИИ: роли моделей + возраст проверки -->
             <div class="mhealth" id="modelHealth" data-state="unknown" hidden>
               <div class="mhealth-inds">
@@ -95,7 +87,19 @@
               <div class="mhealth-note" id="mhNote"></div>
               <div class="mhealth-age" id="mhAge"></div>
             </div>
-            <button id="create" class="btn btn-lg btn-accent" aria-describedby="createHint" disabled>Создать презентацию</button>
+            <!-- Два равнозначных пути, а не галочка при кнопке: раньше пошаговая
+                 сборка пряталась опцией у «Создать презентацию» и читалась как
+                 второстепенная настройка, хотя это другой процесс целиком. -->
+            <div class="start-modes">
+              <button id="create" class="btn start-mode" aria-describedby="createHint" disabled>
+                <span class="start-mode__name">Быстрая сборка</span>
+                <span class="start-mode__desc">ИИ сам решит, что и на каком макете разместить. Вы получаете готовую презентацию и правите её в редакторе.</span>
+              </button>
+              <button id="createGlass" class="btn start-mode" aria-describedby="createHint" disabled>
+                <span class="start-mode__name">Пошаговая сборка</span>
+                <span class="start-mode__desc">Слайды заполняются по одному у вас на глазах. Там, где макет неочевиден, ИИ остановится и спросит &mdash; и править можно прямо по ходу.</span>
+              </button>
+            </div>
             <div class="field-hint" id="createHint">Сначала выберите файл</div>
           </div>
         </div>

@@ -82,12 +82,21 @@ let selectedFile = null;
 const drop = $("#drop");
 const fileInput = $("#file");
 
+// Стартов два и они равнозначны — гасим и включаем их только парой: файл нужен
+// обоим, и «одна кнопка живая, вторая нет» читалось бы как разница между ними.
+function setStartEnabled(on) {
+  ["#create", "#createGlass"].forEach((sel) => {
+    const b = $(sel);
+    if (b) b.disabled = !on;
+  });
+}
+
 function resetFile() {
   selectedFile = null;
   fileInput.value = "";
   drop.classList.remove("has-file");
   $("#dropText").textContent = "Перетащите файл или нажмите, чтобы выбрать";
-  $("#create").disabled = true;
+  setStartEnabled(false);
   const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
   if (hint) hint.hidden = false;
 }
@@ -96,7 +105,7 @@ function setFile(file) {
   selectedFile = file;
   drop.classList.add("has-file");
   $("#dropText").textContent = "Файл: " + file.name;
-  $("#create").disabled = false;
+  setStartEnabled(true);
   const hint = $("#createHint");        // Г§7 — файл выбран → причина исчезла
   if (hint) hint.hidden = true;
 }
@@ -507,10 +516,6 @@ async function autoResumeActive() {
 // Г§8 — extracted so a failed card's «Повторить» can re-run the build directly.
 async function createJob(opts) {
   if (!selectedFile) return;
-  // «Прозрачная сборка» — свой путь: черновик + /glass/start вместо очереди
-  // раннера; слайды заполняются по одному уже в редакторе.
-  const glass = document.getElementById("glassMode");
-  if (glass && glass.checked) return createGlass();
   const force = !!(opts && opts.force);
   const ex = document.getElementById("exactTransfer");
   const isExact = !!(ex && ex.checked);
@@ -553,7 +558,7 @@ async function createJob(opts) {
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
   if (isExact) fd.append("exact_transfer", "true");
-  $("#create").disabled = true;
+  setStartEnabled(false);
   const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
   if (!res.ok) {
     // Surface the failure in the #result panel (own visual system, SB Sans),
@@ -571,7 +576,7 @@ async function createJob(opts) {
         : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`;
     }
     launchError("Не удалось запустить сборку", body);
-    $("#create").disabled = false;
+    setStartEnabled(true);
     return;
   }
   const { session_id, kind } = await res.json();
@@ -581,16 +586,20 @@ async function createJob(opts) {
 }
 // Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
 $("#create").onclick = () => createJob();
+$("#createGlass").onclick = () => createGlass();
 
-/* ---- прозрачная сборка: черновик + /glass/start → редактор со степпером ---- */
+/* ---- пошаговая сборка: черновик + /glass/start → редактор со степпером ---- */
 let glassStarting = false;
 async function createGlass() {
   if (!selectedFile || glassStarting) return;
   glassStarting = true;
-  const btn = $("#create");
-  const prevLabel = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = "Раскладываю документ на слайды…";
+  const btn = $("#createGlass");
+  // Кнопка — карточка из названия и описания: подменяем описание, а не весь
+  // textContent, иначе разметка схлопнется в строку и вернуть её будет нечем.
+  const desc = btn.querySelector(".start-mode__desc");
+  const prevDesc = desc ? desc.textContent : "";
+  setStartEnabled(false);
+  if (desc) desc.textContent = "Раскладываю документ на слайды…";
   try {
     const r = await fetch(U("/api/drafts"), {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -610,16 +619,16 @@ async function createGlass() {
     location.href = U(`/editor?session=${session_id}&mode=manual&glass=1`);
     return; // уходим со страницы — кнопку не воскрешаем
   } catch (e) {
-    launchError("Не удалось начать прозрачную сборку",
+    launchError("Не удалось начать пошаговую сборку",
       `<p>${esc(e && e.message ? e.message : String(e))}</p>`);
-    btn.disabled = false;
-    btn.textContent = prevLabel;
+    setStartEnabled(true);
+    if (desc) desc.textContent = prevDesc;
   } finally {
     glassStarting = false;
   }
 }
 
-/* ---- доступность сервиса ИИ (плашка над кнопкой «Создать») ---- */
+/* ---- доступность сервиса ИИ (плашка над кнопками старта) ---- */
 // Пробы стоят вызовов к провайдеру, поэтому в фоне не поллим: спрашиваем при
 // загрузке страницы и при возврате во вкладку, если данным больше TTL. Возраст
 // показываем живым таймером — зелёный индикатор часовой давности иначе читался бы

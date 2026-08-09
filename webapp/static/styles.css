@@ -439,6 +439,27 @@ a { color: var(--accent); }
   color: var(--muted); cursor: not-allowed; }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
 #createHint { margin-top: 8px; }  /* Г§7 — отступ хинта от полноширинной CTA */
+
+/* ===== Два старта: быстрая / пошаговая сборка =====
+   Кнопки равнозначны по весу — ни одна не «главная»: это не CTA и её настройка,
+   а два разных процесса. Отсюда одинаковая поверхность и размер; акцент несёт
+   только название, чтобы пара читалась как выбор, а не как основное-и-запасное. */
+/* Ряды 1fr — обе карточки высотой по большей: разная длина описаний иначе делала
+   одну кнопку заметно крупнее, а это ровно та разница в весе, которой тут нет. */
+.start-modes { display: grid; gap: 10px; grid-auto-rows: 1fr; }
+.start-mode { display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+  width: 100%; text-align: left; padding: 14px 16px; font-weight: 400; }
+.start-mode__name { font-family: var(--font-display); font-size: 16px; font-weight: 600;
+  color: var(--accent); line-height: var(--lh-tight); }
+.start-mode__desc { font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
+/* Ховер уводит в акцент весь блок — у .btn это делает color, а тут цвета заданы
+   потомкам, и без этого правила карточка на наведении не отзывалась бы. */
+.start-mode:hover { background: var(--surface-active); }
+.start-mode:hover .start-mode__desc { color: var(--text); }
+/* Нет файла — обе одинаково погашены: причина одна и написана в #createHint. */
+.start-mode:disabled .start-mode__name,
+.start-mode:disabled .start-mode__desc { color: var(--muted); }
+.start-mode:disabled .start-mode__desc { color: var(--muted-2); }
 .btn-ghost { background: var(--surface-active); color: var(--text); border: 1px solid transparent; }  /* совместимый алиас дефолта */
 .btn-ghost:hover { background: var(--surface-active); color: var(--accent); }
 /* Единственный носитель заливки акцентом */
@@ -1112,7 +1133,7 @@ a { color: var(--accent); }
   }
 }
 
-/* ===== Прозрачная сборка (?glass=1): статус степпера + вопросы ИИ ===== */
+/* ===== Пошаговая сборка (?glass=1): статус степпера + вопросы ИИ ===== */
 /* Панель живёт в .rpanel вместо табов «Поля | Чат»; канон v5 — поверхности без
    рамок: карточка вопроса --surface, чипы и поле уточнения --surface-inset. */
 .glass { flex: 1; min-height: 0; display: flex; flex-direction: column;

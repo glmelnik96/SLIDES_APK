@@ -3406,7 +3406,7 @@ function glassEnqueue(fn) {
 function startGlassMode() {
   glassRunning = true;
   const badge = byId("modeBadge");
-  if (badge) badge.textContent = "Прозрачная сборка";
+  if (badge) badge.textContent = "Пошаговая сборка";
   byId("rpanelTabs")?.classList.add("hidden");
   byId("builder")?.classList.add("hidden");
   document.querySelector(".chat")?.classList.add("hidden");
