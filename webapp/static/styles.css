@@ -876,6 +876,12 @@ a { color: var(--accent); }
   letter-spacing: .04em; color: #000; background: var(--accent);
   opacity: 0; transition: opacity .12s; }
 .picker-item:hover .picker-num { opacity: 1; }
+/* «Сейчас» — какой макет/тип стоит на слайде прямо сейчас. Без этой пометки пикер
+   был списком равных карточек и не отвечал на вопрос «а что у меня выбрано?». */
+.picker-cur { position: absolute; left: 0; top: 0; z-index: 2; padding: 4px 8px;
+  font-size: var(--fs-cap); font-weight: 600; letter-spacing: .04em;
+  color: #000; background: var(--accent); }
+.picker-item--current { border-color: var(--line); background: var(--surface-active); }
 .picker-meta { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; }
 .picker-id { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-base); }
 .picker-intent { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }

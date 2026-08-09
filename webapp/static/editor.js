@@ -1162,7 +1162,8 @@ function renderBuilderForm() {
   tplBox.innerHTML =
     `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
-  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind));
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind),
+                                               { id: slide.template_id });
 
   form.innerHTML = "";
   if (!tpl) return;
@@ -1474,7 +1475,8 @@ function renderDiagramPanel(slide) {
     const nameEl = tplBox.querySelector(".tpl-name");
     if (t && nameEl) nameEl.textContent = `Схема: ${t.display_name}`;
   });
-  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind));
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind),
+                                               { id: "diagram", kind: spec.kind });
   byId("changeDgmKind").onclick = () => openDiagramPicker(async (kind) => {
     if (kind === spec.kind) return;
     const fresh = collectDiagramFields() || f;
@@ -1498,7 +1500,7 @@ function renderDiagramPanel(slide) {
     pushUndo();
     await applyDiagramKind(current + 1, kind, fresh);
     await reloadDraft(current);
-  });
+  }, spec.kind);
 
   form.innerHTML = "";
   form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54));
@@ -2584,9 +2586,20 @@ document.addEventListener("keydown", (e) => {
 /* ---- template picker ---- */
 let pickerSeq = 0;
 
-async function openPicker(onPick) {
+function curBadge() {
+  const b = document.createElement("span");
+  b.className = "picker-cur";
+  b.textContent = "сейчас";
+  return b;
+}
+
+// cur = {id, kind} текущего слайда (для «Сменить макет»); при добавлении — пусто.
+// Без пометки «сейчас» пикер не отвечал на вопрос «а что стоит сейчас?»: список
+// одинаковых карточек, среди которых уже выбранная ничем не выделена.
+async function openPicker(onPick, cur) {
   const picker = byId("picker");
   const grid = byId("pickerGrid");
+  const curId = cur && cur.id;
   const seq = ++pickerSeq;
   grid.innerHTML = "";
   picker.classList.remove("hidden");   // окно сразу: клик всегда отвечает
@@ -2601,8 +2614,10 @@ async function openPicker(onPick) {
     return;
   }
   pickable.forEach((t, i) => {
+    const isCur = !!curId && t.id === curId;
     const card = document.createElement("button");
-    card.type = "button"; card.className = "picker-item";
+    card.type = "button";
+    card.className = "picker-item" + (isCur ? " picker-item--current" : "");
     // visual preview: a scaled iframe of the real one-slide render (lazy src)
     const prev = document.createElement("div");
     prev.className = "picker-prev";
@@ -2611,6 +2626,7 @@ async function openPicker(onPick) {
     ifr.tabIndex = -1;
     ifr.src = U(`/api/templates/${t.id}/preview?static=1`);  // К§16: покойные превью, без лупов
     prev.appendChild(ifr);
+    if (isCur) prev.appendChild(curBadge());
     const num = document.createElement("span");
     num.className = "picker-num";
     num.textContent = String(i + 1).padStart(2, "0");
@@ -2627,8 +2643,11 @@ async function openPicker(onPick) {
       picker.classList.add("hidden");
       // Мастер «Схема» — двухшаговый выбор: сначала макет, затем тип диаграммы.
       // onPick получает вторым аргументом kind — вызывающий материализует пример.
-      if (t.id === "diagram") openDiagramPicker((kind) => onPick(t.id, kind));
-      else onPick(t.id);
+      if (t.id === "diagram") openDiagramPicker((kind) => onPick(t.id, kind),
+                                                cur && cur.kind);
+      // Пересадка «в тот же макет» — это delete+add: у диаграммного слайда она
+      // сбрасывала схему к примеру. Уже выбранная карточка просто закрывает пикер.
+      else if (!isCur) onPick(t.id);
     };
     grid.appendChild(card);
   });
@@ -2661,7 +2680,7 @@ function dgmType(kind) {
 
 // Большой блок выбора типа схемы: доступные — с живым превью (тот же рендер, что
 // боевой слайд), будущие волны — приглушённые карточки с пометкой «скоро».
-async function openDiagramPicker(onKind) {
+async function openDiagramPicker(onKind, curKind) {
   const picker = byId("dgmPicker");
   const grid = byId("dgmPickerGrid");
   if (!picker || !grid) return;
@@ -2676,9 +2695,11 @@ async function openDiagramPicker(onKind) {
     return;
   }
   cat.forEach((t) => {
+    const isCur = !!curKind && t.kind === curKind;
     const card = document.createElement("button");
     card.type = "button";
-    card.className = "picker-item" + (t.available ? "" : " picker-item--soon");
+    card.className = "picker-item" + (t.available ? "" : " picker-item--soon")
+      + (isCur ? " picker-item--current" : "");
     const prev = document.createElement("div");
     prev.className = "picker-prev";
     if (t.available) {
@@ -2687,6 +2708,7 @@ async function openDiagramPicker(onKind) {
       ifr.tabIndex = -1;
       ifr.src = U(`/api/diagrams/${t.kind}/preview?static=1`);
       prev.appendChild(ifr);
+      if (isCur) prev.appendChild(curBadge());
     } else {
       const soon = document.createElement("span");
       soon.className = "picker-soon";
@@ -2700,7 +2722,10 @@ async function openDiagramPicker(onKind) {
     card.appendChild(prev);
     card.appendChild(meta);
     if (t.available) {
-      card.onclick = () => { picker.classList.add("hidden"); onKind(t.kind); };
+      card.onclick = () => {
+        picker.classList.add("hidden");
+        if (!isCur) onKind(t.kind);   // тот же тип — просто закрываем, схема цела
+      };
     } else {
       card.disabled = true;
     }
