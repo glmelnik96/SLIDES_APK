@@ -133,3 +133,69 @@ test("pruneZero: нулевые сдвиги не хранятся (пустой
   const off = { a: { dx: 0, dy: 0 }, b: { dx: 0.2, dy: -0.3 }, c: { dx: 40, dy: 0 } };
   assert.deepStrictEqual(Drag.pruneZero(off), { c: { dx: 40, dy: 0 } });
 });
+
+/* ---- перенос подписей при смене типа схемы ---- */
+// Примеры каталога (htmlslides/diagrams/catalog.py) в том виде, в каком их
+// отдаёт /api/diagrams/catalog: смена типа кладёт в слайд именно их.
+const S_PROCESS = { kind: "process", nodes: [
+  { id: "s1", label: "Аудит инфраструктуры" }, { id: "s2", label: "План миграции" },
+  { id: "s3", label: "Пилотный перенос" },
+  { id: "s4", label: "Промышленная миграция", accent: true },
+  { id: "s5", label: "Сопровождение" }] };
+const S_MATRIX = { kind: "matrix", meta: { x_axis: "Стоимость", y_axis: "Эффект" },
+  nodes: [{ id: "q1", label: "Быстрые победы", accent: true }, { id: "q2", label: "Стратегические" },
+          { id: "q3", label: "Мелочи" }, { id: "q4", label: "Отложить" }] };
+const S_FLOW = { kind: "flowchart", direction: "right",
+  nodes: [{ id: "start", label: "Заявка", shape: "start" },
+          { id: "check", label: "Проверка", shape: "process" },
+          { id: "ok", label: "Полные?", shape: "decision" }],
+  edges: [{ from: "start", to: "check" }, { from: "check", to: "ok" }] };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const CYCLE6 = { kind: "cycle", nodes: ["Сбор данных", "Узкие места", "Гипотеза",
+  "Пилот", "Тиражирование", "Замер"].map((l, i) => ({ id: "c" + i, label: l })) };
+
+test("смена типа переносит подписи узлов, а не подменяет их примером", () => {
+  // Регрессия: цикл из шести этапов молча становился «Аудитом инфраструктуры»
+  // и далее по списку — пользовательский текст исчезал без предупреждения.
+  const out = Drag.carryLabels(clone(S_PROCESS), CYCLE6);
+  assert.deepStrictEqual(out.nodes.map((n) => n.label),
+    ["Сбор данных", "Узкие места", "Гипотеза", "Пилот", "Тиражирование", "Замер"]);
+  assert.strictEqual(out.nodes.length, 6);            // тип вмещает больше пяти
+  assert.strictEqual(new Set(out.nodes.map((n) => n.id)).size, 6, "id должны быть уникальны");
+  // акцент примера остаётся ровно один — клон последнего узла его не тащит
+  assert.strictEqual(out.nodes.filter((n) => n.accent).length, 1);
+});
+
+test("смена типа не ломает жёсткие капы (матрица — ровно 4 узла)", () => {
+  const out = Drag.carryLabels(clone(S_MATRIX), CYCLE6);
+  assert.strictEqual(out.nodes.length, 4);
+  assert.deepStrictEqual(out.nodes.map((n) => n.label),
+    ["Сбор данных", "Узкие места", "Гипотеза", "Пилот"]);
+  assert.deepStrictEqual(out.nodes.map((n) => n.id), ["q1", "q2", "q3", "q4"]);
+  assert.deepStrictEqual(out.meta, { x_axis: "Стоимость", y_axis: "Эффект" });
+});
+
+test("смена типа добивает узлы до минимума типа", () => {
+  // Две стороны сравнения → цикл: три узла минимум, третий берётся из примера.
+  const two = { kind: "comparison", nodes: [{ id: "a", label: "Своё" }, { id: "b", label: "Облако" }] };
+  const out = Drag.carryLabels(clone({ kind: "cycle", nodes: [
+    { id: "c1", label: "Планирование" }, { id: "c2", label: "Внедрение" },
+    { id: "c3", label: "Замер" }, { id: "c4", label: "Улучшение" }] }), two);
+  assert.strictEqual(out.nodes.length, 3);
+  assert.deepStrictEqual(out.nodes.map((n) => n.label), ["Своё", "Облако", "Замер"]);
+});
+
+test("у типов со структурой в рёбрах список узлов не меняется", () => {
+  // Наращивание сломало бы рёбра примера: они адресуют узлы по id.
+  const out = Drag.carryLabels(clone(S_FLOW), CYCLE6);
+  assert.deepStrictEqual(out.nodes.map((n) => n.id), ["start", "check", "ok"]);
+  assert.deepStrictEqual(out.nodes.map((n) => n.label),
+    ["Сбор данных", "Узкие места", "Гипотеза"]);
+  assert.deepStrictEqual(out.nodes.map((n) => n.shape), ["start", "process", "decision"]);
+  assert.strictEqual(out.edges.length, 2);
+});
+
+test("без старой схемы пример остаётся примером", () => {
+  assert.deepStrictEqual(Drag.carryLabels(clone(S_PROCESS), null), S_PROCESS);
+  assert.deepStrictEqual(Drag.carryLabels(clone(S_PROCESS), { nodes: [] }), S_PROCESS);
+});

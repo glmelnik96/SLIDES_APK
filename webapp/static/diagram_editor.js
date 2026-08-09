@@ -98,6 +98,54 @@
     return offsets;
   }
 
+  /* Сколько узлов допускает тип — зеркало semantic_errors в
+     htmlslides/diagrams/schema.py. Типы, которых здесь нет, ограничены только
+     общим капом схемы (12). */
+  var NODE_RANGE = {
+    cycle: [3, 12], funnel: [2, 12], matrix: [4, 4], pyramid: [3, 12],
+    hub_spoke: [3, 12], comparison: [2, 12], venn: [2, 3], gantt_lite: [2, 8],
+    steps: [2, 6], mindmap: [3, 12], network: [3, 12],
+  };
+  /* Типы, у которых смысл держится на рёбрах: узлы адресуются из edges по id,
+     поэтому их список нельзя ни наращивать, ни резать. */
+  var EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "mindmap", "network"];
+
+  /* Перенести подписи узлов в пример нового типа при смене типа схемы. Раньше в
+     слайд записывался голый пример каталога: шесть написанных этапов цикла молча
+     заменялись «Аудитом инфраструктуры», а заголовок слайда оставался прежним —
+     слайд начинал противоречить сам себе. Структуру (рёбра, дорожки, формы,
+     величины) берём у примера — она и есть смысл типа, — а тексты подставляем из
+     старой схемы по порядку. Мутирует пример и возвращает его же. */
+  function carryLabels(sample, prevSpec) {
+    var src = ((prevSpec && prevSpec.nodes) || [])
+      .map(function (n) { return (n && n.label) || ""; })
+      .filter(function (s) { return s; });
+    var base = sample.nodes || [];
+    if (!src.length || !base.length) return sample;
+    var range = NODE_RANGE[sample.kind] || [1, 12];
+    var n = EDGE_KINDS.indexOf(sample.kind) >= 0
+      ? base.length
+      : Math.min(Math.max(src.length, range[0]), range[1]);
+    var used = {}, out = [], i;
+    base.forEach(function (b) { used[b.id] = 1; });
+    for (i = 0; i < n; i++) {
+      var node = Object.assign({}, base[i] || base[base.length - 1]);
+      if (!base[i]) {
+        // узел сверх примера: свой id и без акцента — иначе клон последнего узла
+        // размножил бы зелёную заливку по всей схеме
+        var k = i + 1, id;
+        do { id = "n" + k++; } while (used[id]);
+        used[id] = 1;
+        node.id = id;
+        delete node.accent;
+      }
+      if (src[i]) node.label = src[i];
+      out.push(node);
+    }
+    sample.nodes = out;
+    return sample;
+  }
+
   function drawGuides(host, guides) {
     if (!guides || !guides.length) return;
     var svg = host.querySelector("svg.diagram-svg");
@@ -201,6 +249,7 @@
   var api = {
     attach: attach, snapOffset: snapOffset, snapAxis: snapAxis,
     anchors: anchors, pruneZero: pruneZero, SNAP: SNAP,
+    carryLabels: carryLabels, NODE_RANGE: NODE_RANGE, EDGE_KINDS: EDGE_KINDS,
   };
   global.DiagramDrag = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

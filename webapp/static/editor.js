@@ -1361,7 +1361,7 @@ function charCounter(el, max) {
 const DGM_SHAPES = [["start", "Начало"], ["process", "Шаг"], ["decision", "Условие"],
                     ["io", "Ввод/вывод"], ["end", "Финал"]];
 // редактируемые рёбра (у остальных типов порядок задаёт список узлов)
-const DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "mindmap", "network"];
+const DGM_EDGE_KINDS = DiagramDrag.EDGE_KINDS;
 const DGM_MAX_NODES = 12, DGM_MAX_EDGES = 20;        // капы схемы (schema.py)
 // узлы с полем value: подпись поля зависит от типа (число слоя, длительность…)
 const DGM_VALUE_KINDS = { funnel: "число", pyramid: "число",
@@ -1374,18 +1374,22 @@ const DGM_EDGE_LABEL = {
   mindmap: "Ветви (от чего → к чему)",
   network: "Связи (между узлами)",
 };
-// капы узлов и подсказки, отличные от общих (matrix: ровно 4, без добавления)
-const DGM_NODE_RULES = {
-  matrix: { min: 4, max: 4, hint: "ровно 4 узла: верх-лево, верх-право, низ-лево, низ-право" },
-  venn: { min: 2, max: 3, hint: "2–3 множества" },
-  pyramid: { min: 3, max: DGM_MAX_NODES, hint: "уровни сверху вниз, вершина первой" },
-  hub_spoke: { min: 3, max: DGM_MAX_NODES, hint: "первый узел — центр, остальные — лучи" },
-  gantt_lite: { min: 2, max: 8,
-    hint: "до 8 работ: длительность в периодах, старт — номер периода (пусто — сразу за предыдущей)" },
-  steps: { min: 2, max: 6, hint: "до 6 ступеней снизу вверх, первая — нижняя" },
-  mindmap: { min: 3, max: DGM_MAX_NODES, hint: "первый узел — центр карты, остальные — ветви" },
-  network: { min: 3, max: DGM_MAX_NODES, hint: "раскладку задают связи, а не порядок узлов" },
+// смысловые подсказки к списку узлов; сами границы «сколько узлов допустимо» —
+// в DiagramDrag.NODE_RANGE (по ним же переносятся подписи при смене типа)
+const DGM_NODE_HINTS = {
+  matrix: "ровно 4 узла: верх-лево, верх-право, низ-лево, низ-право",
+  venn: "2–3 множества",
+  pyramid: "уровни сверху вниз, вершина первой",
+  hub_spoke: "первый узел — центр, остальные — лучи",
+  gantt_lite: "до 8 работ: длительность в периодах, старт — номер периода (пусто — сразу за предыдущей)",
+  steps: "до 6 ступеней снизу вверх, первая — нижняя",
+  mindmap: "первый узел — центр карты, остальные — ветви",
+  network: "раскладку задают связи, а не порядок узлов",
 };
+function dgmNodeRules(kind) {
+  const r = DiagramDrag.NODE_RANGE[kind] || [1, DGM_MAX_NODES];
+  return { min: r[0], max: r[1], hint: DGM_NODE_HINTS[kind] };
+}
 
 /* Правка схемы, отвергнутая проверкой (наши претензии или 400 сервера), на
    сервер не уходит — и при уходе со слайда пропадала молча: пользователь
@@ -1413,13 +1417,26 @@ function renderDiagramPanel(slide) {
   byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind));
   byId("changeDgmKind").onclick = () => openDiagramPicker(async (kind) => {
     if (kind === spec.kind) return;
+    const fresh = collectDiagramFields() || f;
+    // Сколько подписей реально доедет — считаем тем же переносом, что и применим:
+    // обещать «всё сохранится» там, где тип вмещает меньше узлов, нельзя.
+    await fetchDgmCatalog();
+    const t = dgmType(kind);
+    const fit = t && t.sample
+      ? DiagramDrag.carryLabels(JSON.parse(JSON.stringify(t.sample)),
+                           fresh.diagram).nodes.length
+      : 0;
     const ok = await confirmDialog(
-      "Смена типа заменит узлы и связи примером выбранного типа. Заголовок сохранится. Продолжить?",
+      "Подписи узлов перенесутся в новый тип по порядку; связи, дорожки и "
+      + "величины возьмутся из примера. Заголовок сохранится."
+      + (fit && fit < ((fresh.diagram || {}).nodes || []).length
+        ? " Часть подписей не поместится — в новом типе узлов меньше." : "")
+      + " Продолжить?",
       "Сменить", "Отмена");
     if (!ok) return;
     clearTimeout(putTimer); putTimer = null;  // форму старого типа не сейвим
     pushUndo();
-    await applyDiagramKind(current + 1, kind, collectDiagramFields() || f);
+    await applyDiagramKind(current + 1, kind, fresh);
     await reloadDraft(current);
   });
 
@@ -1451,7 +1468,7 @@ function renderDiagramPanel(slide) {
   nodeList.id = "dgmNodeList";
   (spec.nodes || []).forEach((n) => nodeList.appendChild(dgmNodeRow(spec.kind, n)));
   nodesWrap.appendChild(nodeList);
-  const rules = DGM_NODE_RULES[spec.kind] || { min: 1, max: DGM_MAX_NODES };
+  const rules = dgmNodeRules(spec.kind);
   nodeList.dataset.min = String(rules.min || 1);
   nodeList.dataset.max = String(rules.max || DGM_MAX_NODES);
   if (rules.max > (spec.nodes || []).length || rules.max > rules.min) {
@@ -2571,7 +2588,8 @@ async function applyDiagramKind(index1, kind, prev) {
   const fields = {
     heading: (prev && prev.heading) || t.display_name,
     subtitle: (prev && prev.subtitle) || "",
-    diagram: JSON.parse(JSON.stringify(t.sample)),
+    diagram: DiagramDrag.carryLabels(JSON.parse(JSON.stringify(t.sample)),
+                                prev && prev.diagram),
   };
   await fetch(U(`/api/drafts/${sessionId}/slides/${index1}/fields`), {
     method: "PUT", headers: { "Content-Type": "application/json" },
