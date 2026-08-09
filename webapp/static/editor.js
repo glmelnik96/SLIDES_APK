@@ -1526,6 +1526,7 @@ function renderDiagramPanel(slide) {
   nLabel.textContent = "Узлы";
   nodesWrap.appendChild(nLabel);
   nodesWrap.appendChild(hint("Текст узлов — здесь, положение — перетаскиванием прямо на слайде"));
+  nodesWrap.appendChild(hint("Порядок строк — это порядок узлов на схеме: ↑ ↓ переставляют"));
   nodesWrap.appendChild(hint("Узел сам выравнивается по соседям и центру — совпавшая ось подсвечивается. Alt — без выравнивания."));
   const nodeList = document.createElement("div");
   nodeList.className = "field-list";
@@ -1724,6 +1725,34 @@ function dgmNodeRow(kind, n) {
   acc.appendChild(cb);
   acc.appendChild(document.createTextNode("акцент"));
   row.appendChild(acc);
+  /* Порядок строк — это порядок узлов на схеме: этапы процесса, ступени воронки,
+     уровни пирамиды, квадранты матрицы читаются именно по нему. «+ узел» умеет
+     только дописать в конец, поэтому забытый второй шаг оказывался последним, и
+     единственным способом его вернуть на место было перенабрать все подписи ниже.
+     Стрелки двигают строку — это и двигает узел на слайде. */
+  const mv = document.createElement("span");
+  mv.className = "dgm-move";
+  [[-1, "↑", "Переместить выше"], [1, "↓", "Переместить ниже"]].forEach(([dir, glyph, title]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-ghost btn-sm item-move";
+    b.dataset.dir = String(dir);
+    b.textContent = glyph;
+    b.title = title;
+    b.onclick = () => {
+      if (b.disabled) return;
+      const sib = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+      if (!sib) return;
+      if (dir < 0) row.parentNode.insertBefore(row, sib);
+      else row.parentNode.insertBefore(sib, row);
+      refreshDgmEdgeSelects();  // списки связей перечисляют узлы в том же порядке
+      syncDgmCounts();
+      b.focus();                // строка уехала — кнопка под курсором остаётся той же
+      scheduleSave();
+    };
+    mv.appendChild(b);
+  });
+  row.appendChild(mv);
   if (kind !== "matrix") {   // у матрицы ровно 4 квадранта — удалять нечего
     const del = document.createElement("button");
     del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
@@ -1761,7 +1790,11 @@ function syncDgmCounts() {
       add.title = add.disabled ? "Больше узлов этот тип схемы не покажет" : "";
     }
     const atMin = rows.length <= min;
-    rows.forEach((r) => {
+    rows.forEach((r, i) => {
+      const up = r.querySelector('.item-move[data-dir="-1"]');
+      const dn = r.querySelector('.item-move[data-dir="1"]');
+      if (up) up.disabled = i === 0;              // первый узел выше некуда
+      if (dn) dn.disabled = i === rows.length - 1;
       const d = r.querySelector(".item-del");
       if (!d) return;
       d.disabled = atMin;

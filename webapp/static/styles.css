@@ -915,6 +915,11 @@ a { color: var(--accent); }
 .dgm-acc { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
   font-size: var(--fs-cap); color: var(--muted); cursor: pointer; user-select: none; }
 .dgm-acc input { width: auto; accent-color: var(--accent); margin: 0; }
+/* Стрелки порядка: пара узких кнопок без зазора — читается как один орган
+   управления строкой и не отбирает ширину у поля подписи. */
+.dgm-move { display: inline-flex; flex: 0 0 auto; }
+.item-move { flex: 0 0 auto; padding: 6px 4px; line-height: 1; }
+.item-move:disabled { opacity: 0.35; cursor: default; }
 /* Узел, чья подпись не влезет в плашку и будет сокращена движком: подсвечиваем
    само поле — иначе строка «сократятся: …» под списком не показывает, какое. */
 .dgm-node-row--over input[data-dgm="label"] { border-color: var(--danger-soft); }
