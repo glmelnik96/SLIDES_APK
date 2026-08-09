@@ -30,7 +30,8 @@
   <!-- Thumbnail rail -->
   <aside class="thumbs">
     <div class="thumbs-title">Слайды</div>
-    <button class="btn btn-ghost addslide hidden" id="addSlide">+ Добавить слайд</button>
+    <button class="btn btn-ghost addslide hidden" id="addSlide"
+            title="Новый слайд встанет сразу после текущего">+ Добавить слайд</button>
     <div id="thumbs"></div>
   </aside>
 
@@ -116,6 +117,12 @@
   </aside>
   </aside><!-- /.rpanel -->
   </div><!-- /.editor-main -->
+</div>
+
+<!-- Отмена удаления слайда: Ctrl+Z есть, но о нём не догадаться — даём кнопку -->
+<div class="undo-toast hidden" id="undoToast" role="status" aria-live="polite">
+  <span class="undo-toast__text"></span>
+  <button class="btn btn-ghost btn-sm" type="button" id="undoToastBtn">Вернуть</button>
 </div>
 
 <!-- Template picker (manual mode) -->

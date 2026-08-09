@@ -817,7 +817,19 @@ a { color: var(--accent); }
 .field-item { display: flex; gap: 6px; align-items: center; }
 .field-item input { flex: 1; }
 .item-del { flex: 0 0 auto; padding: 6px 8px; }
+/* Номер пункта = номер блока на слайде: связывает строку формы с тем, что видно. */
+.item-num { flex: 0 0 auto; min-width: 14px; text-align: right;
+  font-size: var(--fs-cap); line-height: 1; color: var(--muted-2);
+  font-variant-numeric: tabular-nums; }
 .field-lines { display: flex; flex-direction: column; gap: 8px; }
+
+/* Плашка «Вернуть» после удаления слайда — единственный видимый вход в отмену. */
+.undo-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+  z-index: 30; display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 16px; border-radius: var(--radius-card);
+  background: var(--bg-soft); border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: var(--fs-cap); }
+.undo-toast.hidden { display: none; }
 
 /* ===== Пикер макетов ===== */
 .picker { position: fixed; inset: 0; background: rgba(10,10,10,.82); z-index: 20;

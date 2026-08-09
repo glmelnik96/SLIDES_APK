@@ -1241,13 +1241,19 @@ function renderSlot(name, spec, value) {
     add.type = "button"; add.className = "btn btn-ghost btn-sm";
     add.textContent = "+ пункт";
     add.onclick = () => {
-      if (spec.max_items && list.children.length >= spec.max_items) return;
+      if (add.disabled) return;
       const row = renderItem(spec, {});
       list.appendChild(row);
+      syncList(list, spec, add, note);
       row.querySelector("input")?.focus();   // ready to type; saved on first input
     };
     wrap.appendChild(add);
-    if (spec.max_items) wrap.appendChild(hint(`до ${spec.max_items} пунктов`));
+    const note = hint("");
+    wrap.appendChild(note);
+    // Счётчик/нумерация/кап живут на одном обработчике: input всплывает из полей
+    // пункта, а удаление строки шлёт такое же событие вручную (renderItem).
+    list.addEventListener("input", () => syncList(list, spec, add, note));
+    syncList(list, spec, add, note);
   } else if (spec.kind === "group") {
     wrap.appendChild(renderItem(spec, value || {}, name));
   }
@@ -1258,9 +1264,15 @@ function renderItem(spec, item, groupSlot) {
   const row = document.createElement("div");
   row.className = "field-item";
   if (groupSlot) { row.dataset.slot = groupSlot; row.dataset.kind = "group"; }
+  else {
+    const num = document.createElement("span");
+    num.className = "item-num";                 // номер пункта = номер блока на слайде
+    row.appendChild(num);
+  }
   for (const [sub, subSpec] of Object.entries(spec.item_slots || {})) {
     const inp = document.createElement("input");
-    inp.placeholder = sub + (subSpec.required ? " *" : "");
+    // Подпись поля берём из библиотеки (там она русская); ключ слота — только фолбэк.
+    inp.placeholder = (subSpec.label || sub) + (subSpec.required ? " *" : "");
     if (subSpec.max_chars) inp.maxLength = subSpec.max_chars;
     inp.value = item[sub] == null ? "" : String(item[sub]);
     inp.dataset.sub = sub;
@@ -1271,10 +1283,50 @@ function renderItem(spec, item, groupSlot) {
     const del = document.createElement("button");
     del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
     del.textContent = "✕";
-    del.onclick = () => { row.remove(); scheduleSave(); };
+    del.title = "Удалить пункт";
+    del.onclick = () => {
+      const list = row.parentNode;
+      row.remove();
+      // Список без строк = пустой обязательный слот, а его сервер рисует примером
+      // (draft_render._coerce_slot). Пустая форма против блоков на слайде читается
+      // как «удаление не сработало», поэтому оставляем одну пустую строку — тот же
+      // вид, что и при первом открытии слайда, — а счётчик объяснит про пример.
+      if (list && list.classList.contains("field-list") && !list.children.length)
+        list.appendChild(renderItem(spec, {}));
+      list?.dispatchEvent(new Event("input", { bubbles: true }));
+      scheduleSave();
+    };
     row.appendChild(del);
   }
   return row;
+}
+
+// Держит в актуальном состоянии нумерацию пунктов, счётчик «N из M» и кап «+ пункт».
+function syncList(list, spec, add, note) {
+  const rows = [...list.querySelectorAll(".field-item")];
+  const filled = rows.filter((r) => [...r.querySelectorAll("[data-sub]")]
+    .some((i) => i.value.trim())).length;
+  rows.forEach((r, i) => {
+    const n = r.querySelector(".item-num");
+    if (n) n.textContent = String(i + 1);
+  });
+  const max = spec.max_items || 0;
+  add.disabled = max > 0 && rows.length >= max;
+  add.title = add.disabled
+    ? `Этот макет показывает не больше ${max} — удалите пункт, чтобы добавить новый`
+    : "";
+  if (!filled) {
+    // Пустой ОБЯЗАТЕЛЬНЫЙ список сервер рисует примером (draft_render._coerce_slot),
+    // иначе «удалил всё, а блоки на слайде остались» читается как «не работает».
+    // Необязательный пустой список просто не попадает на слайд — не врём про пример.
+    note.textContent = spec.required
+      ? "Пункты пустые — на слайде показан пример. Заполните поля, чтобы заменить его"
+      : "Пункты пустые — этот блок на слайде не появится";
+    return;
+  }
+  // disabled-кнопке браузер не показывает title, поэтому причина — в самом счётчике.
+  note.textContent = (max ? `${rows.length} из ${max}` : `Пунктов: ${rows.length}`)
+    + (add.disabled ? " — предел этого макета" : "");
 }
 
 function hint(text) {
@@ -1384,20 +1436,29 @@ function renderDiagramPanel(slide) {
   (spec.nodes || []).forEach((n) => nodeList.appendChild(dgmNodeRow(spec.kind, n)));
   nodesWrap.appendChild(nodeList);
   const rules = DGM_NODE_RULES[spec.kind] || { min: 1, max: DGM_MAX_NODES };
+  nodeList.dataset.min = String(rules.min || 1);
+  nodeList.dataset.max = String(rules.max || DGM_MAX_NODES);
   if (rules.max > (spec.nodes || []).length || rules.max > rules.min) {
     const addNode = document.createElement("button");
     addNode.type = "button"; addNode.className = "btn btn-ghost btn-sm";
+    addNode.id = "dgmAddNode";
     addNode.textContent = "+ узел";
     addNode.onclick = () => {
-      if (nodeList.children.length >= rules.max) return;
+      if (addNode.disabled) return;
       const row = dgmNodeRow(spec.kind, { id: dgmNewId(), label: "" });
       nodeList.appendChild(row);
       refreshDgmEdgeSelects();
+      syncDgmCounts();
       row.querySelector('[data-dgm="label"]')?.focus(); // сейв — на первый ввод
     };
     nodesWrap.appendChild(addNode);
   }
-  nodesWrap.appendChild(hint(rules.hint || `до ${rules.max} узлов`));
+  const nodesNote = hint("");
+  nodesNote.id = "dgmNodesNote";
+  nodesWrap.appendChild(nodesNote);
+  // Смысловая подсказка типа остаётся; «до N узлов» больше не нужна — число теперь
+  // в живом счётчике, а два хинта подряд про одно и то же только шумят.
+  if (rules.hint) nodesWrap.appendChild(hint(rules.hint));
   form.appendChild(nodesWrap);
 
   // Связи — только у типов, где рёбра задаются руками
@@ -1415,19 +1476,24 @@ function renderDiagramPanel(slide) {
     const addEdge = document.createElement("button");
     addEdge.type = "button"; addEdge.className = "btn btn-ghost btn-sm";
     addEdge.textContent = "+ связь";
+    addEdge.id = "dgmAddEdge";
     addEdge.onclick = () => {
-      if (edgeList.children.length >= DGM_MAX_EDGES) return;
+      if (addEdge.disabled) return;
       const ids = [...nodeList.querySelectorAll(".dgm-node-row")]
         .map((r) => r.dataset.nodeId);
       edgeList.appendChild(dgmEdgeRow(spec.kind, { from: ids[0] || "", to: ids[1] || "" }));
       refreshDgmEdgeSelects();
+      syncDgmCounts();
       scheduleSave();
     };
     edgesWrap.appendChild(addEdge);
-    edgesWrap.appendChild(hint(`до ${DGM_MAX_EDGES} связей`));
+    const edgesNote = hint("");
+    edgesNote.id = "dgmEdgesNote";
+    edgesWrap.appendChild(edgesNote);
     form.appendChild(edgesWrap);
     refreshDgmEdgeSelects();
   }
+  syncDgmCounts();
 
   // Сбросить ручную раскладку — только когда сдвиги есть
   if (spec.offsets && Object.keys(spec.offsets).length) {
@@ -1542,10 +1608,58 @@ function dgmNodeRow(kind, n) {
     del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
     del.textContent = "✕";
     del.title = "Удалить узел";
-    del.onclick = () => { row.remove(); refreshDgmEdgeSelects(); scheduleSave(); };
+    del.onclick = () => {
+      if (del.disabled) return;   // на минимуме типа схемы удалять нельзя
+      row.remove(); refreshDgmEdgeSelects(); syncDgmCounts(); scheduleSave();
+    };
     row.appendChild(del);
   }
   return row;
+}
+
+/* Капы схемы (schema.py) в панели: раньше «+ узел»/«+ связь» на пределе просто
+   ничего не делали, а удаление узлов ниже минимума типа роняло сейв в «invalid» —
+   человек видел сломанный сейв без причины. Теперь предел виден: кнопка гаснет,
+   счётчик называет причину, крестики на минимуме заблокированы. */
+function syncDgmCounts() {
+  const nodes = byId("dgmNodeList");
+  if (nodes) {
+    const rows = [...nodes.querySelectorAll(".dgm-node-row")];
+    const min = Number(nodes.dataset.min || 1);
+    const max = Number(nodes.dataset.max || DGM_MAX_NODES);
+    const add = byId("dgmAddNode");
+    if (add) {
+      add.disabled = rows.length >= max;
+      add.title = add.disabled ? "Больше узлов этот тип схемы не покажет" : "";
+    }
+    const atMin = rows.length <= min;
+    rows.forEach((r) => {
+      const d = r.querySelector(".item-del");
+      if (!d) return;
+      d.disabled = atMin;
+      d.title = atMin ? `Минимум для этого типа — ${min}` : "Удалить узел";
+    });
+    const note = byId("dgmNodesNote");
+    if (note) {
+      note.textContent = `${rows.length} из ${max}`
+        + (rows.length >= max ? " — предел этого типа"
+           : atMin ? ` — минимум этого типа` : "");
+    }
+  }
+  const edges = byId("dgmEdgeList");
+  if (edges) {
+    const n = edges.querySelectorAll(".dgm-edge-row").length;
+    const add = byId("dgmAddEdge");
+    if (add) {
+      add.disabled = n >= DGM_MAX_EDGES;
+      add.title = add.disabled ? "Больше связей схема не покажет" : "";
+    }
+    const note = byId("dgmEdgesNote");
+    if (note) {
+      note.textContent = `${n} из ${DGM_MAX_EDGES}`
+        + (n >= DGM_MAX_EDGES ? " — предел" : "");
+    }
+  }
 }
 
 function dgmEdgeRow(kind, e) {
@@ -1579,7 +1693,7 @@ function dgmEdgeRow(kind, e) {
   del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
   del.textContent = "✕";
   del.title = "Удалить связь";
-  del.onclick = () => { row.remove(); scheduleSave(); };
+  del.onclick = () => { row.remove(); syncDgmCounts(); scheduleSave(); };
   row.appendChild(del);
   return row;
 }
@@ -2047,7 +2161,29 @@ async function deleteSlideAt(i) {
   pushUndo();
   await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`), { method: "DELETE" });
   await reloadDraft(Math.max(0, i - 1));
+  showUndoToast(`Слайд ${i + 1} удалён`);
 }
+
+/* Плашка «Вернуть» после разрушающего действия. Отмена в редакторе есть (Ctrl+Z),
+   но она невидима — человек видит только исчезнувший слайд и не знает, что его
+   можно достать. Плашка дёргает тот же undo(), поэтому подтверждение перед
+   удалением не нужно: путь назад показан ровно тогда, когда он нужен. */
+let undoToastTimer = null;
+
+function showUndoToast(text) {
+  const el = byId("undoToast");
+  if (!el) return;
+  el.querySelector(".undo-toast__text").textContent = text;
+  el.classList.remove("hidden");
+  clearTimeout(undoToastTimer);
+  undoToastTimer = setTimeout(() => el.classList.add("hidden"), 9000);
+}
+
+byId("undoToastBtn")?.addEventListener("click", () => {
+  clearTimeout(undoToastTimer);
+  byId("undoToast")?.classList.add("hidden");
+  undo();
+});
 
 /* ---- перетаскивание миниатюр для смены порядка ---- */
 let dragFromIndex = null;
