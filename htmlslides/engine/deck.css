@@ -298,6 +298,11 @@ html[data-theme="dark"] .contacts-arrows{color:var(--accent);}
 .kpi-cell:nth-child(1){width:766px;}     /* первая цифра width 766 @ x=53 */
 .kpi-cell:nth-child(2){width:490px;margin-left:150px;}  /* вторая @ x=969 (53+766+150) — ближе к центру */
 .kpi-value{color:var(--accent);white-space:nowrap;line-height:1;}
+/* Значение в 4 знака (слотовый максимум) в колонку макета не влезает: без
+   ужатия единица+описание первой пары наезжали на цифру второй (перекрытие
+   94px), а вторая пара уходила за правый край слайда. Класс ставит шаблон по
+   САМОМУ длинному значению — обеим парам сразу, чтобы цифры были одного размера. */
+.kpi-grid--tight .kpi-value{font-size:250px;}
 html[data-theme="light"] .kpi-value{color:var(--fg-body);}
 .kpi-side{padding-left:24px;padding-top:52px;width:280px;flex:none;}  /* верх unit ≈ верхний край глифа цифры */
 .kpi-unit{color:var(--fg);}               /* типографика — роль .t-head-36 */

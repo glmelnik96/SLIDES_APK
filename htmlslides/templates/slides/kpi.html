@@ -1,13 +1,23 @@
 {#- KPI: 2 гигантские цифры 320px с единицами и описанием (figma D 3393:11314 / L 3393:11061).
     Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок сверху слева.
-    Поле точек понизу под цифрами. -#}
+    Поле точек понизу под цифрами.
+
+    Кегль цифры зависит от длины значения. Макет Figma рассчитан на 2–3 знака:
+    при четырёх («1500», «9999» — слот разрешает 4) цифра шириной 640–730px
+    выталкивала единицу с описанием на соседнюю колонку — блоки НАЕЗЖАЛИ друг
+    на друга (замер: перекрытие 94px), а вторая пара уезжала за правый край
+    слайда. Ужимаем кегль по САМОМУ длинному значению и применяем ко всем
+    цифрам сразу — как в autofitStats: у дизайнера цифры одного размера.
+    Больше 4 знаков слот не пропускает, поэтому ступень ровно одна. -#}
+{% set vl = namespace(n=0) %}
+{% for k in content.kpis %}{% set l = k.value | string | trim | length %}{% if l > vl.n %}{% set vl.n = l %}{% endif %}{% endfor %}
 <section class="slide slide--chrome-sm" data-template="kpi">
   {% include "_chrome.html" %}
   <div class="content-head">
     <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
     {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
   </div>
-  <div class="kpi-grid m-stagger" data-slot="kpis">
+  <div class="kpi-grid m-stagger{% if vl.n >= 4 %} kpi-grid--tight{% endif %}" data-slot="kpis">
     {% for k in content.kpis %}
     <div class="kpi-cell">
       <div class="kpi-value t-number-320 js-count">{{ k.value }}</div>

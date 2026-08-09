@@ -143,6 +143,32 @@ def _glue_nbsp(value):
     return value
 
 
+def _text_w(value, size: float = 30.0) -> float:
+    """Оценка ширины строки в px при данном кегле — для SVG-шаблонов, где текст
+    надо уместить в viewBox, а <text> не умеет мериться на сервере.
+
+    SVG режет всё, что вышло за viewBox, МОЛЧА: подпись «1 200 млрд» у самого
+    длинного бара превращалась в «1 200 мл», и это читается как испорченные
+    данные, а не как обрезка. Поэтому оценка сознательно завышена — лучше
+    зря отдать бару 30px, чем срезать подпись.
+
+    Замер в Chromium (шрифт деки, font-size 30, Medium), px на символ:
+    цифры 17.2, строчная кириллица 17.5, заглавные 22–31 (Ш/Щ/Ю/Ж/М — худшие),
+    пробел ~8. Берём 31 на заглавную, 19 на остальное, 9 на пробел — верхняя
+    граница по каждому классу. Чистая функция → вёрстка воспроизводима.
+    """
+    s = str(value or "")
+    w = 0.0
+    for ch in s:
+        if ch.isspace():
+            w += 9.0
+        elif ch.isupper():
+            w += 31.0
+        else:
+            w += 19.0
+    return w * size / 30.0
+
+
 def _jinja_env() -> Environment:
     env = Environment(
         loader=FunctionLoader(_load_slide_template),
@@ -150,6 +176,7 @@ def _jinja_env() -> Environment:
         finalize=_glue_nbsp,
     )
     env.filters["num"] = _num
+    env.filters["textw"] = _text_w
     env.globals["asset"] = _asset_data_uri
     return env
 
