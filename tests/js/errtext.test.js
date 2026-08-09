@@ -1,7 +1,39 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { errText, SAVE_STATUS, REBUILD_LABEL, plural, estimateLine,
-  healthLine, checkedAgo, diagramClaims } = require("../../webapp/static/errtext.js");
+  healthLine, checkedAgo, diagramClaims, gist } = require("../../webapp/static/errtext.js");
+
+test("gist: точка внутри сокращения не режет фразу", () => {
+  assert.strictEqual(
+    gist("Гориз. составные бары: состав (2–4 части) по категориям."),
+    "Гориз. составные бары");
+});
+
+test("gist: двоеточие заканчивает фразу", () => {
+  assert.strictEqual(gist("Титульный слайд деки: огромный заголовок."),
+                     "Титульный слайд деки");
+});
+
+test("gist: точка с пробелом заканчивает фразу", () => {
+  assert.strictEqual(gist("Задник деки. Ставится последним."), "Задник деки");
+});
+
+test("gist: длинная фраза обрезается с многоточием", () => {
+  const out = gist("а".repeat(200));
+  assert.strictEqual(out.length, 80);
+  assert.ok(out.endsWith("…"));
+});
+
+test("gist: незакрытая скобка не остаётся в хвосте", () => {
+  assert.strictEqual(
+    gist("Акцентное заявление на полотне (брендовый инверт: графитовый текст)."),
+    "Акцентное заявление на полотне");
+});
+
+test("gist: пусто на пустом входе", () => {
+  assert.strictEqual(gist(""), "");
+  assert.strictEqual(gist(null), "");
+});
 
 test("missing_required → просьба заполнить", () => {
   assert.strictEqual(errText("missing_required", ""), "Заполните обязательное поле");

@@ -2974,10 +2974,7 @@ function startGlassMode() {
 // а целиком это абзац на 300 символов — в чип не влезает.
 function tplGist(tid) {
   const t = tplOf(tid);
-  if (!t || !t.intent) return "";
-  const cut = t.intent.search(/[:.]/);
-  const s = (cut > 0 ? t.intent.slice(0, cut) : t.intent).trim();
-  return s.length > 80 ? s.slice(0, 79) + "…" : s;
+  return t ? gist(t.intent) : "";
 }
 
 // Переподписать чипы, когда каталог доехал позже карточек.

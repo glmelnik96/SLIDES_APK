@@ -213,6 +213,25 @@
     return MODEL_HEALTH[state] || MODEL_HEALTH.unknown;
   }
 
+  // Короткое «что это» для чипа и карточки макета: первая фраза intent'а, который
+  // целиком — абзац на 300 символов для промпта. Точку признаём концом фразы
+  // только вместе с пробелом: иначе «Гориз. составные бары» обрезалось в «Гориз».
+  function gist(intent, max) {
+    var text = String(intent || "").trim();
+    if (!text) return "";
+    var limit = max || 80;
+    var end = text.length;
+    var re = /:|\.(?=\s|$)/g, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index >= 8) { end = m.index; break; }  // «Гориз.» — сокращение, не фраза
+    }
+    var out = text.slice(0, end).trim();
+    // Обрыв внутри скобки читается как опечатка — отрезаем незакрытый хвост.
+    if (out.split("(").length > out.split(")").length)
+      out = out.slice(0, out.lastIndexOf("(")).trim();
+    return out.length > limit ? out.slice(0, limit - 1).trim() + "…" : out;
+  }
+
   // Возраст проверки доступности. Проба идёт только по запросу (загрузка страницы
   // и возврат во вкладку), поэтому свежесть данных пользователь обязан видеть —
   // иначе зелёный индикатор часовой давности читается как «сейчас всё хорошо».
@@ -232,13 +251,14 @@
   root.plural = plural;
   root.errText = errText;
   root.diagramClaims = diagramClaims;
+  root.gist = gist;
   root.estimateLine = estimateLine;
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
-      diagramClaims: diagramClaims, estimateLine: estimateLine,
+      diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
       healthLine: healthLine, checkedAgo: checkedAgo };
   }
 })(typeof window !== "undefined" ? window : globalThis);
