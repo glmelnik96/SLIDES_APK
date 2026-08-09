@@ -1042,6 +1042,7 @@ async function fetchPlan() {
 
 async function reloadDraft(goToIndex) {
   await fetchPlan();
+  dgmUnsaved = null;   // индексы уехали — черновик схемы больше не привязать к слайду
   if (goToIndex != null) pendingGoTo = goToIndex;
   builtFormFor = -1;  // plan changed structurally → force a form rebuild
   loadDeck(); // re-render preview from the server's derived deck.html
@@ -1386,10 +1387,18 @@ const DGM_NODE_RULES = {
   network: { min: 3, max: DGM_MAX_NODES, hint: "раскладку задают связи, а не порядок узлов" },
 };
 
+/* Правка схемы, отвергнутая проверкой (наши претензии или 400 сервера), на
+   сервер не уходит — и при уходе со слайда пропадала молча: пользователь
+   добавлял узел, переключался и возвращался к схеме без своего узла. Держим
+   отвергнутый ввод здесь до возвращения на слайд. Индексы уезжают при любой
+   структурной правке деки, поэтому reloadDraft черновик сбрасывает. */
+let dgmUnsaved = null;   // { idx, fields, claims, tone }
+
 function renderDiagramPanel(slide) {
   const form = byId("builderForm");
   const tplBox = byId("builderTpl");
-  const f = slide.fields;
+  const stash = dgmUnsaved && dgmUnsaved.idx === current ? dgmUnsaved : null;
+  const f = stash ? stash.fields : slide.fields;
   const spec = f.diagram || {};
   const t0 = dgmType(spec.kind);
   tplBox.innerHTML =
@@ -1506,6 +1515,8 @@ function renderDiagramPanel(slide) {
   if (spec.offsets && Object.keys(spec.offsets).length) {
     form.appendChild(dgmResetLayoutButton());
   }
+  // Вернулись к отвергнутой правке — вместе с ней возвращаем и причину отказа.
+  if (stash) dgmShowClaims(stash.claims, stash.tone);
 }
 
 function dgmResetLayoutButton() {
@@ -1845,6 +1856,7 @@ async function saveDiagramSlide(idx, attempt) {
   if (claims.length) {
     // Заведомо невалидная правка: запрос вернул бы 400 и не изменил план.
     // Ни план, ни сервер не трогаем — ввод в форме остаётся, чинить его тут же.
+    dgmUnsaved = { idx, fields, claims, tone: "warn" };
     dgmShowClaims(claims, "warn");
     setSaveStatus("invalid");
     return;
@@ -1859,6 +1871,7 @@ async function saveDiagramSlide(idx, attempt) {
     });
   } catch (_) { r = null; }
   if (r && r.ok) {
+    if (dgmUnsaved && dgmUnsaved.idx === idx) dgmUnsaved = null;
     dgmShowClaims([], "warn");
     setSaveStatus("saved");
     loadDeck();  // SVG живёт в data-атрибуте — точечный текст-патч не применим
@@ -1871,7 +1884,9 @@ async function saveDiagramSlide(idx, attempt) {
     slide.fields = accepted;
     let srv = [];
     try { srv = ((await r.json()).detail || {}).errors || []; } catch (_) { /* пусто */ }
-    dgmShowClaims(srv.length ? srv : ["Схема не прошла проверку"], "error");
+    const claimsSrv = srv.length ? srv : ["Схема не прошла проверку"];
+    dgmUnsaved = { idx, fields, claims: claimsSrv, tone: "error" };
+    dgmShowClaims(claimsSrv, "error");
     setSaveStatus("invalid");
     return;
   }
