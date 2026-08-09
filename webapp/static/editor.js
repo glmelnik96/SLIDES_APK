@@ -1573,7 +1573,7 @@ function renderDiagramPanel(slide) {
     const edgeList = document.createElement("div");
     edgeList.className = "field-list";
     edgeList.id = "dgmEdgeList";
-    (spec.edges || []).forEach((e) => edgeList.appendChild(dgmEdgeRow(spec.kind, e)));
+    (spec.edges || []).forEach((e) => edgeList.appendChild(dgmEdgeRow(e)));
     edgesWrap.appendChild(edgeList);
     const addEdge = document.createElement("button");
     addEdge.type = "button"; addEdge.className = "btn btn-ghost btn-sm";
@@ -1583,7 +1583,7 @@ function renderDiagramPanel(slide) {
       if (addEdge.disabled) return;
       const ids = [...nodeList.querySelectorAll(".dgm-node-row")]
         .map((r) => r.dataset.nodeId);
-      edgeList.appendChild(dgmEdgeRow(spec.kind, { from: ids[0] || "", to: ids[1] || "" }));
+      edgeList.appendChild(dgmEdgeRow({ from: ids[0] || "", to: ids[1] || "" }));
       refreshDgmEdgeSelects();
       syncDgmCounts();
       scheduleSave();
@@ -1827,7 +1827,7 @@ function syncDgmFit() {
   }
 }
 
-function dgmEdgeRow(kind, e) {
+function dgmEdgeRow(e) {
   const row = document.createElement("div");
   row.className = "field-item dgm-edge-row";
   const from = document.createElement("select");
@@ -1844,16 +1844,22 @@ function dgmEdgeRow(kind, e) {
   row.appendChild(from);
   row.appendChild(arrow);
   row.appendChild(to);
-  if (kind === "flowchart") {
-    const label = document.createElement("input");
-    label.placeholder = "подпись";
-    label.maxLength = 30;
-    label.className = "dgm-edge-label";
-    label.value = e.label == null ? "" : String(e.label);
-    label.dataset.dgm = "label";
-    label.oninput = scheduleSave;
-    row.appendChild(label);
-  }
+  /* Подпись связи — у всех типов с рёбрами, а не только у блок-схемы. Движок
+     рисует label на любом ребре (оргсхема «утверждает», сеть «поставки»), и
+     заполнитель их пишет: в промпте ребро описано как {from,to,label} без
+     оговорок про тип. А поле было только у flowchart — при том, что связи
+     собираются из DOM панели заново. Значит, у оргсхемы, дорожек, карты и сети
+     подпись ребра не показывалась вовсе, и первый же автосейв (хоть правка
+     заголовка) стирал её со слайда молча. Поле есть — подпись и видна, и
+     переживает сейв. */
+  const label = document.createElement("input");
+  label.placeholder = "подпись";
+  label.maxLength = 30;                 // MAX_EDGE_LABEL (schema.py)
+  label.className = "dgm-edge-label";
+  label.value = e.label == null ? "" : String(e.label);
+  label.dataset.dgm = "label";
+  label.oninput = scheduleSave;
+  row.appendChild(label);
   const del = document.createElement("button");
   del.type = "button"; del.className = "btn btn-ghost btn-sm item-del";
   del.textContent = "✕";
@@ -1942,15 +1948,21 @@ function collectDiagramFields() {
   });
   if (metaTouched) diagram.meta = { ...(base.meta || {}), ...metaPatch };
   if (form.querySelector("#dgmEdgeList")) {
+    // Свойства ребра, которых в панели нет (style: пунктир), берём из слепка по
+    // паре from>to — тем же приёмом, каким узлы наследуют baseNodes. Иначе сбор
+    // «с нуля» превращал пунктирную связь в сплошную на первом же сейве.
+    const baseEdges = {};
+    (base.edges || []).forEach((e) => { baseEdges[e.from + ">" + e.to] = e; });
     const edges = [];
     form.querySelectorAll(".dgm-edge-row").forEach((row) => {
       const fromId = row.querySelector('[data-dgm="from"]')?.value || "";
       const toId = row.querySelector('[data-dgm="to"]')?.value || "";
       // связь на удалённый узел или петля — молча пропускаем (транзиент правки)
       if (!fromId || !toId || fromId === toId || !ids.has(fromId) || !ids.has(toId)) return;
-      const e = { from: fromId, to: toId };
+      const e = { ...(baseEdges[fromId + ">" + toId] || {}), from: fromId, to: toId };
       const lbl = row.querySelector('[data-dgm="label"]');
-      if (lbl && lbl.value.trim()) e.label = lbl.value.trim();
+      // Поле есть всегда (dgmEdgeRow), пустое — это осознанно снятая подпись.
+      if (lbl) e.label = lbl.value.trim();
       edges.push(e);
     });
     diagram.edges = edges;

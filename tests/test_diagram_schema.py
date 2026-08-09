@@ -455,3 +455,22 @@ def test_browser_mirrors_repeat_the_schema_caps():
                      r"{kind}:\s*\[\s*\d+\s*,\s*(\d+)\s*\]") == _COUNTED
     assert _js_maxes("errtext.js",
                      r"{kind}:\s*\{{[^}}]*max:\s*(\d+)") == _COUNTED
+
+
+def test_panel_keeps_edge_properties_it_does_not_show():
+    """Панель схемы собирает связи из DOM заново, поэтому всё, чего в ней нет,
+    исчезает при первом же сейве — хоть при правке заголовка. Так и вышло:
+    поле подписи ребра рисовалось только для блок-схемы, а движок рисует label
+    на любом ребре (оргсхема «утверждает», сеть «поставки») и заполнитель их
+    пишет. Правка заголовка оргсхемы стирала обе подписи со слайда молча; style
+    (пунктир) терялся у всех типов. Узлы от этого защищены слепком baseNodes —
+    у связей должен быть такой же."""
+    src = (_STATIC / "editor.js").read_text(encoding="utf-8")
+    # подпись ребра — у всех типов со связями, а не под условием на kind
+    row = src[src.index("function dgmEdgeRow("):]
+    row = row[:row.index("\nfunction ")]
+    code = re.sub(r"//[^\n]*", "", re.sub(r"/\*.*?\*/", "", row, flags=re.S))
+    assert 'label.dataset.dgm = "label"' in code, "строка связи без поля подписи"
+    assert "kind" not in code, "поле подписи снова под условием на тип"
+    # сбор связей стартует со слепка, а не с пустого {from, to}
+    assert "baseEdges[fromId" in src
