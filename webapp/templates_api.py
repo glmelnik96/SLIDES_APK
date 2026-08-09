@@ -20,8 +20,13 @@ _NOT_FILLABLE = {"section-dots", "section-frame", "back-cover"}
 _HIDDEN_FROM_PICKER = {"cards-6"}
 
 
-def _slot_dict(spec: SlotSpec) -> dict:
+def _slot_dict(spec: SlotSpec, name: str = "") -> dict:
     out: dict = {"kind": spec.kind, "required": spec.required}
+    # Пустой слот рендерится примером (draft_render._coerce_slot) — редактор по
+    # этому флагу предупреждает перед экспортом, что рыба уедет в файл. Слоты со
+    # своим шаблонным дефолтом (image/lead/display) сэмплятся в "" и не считаются.
+    if spec.kind == "text" and name and _sample_value(name, spec):
+        out["filler"] = True
     if spec.max_chars:
         out["max_chars"] = spec.max_chars
     if spec.max_items:
@@ -33,7 +38,7 @@ def _slot_dict(spec: SlotSpec) -> dict:
     if spec.hint:
         out["hint"] = spec.hint
     if spec.item_slots:
-        out["item_slots"] = {n: _slot_dict(s) for n, s in spec.item_slots.items()}
+        out["item_slots"] = {n: _slot_dict(s, n) for n, s in spec.item_slots.items()}
     return out
 
 
@@ -58,7 +63,7 @@ def catalog(include_hidden: bool = False) -> list[dict]:
             "type": t.type,
             "intent": t.intent,
             "display_name": t.display_name,
-            "slots": {n: _slot_dict(s) for n, s in t.slots.items()},
+            "slots": {n: _slot_dict(s, n) for n, s in t.slots.items()},
         }
         if hidden:
             item["hidden"] = True

@@ -701,13 +701,17 @@ function countPlaceholderSlides() {
     const tpl = tplOf(slide.template_id);
     if (!tpl) return;
     const content = slide.content || {};
-    const hasEmptyRequired = Object.entries(tpl.slots).some(([name, spec]) => {
-      if (!spec.required) return false;
+    // Пример-текст подставляется НЕ только в обязательные слоты: пустой
+    // необязательный текст тоже рендерится рыбой («Короткий подзаголовок» на
+    // обложке), а пустой необязательный список просто не выводится.
+    const hasPlaceholder = Object.entries(tpl.slots).some(([name, spec]) => {
       const val = content[name];
-      if (spec.kind === "list") return !Array.isArray(val) || val.length === 0;
+      if (spec.kind === "list")
+        return spec.required && (!Array.isArray(val) || val.length === 0);
+      if (spec.kind !== "text" || !spec.filler) return false;
       return val == null || String(val).trim() === "";
     });
-    if (hasEmptyRequired) n++;
+    if (hasPlaceholder) n++;
   });
   return n;
 }
