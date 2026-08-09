@@ -197,6 +197,17 @@
     return { text: text, warn: warn };
   }
 
+  // Минуты на «Проверить и улучшить слайды». Это ХВОСТ сборки (сборка HTML →
+  // линтер → вычитка внешнего вида → круг автоправок): ни разбора документа, ни
+  // планирования, ни заполнения. Значит, он заведомо не дольше полной сборки
+  // такого же числа слайдов, — берём ту же ставку 30 с/слайд, что и estimateLine.
+  // Раньше здесь стояло «примерно n–2n мин», то есть в 2–4 раза БОЛЬШЕ, чем
+  // страница обещает за сборку с нуля; замер: 1 слайд ≈ 50 с, 8 слайдов ≈ 2,5 мин
+  // (вычитка идёт волнами по QA_WORKERS=8 параллельно).
+  function rebuildEstimate(count) {
+    return Math.max(1, Math.round(count * 0.5));
+  }
+
   // Доступность сервиса ИИ (GET /api/models/health) → тон индикатора и текст.
   // Роли, а не имена моделей: имя — деталь реализации, менялось уже дважды.
   // При "down" кнопку сборки НЕ блокируем — состояние могло измениться за секунды,
@@ -253,12 +264,14 @@
   root.diagramClaims = diagramClaims;
   root.gist = gist;
   root.estimateLine = estimateLine;
+  root.rebuildEstimate = rebuildEstimate;
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
+      rebuildEstimate: rebuildEstimate,
       healthLine: healthLine, checkedAgo: checkedAgo };
   }
 })(typeof window !== "undefined" ? window : globalThis);

@@ -2795,9 +2795,10 @@ byId("rebuild")?.addEventListener("click", async () => {
   if (!draftPlan.slides || !draftPlan.slides.length) return;  // К§17: кнопка дизейблится при пустом плане
   const n = draftPlan.slides.length;
   // Ч§3: единый копирайт, «вы», без «движка»; продуктовая формулировка + русская плюрализация.
+  const m = rebuildEstimate(n);
   const ok = await confirmDialog(
     `Улучшить ${n} ${plural(n, "слайд", "слайда", "слайдов")}? Проверим вёрстку и внешний вид ` +
-    `каждого и исправим ошибки — примерно ${n}–${2 * n} мин.`,
+    `каждого и исправим ошибки — примерно ${m} ${plural(m, "минуту", "минуты", "минут")}.`,
     "Улучшить", "Отмена");
   if (!ok) return;
   rebuilding = true;
