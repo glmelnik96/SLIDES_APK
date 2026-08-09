@@ -344,6 +344,7 @@ function attachDiagramDrag(doc) {
       any = true;
       DiagramDrag.attach(host, {
         engine: eng,
+        editText: true,   // у собранной деки нет боковой панели — правим на месте
         getSpec: () => {
           try { return JSON.parse(host.getAttribute("data-diagram") || "null"); }
           catch (_) { return null; }

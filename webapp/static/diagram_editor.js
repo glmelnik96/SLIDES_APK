@@ -160,15 +160,70 @@
     svg.insertAdjacentHTML("beforeend", s);
   }
 
+  /* Правка подписи узла прямо на схеме — для собранных дек, где боковой панели
+     нет вообще: без этого опечатку в узле нельзя было исправить никак (текст
+     схемы исключён из inline-правки деки, а панель есть только у черновиков).
+     Редактируемость включаем на один клик и снимаем на blur: движок
+     перерисовывает хост целиком, и постоянный contenteditable не пережил бы
+     ни одного перетаскивания. */
+  function nodeOf(spec, id) {
+    var nodes = (spec && spec.nodes) || [];
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodes[i];
+    return null;
+  }
+
+  function startEdit(host, id, e, opts) {
+    var g = null, gs = host.querySelectorAll("[data-node-id]");
+    for (var i = 0; i < gs.length; i++) {
+      if (gs[i].getAttribute("data-node-id") === id) { g = gs[i]; break; }
+    }
+    var div = g && g.querySelector("foreignObject div");
+    var spec = opts.getSpec();
+    var node = nodeOf(spec, id);
+    if (!div || !node) return;
+    var orig = node.label == null ? "" : String(node.label);
+    div.setAttribute("contenteditable", "true");
+    div.style.cursor = "text";
+    div.textContent = orig;   // движок мог обрезать подпись многоточием — правим полную
+    div.focus();
+    var doc = host.ownerDocument;
+    try {                      // каретка — туда, куда кликнули
+      var range = doc.caretRangeFromPoint && doc.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range) {
+        var sel = doc.defaultView.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (_) { /* каретка в конец — как поставил focus() */ }
+    div.addEventListener("keydown", function (ke) {
+      // Подпись однострочная: Enter завершает правку, Esc откатывает.
+      if (ke.key === "Enter") { ke.preventDefault(); div.blur(); }
+      if (ke.key === "Escape") { ke.preventDefault(); div.textContent = orig; div.blur(); }
+    });
+    div.addEventListener("blur", function () {
+      div.removeAttribute("contenteditable");
+      var text = (div.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+      var fresh = opts.getSpec();
+      var n = nodeOf(fresh, id);
+      // Пустая подпись схему не проходит — возвращаем прежнюю (перерисовкой).
+      if (!n || !text || text === orig) { opts.engine.render(host, fresh); return; }
+      n.label = text;
+      opts.engine.render(host, fresh);
+      opts.onCommit(fresh);
+    });
+  }
+
   function attach(host, opts) {
     if (host.__dgmDrag) return;      // повторный load кадра — не дублируем
     host.__dgmDrag = true;
     host.style.touchAction = "none"; // жест целиком наш, без скролла страницы
     host.style.cursor = "grab";
     // Подсказка там, где жест: курсор-«рука» говорит «можно тянуть», тултип — что
-    // именно произойдёт. Правка текста живёт в панели, здесь про неё не врём.
-    host.title = "Перетащите узел, чтобы сдвинуть. Узел выравнивается по соседям " +
-      "и центру, Alt — без выравнивания. Текст узлов правится в панели справа.";
+    // именно произойдёт. В черновике текст правится в панели, в собранной деке —
+    // кликом по узлу; обещать панель там, где её нет, нельзя.
+    host.title = "Перетащите узел, чтобы сдвинуть. Узел выравнивается по соседям "
+      + "и центру, Alt — без выравнивания. Текст узлов "
+      + (opts.editText ? "правится кликом по узлу." : "правится в панели справа.");
     var drag = null;
 
     host.addEventListener("pointerdown", function (e) {
@@ -232,12 +287,16 @@
       drawGuides(host, res.guides);
     });
 
-    function finish() {
+    function finish(e) {
       if (!drag) return;
       var d = drag;
       drag = null;
       host.style.cursor = "grab";
-      if (!d.moved) return;
+      // Клик без сдвига = «хочу поправить текст» (там, где панели нет).
+      if (!d.moved) {
+        if (opts.editText && e && e.type === "pointerup") startEdit(host, d.id, e, opts);
+        return;
+      }
       pruneZero(d.spec.offsets);
       opts.engine.render(host, d.spec);   // финальный кадр — уже без направляющих
       opts.onCommit(d.spec);
