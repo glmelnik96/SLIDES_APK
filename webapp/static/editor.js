@@ -1503,7 +1503,7 @@ function renderDiagramPanel(slide) {
   }, spec.kind);
 
   form.innerHTML = "";
-  form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54));
+  form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54, true));
   form.appendChild(dgmTextField("Подзаголовок", "subtitle", f.subtitle, 70));
 
   // Подписи, специфичные для типа (meta) — matrix: оси, venn: пересечение
@@ -1624,7 +1624,7 @@ function dgmResetLayoutButton() {
   return reset;
 }
 
-function dgmTextField(labelText, key, value, max) {
+function dgmTextField(labelText, key, value, max, required) {
   const wrap = document.createElement("div");
   wrap.className = "field";
   const label = document.createElement("label");
@@ -1637,6 +1637,23 @@ function dgmTextField(labelText, key, value, max) {
   el.addEventListener("input", scheduleSave);
   wrap.appendChild(el);
   wrap.appendChild(charCounter(el, max));
+  // Пустое обязательное поле схема принимает, а шаблон подставляет вместо него
+  // пример («ЗАГОЛОВОК СЛАЙДА»): в панели пусто, на слайде — чужой текст. На
+  // обычных слайдах об этом говорит серверная проверка; здесь её нет — говорим
+  // сами, тем же текстом (errtext: missing_required).
+  if (required) {
+    const msg = document.createElement("div");
+    msg.className = "field-hint field-hint--error";
+    msg.textContent = errText("missing_required");
+    const upd = () => {
+      const empty = !el.value.trim();
+      wrap.classList.toggle("field-error", empty);
+      msg.hidden = !empty;
+    };
+    el.addEventListener("input", upd);
+    upd();
+    wrap.appendChild(msg);
+  }
   return wrap;
 }
 
