@@ -1237,14 +1237,36 @@
     return out;
   }
 
+  /* Бюджет заголовка колонки: ширина карточки (660, см. layoutComparison) минус
+   * поля — заголовок жирный, а 0.6 кегля на символ выведены по обычному
+   * начертанию, так что запас нужен. Две строки — всё, что помещается над
+   * карточками. */
+  var CMP_W = 620, CMP_H = 2 * 34 * 1.16;
+
   function decorComparison(spec, layout) {
     var out = '<line x1="' + W / 2 + '" y1="20" x2="' + W / 2 + '" y2="' + (H - 20) +
       '" stroke="var(--fg-muted)" stroke-width="2" stroke-dasharray="10 8" opacity="0.6"/>';
     var cols = [W * 0.27, W * 0.73];
     (layout.lanes || []).slice(0, 2).forEach(function (lane, i) {
       if (!lane) return;
-      out += '<text x="' + cols[i] + '" y="64" text-anchor="middle" font-size="34" ' +
-        'font-weight="500" fill="var(--fg-body)">' + esc(lane) + "</text>";
+      /* Заголовок колонки рисовался голым <text> без габарита, а схема разрешает
+       * lane до 40 символов: «Целевая архитектура эксплуатации ЦОД 2030» на 34
+       * кегле занимает ~870px при колонке в 660 — заголовок наезжал на пунктирный
+       * разделитель и лез в чужую половину. Бюджет — ширина карточки минус поля;
+       * дальше тот же контракт, что у подписей узлов и рёбер. Блок из двух строк
+       * расходится от прежней базовой линии симметрично: одна строка стоит там
+       * же, где стояла, две — не достают до карточек (их верх на y=120). */
+      var lfs = fitFontBox(lane, CMP_W, CMP_H, 34);
+      var lead = Math.round(lfs * 1.16);
+      var rows = wrapLines(clampLabelBox(lane, CMP_W, CMP_H, lfs),
+                           Math.max(1, Math.floor(CMP_W / (lfs * 0.6))));
+      out += '<text x="' + cols[i] + '" y="' + (64 - (rows.length - 1) * lead / 2) +
+        '" text-anchor="middle" font-size="' + lfs + '" ' +
+        'font-weight="500" fill="var(--fg-body)">' +
+        rows.map(function (row, k) {
+          return '<tspan x="' + cols[i] + '"' + (k ? ' dy="' + lead + '"' : "") +
+            ">" + esc(row) + "</tspan>";
+        }).join("") + "</text>";
     });
     return out;
   }
