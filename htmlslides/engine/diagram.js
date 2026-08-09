@@ -119,19 +119,35 @@
     var links = edges.map(function (e) {
       var s = pos[e.from], t = pos[e.to];
       var forward = rank[e.to] > rank[e.from];
+      var same = rank[e.to] === rank[e.from];
       var points;
       if (down) {
         points = forward
           ? [[s.x, s.y + s.h / 2], [s.x, (s.y + t.y) / 2], [t.x, (s.y + t.y) / 2], [t.x, t.y - t.h / 2]]
-          : backRoute(s, t, true);
+          : same ? sameRankRoute(s, t, true) : backRoute(s, t, true);
       } else {
         points = forward
           ? [[s.x + s.w / 2, s.y], [(s.x + t.x) / 2, s.y], [(s.x + t.x) / 2, t.y], [t.x - t.w / 2, t.y]]
-          : backRoute(s, t, false);
+          : same ? sameRankRoute(s, t, false) : backRoute(s, t, false);
       }
       return { from: e.from, to: e.to, points: points, label: e.label || "", style: e.style || "solid" };
     });
     return { nodes: pos, links: links };
+  }
+
+  /* Соседи одного ранга (две ветки развилки, сходящиеся друг в друга) стоят в
+     одной колонке, поэтому это НЕ обратное ребро: обход низом прокладывал линию
+     сквозь целевую плашку и оставлял торчащий хвост под ней. Соединяем встречные
+     грани напрямую. */
+  function sameRankRoute(s, t, down) {
+    if (down) {
+      var right = t.x >= s.x;
+      return [[s.x + (right ? s.w / 2 : -s.w / 2), s.y],
+              [t.x + (right ? -t.w / 2 : t.w / 2), t.y]];
+    }
+    var below = t.y >= s.y;
+    return [[s.x, s.y + (below ? s.h / 2 : -s.h / 2)],
+            [t.x, t.y + (below ? -t.h / 2 : t.h / 2)]];
   }
 
   /* Обратное ребро (цикл «на доработку»): обводим низом/краем рабочей зоны. */

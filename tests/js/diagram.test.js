@@ -81,6 +81,30 @@ test("layoutFlowchart: direction down — ранги растут сверху �
   assert.ok(pos.start.y < pos.check.y && pos.check.y < pos.ok.y);
 });
 
+/* Две ветки развилки, сходящиеся друг в друга (manager→reserve), стоят в одной
+   колонке. Обход низом вёл линию сквозь целевую плашку и оставлял хвост под ней. */
+test("layoutFlowchart: ребро внутри ранга идёт напрямую, не сквозь плашку", () => {
+  const spec = {
+    kind: "flowchart", direction: "right",
+    nodes: [{ id: "a" }, { id: "up" }, { id: "down" }, { id: "z" }],
+    edges: [{ from: "a", to: "up" }, { from: "a", to: "down" },
+            { from: "up", to: "down" }, { from: "down", to: "z" }],
+  };
+  const { nodes: pos, links } = D.layoutFlowchart(spec);
+  const l = links.find((x) => x.from === "up" && x.to === "down");
+  assert.strictEqual(l.points.length, 2);                       // прямая, без обхода
+  const [s, t] = l.points;
+  assert.strictEqual(s[1], pos.up.y + pos.up.h / 2);            // низ источника
+  assert.strictEqual(t[1], pos.down.y - pos.down.h / 2);        // верх цели
+  l.points.forEach((p) => assert.ok(p[1] <= H, "линия ушла под холст"));
+});
+
+test("layoutFlowchart: настоящее обратное ребро по-прежнему идёт обходом", () => {
+  const { links } = D.layoutFlowchart(FLOW);
+  const back = links.find((l) => l.from === "fix" && l.to === "check");
+  assert.strictEqual(back.points.length, 4);
+});
+
 test("layoutFlowchart: метка ребра доносится до линка", () => {
   const { links } = D.layoutFlowchart(FLOW);
   const labels = links.map((l) => l.label).filter(Boolean).sort();
