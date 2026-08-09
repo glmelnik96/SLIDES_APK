@@ -1197,6 +1197,39 @@ test("render: подпись поверх заливки берёт контра
     "цвет фона в роли подписи не зависит от того, насколько тёмная заливка");
 });
 
+test("render: акцент на шкале графиков — ровно одна зелёная плашка", () => {
+  // --accent и --chart-1 — один и тот же зелёный. Галочка «акцент» на первом
+  // узле не меняла ничего вовсе, а на любом другом давала ВТОРУЮ зелёную
+  // плашку: воронка «зелёный / серый / серый / зелёный» читалась как родство
+  // первой ступени и выделенной, которого нет.
+  const greens = (html) =>
+    (html.match(/fill="var\(--(accent|chart-1)\)"/g) || []).length;
+
+  const host = fakeHost();
+  D.render(host, { kind: "funnel", nodes: [
+    { id: "a", label: "Лиды" }, { id: "b", label: "Квалификация" },
+    { id: "c", label: "Пилоты" }, { id: "d", label: "Сделки", accent: true }] });
+  assert.strictEqual(greens(host.innerHTML), 1, "зелёных плашек должно быть ровно одна");
+  assert.ok(host.innerHTML.includes('fill="var(--accent)"'));
+  assert.ok(!host.innerHTML.includes('fill="var(--chart-1)"'),
+    "шкала при акценте начинается с серого");
+
+  // Акцент на ПЕРВОМ узле теперь виден: он и есть зелёный, остальные серые.
+  const first = fakeHost();
+  D.render(first, { kind: "funnel", nodes: [
+    { id: "a", label: "Лиды", accent: true }, { id: "b", label: "Квалификация" },
+    { id: "c", label: "Сделки" }] });
+  assert.strictEqual(greens(first.innerHTML), 1);
+  assert.ok(first.innerHTML.includes('fill="var(--chart-2)"'));
+
+  // Без акцента шкала прежняя: зелёный-герой на первом сегменте.
+  const plain = fakeHost();
+  D.render(plain, { kind: "funnel", nodes: [
+    { id: "a", label: "Лиды" }, { id: "b", label: "Сделки" }] });
+  assert.ok(plain.innerHTML.includes('fill="var(--chart-1)"'));
+  assert.strictEqual(greens(plain.innerHTML), 1);
+});
+
 test("layout: стрелки цикла упираются в край плашки, а не внутрь неё", () => {
   // Фиксированный угловой отступ не учитывал ширину плашки: широкий узел
   // наверху круга съедал больший угол, и наконечник прятался под самой плашкой

@@ -1271,23 +1271,42 @@
      теме почти сливается с фоном (--chart-4 #525252 против --bg #222 — контраст
      2:1), и «Допущены к пилотам» на четвёртой полосе воронки читалось как тень.
      Пары «заливка → подпись» живут в теме, здесь только выбор индекса. */
-  function onChart(i, accent) {
-    return "var(--on-chart-" + (accent ? 1 : Math.min(i, 5) + 1) + ")";
+  function onChart(ci) {
+    return "var(--on-chart-" + (ci || 1) + ")";   // 0 = --accent, он же зелёный chart-1
+  }
+
+  /* Индекс шкалы --chart-N для типов, которые красят узлы палитрой (воронка,
+     пирамида, план-график, Венн). --accent и --chart-1 — ОДИН И ТОТ ЖЕ зелёный:
+     галочка «акцент» на первом узле не меняла ровно ничего, а на любом другом
+     давала вторую зелёную плашку — слайд заявлял родство первой ступени и
+     выделенной, которого нет. Поэтому там, где акцент проставлен, остальные
+     узлы начинают шкалу с серого: зелёный на схеме остаётся ровно один.
+     Возвращает функцию, вызываемую по одному разу на узел ПО ПОРЯДКУ. */
+  function chartIndex(spec) {
+    var shift = (spec.nodes || []).some(function (n) { return n.accent; }) ? 1 : 0;
+    var seen = 0;
+    return function (n) {
+      if (n.accent) return 0;
+      return Math.min(seen++ + shift, 5) + 1;
+    };
+  }
+  function chartFill(ci) {
+    return ci ? "var(--chart-" + ci + ")" : "var(--accent)";
   }
 
   function renderFunnel(spec, pos) {
-    var parts = [];
-    spec.nodes.forEach(function (n, i) {
+    var parts = [], idx = chartIndex(spec);
+    spec.nodes.forEach(function (n) {
       var p = pos[n.id];
       var wTop = p.w, wBot = p.wBottom == null ? p.w : p.wBottom;
-      var fill = n.accent ? "var(--accent)" : "var(--chart-" + (Math.min(i, 5) + 1) + ")";
+      var ci = idx(n), fill = chartFill(ci);
       parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
         '<polygon points="' +
         (p.x - wTop / 2) + "," + (p.y - p.h / 2) + " " + (p.x + wTop / 2) + "," + (p.y - p.h / 2) + " " +
         (p.x + wBot / 2) + "," + (p.y + p.h / 2) + " " + (p.x - wBot / 2) + "," + (p.y + p.h / 2) +
         '" fill="' + fill + '"/>' +
         labelFO({ x: p.x, y: p.y, w: Math.min(wTop, wBot) + 40, h: p.h }, n,
-                onChart(i, n.accent)) +
+                onChart(ci)) +
         (n.value ? '<text x="' + (p.x + 640) + '" y="' + p.y +
           '" dominant-baseline="middle" font-size="30" font-weight="500" ' +
           'fill="var(--fg-body)">' + esc(n.value) + "</text>" : "") +
@@ -1302,10 +1321,10 @@
   }
 
   function renderVenn(spec, pos) {
-    var parts = [];
-    spec.nodes.forEach(function (n, i) {
+    var parts = [], idx = chartIndex(spec);
+    spec.nodes.forEach(function (n) {
       var p = pos[n.id];
-      var fill = n.accent ? "var(--accent)" : "var(--chart-" + (Math.min(i, 5) + 1) + ")";
+      var fill = chartFill(idx(n));
       parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
         '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + p.r + '" fill="' + fill +
         '" fill-opacity="0.45"/>' +
@@ -1342,17 +1361,17 @@
   }
 
   function renderGantt(spec, pos) {
-    var parts = [];
-    spec.nodes.forEach(function (n, i) {
+    var parts = [], idx = chartIndex(spec);
+    spec.nodes.forEach(function (n) {
       var p = pos[n.id];
-      var fill = n.accent ? "var(--accent)" : "var(--chart-" + (Math.min(i, 5) + 1) + ")";
+      var ci = idx(n), fill = chartFill(ci);
       /* Подпись живёт внутри полосы, пока та достаточно широка; короткая
          работа (один период на длинной шкале) уводит подпись наружу — иначе
          текст молча резался бы по границе полосы. */
       var box, color, align;
       if (p.w >= 300) {
         box = { x: p.x, y: p.y, w: p.w, h: p.h };
-        color = onChart(i, n.accent); align = "center";
+        color = onChart(ci); align = "center";
       } else if (W - (p.x + p.w / 2) >= 280) {
         var lw = Math.min(420, W - (p.x + p.w / 2) - 16);
         box = { x: p.x + p.w / 2 + 16 + lw / 2, y: p.y, w: lw, h: p.h };
