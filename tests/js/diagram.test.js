@@ -665,3 +665,59 @@ test("render: подпись переносится по словам, а не �
   assert.ok(!/word-break\s*:/.test(host.innerHTML),
     "word-break рвёт слова там, где перенос уместился бы целиком");
 });
+
+// ── плашки не налезают друг на друга ────────────────────────────────────────
+function boxOverlap(L) {
+  const ns = Object.keys(L.nodes).map((id) => Object.assign({ id }, L.nodes[id]));
+  const hits = [];
+  for (let i = 0; i < ns.length; i++) {
+    for (let j = i + 1; j < ns.length; j++) {
+      const a = ns[i], b = ns[j];
+      const ox = (a.w + b.w) / 2 - Math.abs(a.x - b.x);
+      const oy = (a.h + b.h) / 2 - Math.abs(a.y - b.y);
+      if (ox > 0 && oy > 0) hits.push(`${a.id}~${b.id}`);
+    }
+  }
+  return hits;
+}
+
+function chain(kind, n) {
+  const nodes = [], edges = [];
+  for (let i = 0; i < n; i++) nodes.push({ id: "n" + i, label: "Узел " + (i + 1) });
+  for (let i = 1; i < n; i++) edges.push({ from: "n" + (i - 1), to: "n" + i });
+  return { version: 1, kind, direction: "right", nodes, edges };
+}
+
+test("layout: узлы графа связей не встают вплотную", () => {
+  // Силовая модель считает узлы точками — плашки касались боками, и стрелка
+  // между ними вырождалась в огрызок в 4px.
+  for (const n of [3, 5, 8, 12]) {
+    const L = D.LAYOUTS.network(chain("network", n));
+    assert.deepEqual(boxOverlap(L), [], `network n=${n}: плашки перекрылись`);
+  }
+});
+
+test("layout: раскладка графа связей повторяема", () => {
+  // Сейв редактора запекает SVG в деку — повторный рендер обязан совпасть.
+  const a = D.LAYOUTS.network(chain("network", 7));
+  const b = D.LAYOUTS.network(chain("network", 7));
+  assert.deepEqual(a.nodes, b.nodes);
+});
+
+test("layout: корень mindmap не залезает на первую ветвь", () => {
+  // Корень был шире колонки (colW+60 против colW-40) — на глубине от трёх
+  // уровней он перекрывал ветвь, и стрелка к ней рисовалась задом наперёд.
+  for (const n of [4, 6, 8]) {
+    const L = D.LAYOUTS.mindmap(chain("mindmap", n));
+    assert.deepEqual(boxOverlap(L), [], `mindmap n=${n}: плашки перекрылись`);
+    const s = L.nodes.n0, t = L.nodes.n1;
+    assert.ok(Math.abs(t.x - s.x) > (s.w + t.w) / 2,
+      `mindmap n=${n}: стрелка от корня идёт назад`);
+  }
+});
+
+test("layout: одиннадцать лучей hub_spoke не перекрываются", () => {
+  const L = D.LAYOUTS.hub_spoke(
+    Object.assign(chain("hub_spoke", 12), { edges: [] }));
+  assert.deepEqual(boxOverlap(L), [], "лучи внизу эллипса налезли друг на друга");
+});

@@ -370,10 +370,14 @@
     var hub = nodes[0], spokes = nodes.slice(1), m = spokes.length || 1;
     var pos = {};
     pos[hub.id] = { x: W / 2, y: H / 2, w: 400, h: 150 };
-    var rx = 630, ry = 255;
+    /* От одиннадцати лучей шаг по эллипсу становится меньше карточки, и соседи
+       внизу налезали друг на друга: раздвигаем эллипс и ужимаем плашки. */
+    var wide = m > 10;
+    var rx = wide ? 660 : 630, ry = wide ? 272 : 255;
+    var sw = wide ? 250 : 310, sh = wide ? 86 : 104;
     spokes.forEach(function (n, i) {
       var a = -Math.PI / 2 + (2 * Math.PI * i) / m;
-      pos[n.id] = { x: W / 2 + rx * Math.cos(a), y: H / 2 + ry * Math.sin(a), w: 310, h: 104 };
+      pos[n.id] = { x: W / 2 + rx * Math.cos(a), y: H / 2 + ry * Math.sin(a), w: sw, h: sh };
     });
     var edges = (spec.edges && spec.edges.length) ? spec.edges
       : spokes.map(function (n) { return { from: hub.id, to: n.id }; });
@@ -563,7 +567,10 @@
     var colW = Math.min(420, (W / 2 - 200) / Math.max(1, maxDepth));
     var w = Math.min(320, colW - 40), h = 86;
     var pos = {};
-    pos[root.id] = { x: W / 2, y: H / 2, w: Math.min(380, colW + 60), h: 130 };
+    /* Ширина корня — по той же мерке, что у ветвей: прежние colW+60 при глубине
+       от трёх уровней (colW < 320) залезали на первую ветвь на 10px, и стрелка
+       от корня уходила назад, рисуясь задом наперёд. Корень выделен высотой. */
+    pos[root.id] = { x: W / 2, y: H / 2, w: Math.min(380, colW - 40), h: 130 };
     [1, -1].forEach(function (dir) {
       /* Ветви центра расходятся через одну: чётные — вправо, нечётные — влево. */
       var branches = children[root.id].filter(function (id, i) {
@@ -599,6 +606,51 @@
       });
     });
     return { nodes: pos, links: links };
+  }
+
+  /* Развести перекрывшиеся плашки по оси наименьшего проникновения и вернуть их
+     в холст. Порядок обхода фиксирован (ключи в порядке вставки), случайности
+     нет — повторный рендер обязан дать ТЕ ЖЕ координаты. */
+  function separateBoxes(pos, gap) {
+    var ids = Object.keys(pos), i, j;
+    for (var pass = 0; pass < 80; pass++) {
+      var moved = false;
+      for (i = 0; i < ids.length; i++) {
+        for (j = i + 1; j < ids.length; j++) {
+          var a = pos[ids[i]], b = pos[ids[j]];
+          var ox = (a.w + b.w) / 2 + gap - Math.abs(a.x - b.x);
+          var oy = (a.h + b.h) / 2 + gap - Math.abs(a.y - b.y);
+          if (ox <= 0 || oy <= 0) continue;
+          moved = true;
+          /* Проникновение сравниваем в долях размера: холст широкий, и «кто
+             меньше в пикселях» всегда толкал бы по вертикали. */
+          if (ox / (a.w + b.w) < oy / (a.h + b.h)) {
+            var sx = ((a.x <= b.x ? -1 : 1) * ox) / 2;
+            a.x += sx; b.x -= sx;
+          } else {
+            var sy = ((a.y <= b.y ? -1 : 1) * oy) / 2;
+            a.y += sy; b.y -= sy;
+          }
+        }
+      }
+      for (i = 0; i < ids.length; i++) {
+        var p = pos[ids[i]];
+        p.x = Math.max(p.w / 2 + 4, Math.min(W - p.w / 2 - 4, p.x));
+        p.y = Math.max(p.h / 2 + 4, Math.min(H - p.h / 2 - 4, p.y));
+      }
+      if (!moved) break;
+    }
+    /* Разведение толкает облако к краям, а клампы прибивают его к низу: граф
+       съезжал в нижнюю половину, оставляя пустую верхнюю. Возвращаем композицию
+       в центр по фактическим габаритам плашек. */
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    ids.forEach(function (id) {
+      var p = pos[id];
+      minX = Math.min(minX, p.x - p.w / 2); maxX = Math.max(maxX, p.x + p.w / 2);
+      minY = Math.min(minY, p.y - p.h / 2); maxY = Math.max(maxY, p.y + p.h / 2);
+    });
+    var shiftX = (W - (minX + maxX)) / 2, shiftY = (H - (minY + maxY)) / 2;
+    ids.forEach(function (id) { pos[id].x += shiftX; pos[id].y += shiftY; });
   }
 
   /* Граф связей: старт по эллипсу + фиксированное число итераций
@@ -660,6 +712,12 @@
       pos[nd.id] = { x: W / 2 + (px[i2] - cx) * s, y: H / 2 + (py[i2] - cy) * s,
                      w: w, h: h };
     });
+    /* Силовая модель считает узлы точками, поэтому плашки вставали вплотную:
+       две карточки касались боками, а стрелка между ними вырождалась в огрызок
+       в 4px. Разводим прямоугольники ПОСЛЕ вписывания — до него общий масштаб
+       снова съел бы зазор. Зазор в 56px, а не впритык: стрелке нужна длина,
+       иначе она читается царапиной между плашками. */
+    separateBoxes(pos, 56);
     var links = edges.filter(function (e) { return pos[e.from] && pos[e.to]; })
       .map(function (e) {
         return { from: e.from, to: e.to, label: e.label || "",
