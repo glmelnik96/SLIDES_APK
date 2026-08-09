@@ -164,6 +164,27 @@ test("layoutFunnel: ширины по value убывают, без value — л�
   assert.ok(q.a.w > q.b.w && q.b.w > q.c.w);
 });
 
+test("layoutFunnel: ступень без числа не раздувает воронку обратно", () => {
+  // Числа проставлены не у всех этапов (обычная история: последние ещё не
+  // посчитали). Раньше пустая ступень бралась из линейного скоса «с нуля» и
+  // оказывалась ШИРЕ соседней сверху — воронка разъезжалась посреди склона.
+  const spec = { kind: "funnel", nodes: [
+    { id: "a", value: "12000" }, { id: "b", value: "3400" },
+    { id: "c", value: "1100" }, { id: "d", value: "280" },
+    { id: "e" }, { id: "f" }] };
+  const p = D.layoutFunnel(spec).nodes;
+  inCanvas(p);
+  const w = ["a", "b", "c", "d", "e", "f"].map((k) => p[k].w);
+  w.slice(1).forEach((cur, i) => {
+    assert.ok(cur <= w[i] + 1e-6, `ступень ${i + 2} шире предыдущей: ${w[i]} → ${cur}`);
+  });
+
+  // Дырка посреди известных величин тянется между соседями, а не скачет.
+  const mid = D.layoutFunnel({ kind: "funnel", nodes: [
+    { id: "a", value: "100" }, { id: "b" }, { id: "c", value: "20" }] }).nodes;
+  assert.ok(mid.a.w > mid.b.w && mid.b.w > mid.c.w);
+});
+
 test("layoutHierarchy: корень над детьми, родитель по центру потомков", () => {
   const spec = {
     kind: "hierarchy",

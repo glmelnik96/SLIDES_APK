@@ -257,10 +257,29 @@
     var wMax = 1150, wMin = 340;
     var values = nodes.map(function (nd) { return num(nd.value); });
     var vMax = Math.max.apply(null, values.concat([0]));
-    var widths = nodes.map(function (nd, i) {
-      if (vMax > 0 && values[i] > 0) return wMin + (values[i] / vMax) * (wMax - wMin);
-      return wMax - (i * (wMax - wMin)) / Math.max(1, n - 1);   // линейное сужение
-    });
+    var linear = function (i) { return wMax - (i * (wMax - wMin)) / Math.max(1, n - 1); };
+    var widths, i;
+    if (!(vMax > 0)) {
+      widths = nodes.map(function (nd, k) { return linear(k); });   // чисел нет — ровный скос
+    } else {
+      /* Ступень без числа не начинает скос заново: иначе воронка, где числа
+         проставлены не у всех этапов, раздувалась обратно посреди склона —
+         человек читал это как «здесь стало больше», хотя данных просто нет.
+         Тянемся между ближайшими известными ширинами, дальше — вниз к wMin. */
+      widths = values.map(function (v) {
+        return v > 0 ? wMin + (v / vMax) * (wMax - wMin) : null;
+      });
+      for (i = 0; i < n; i++) {
+        if (widths[i] != null) continue;
+        var p = i - 1, q = i + 1;
+        while (p >= 0 && widths[p] == null) p--;
+        while (q < n && widths[q] == null) q++;
+        var lo = p >= 0 ? widths[p] : null, hi = q < n ? widths[q] : null;
+        if (lo == null) widths[i] = Math.min(wMax, hi + ((wMax - hi) * (q - i)) / (q + 1));
+        else if (hi == null) widths[i] = Math.max(wMin, lo - ((lo - wMin) * (i - p)) / (n - p));
+        else widths[i] = lo + ((hi - lo) * (i - p)) / (q - p);
+      }
+    }
     var pos = {};
     nodes.forEach(function (nd, i) {
       pos[nd.id] = {

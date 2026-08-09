@@ -207,6 +207,31 @@ test("у типов со структурой в рёбрах список уз�
   assert.strictEqual(out.edges.length, 2);
 });
 
+test("узлы сверх примера не получают чужих чисел и сроков", () => {
+  // Регрессия: клон последнего узла примера тащил его величину — воронка из
+  // шести этапов показывала хвост одинаковых «280», которых человек не вводил,
+  // и они же задавали ширину ступени. То же со стартовым периодом план-графика.
+  const six = { kind: "cycle", nodes: CYCLE6.nodes };
+  const funnel = { kind: "funnel", nodes: [
+    { id: "f1", label: "Лиды", value: "12000" },
+    { id: "f2", label: "Квалификация", value: "3400" },
+    { id: "f3", label: "Сделки", value: "280" }] };
+  const out = Drag.carryLabels(clone(funnel), six);
+  assert.strictEqual(out.nodes.length, 6);
+  assert.deepStrictEqual(out.nodes.map((n) => n.value),
+    ["12000", "3400", "280", undefined, undefined, undefined]);
+
+  const gantt = { kind: "gantt_lite", nodes: [
+    { id: "g1", label: "Аудит", value: "2", level: 0 },
+    { id: "g2", label: "Миграция", value: "3", level: 2 }] };
+  const g = Drag.carryLabels(clone(gantt), six);
+  assert.strictEqual(g.nodes.length, 6);
+  assert.deepStrictEqual(g.nodes.map((n) => n.level),
+    [0, 2, undefined, undefined, undefined, undefined]);
+  assert.deepStrictEqual(g.nodes.map((n) => n.value),
+    ["2", "3", undefined, undefined, undefined, undefined]);
+});
+
 test("без старой схемы пример остаётся примером", () => {
   assert.deepStrictEqual(Drag.carryLabels(clone(S_PROCESS), null), S_PROCESS);
   assert.deepStrictEqual(Drag.carryLabels(clone(S_PROCESS), { nodes: [] }), S_PROCESS);
