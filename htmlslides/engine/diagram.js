@@ -1036,7 +1036,7 @@
    * SVG не расставляет переносов, и «Автоматизиров/анная» читается как брак. */
   var EDGE_FS = 24, EDGE_W = 200, EDGE_H = 2 * EDGE_FS * 1.16;
 
-  function linkPath(link, markerId) {
+  function linkPath(link, markerId, boxes) {
     var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="3"' +
       (link.style === "dashed" ? ' stroke-dasharray="10 8"' : "") +
       ' marker-end="url(#' + markerId + ')"';
@@ -1068,6 +1068,21 @@
       var anchor = "middle";
       if (pts.length === 2) {              // прямой сегмент (hub_spoke): середина
         lx = (pts[0][0] + pts[1][0]) / 2; ly = (pts[0][1] + pts[1][1]) / 2 - 12;
+      } else if (Math.abs(p0[0] - p1[0]) < 1 && Math.abs(p0[1] - p1[1]) < 1 &&
+                 Math.abs(pts[0][1] - pts[pts.length - 1][1]) < 1) {
+        /* Средний сегмент выродился в точку, и всё ребро идёт по горизонтали:
+         * соседи стоят в одном ряду, ломаная «колено-колено» на деле прямая.
+         * Это попадало в ветку вертикального сегмента и метку уносило ВБОК на её
+         * полную ширину — прямо на плашку следующего узла. Промежуток между
+         * колонками зависит от числа рангов: на трёх он 450 (бюджет метки 200
+         * влезает), на пяти — 75, и «при положительном решении» ложилось поперёк
+         * соседа. Ставим метку НАД линией, выше плашки: блок растёт вверх, и
+         * между рядами под него как раз и заложены две строки.
+         * Проверка на горизонтальность ребра обязательна: у связи с единственным
+         * потомком оргсхемы средний сегмент тоже вырожден, но ребро вертикально —
+         * там метка и так стоит в просвете между рядами, а сдвиг «выше плашки»
+         * загнал бы её ПОД плашку родителя. */
+        ly = p0[1] - (boxes && boxes[link.from] ? boxes[link.from].h : 0) / 2 - 12;
       } else if (Math.abs(p0[0] - p1[0]) < 1) { // вертикальный сегмент: метку вбок
         lx += 14; ly += 12; anchor = "start";
       }
@@ -1450,7 +1465,7 @@
       '<path d="M0 0L10 5L0 10z" fill="var(--fg-muted)"/></marker></defs>');
     var decor = DECOR[spec.kind];
     if (decor) parts.push(decor(spec, result, markerId));
-    result.links.forEach(function (link) { parts.push(linkPath(link, markerId)); });
+    result.links.forEach(function (link) { parts.push(linkPath(link, markerId, result.nodes)); });
     var custom = NODE_RENDERERS[spec.kind];
     if (custom) {
       parts.push(custom(spec, result.nodes));
