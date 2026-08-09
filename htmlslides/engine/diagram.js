@@ -1095,9 +1095,26 @@
     if (cl) {
       var cx = 0, cy = 0, n = spec.nodes.length;
       spec.nodes.forEach(function (nd) { cx += pos[nd.id].x / n; cy += pos[nd.id].y / n; });
-      parts.push('<text x="' + cx + '" y="' + cy + '" text-anchor="middle" ' +
-        'dominant-baseline="middle" font-size="26" font-weight="500" ' +
-        'fill="var(--fg-body)">' + esc(cl) + "</text>");
+      /* Габарит подписи — сама линза пересечения, а не «сколько текста пришло».
+         Голый <text> тянулся во всю длину: «Планирование маршрута доставки» на
+         450px при линзе в 180 ложилось поверх подписей обоих кругов, и слайд
+         читался как месиво наложенных букв. Радиус минус расстояние до центра —
+         это и есть половина линзы, работает и для двух кругов, и для трёх. */
+      var half = Infinity;
+      spec.nodes.forEach(function (nd) {
+        var p = pos[nd.id], dx = p.x - cx, dy = p.y - cy;
+        half = Math.min(half, (p.r || 0) - Math.sqrt(dx * dx + dy * dy));
+      });
+      var cw = Math.max(60, 2 * half), ch = cw;
+      var cfs = fitFontBox(cl, cw, ch, 26);
+      parts.push('<foreignObject x="' + (cx - cw / 2) + '" y="' + (cy - ch / 2) +
+        '" width="' + cw + '" height="' + ch + '">' +
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;' +
+        'display:flex;align-items:center;justify-content:center;text-align:center;' +
+        'overflow:hidden;font-size:' + cfs + 'px;line-height:1.15;font-weight:500;' +
+        'color:var(--fg-body);"><div style="min-width:0;max-width:100%;' +
+        'overflow-wrap:break-word;">' + esc(clampLabelBox(cl, cw, ch, cfs)) +
+        "</div></div></foreignObject>");
     }
     return parts.join("");
   }

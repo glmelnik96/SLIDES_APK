@@ -704,6 +704,25 @@ test("render: длинная подпись дорожки не срезаетс
     `подпись дорожки не переносится: ${frag}`);
 });
 
+test("render: подпись пересечения venn не наезжает на подписи кругов", () => {
+  // center_label рисовался голым <text> без габарита: «Планирование маршрута
+  // доставки» растягивалось на 450px при линзе в 180 и ложилось поверх подписей
+  // обоих кругов — читалось месиво из наложенных букв.
+  const host = fakeHost();
+  D.render(host, { kind: "venn",
+    nodes: [{ id: "a", label: "Отдел клиентского сопровождения" },
+            { id: "b", label: "Электроэнцефалография пациента" }],
+    meta: { center_label: "Планирование маршрута доставки" } });
+  assert.ok(!/<text[^>]*>[^<]*Планирование/.test(host.innerHTML),
+    "подпись пересечения всё ещё голый <text> без габарита");
+  const i = host.innerHTML.indexOf("Планирование");
+  const fo = host.innerHTML.lastIndexOf("<foreignObject", i);
+  assert.ok(fo >= 0, "подпись пересечения не в foreignObject");
+  const w = Number(/width="([\d.]+)"/.exec(host.innerHTML.slice(fo, i))[1]);
+  // линза двух кругов: 2*(r - dx) = 2*(255-165) = 180
+  assert.ok(w > 0 && w <= 180, `подпись пересечения шире линзы: ${w}`);
+});
+
 test("render: кегль подписи попадает в разметку", () => {
   const host = fakeHost();
   D.render(host, { kind: "swimlanes",
