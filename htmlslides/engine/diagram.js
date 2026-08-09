@@ -80,6 +80,10 @@
     return rank;
   }
 
+  /* Высота нарисованного ромба развилки: выше коробки, иначе подпись не влезает
+     в узкую середину. Одна формула на раскладку и на отрисовку. */
+  function diamondH(h) { return Math.min(h + 44, h * 1.7); }
+
   function layoutFlowchart(spec) {
     var nodes = spec.nodes, edges = spec.edges || [];
     var down = spec.direction === "down";
@@ -113,6 +117,11 @@
         var w = down ? Math.min(300, pitch - 24) : nodeMain;
         var h = down ? nodeMain : Math.min(110, pitch - 24);
         pos[b.id] = { x: down ? cross : main, y: down ? main : cross, w: w, h: h };
+        /* Ромб рисуется ВЫШЕ своей коробки — иначе подпись не влезала бы в узкую
+           середину. Храним нарисованную высоту рядом с коробкой: раскладка и
+           якоря рёбер живут по h, а всё, что обходит фигуру глазами (подписи
+           связей), обязано мерить hDraw. */
+        if (nodes[b.idx].shape === "decision") pos[b.id].hDraw = diamondH(h);
       });
     });
 
@@ -1030,7 +1039,7 @@
     var x = p.x, y = p.y, w = p.w, h = p.h;
     var fill = nodeFill(n);
     if (n.shape === "decision") {
-      var dh = Math.min(h + 44, h * 1.7);
+      var dh = diamondH(h);
       return '<polygon points="' + x + "," + (y - dh / 2) + " " + (x + w / 2) + "," + y + " " +
         x + "," + (y + dh / 2) + " " + (x - w / 2) + "," + y + '" fill="' + fill + '"/>';
     }
@@ -1055,6 +1064,20 @@
    * «Автоматизированная» (18 символов при 13 на строку) рвалось посреди слова —
    * SVG не расставляет переносов, и «Автоматизиров/анная» читается как брак. */
   var EDGE_FS = 24, EDGE_W = 200, EDGE_H = 2 * EDGE_FS * 1.16;
+
+  /* Просвет от линии y до ближайшей плашки вверх (dir −1) или вниз (dir +1),
+     считая только те, что попадают в горизонтальный диапазон [x0, x1]. Высоту
+     берём НАРИСОВАННУЮ (hDraw): ромб развилки выступает за свою коробку. */
+  function clearance(boxes, x0, x1, y, dir) {
+    var room = dir < 0 ? y : H - y;
+    Object.keys(boxes).forEach(function (id) {
+      var p = boxes[id], ph = p.hDraw || p.h;
+      if (x1 <= p.x - p.w / 2 || x0 >= p.x + p.w / 2) return;
+      var edge = dir < 0 ? p.y + ph / 2 : p.y - ph / 2;
+      if (dir < 0 ? edge < y : edge > y) room = Math.min(room, Math.abs(y - edge));
+    });
+    return room;
+  }
 
   function linkPath(link, markerId, boxes) {
     var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="3"' +
@@ -1085,7 +1108,7 @@
       var pts = link.points;
       var p0 = pts[1] || pts[0], p1 = pts[2] || pts[1] || p0;
       var lx = (p0[0] + p1[0]) / 2, ly = (p0[1] + p1[1]) / 2 - 12;
-      var anchor = "middle", budget = EDGE_W;
+      var anchor = "middle", budget = EDGE_W, lifted = false;
       if (pts.length === 2) {              // прямой сегмент (hub_spoke): середина
         lx = (pts[0][0] + pts[1][0]) / 2; ly = (pts[0][1] + pts[1][1]) / 2 - 12;
         /* Соседи по одной дорожке соединяются прямой горизонталью, и промежуток
@@ -1138,6 +1161,7 @@
          * там метка и так стоит в просвете между рядами, а сдвиг «выше плашки»
          * загнал бы её ПОД плашку родителя. */
         ly = p0[1] - (boxes && boxes[link.from] ? boxes[link.from].h : 0) / 2 - 12;
+        lifted = true;
       } else if (Math.abs(p0[0] - p1[0]) < 1) { // вертикальный сегмент: метку вбок
         lx += 14; ly += 12; anchor = "start";
       }
@@ -1149,10 +1173,39 @@
        * clampLabelBox, что и подписи узлов, и раскладываем на tspan'ы. Блок
        * растёт ВВЕРХ: нижняя строка остаётся на прежней базовой линии, то есть
        * короткие «да»/«нет» стоят там же, где стояли. */
-      var efs = fitFontBox(link.label, budget, EDGE_H, EDGE_FS);
-      var lead = Math.round(efs * 1.16);
-      var elines = wrapLines(clampLabelBox(link.label, budget, EDGE_H, efs),
-                             Math.max(1, Math.floor(budget / (efs * 0.6))));
+      var efs, lead, elines;
+      function fit(h) {
+        efs = fitFontBox(link.label, budget, h, EDGE_FS);
+        lead = Math.round(efs * 1.16);
+        elines = wrapLines(clampLabelBox(link.label, budget, h, efs),
+                           Math.max(1, Math.floor(budget / (efs * 0.6))));
+      }
+      fit(EDGE_H);
+      /* Блок растёт ВВЕРХ — и упирается в то, что стоит НАД ним. У блок-схемы
+       * обратное ребро идёт по коридору в 56px под рядом плашек, а блоку из двух
+       * строк нужно 68: подпись возвратной связи налезала на ромб развилки, и
+       * «положительном» читалось как «поло⧫ительном» — будто в файле битый
+       * символ. Ромб особенно коварен: он РИСУЕТСЯ на 44px выше своей коробки
+       * раскладки (hDraw), поэтому меряем нарисованную фигуру.
+       * Сначала пробуем перенести блок ПОД линию — там у возвратного ребра
+       * обычно пусто, и подпись сохраняется целиком; и только если и снизу
+       * тесно, ужимаем блок до фактического просвета (кегль вниз, дальше честное
+       * «…»). Метку, уже поднятую НАД плашкой соседа по ряду, не опускаем: под
+       * ней та самая плашка, от которой мы её и убирали. */
+      if (anchor === "middle" && boxes) {
+        var half = Math.max.apply(null, elines.map(function (s) { return s.length; }))
+          * efs * 0.6 / 2;
+        var blockH = efs + (elines.length - 1) * lead;
+        var room = clearance(boxes, lx - half, lx + half, ly, -1);
+        if (blockH > room) {
+          var under = clearance(boxes, lx - half, lx + half, p0[1] + 12, 1);
+          if (!lifted && under >= blockH + 12) {
+            ly = p0[1] + 12 + blockH;
+          } else if (room > 0) {
+            fit(room);
+          }
+        }
+      }
       out += '<text x="' + lx + '" y="' + (ly - (elines.length - 1) * lead) +
         '" text-anchor="' + anchor + '" font-size="' + efs + '" ' +
         'fill="var(--fg-muted)">' +

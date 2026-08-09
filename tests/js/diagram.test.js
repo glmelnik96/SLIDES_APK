@@ -552,6 +552,51 @@ test("render: подписи ветвей карты не заезжают на 
   });
 });
 
+test("render: подпись возвратной связи не налезает на ромб развилки", () => {
+  // Возвратное ребро идёт по коридору в 56px под рядом плашек, а блок подписи из
+  // двух строк требует 68 — и «положительном» упиралось в НИЖНИЙ ЛУЧ РОМБА:
+  // ромб рисуется на 44px выше своей коробки раскладки, поэтому подпись,
+  // честно обошедшая коробку, всё равно получала клин поверх буквы. Читалось
+  // как битый символ в файле. Подпись обязана уйти под линию и остаться целой.
+  const spec = {
+    kind: "flowchart", direction: "right",
+    nodes: [{ id: "start", label: "Заявка", shape: "start" },
+            { id: "check", label: "Проверка", shape: "process" },
+            { id: "ok", label: "Данные полные?", shape: "decision" },
+            { id: "fix", label: "Доработка", shape: "process" },
+            { id: "done", label: "Готово", shape: "end" }],
+    edges: [{ from: "start", to: "check" }, { from: "check", to: "ok" },
+            { from: "ok", to: "fix" }, { from: "ok", to: "done" },
+            { from: "fix", to: "check", label: "при положительном решении" }],
+  };
+  const host = fakeHost();
+  D.render(host, spec);
+  const out = D.LAYOUTS.flowchart(spec);
+  const texts = host.innerHTML.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
+  assert.strictEqual(texts.length, 1, "подпись возвратной связи потерялась");
+  const t = texts[0];
+  const x = Number(t.match(/x="([\d.-]+)"/)[1]);
+  const y = Number(t.match(/y="([\d.-]+)"/)[1]);
+  const fs = Number(t.match(/font-size="([\d.-]+)"/)[1]);
+  const lines = (t.match(/<tspan[^>]*>([^<]*)<\/tspan>/g) || [])
+    .map((s) => s.replace(/<[^>]*>/g, ""));
+  assert.strictEqual(lines.join(" "), "при положительном решении",
+                     "подпись усохла, хотя под линией места вдоволь");
+  const w = Math.max(...lines.map((s) => s.length)) * fs * 0.6;
+  const lead = Math.round(fs * 1.16);
+  const box = { x0: x - w / 2, x1: x + w / 2,
+                y0: y - fs, y1: y + (lines.length - 1) * lead };
+  Object.keys(out.nodes).forEach((id) => {
+    const p = out.nodes[id];
+    // Меряем НАРИСОВАННУЮ фигуру: у ромба она выше коробки, и именно этот
+    // излишек съедал букву.
+    const ph = p.hDraw || p.h;
+    const over = box.x0 < p.x + p.w / 2 && box.x1 > p.x - p.w / 2 &&
+                 box.y0 < p.y + ph / 2 && box.y1 > p.y - ph / 2;
+    assert.ok(!over, `подпись легла на фигуру «${id}»`);
+  });
+});
+
 test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
     ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",
