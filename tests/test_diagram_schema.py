@@ -10,10 +10,11 @@ from htmlslides.diagrams import (AVAILABLE_KINDS, CANVAS_H, CANVAS_W,
 
 
 # ── сэмплы каталога = живой контракт ─────────────────────────────────────────
-def test_available_kinds_waves_1_2():
+def test_available_kinds_all_waves():
     assert AVAILABLE_KINDS == ("flowchart", "process", "cycle", "funnel",
                                "hierarchy", "matrix", "pyramid", "hub_spoke",
-                               "comparison", "venn", "swimlanes")
+                               "comparison", "venn", "swimlanes", "gantt_lite",
+                               "mindmap", "network", "steps")
 
 
 @pytest.mark.parametrize("kind", AVAILABLE_KINDS)
@@ -28,9 +29,7 @@ def test_sample_spec_returns_copy():
     assert sample_spec("flowchart")["nodes"][0]["label"] != "MUTATED"
 
 
-def test_sample_spec_unimplemented_raises():
-    with pytest.raises(KeyError):
-        sample_spec("gantt_lite")  # волна 3 — карточка есть, сэмпла нет
+def test_sample_spec_unknown_raises():
     with pytest.raises(KeyError):
         sample_spec("nonsense")
 
@@ -42,8 +41,10 @@ def test_catalog_for_ui_shape():
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
     assert by_kind["matrix"]["available"] is True
-    assert by_kind["gantt_lite"]["available"] is False
+    assert by_kind["gantt_lite"]["available"] is True
     assert all(c["when_to_use"] for c in cat)
+    # весь каталог реализован: карточек «скоро» больше нет
+    assert all(c["available"] for c in cat)
 
 
 def test_get_type_unknown_raises():
@@ -66,7 +67,7 @@ def test_parse_bad_json_string():
 
 def test_parse_unknown_kind():
     with pytest.raises(DiagramValidationError):
-        parse_diagram({"kind": "mindmap", "nodes": [{"id": "a"}]})
+        parse_diagram({"kind": "sankey", "nodes": [{"id": "a"}]})
 
 
 def test_parse_caps_nodes():
@@ -214,6 +215,92 @@ def test_swimlanes_lane_rules():
                        "nodes": [{"id": "a", "lane": "X"},
                                  {"id": "b", "lane": "X"}]})
     assert any("дорожек" in e for e in ei.value.errors)
+
+
+def test_gantt_requires_duration():
+    """value = ширина полосы. Без числа работу нечем рисовать, поэтому это
+    претензия, а не «нулевая длительность»."""
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "gantt_lite",
+                       "nodes": [{"id": "a", "label": "Аудит", "value": "2"},
+                                 {"id": "b", "label": "Пилот"}]})
+    claim = [e for e in ei.value.errors if "длительность" in e]
+    assert len(claim) == 1 and "'b'" in claim[0] and "'a'" not in claim[0]
+
+
+def test_gantt_duration_accepts_units_and_comma():
+    spec = parse_diagram({"kind": "gantt_lite",
+                          "nodes": [{"id": "a", "label": "Аудит", "value": "2 мес"},
+                                    {"id": "b", "label": "Пилот", "value": "1,5"}]})
+    assert [n.value for n in spec.nodes] == ["2 мес", "1,5"]
+
+
+def test_gantt_row_cap():
+    nodes = [{"id": f"g{i}", "label": f"Работа {i}", "value": "1"}
+             for i in range(9)]          # MAX_GANTT_ROWS = 8
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "gantt_lite", "nodes": nodes})
+    assert any("до 8 работ" in e for e in ei.value.errors)
+
+
+def test_steps_cap():
+    """Кап ступеней ниже общего MAX_NODES: 12 ступеней на 1800px нечитаемы."""
+    nodes = [{"id": f"s{i}", "label": f"Уровень {i}"} for i in range(7)]
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "steps", "nodes": nodes})
+    assert any("до 6 ступеней" in e for e in ei.value.errors)
+    parse_diagram({"kind": "steps", "nodes": nodes[:6]})
+
+
+def test_mindmap_center_cannot_be_child():
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "mindmap",
+                       "nodes": [{"id": "c", "label": "Центр"},
+                                 {"id": "a", "label": "Раз"},
+                                 {"id": "b", "label": "Два"}],
+                       "edges": [{"from": "a", "to": "c"}]})
+    assert any("не может быть подветвью" in e for e in ei.value.errors)
+
+
+def test_mindmap_multi_parent_rejected():
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "mindmap",
+                       "nodes": [{"id": "c", "label": "Центр"},
+                                 {"id": "a", "label": "Раз"},
+                                 {"id": "b", "label": "Два"},
+                                 {"id": "d", "label": "Три"}],
+                       "edges": [{"from": "a", "to": "d"},
+                                 {"from": "b", "to": "d"}]})
+    assert any("родител" in e for e in ei.value.errors)
+
+
+def test_mindmap_orphans_allowed():
+    """Узел без ребра у карты — законная ветвь центра, претензии быть не должно
+    (в отличие от flowchart, где он выпадает из потока)."""
+    parse_diagram({"kind": "mindmap",
+                   "nodes": [{"id": "c", "label": "Центр"},
+                             {"id": "a", "label": "Раз"},
+                             {"id": "b", "label": "Два"}]})
+
+
+def test_network_requires_edges():
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "network",
+                       "nodes": [{"id": "a", "label": "Раз"},
+                                 {"id": "b", "label": "Два"},
+                                 {"id": "c", "label": "Три"}]})
+    assert any("хотя бы одну связь" in e for e in ei.value.errors)
+
+
+def test_network_isolated_node_rejected():
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "network",
+                       "nodes": [{"id": "a", "label": "Раз"},
+                                 {"id": "b", "label": "Два"},
+                                 {"id": "c", "label": "Три"}],
+                       "edges": [{"from": "a", "to": "b"}]})
+    claim = [e for e in ei.value.errors if "вне схемы" in e]
+    assert len(claim) == 1 and "'c'" in claim[0]
 
 
 def test_flowchart_sample_contains_back_edge():

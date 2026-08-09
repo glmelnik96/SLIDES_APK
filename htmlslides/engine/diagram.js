@@ -461,6 +461,198 @@
     return { nodes: pos, links: links, lanes: lanes, laneH: laneH, labelW: labelW };
   }
 
+  /* ---------------- волна 3 ---------------- */
+
+  /* План-график: строка = работа, полоса по шкале периодов. value —
+     длительность, level — стартовый период; без level работа встаёт сразу за
+     предыдущей (каскад). Линейку и сетку рисует decorGantt. */
+  var GANTT_TOP = 86;                       // полоса линейки периодов сверху
+
+  function layoutGantt(spec) {
+    var nodes = spec.nodes, n = nodes.length;
+    var rowH = (H - GANTT_TOP) / n;
+    var barH = Math.min(84, rowH - 16);
+    var starts = [], durs = [], cursor = 0, total = 0;
+    nodes.forEach(function (nd, i) {
+      var d = Math.max(1, num(nd.value) || 1);
+      var s = (nd.level == null) ? cursor : Math.max(0, +nd.level || 0);
+      starts[i] = s; durs[i] = d; cursor = s + d;
+      total = Math.max(total, s + d);
+    });
+    var unit = W / Math.max(1, total);
+    var pos = {};
+    nodes.forEach(function (nd, i) {
+      pos[nd.id] = {
+        x: (starts[i] + durs[i] / 2) * unit,
+        y: GANTT_TOP + i * rowH + rowH / 2,
+        w: Math.max(56, durs[i] * unit - 14), h: barH,
+      };
+    });
+    return { nodes: pos, links: [], unit: unit, total: total };
+  }
+
+  /* Лестница: ступени слева направо и снизу вверх. */
+  function layoutSteps(spec) {
+    var nodes = spec.nodes, n = nodes.length;
+    var gap = 26;
+    var w = Math.min(360, (W - gap * (n - 1)) / n);
+    var h = Math.min(150, (H - 60) / Math.max(2, n));
+    var rise = n > 1 ? (H - h - 46) / (n - 1) : 0;
+    var x0 = (W - (w * n + gap * (n - 1))) / 2;
+    var pos = {};
+    nodes.forEach(function (nd, i) {
+      pos[nd.id] = { x: x0 + i * (w + gap) + w / 2,
+                     y: H - h / 2 - i * rise, w: w, h: h };
+    });
+    return { nodes: pos, links: [] };
+  }
+
+  /* Ментальная карта: первый узел — центр, ветви расходятся вправо и влево
+     через одну. Дерево строим обходом в ширину от центра: второй родитель и
+     кольцо («b→a» при «a→b») в дерево просто не попадают — раскладка обязана
+     пережить данные, которые схема бы завернула (в собранной деке истина —
+     HTML). Узел, до которого обход не дошёл, становится ветвью центра. */
+  function layoutMindmap(spec) {
+    var nodes = spec.nodes, root = nodes[0];
+    var edges = (spec.edges && spec.edges.length) ? spec.edges
+      : nodes.slice(1).map(function (n) { return { from: root.id, to: n.id }; });
+    var adj = {}, children = {};
+    nodes.forEach(function (n) { adj[n.id] = []; children[n.id] = []; });
+    edges.forEach(function (e) { if (adj[e.from]) adj[e.from].push(e.to); });
+
+    var depth = {}, queue = [root.id];
+    depth[root.id] = 0;
+    while (queue.length) {
+      var id = queue.shift();
+      adj[id].forEach(function (to) {
+        if (to in depth) return;
+        depth[to] = depth[id] + 1;
+        children[id].push(to);
+        queue.push(to);
+      });
+    }
+    var maxDepth = 0;
+    nodes.forEach(function (n) {
+      if (!(n.id in depth)) { depth[n.id] = 1; children[root.id].push(n.id); }
+      maxDepth = Math.max(maxDepth, depth[n.id]);
+    });
+
+    function leaves(id) {
+      var kids = children[id];
+      if (!kids.length) return 1;
+      return kids.reduce(function (s, k) { return s + leaves(k); }, 0);
+    }
+    /* 200 — запас под половину самой широкой плашки: считать колонку по чистому
+       расстоянию до края значило бы вывесить крайний уровень за холст. */
+    var colW = Math.min(420, (W / 2 - 200) / Math.max(1, maxDepth));
+    var w = Math.min(320, colW - 40), h = 86;
+    var pos = {};
+    pos[root.id] = { x: W / 2, y: H / 2, w: Math.min(380, colW + 60), h: 130 };
+    [1, -1].forEach(function (dir) {
+      /* Ветви центра расходятся через одну: чётные — вправо, нечётные — влево. */
+      var branches = children[root.id].filter(function (id, i) {
+        return (i % 2 ? -1 : 1) === dir;
+      });
+      var total = branches.reduce(function (s, id) { return s + leaves(id); }, 0) || 1;
+      var slot = H / total, cursor = { y: 0 };
+      (function place(ids) {
+        ids.forEach(function (id) {
+          var kids = children[id], y;
+          if (kids.length) {
+            place(kids);
+            y = kids.reduce(function (s, k) { return s + pos[k].y; }, 0) / kids.length;
+          } else {
+            y = cursor.y + slot / 2; cursor.y += slot;
+          }
+          pos[id] = { x: W / 2 + dir * depth[id] * colW, y: y, w: w, h: h };
+        });
+      })(branches);
+    });
+
+    var byPair = {};
+    (spec.edges || []).forEach(function (e) { byPair[e.from + ">" + e.to] = e; });
+    var links = [];
+    Object.keys(children).forEach(function (pid) {
+      children[pid].forEach(function (cid) {
+        var s = pos[pid], t = pos[cid], e = byPair[pid + ">" + cid] || {};
+        var dir = t.x >= s.x ? 1 : -1;
+        links.push({ from: pid, to: cid, label: e.label || "",
+                     style: e.style || "solid", curve: true,
+                     points: [[s.x + dir * s.w / 2, s.y],
+                              [t.x - dir * t.w / 2, t.y]] });
+      });
+    });
+    return { nodes: pos, links: links };
+  }
+
+  /* Граф связей: старт по эллипсу + фиксированное число итераций
+     Фрухтермана—Рейнгольда. Ни случайности, ни времени: сейв редактора запекает
+     SVG в деку, и повторный рендер обязан дать ТЕ ЖЕ координаты. */
+  function layoutNetwork(spec) {
+    var nodes = spec.nodes, edges = spec.edges || [], n = nodes.length;
+    var w = Math.min(280, Math.max(160, W / (n + 1))), h = 92;
+    var idx = {}, px = [], py = [];
+    nodes.forEach(function (nd, i) {
+      idx[nd.id] = i;
+      var a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+      px[i] = W / 2 + W * 0.33 * Math.cos(a);
+      py[i] = H / 2 + H * 0.34 * Math.sin(a);
+    });
+    var k = Math.sqrt((W * H) / n) * 0.5, iters = 240;
+    var dx = [], dy = [], i, j;
+    for (var it = 0; it < iters; it++) {
+      for (i = 0; i < n; i++) { dx[i] = 0; dy[i] = 0; }
+      for (i = 0; i < n; i++) {
+        for (j = i + 1; j < n; j++) {
+          /* Вертикаль весит больше: холст 1800×720, и «круглое» отталкивание
+             сбивало узлы в столбики по краям вместо ленты. */
+          var ax = px[i] - px[j], ay = (py[i] - py[j]) * 1.6;
+          var d = Math.max(1, Math.sqrt(ax * ax + ay * ay));
+          var f = (k * k) / (d * d);
+          dx[i] += ax * f; dy[i] += ay * f;
+          dx[j] -= ax * f; dy[j] -= ay * f;
+        }
+      }
+      edges.forEach(function (e) {
+        var a = idx[e.from], b = idx[e.to];
+        if (a === undefined || b === undefined) return;
+        var ex = px[a] - px[b], ey = py[a] - py[b];
+        var d2 = Math.max(1, Math.sqrt(ex * ex + ey * ey));
+        var pull = (d2 * d2) / k;
+        dx[a] -= (ex / d2) * pull; dy[a] -= (ey / d2) * pull;
+        dx[b] += (ex / d2) * pull; dy[b] += (ey / d2) * pull;
+      });
+      var temp = 26 * (1 - it / iters) + 1;
+      for (i = 0; i < n; i++) {
+        var len = Math.max(0.01, Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]));
+        var step = Math.min(len, temp);
+        px[i] = Math.max(w / 2 + 4, Math.min(W - w / 2 - 4, px[i] + (dx[i] / len) * step));
+        py[i] = Math.max(h / 2 + 4, Math.min(H - h / 2 - 4, py[i] + (dy[i] / len) * step));
+      }
+    }
+    /* Итерации оставляют облако где придётся: узлы липнут к рамке клампа, а
+       полканваса пустует. Вписываем облако в холст ОДНИМ масштабом по обеим
+       осям — разные растянули бы граф и соврали про расстояния. */
+    var minX = Math.min.apply(null, px), maxX = Math.max.apply(null, px);
+    var minY = Math.min.apply(null, py), maxY = Math.max.apply(null, py);
+    var pad = 24;
+    var s = Math.min(2, (W - w - 2 * pad) / Math.max(1, maxX - minX),
+                     (H - h - 2 * pad) / Math.max(1, maxY - minY));
+    var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    var pos = {};
+    nodes.forEach(function (nd, i2) {
+      pos[nd.id] = { x: W / 2 + (px[i2] - cx) * s, y: H / 2 + (py[i2] - cy) * s,
+                     w: w, h: h };
+    });
+    var links = edges.filter(function (e) { return pos[e.from] && pos[e.to]; })
+      .map(function (e) {
+        return { from: e.from, to: e.to, label: e.label || "",
+                 style: e.style || "solid",
+                 points: trimSegment(pos[e.from], pos[e.to]) };
+      });
+    return { nodes: pos, links: links };
+  }
+
   var LAYOUTS = {
     flowchart: layoutFlowchart,
     process: layoutProcess,
@@ -473,6 +665,10 @@
     comparison: layoutComparison,
     venn: layoutVenn,
     swimlanes: layoutSwimlanes,
+    gantt_lite: layoutGantt,
+    steps: layoutSteps,
+    mindmap: layoutMindmap,
+    network: layoutNetwork,
   };
 
   /* Гибрид: ручные сдвиги поверх авто-раскладки + кламп центра в холст. */
@@ -520,6 +716,11 @@
      прямой: окружности, вокруг которой она шла, больше нет. */
   function reroute(link, sAuto, tAuto, s, t) {
     var pts = link.points || [];
+    if (link.curve) {                     // ветвь карты: кривая остаётся кривой
+      var dir = t.x >= s.x ? 1 : -1;
+      link.points = [[s.x + dir * s.w / 2, s.y], [t.x - dir * t.w / 2, t.y]];
+      return;
+    }
     if (link.arc || pts.length < 4) {
       delete link.arc;
       link.points = trimSegment(s, t);
@@ -593,12 +794,15 @@
     return 16;
   }
 
-  function labelFO(p, n, color, fontSize) {
+  var FO_ALIGN = { left: ["flex-start", "left"], right: ["flex-end", "right"] };
+
+  function labelFO(p, n, color, fontSize, align) {
     var pad = 10;
+    var a = FO_ALIGN[align] || ["center", "center"];
     return '<foreignObject x="' + (p.x - p.w / 2 + pad) + '" y="' + (p.y - p.h / 2 + pad) +
       '" width="' + (p.w - 2 * pad) + '" height="' + (p.h - 2 * pad) + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;' +
-      'align-items:center;justify-content:center;text-align:center;overflow:hidden;' +
+      'align-items:center;justify-content:' + a[0] + ';text-align:' + a[1] + ';overflow:hidden;' +
       'font-size:' + fitFont(n.label, p.w, p.h, fontSize) + 'px;line-height:1.15;' +
       'letter-spacing:-.3px;word-break:break-word;' +
       'color:' + color + ';">' + esc(n.label) + "</div></foreignObject>";
@@ -637,6 +841,12 @@
       d = "M" + (a.cx + a.r * Math.cos(a.a1)) + " " + (a.cy + a.r * Math.sin(a.a1)) +
         " A" + a.r + " " + a.r + " 0 " + large + " 1 " +
         (a.cx + a.r * Math.cos(a.a2)) + " " + (a.cy + a.r * Math.sin(a.a2));
+    } else if (link.curve && link.points.length === 2) {
+      /* Ветвь ментальной карты: горизонтальные касательные у обоих концов —
+         ломаная «коленом» читалась бы как оргсхема, а не как карта. */
+      var q0 = link.points[0], q1 = link.points[1], mx = (q0[0] + q1[0]) / 2;
+      d = "M" + q0[0] + " " + q0[1] + " C" + mx + " " + q0[1] + " " + mx + " " +
+        q1[1] + " " + q1[0] + " " + q1[1];
     } else {
       d = link.points.map(function (pt, i) { return (i ? "L" : "M") + pt[0] + " " + pt[1]; }).join("");
     }
@@ -708,6 +918,55 @@
     return parts.join("");
   }
 
+  function renderGantt(spec, pos) {
+    var parts = [];
+    spec.nodes.forEach(function (n, i) {
+      var p = pos[n.id];
+      var fill = n.accent ? "var(--accent)" : "var(--chart-" + (Math.min(i, 5) + 1) + ")";
+      /* Подпись живёт внутри полосы, пока та достаточно широка; короткая
+         работа (один период на длинной шкале) уводит подпись наружу — иначе
+         текст молча резался бы по границе полосы. */
+      var box, color, align;
+      if (p.w >= 300) {
+        box = { x: p.x, y: p.y, w: p.w, h: p.h }; color = "var(--bg)"; align = "center";
+      } else if (W - (p.x + p.w / 2) >= 280) {
+        var lw = Math.min(420, W - (p.x + p.w / 2) - 16);
+        box = { x: p.x + p.w / 2 + 16 + lw / 2, y: p.y, w: lw, h: p.h };
+        color = "var(--fg-body)"; align = "left";
+      } else {
+        var rw = Math.min(420, p.x - p.w / 2 - 16);
+        box = { x: p.x - p.w / 2 - 16 - rw / 2, y: p.y, w: rw, h: p.h };
+        color = "var(--fg-body)"; align = "right";
+      }
+      parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
+        '<rect x="' + (p.x - p.w / 2) + '" y="' + (p.y - p.h / 2) + '" width="' + p.w +
+        '" height="' + p.h + '" rx="10" fill="' + fill + '"/>' +
+        labelFO(box, n, color, 26, align) + "</g>");
+    });
+    return parts.join("");
+  }
+
+  function renderSteps(spec, pos) {
+    var parts = [], fs = 28;
+    spec.nodes.forEach(function (n) {
+      var p = pos[n.id];
+      fs = Math.min(fs, fitFont(n.label, p.w, p.h));
+    });
+    spec.nodes.forEach(function (n) {
+      var p = pos[n.id];
+      var g = '<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
+        '<rect x="' + (p.x - p.w / 2) + '" y="' + (p.y - p.h / 2) + '" width="' + p.w +
+        '" height="' + p.h + '" fill="' + nodeFill(n) + '"/>' +
+        labelFO(p, n, nodeText(n), fs);
+      if (n.value) {                        // пометка ступени — над карточкой
+        g += '<text x="' + p.x + '" y="' + (p.y - p.h / 2 - 14) + '" text-anchor="middle" ' +
+          'font-size="24" fill="var(--fg-muted)">' + esc(n.value) + "</text>";
+      }
+      parts.push(g + "</g>");
+    });
+    return parts.join("");
+  }
+
   /* ---- декор фона (оси, разделители, дорожки) — рисуется ПОД узлами ---- */
 
   function decorMatrix(spec, layout, markerId) {
@@ -760,16 +1019,61 @@
     return out;
   }
 
+  function decorGantt(spec, layout) {
+    var total = layout.total || 1, unit = layout.unit || W;
+    var out = "";
+    var ax = spec.meta && spec.meta.x_axis;
+    if (ax) {
+      out += '<text x="4" y="30" font-size="26" fill="var(--fg-muted)">' +
+        esc(ax) + "</text>";
+    }
+    for (var i = 0; i <= total; i++) {
+      var x = Math.min(W - 1, i * unit);
+      out += '<line x1="' + x + '" y1="' + (GANTT_TOP - 8) + '" x2="' + x + '" y2="' + H +
+        '" stroke="var(--fg-muted)" stroke-width="1.5" opacity="' +
+        (i ? "0.22" : "0.4") + '"/>';
+      /* Номера периодов только пока они читаются: на длинной шкале подписи
+         слипаются в серую полосу — сетка без номеров честнее. */
+      if (total <= 16 && i < total) {
+        out += '<text x="' + (i * unit + unit / 2) + '" y="' + (GANTT_TOP - 22) +
+          '" text-anchor="middle" font-size="24" fill="var(--fg-muted)">' +
+          (i + 1) + "</text>";
+      }
+    }
+    return out;
+  }
+
+  function decorSteps(spec, layout) {
+    var pos = layout.nodes, out = "";
+    /* Подступенки считаются по ФАКТИЧЕСКИМ позициям (декор рисуется после
+       applyOffsets) — иначе сдвинутая руками ступень висела бы над чужим
+       столбом. */
+    spec.nodes.forEach(function (n) {
+      var p = pos[n.id];
+      if (!p) return;
+      var top = p.y + p.h / 2;
+      if (top >= H - 2) return;
+      out += '<rect x="' + (p.x - p.w / 2) + '" y="' + top + '" width="' + p.w +
+        '" height="' + (H - top) + '" fill="var(--bg-card)" fill-opacity="0.45"/>';
+    });
+    return out + '<line x1="0" y1="' + (H - 1) + '" x2="' + W + '" y2="' + (H - 1) +
+      '" stroke="var(--fg-muted)" stroke-width="2" opacity="0.4"/>';
+  }
+
   var DECOR = {
     matrix: decorMatrix,
     comparison: decorComparison,
     swimlanes: decorSwimlanes,
+    gantt_lite: decorGantt,
+    steps: decorSteps,
   };
 
   var NODE_RENDERERS = {
     funnel: renderFunnel,
     pyramid: renderPyramid,
     venn: renderVenn,
+    gantt_lite: renderGantt,
+    steps: renderSteps,
   };
 
   function render(host, specArg) {
@@ -891,6 +1195,8 @@
     layoutMatrix: layoutMatrix, layoutPyramid: layoutPyramid,
     layoutHubSpoke: layoutHubSpoke, layoutComparison: layoutComparison,
     layoutVenn: layoutVenn, layoutSwimlanes: layoutSwimlanes,
+    layoutGantt: layoutGantt, layoutSteps: layoutSteps,
+    layoutMindmap: layoutMindmap, layoutNetwork: layoutNetwork,
     laneList: laneList, trimSegment: trimSegment, fitFont: fitFont,
     CANVAS: { W: W, H: H },
   };

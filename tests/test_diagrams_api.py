@@ -28,13 +28,13 @@ def test_catalog_lists_all_types_with_availability(monkeypatch, tmp_path):
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
     assert by_kind["matrix"]["available"] is True        # волна 2 реализована
-    assert by_kind["gantt_lite"]["available"] is False   # волна 3 — «скоро»
+    assert by_kind["gantt_lite"]["available"] is True    # волна 3 реализована
     # sample питает материализацию типа в поля слайда на клиенте
     assert by_kind["flowchart"]["sample"]["kind"] == "flowchart"
     assert by_kind["matrix"]["sample"]["kind"] == "matrix"
-    assert by_kind["gantt_lite"]["sample"] is None
     for t in cat:
         assert t["display_name"] and t["when_to_use"]
+        assert t["available"] and t["sample"]["kind"] == t["kind"]
 
 
 def test_catalog_requires_auth(monkeypatch, tmp_path):
@@ -54,10 +54,18 @@ def test_kind_preview_renders_one_slide_deck(monkeypatch, tmp_path):
         assert "animation:none" in r2.text
 
 
-def test_kind_preview_404_on_unknown_and_unimplemented(monkeypatch, tmp_path):
+def test_kind_preview_404_on_unknown(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/api/diagrams/nope/preview",
                      headers=H()).status_code == 404
-        # gantt_lite есть в каталоге, но ещё не реализована — превью нет
-        assert c.get("/api/diagrams/gantt_lite/preview",
-                     headers=H()).status_code == 404
+
+
+def test_every_catalog_type_has_preview(monkeypatch, tmp_path):
+    """Карточек «скоро» в каталоге не осталось: пикер обещает превью каждому
+    типу, и 404 в сетке выбора был бы битой карточкой."""
+    with _client(monkeypatch, tmp_path) as c:
+        for kind in [t["kind"] for t in c.get("/api/diagrams/catalog",
+                                              headers=H()).json()]:
+            r = c.get(f"/api/diagrams/{kind}/preview", headers=H())
+            assert r.status_code == 200, kind
+            assert "diagram-host" in r.text

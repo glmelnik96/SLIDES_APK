@@ -93,6 +93,49 @@ test("diagramClaims: два родителя в оргсхеме", () => {
   assert.match(out[0], /один руководитель.*«Отдел»/);
 });
 
+test("diagramClaims: план-график без длительности", () => {
+  const out = diagramClaims({ kind: "gantt_lite",
+    nodes: [{ id: "a", label: "Аудит", value: "2" },
+            { id: "b", label: "Пилот" },
+            { id: "c", label: "Запуск", value: "мес" }] });
+  assert.strictEqual(out.length, 1);
+  assert.match(out[0], /длительность.*«Пилот», «Запуск»/);
+  assert.deepStrictEqual(diagramClaims({ kind: "gantt_lite",
+    nodes: [{ id: "a", label: "Аудит", value: "2 мес" },
+            { id: "b", label: "Пилот", value: "1,5" }] }), []);
+});
+
+test("diagramClaims: карта и граф связей", () => {
+  // центр карты не может быть подветвью
+  assert.match(diagramClaims({ kind: "mindmap",
+    nodes: [{ id: "c", label: "Центр" }, { id: "a", label: "Раз" },
+            { id: "b", label: "Два" }],
+    edges: [{ from: "a", to: "c" }] })[0], /Центр.*не может быть подветвью/);
+  // одиночки у карты — норма: узел без связи станет ветвью центра
+  assert.deepStrictEqual(diagramClaims({ kind: "mindmap",
+    nodes: [{ id: "c", label: "Центр" }, { id: "a", label: "Раз" },
+            { id: "b", label: "Два" }] }), []);
+  // у графа связей одиночка, наоборот, выпадает из раскладки
+  const net = diagramClaims({ kind: "network",
+    nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" },
+            { id: "c", label: "Три" }],
+    edges: [{ from: "a", to: "b" }] });
+  assert.strictEqual(net.length, 1);
+  assert.match(net[0], /«Три»/);
+  assert.match(diagramClaims({ kind: "network",
+    nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" },
+            { id: "c", label: "Три" }] })[0], /хотя бы одна связь/);
+});
+
+test("diagramClaims: капы волны 3", () => {
+  const only = (spec) => diagramClaims(spec)[0] || "";
+  const nodes = (n) => Array.from({ length: n },
+    (_, i) => ({ id: "n" + i, label: "У" + i, value: "1" }));
+  assert.match(only({ kind: "steps", nodes: nodes(7) }), /до 6 ступеней — сейчас 7/);
+  assert.match(only({ kind: "gantt_lite", nodes: nodes(9) }), /до 8 работ — сейчас 9/);
+  assert.match(only({ kind: "mindmap", nodes: nodes(2) }), /две ветви — сейчас 2/);
+});
+
 test("diagramClaims: пустая схема и незнакомый спек", () => {
   assert.match(diagramClaims({ kind: "flowchart", nodes: [] })[0], /ни одного узла/);
   assert.deepStrictEqual(diagramClaims(null), []);

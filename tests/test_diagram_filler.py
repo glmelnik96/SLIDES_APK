@@ -7,9 +7,11 @@ Fake-клиент вместо LLM (паттерн test_filler.py): провер
 готового контента из редактора не зовёт LLM.
 """
 import json
+import re
 
 import pytest
 
+from htmlslides.diagrams import AVAILABLE_KINDS
 from htmlslides.library import TemplateLibrary
 from htmlslides.models import SlidePlan
 from htmlslides.pipeline import diagram_filler, filler
@@ -131,12 +133,12 @@ def test_fill_slide_routes_diagram_and_maps_error_to_fill_error(library):
     assert out.content["title"] == "Как проходит заявка"
 
 
-def test_system_prompt_lists_only_available_kinds():
-    """Промпт собирается из каталога: реализованные типы в меню, будущие — нет
-    (иначе модель выбирала бы gantt_lite, которого движок не нарисует)."""
+def test_system_prompt_menu_is_exactly_available_kinds():
+    """Меню промпта собирается из каталога: только реализованные типы. Тип со
+    снятым available обязан из меню исчезать — иначе модель выберет то, чего
+    движок не нарисует."""
     s = diagram_filler.DIAGRAM_SYSTEM
-    for kind in ("flowchart", "process", "cycle", "funnel", "hierarchy",
-                 "matrix", "pyramid", "hub_spoke", "comparison", "venn",
-                 "swimlanes"):
-        assert f"- {kind}:" in s
-    assert "gantt_lite" not in s and "mindmap" not in s
+    # только блок меню: ниже идёт контракт полей, там строки того же вида
+    menu_block = s.split("Контракт diagram:")[0]
+    assert tuple(re.findall(r"^- (\w+): ", menu_block, re.M)) == AVAILABLE_KINDS
+    assert "- sankey:" not in s

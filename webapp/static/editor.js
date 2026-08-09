@@ -1294,17 +1294,31 @@ function charCounter(el, max) {
 /* ---- панель диаграммного слайда (узлы/связи; drag — на самом слайде) ---- */
 const DGM_SHAPES = [["start", "Начало"], ["process", "Шаг"], ["decision", "Условие"],
                     ["io", "Ввод/вывод"], ["end", "Финал"]];
-const DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes"]; // редактируемые рёбра
+// редактируемые рёбра (у остальных типов порядок задаёт список узлов)
+const DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "mindmap", "network"];
 const DGM_MAX_NODES = 12, DGM_MAX_EDGES = 20;        // капы схемы (schema.py)
-const DGM_VALUE_KINDS = ["funnel", "pyramid"];       // узлы с числом
+// узлы с полем value: подпись поля зависит от типа (число слоя, длительность…)
+const DGM_VALUE_KINDS = { funnel: "число", pyramid: "число",
+                          gantt_lite: "длительность *", steps: "пометка" };
 // lane у узла: подпись поля зависит от типа
 const DGM_LANE_KINDS = { comparison: "сторона", swimlanes: "исполнитель" };
+// заголовок списка связей: смысл ребра у типов разный
+const DGM_EDGE_LABEL = {
+  hierarchy: "Связи (родитель → подчинённый)",
+  mindmap: "Ветви (от чего → к чему)",
+  network: "Связи (между узлами)",
+};
 // капы узлов и подсказки, отличные от общих (matrix: ровно 4, без добавления)
 const DGM_NODE_RULES = {
   matrix: { min: 4, max: 4, hint: "ровно 4 узла: верх-лево, верх-право, низ-лево, низ-право" },
   venn: { min: 2, max: 3, hint: "2–3 множества" },
   pyramid: { min: 3, max: DGM_MAX_NODES, hint: "уровни сверху вниз, вершина первой" },
   hub_spoke: { min: 3, max: DGM_MAX_NODES, hint: "первый узел — центр, остальные — лучи" },
+  gantt_lite: { min: 2, max: 8,
+    hint: "до 8 работ: длительность в периодах, старт — номер периода (пусто — сразу за предыдущей)" },
+  steps: { min: 2, max: 6, hint: "до 6 ступеней снизу вверх, первая — нижняя" },
+  mindmap: { min: 3, max: DGM_MAX_NODES, hint: "первый узел — центр карты, остальные — ветви" },
+  network: { min: 3, max: DGM_MAX_NODES, hint: "раскладку задают связи, а не порядок узлов" },
 };
 
 function renderDiagramPanel(slide) {
@@ -1346,6 +1360,8 @@ function renderDiagramPanel(slide) {
     form.appendChild(dgmTextField("Ось Y (вертикаль)", "y_axis", meta.y_axis, 40));
   } else if (spec.kind === "venn") {
     form.appendChild(dgmTextField("Подпись пересечения", "center_label", meta.center_label, 60));
+  } else if (spec.kind === "gantt_lite") {
+    form.appendChild(dgmTextField("Единица шкалы", "x_axis", meta.x_axis, 40));
   }
 
   // Узлы
@@ -1383,8 +1399,7 @@ function renderDiagramPanel(slide) {
     const edgesWrap = document.createElement("div");
     edgesWrap.className = "field";
     const eLabel = document.createElement("label");
-    eLabel.textContent = spec.kind === "hierarchy"
-      ? "Связи (родитель → подчинённый)" : "Связи (стрелки)";
+    eLabel.textContent = DGM_EDGE_LABEL[spec.kind] || "Связи (стрелки)";
     edgesWrap.appendChild(eLabel);
     const edgeList = document.createElement("div");
     edgeList.className = "field-list";
@@ -1465,15 +1480,29 @@ function dgmNodeRow(kind, n) {
   label.dataset.dgm = "label";
   label.oninput = () => { refreshDgmEdgeSelects(); scheduleSave(); };
   row.appendChild(label);
-  if (DGM_VALUE_KINDS.includes(kind)) {
+  if (DGM_VALUE_KINDS[kind]) {
     const val = document.createElement("input");
-    val.placeholder = "число";
+    val.placeholder = DGM_VALUE_KINDS[kind];
     val.maxLength = 12;
     val.className = "dgm-val";
     val.value = n.value == null ? "" : String(n.value);
     val.dataset.dgm = "value";
     val.oninput = scheduleSave;
     row.appendChild(val);
+  }
+  if (kind === "gantt_lite") {
+    // Стартовый период: пусто = «сразу за предыдущей работой» (каскад раскладки),
+    // поэтому поле не обязательное и пустая строка не равна нулю.
+    const lvl = document.createElement("input");
+    lvl.type = "number";
+    lvl.min = "0"; lvl.max = "11";
+    lvl.placeholder = "старт";
+    lvl.title = "Номер периода, с которого начинается работа";
+    lvl.className = "dgm-val";
+    lvl.value = n.level == null ? "" : String(n.level);
+    lvl.dataset.dgm = "level";
+    lvl.oninput = scheduleSave;
+    row.appendChild(lvl);
   }
   if (DGM_LANE_KINDS[kind]) {
     const lane = document.createElement("input");
@@ -1604,6 +1633,9 @@ function collectDiagramFields() {
     if (val) n.value = val.value.trim();
     const lane = row.querySelector('[data-dgm="lane"]');
     if (lane) n.lane = lane.value.trim();
+    const lvl = row.querySelector('[data-dgm="level"]');
+    // Пустой старт = null: 0 значил бы «начать с первого периода» и ломал каскад.
+    if (lvl) n.level = lvl.value.trim() === "" ? null : Number(lvl.value);
     const acc = row.querySelector('[data-dgm="accent"]');
     if (acc) n.accent = acc.checked;
     nodes.push(n);

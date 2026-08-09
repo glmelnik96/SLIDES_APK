@@ -172,6 +172,79 @@ _SWIMLANES_SAMPLE = {
 }
 
 
+_GANTT_LITE_SAMPLE = {
+    "kind": "gantt_lite",
+    "nodes": [
+        {"id": "g1", "label": "Аудит и требования", "value": "2", "level": 0},
+        {"id": "g2", "label": "Проектирование архитектуры", "value": "3", "level": 2},
+        {"id": "g3", "label": "Пилотная зона", "value": "2", "level": 5},
+        {"id": "g4", "label": "Промышленный запуск", "value": "3", "level": 6,
+         "accent": True},
+        {"id": "g5", "label": "Сопровождение", "value": "3", "level": 9},
+    ],
+    "meta": {"x_axis": "Месяцы"},
+}
+
+_STEPS_SAMPLE = {
+    "kind": "steps",
+    "nodes": [
+        {"id": "l1", "label": "Ручные регламенты", "value": "Уровень 1"},
+        {"id": "l2", "label": "Автоматизация отчётности", "value": "Уровень 2"},
+        {"id": "l3", "label": "Единая платформа данных", "value": "Уровень 3"},
+        {"id": "l4", "label": "Предиктивная аналитика", "value": "Уровень 4",
+         "accent": True},
+    ],
+}
+
+_MINDMAP_SAMPLE = {
+    "kind": "mindmap",
+    "nodes": [
+        {"id": "core", "label": "Переезд в облако", "accent": True},
+        {"id": "inf", "label": "Инфраструктура"},
+        {"id": "data", "label": "Данные"},
+        {"id": "team", "label": "Команда"},
+        {"id": "sec", "label": "Безопасность"},
+        {"id": "k8s", "label": "Kubernetes"},
+        {"id": "net", "label": "Сеть и балансировка"},
+        {"id": "db", "label": "Перенос СУБД"},
+        {"id": "edu", "label": "Обучение инженеров"},
+    ],
+    "edges": [
+        {"from": "core", "to": "inf"},
+        {"from": "core", "to": "data"},
+        {"from": "core", "to": "team"},
+        {"from": "core", "to": "sec"},
+        {"from": "inf", "to": "k8s"},
+        {"from": "inf", "to": "net"},
+        {"from": "data", "to": "db"},
+        {"from": "team", "to": "edu"},
+    ],
+}
+
+_NETWORK_SAMPLE = {
+    "kind": "network",
+    "nodes": [
+        {"id": "api", "label": "API-шлюз", "accent": True},
+        {"id": "auth", "label": "Аутентификация"},
+        {"id": "cat", "label": "Каталог услуг"},
+        {"id": "bill", "label": "Биллинг"},
+        {"id": "db", "label": "База данных"},
+        {"id": "que", "label": "Очередь событий"},
+        {"id": "mon", "label": "Мониторинг"},
+    ],
+    "edges": [
+        {"from": "api", "to": "auth"},
+        {"from": "api", "to": "cat"},
+        {"from": "api", "to": "bill"},
+        {"from": "auth", "to": "db"},
+        {"from": "cat", "to": "db"},
+        {"from": "bill", "to": "db"},
+        {"from": "bill", "to": "que"},
+        {"from": "que", "to": "mon"},
+    ],
+}
+
+
 CATALOG: tuple[DiagramType, ...] = (
     # ---- волна 1 (реализованы) ----
     DiagramType("flowchart", "Блок-схема",
@@ -213,15 +286,19 @@ CATALOG: tuple[DiagramType, ...] = (
     DiagramType("swimlanes", "Дорожки процесса",
                 "Процесс, разложенный по исполнителям: кто какой шаг делает, "
                 "передачи между отделами.", 2, _SWIMLANES_SAMPLE),
-    # ---- волна 3+ ----
+    # ---- волна 3 (реализованы) ----
     DiagramType("gantt_lite", "План-график",
-                "Работы на шкале времени: этапы проекта с длительностями.", 3),
+                "Работы на шкале времени: этапы проекта с длительностями, "
+                "параллельные и последовательные работы.", 3, _GANTT_LITE_SAMPLE),
     DiagramType("mindmap", "Ментальная карта",
-                "Радиальная структура идей вокруг центральной темы.", 3),
+                "Радиальная структура идей вокруг центральной темы: разбор "
+                "направлений, состав задачи.", 3, _MINDMAP_SAMPLE),
     DiagramType("network", "Граф связей",
-                "Произвольная сеть узлов: интеграции, зависимости сервисов.", 3),
+                "Произвольная сеть узлов: интеграции, зависимости сервисов, "
+                "связи участников.", 3, _NETWORK_SAMPLE),
     DiagramType("steps", "Лестница",
-                "Ступени роста по диагонали: уровни зрелости, план развития.", 3),
+                "Ступени роста по диагонали: уровни зрелости, план развития.",
+                3, _STEPS_SAMPLE),
 )
 
 _BY_KIND = {t.kind: t for t in CATALOG}

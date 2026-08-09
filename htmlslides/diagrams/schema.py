@@ -18,6 +18,7 @@ LLM-филлер (фаза 2) мог ретраить с перечнем пре
 from __future__ import annotations
 
 import json
+import re
 from typing import Annotated, Literal, Union
 
 from pydantic import (BaseModel, ConfigDict, Field, TypeAdapter,
@@ -38,6 +39,11 @@ MAX_ID = 24
 MAX_EDGE_LABEL = 30
 MAX_VALUE = 12
 MAX_LANE = 40
+# Читаемость волны 3: строк плана-графика и ступеней лестницы меньше общего капа
+# узлов — 12 полос на 720px холста и 12 ступеней на 1800px нечитаемы физически.
+MAX_GANTT_ROWS = 8
+MAX_STEPS = 6
+MAX_DURATION = 12          # длительность работы в периодах шкалы
 
 
 class DiagramValidationError(Exception):
@@ -197,26 +203,36 @@ class FunnelSpec(_BaseSpec):
         return errors
 
 
+def _tree_errors(edges) -> list[str]:
+    """Претензии к рёбрам, которые обязаны складываться в дерево (hierarchy,
+    mindmap): второй родитель и кольцо родительских связей.
+
+    Лишнее ребро не просто «некрасиво»: обе раскладки строят дерево обходом от
+    корня и второе ребро к тому же узлу молча теряют — на слайде связь, которую
+    автор задал, отсутствует."""
+    errors: list[str] = []
+    parents: dict[str, str] = {}
+    for e in edges:
+        if e.to in parents:
+            errors.append(f"у узла {e.to!r} несколько родителей — это не дерево")
+        parents[e.to] = e.from_
+    for nid in parents:
+        hops, cur = 0, nid
+        while cur in parents:
+            cur = parents[cur]
+            hops += 1
+            if hops > MAX_NODES:
+                errors.append(f"цикл родительских связей вокруг узла {nid!r}")
+                break
+    return errors
+
+
 class HierarchySpec(_BaseSpec):
     """Оргсхема/дерево: рёбра = родитель→ребёнок, у узла максимум один родитель."""
     kind: Literal["hierarchy"]
 
     def semantic_errors(self) -> list[str]:
-        errors = super().semantic_errors()
-        parents: dict[str, str] = {}
-        for e in self.edges:
-            if e.to in parents:
-                errors.append(f"у узла {e.to!r} несколько родителей — это не дерево")
-            parents[e.to] = e.from_
-        # Дерево не должно содержать циклов: поднимаемся от каждого узла к корню.
-        for nid in parents:
-            hops, cur = 0, nid
-            while cur in parents:
-                cur = parents[cur]
-                hops += 1
-                if hops > MAX_NODES:
-                    errors.append(f"цикл родительских связей вокруг узла {nid!r}")
-                    break
+        errors = super().semantic_errors() + _tree_errors(self.edges)
         return errors + self.isolated_errors()
 
 
@@ -307,10 +323,85 @@ class SwimlanesSpec(_BaseSpec):
         return errors + self.isolated_errors()
 
 
+_NUM_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+
+def _periods(value: str) -> float:
+    """Число из строки величины («3», «2,5», «3 мес») — зеркало diagram.js num.
+    0 = числа нет, то есть длительность не задана."""
+    m = _NUM_RE.search(str(value or ""))
+    return float(m.group(0).replace(",", ".")) if m else 0.0
+
+
+class GanttLiteSpec(_BaseSpec):
+    """План-график: узел = работа, ``value`` — длительность в периодах шкалы,
+    ``level`` — стартовый период (без него работа встаёт сразу за предыдущей).
+    Рёбра не нужны: положение полосы задают числа, а не связи."""
+    kind: Literal["gantt_lite"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if len(self.nodes) < 2:
+            errors.append("gantt_lite требует минимум 2 работы")
+        elif len(self.nodes) > MAX_GANTT_ROWS:
+            errors.append(f"gantt_lite вмещает до {MAX_GANTT_ROWS} работ, "
+                          f"сейчас {len(self.nodes)}")
+        bad = [n.id for n in self.nodes
+               if not 0 < _periods(n.value) <= MAX_DURATION]
+        if bad:
+            errors.append("gantt_lite: длительность работы (value) — число от 1 "
+                          f"до {MAX_DURATION} периодов; не задана у "
+                          + ", ".join(repr(i) for i in bad[:5]))
+        return errors
+
+
+class StepsSpec(_BaseSpec):
+    """Лестница: ступени слева направо и снизу вверх; ``value`` — необязательная
+    пометка ступени («Уровень 2», «2026»)."""
+    kind: Literal["steps"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if not 2 <= len(self.nodes) <= MAX_STEPS:
+            errors.append(f"steps требует от 2 до {MAX_STEPS} ступеней, "
+                          f"сейчас {len(self.nodes)}")
+        return errors
+
+
+class MindmapSpec(_BaseSpec):
+    """Ментальная карта: ПЕРВЫЙ узел — центр, рёбра = ветвь→подветвь. Без рёбер
+    все узлы становятся ветвями центра; узел без ребра тоже уходит к центру —
+    поэтому претензии к одиночкам здесь нет, а к дереву есть."""
+    kind: Literal["mindmap"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors() + _tree_errors(self.edges)
+        if len(self.nodes) < 3:
+            errors.append("mindmap требует минимум 3 узла (центр и две ветви)")
+        if any(e.to == self.nodes[0].id for e in self.edges):
+            errors.append(f"центр карты {self.nodes[0].id!r} не может быть "
+                          "подветвью — ребро ведёт в него")
+        return errors
+
+
+class NetworkSpec(_BaseSpec):
+    """Граф связей: произвольная сеть, раскладку задают именно рёбра."""
+    kind: Literal["network"]
+
+    def semantic_errors(self) -> list[str]:
+        errors = super().semantic_errors()
+        if len(self.nodes) < 3:
+            errors.append("network требует минимум 3 узла")
+        if not self.edges:
+            errors.append("network требует хотя бы одну связь — без связей это "
+                          "не граф, а россыпь плашек")
+        return errors + self.isolated_errors()
+
+
 DiagramSpec = Annotated[
     Union[FlowchartSpec, ProcessSpec, CycleSpec, FunnelSpec, HierarchySpec,
           MatrixSpec, PyramidSpec, HubSpokeSpec, ComparisonSpec, VennSpec,
-          SwimlanesSpec],
+          SwimlanesSpec, GanttLiteSpec, StepsSpec, MindmapSpec, NetworkSpec],
     Field(discriminator="kind"),
 ]
 

@@ -16,8 +16,9 @@ import json
 from pydantic import BaseModel, Field
 
 from ..diagrams.catalog import CATALOG
-from ..diagrams.schema import (MAX_EDGE_LABEL, MAX_EDGES, MAX_ID, MAX_LABEL,
-                               MAX_LANE, MAX_NODES, MAX_VALUE,
+from ..diagrams.schema import (MAX_DURATION, MAX_EDGE_LABEL, MAX_EDGES,
+                               MAX_GANTT_ROWS, MAX_ID, MAX_LABEL, MAX_LANE,
+                               MAX_NODES, MAX_STEPS, MAX_VALUE,
                                DiagramValidationError, parse_diagram)
 from ..library import TemplateLibrary
 from ..models import SlidePlan
@@ -76,18 +77,21 @@ DIAGRAM_SYSTEM = f"""\
 
 Контракт diagram:
 - kind — строго из списка выше; узлов 2–{MAX_NODES}, рёбер ≤{MAX_EDGES}.
-- nodes: [{{"id","label","shape","accent","value","lane"}}] — других ключей у
-  узла НЕ бывает; id — короткая латиница ≤{MAX_ID} символов (n1, check…);
-  label обязателен и непустой, ≤{MAX_LABEL} символов, по-русски, без выдумок;
-  accent:true — у 1–2 ключевых узлов; value — только для funnel/pyramid
-  (число слоя, напр. "1200", ≤{MAX_VALUE} символов); lane — только для
-  comparison/swimlanes, ≤{MAX_LANE} символов.
+- nodes: [{{"id","label","shape","accent","value","lane","level"}}] — других
+  ключей у узла НЕ бывает; id — короткая латиница ≤{MAX_ID} символов (n1,
+  check…); label обязателен и непустой, ≤{MAX_LABEL} символов, по-русски, без
+  выдумок; accent:true — у 1–2 ключевых узлов; value — только для
+  funnel/pyramid (число слоя, напр. "1200"), gantt_lite (длительность в
+  периодах) и steps (пометка ступени, напр. "Уровень 2"), ≤{MAX_VALUE}
+  символов; lane — только для comparison/swimlanes, ≤{MAX_LANE} символов;
+  level — только для gantt_lite (стартовый период, целое от 0).
 - shape — только для flowchart: start|end|process|decision|io; у decision
   подписывай исходящие рёбра («да»/«нет»).
 - edges: [{{"from","to","label"}}] — других ключей нет, label ≤{MAX_EDGE_LABEL}
   символов; только ссылки на существующие id, без петель.
-  Для process/cycle/funnel/pyramid/matrix/venn рёбра НЕ нужны (порядок задаёт
-  список узлов); для hierarchy ребро = родитель→ребёнок, у узла один родитель.
+  Для process/cycle/funnel/pyramid/matrix/venn/steps/gantt_lite рёбра НЕ нужны
+  (порядок задаёт список узлов); для hierarchy ребро = родитель→ребёнок, у узла
+  один родитель.
 - direction: "right" (по умолчанию) или "down" — для flowchart.
 - Правила отдельных типов:
   matrix — ровно 4 узла в порядке квадрантов (верх-лево, верх-право, низ-лево,
@@ -98,6 +102,14 @@ DIAGRAM_SYSTEM = f"""\
   swimlanes — у каждого узла lane = исполнитель шага (2–5 дорожек); рёбра
   задают порядок шагов.
   venn — 2–3 узла-множества; подпись пересечения — meta: {{"center_label"}}.
+  gantt_lite — 2–{MAX_GANTT_ROWS} работ сверху вниз; value обязателен (длительность,
+  целое 1–{MAX_DURATION}), level — номер стартового периода (без него работа встаёт
+  сразу за предыдущей); название единицы шкалы — meta: {{"x_axis"}}, напр. «Месяцы».
+  steps — 2–{MAX_STEPS} ступеней от нижней к верхней; рёбра не нужны.
+  mindmap — ПЕРВЫЙ узел = центр; ребро = ветвь→подветвь, у подветви один
+  родитель, в центр рёбра НЕ ведут; узел без ребра станет ветвью центра.
+  network — произвольная сеть, раскладку задают рёбра: минимум 3 узла и хотя бы
+  одна связь, узлов без связей не оставляй.
 - НЕ добавляй offsets, groups, version и любые не названные здесь ключи —
   раскладку считает движок; meta — только там, где разрешено выше.
 - title ≤54 симв. — заголовок ЭТОГО слайда (из брифа), не всей деки;

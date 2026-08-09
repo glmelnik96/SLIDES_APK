@@ -281,10 +281,131 @@ test("layoutSwimlanes: одинаковый ранг в одной дорожк�
   assert.ok(out.nodes.b.x !== out.nodes.c.x);
 });
 
-test("LAYOUTS покрывает все типы волн 1–2", () => {
+/* ---- волна 3 ---- */
+
+const GANTT = { kind: "gantt_lite", nodes: [
+  { id: "a", label: "Аудит", value: "2" },
+  { id: "b", label: "Проект", value: "3", level: 2 },
+  { id: "c", label: "Пилот", value: "2", level: 2 },
+  { id: "d", label: "Запуск", value: "3" },
+] };
+
+test("layoutGantt: полосы по строкам, длительность задаёт ширину", () => {
+  const out = D.layoutGantt(GANTT);
+  inCanvas(out.nodes);
+  const p = out.nodes;
+  // строки идут сверху вниз в порядке списка, шкала — общая
+  assert.ok(p.a.y < p.b.y && p.b.y < p.c.y && p.c.y < p.d.y);
+  assert.strictEqual(out.total, 7);            // d каскадом за c: 2+2 → 4, +3
+  assert.ok(p.b.w > p.a.w);                    // 3 периода шире 2
+  // общий level = общий левый край (x — центр полосы, ширины разные)
+  const left = (q) => q.x - q.w / 2;
+  assert.ok(Math.abs(left(p.b) - left(p.c)) < 8);
+  assert.strictEqual(out.links.length, 0);
+});
+
+test("layoutGantt: без level работа встаёт за предыдущей", () => {
+  const out = D.layoutGantt({ kind: "gantt_lite", nodes: [
+    { id: "a", label: "Раз", value: "2" }, { id: "b", label: "Два", value: "2" },
+  ] });
+  assert.ok(out.nodes.b.x > out.nodes.a.x);
+  assert.strictEqual(out.total, 4);
+});
+
+test("layoutGantt: единицы и запятая в длительности не ломают шкалу", () => {
+  const out = D.layoutGantt({ kind: "gantt_lite", nodes: [
+    { id: "a", label: "Раз", value: "2 мес" }, { id: "b", label: "Два", value: "1,5" },
+  ] });
+  inCanvas(out.nodes);
+  assert.strictEqual(out.total, 3.5);
+});
+
+test("layoutSteps: ступени идут вправо и вверх", () => {
+  const out = D.layoutSteps({ kind: "steps", nodes: [
+    { id: "a", label: "Раз" }, { id: "b", label: "Два" }, { id: "c", label: "Три" },
+  ] });
+  inCanvas(out.nodes);
+  const p = out.nodes;
+  assert.ok(p.a.x < p.b.x && p.b.x < p.c.x);
+  assert.ok(p.a.y > p.b.y && p.b.y > p.c.y);   // y растёт вниз: выше = меньше
+  assert.strictEqual(out.links.length, 0);
+});
+
+const MIND = { kind: "mindmap", nodes: [
+  { id: "core", label: "Центр" }, { id: "r1", label: "Право" },
+  { id: "l1", label: "Лево" }, { id: "r2", label: "Ещё право" },
+  { id: "k", label: "Подветвь" },
+], edges: [
+  { from: "core", to: "r1" }, { from: "core", to: "l1" },
+  { from: "core", to: "r2" }, { from: "r1", to: "k" },
+] };
+
+test("layoutMindmap: центр посередине, ветви через одну по сторонам", () => {
+  const out = D.layoutMindmap(MIND);
+  inCanvas(out.nodes);
+  const p = out.nodes;
+  assert.strictEqual(p.core.x, W / 2);
+  assert.ok(p.r1.x > p.core.x && p.r2.x > p.core.x);  // чётные ветви — вправо
+  assert.ok(p.l1.x < p.core.x);                       // нечётные — влево
+  assert.ok(p.k.x > p.r1.x);                          // подветвь дальше ветви
+  assert.ok(out.links.every((l) => l.curve === true));
+});
+
+test("layoutMindmap: узел без связи становится ветвью центра", () => {
+  const out = D.layoutMindmap({ kind: "mindmap", nodes: [
+    { id: "core", label: "Центр" }, { id: "a", label: "Раз" },
+    { id: "lone", label: "Один" },
+  ], edges: [{ from: "core", to: "a" }] });
+  inCanvas(out.nodes);
+  assert.ok(out.links.some((l) => l.from === "core" && l.to === "lone"));
+});
+
+test("layoutMindmap: кольцо в данных не вешает обход", () => {
+  // в собранной деке истина — HTML: data-diagram переживает правку руками,
+  // и раскладка обязана пережить то, что схема бы завернула
+  const out = D.layoutMindmap({ kind: "mindmap", nodes: [
+    { id: "core", label: "Центр" }, { id: "a", label: "А" }, { id: "b", label: "Б" },
+  ], edges: [{ from: "core", to: "a" }, { from: "a", to: "b" }, { from: "b", to: "a" }] });
+  assert.deepStrictEqual(Object.keys(out.nodes).sort(), ["a", "b", "core"]);
+  inCanvas(out.nodes);
+});
+
+const NET = { kind: "network", nodes: [
+  { id: "api", label: "Шлюз" }, { id: "auth", label: "Аутентификация" },
+  { id: "cat", label: "Каталог" }, { id: "db", label: "База" },
+  { id: "mon", label: "Мониторинг" },
+], edges: [
+  { from: "api", to: "auth" }, { from: "api", to: "cat" },
+  { from: "auth", to: "db" }, { from: "cat", to: "db" }, { from: "db", to: "mon" },
+] };
+
+test("layoutNetwork: узлы в холсте, связи стыкуются к граням", () => {
+  const out = D.layoutNetwork(NET);
+  inCanvas(out.nodes);
+  assert.strictEqual(out.links.length, 5);
+  out.links.forEach((l) => l.points.forEach((pt) => {
+    assert.ok(Number.isFinite(pt[0]) && Number.isFinite(pt[1]));
+  }));
+});
+
+test("layoutNetwork: раскладка детерминирована — сейв запекает SVG", () => {
+  // повторный рендер поверх запечённого SVG обязан дать ТЕ ЖЕ координаты,
+  // иначе схема «прыгает» при каждой перезагрузке деки
+  const a = D.layoutNetwork(NET).nodes, b = D.layoutNetwork(NET).nodes;
+  assert.deepStrictEqual(a, b);
+});
+
+test("layoutNetwork: связанные узлы ближе несвязанных", () => {
+  const p = D.layoutNetwork(NET).nodes;
+  const dist = (u, v) => Math.hypot(p[u].x - p[v].x, p[u].y - p[v].y);
+  assert.ok(dist("api", "auth") < dist("api", "mon"));
+});
+
+test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
-    ["comparison", "cycle", "flowchart", "funnel", "hierarchy", "hub_spoke",
-     "matrix", "process", "pyramid", "swimlanes", "venn"]);
+    ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",
+     "hub_spoke", "matrix", "mindmap", "network", "process", "pyramid", "steps",
+     "swimlanes", "venn"]);
 });
 
 test("CANVAS синхронизирован со схемой (1800×720)", () => {
@@ -367,6 +488,10 @@ test("relink: у всех типов со связями рёбра догоня
     hub_spoke: { kind: "hub_spoke", nodes: N4 },
     swimlanes: { kind: "swimlanes",
       nodes: N4.map((n, i) => Object.assign({ lane: i % 2 ? "Y" : "X" }, n)),
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "d" }] },
+    mindmap: { kind: "mindmap", nodes: N4,
+      edges: [{ from: "a", to: "b" }, { from: "a", to: "c" }, { from: "b", to: "d" }] },
+    network: { kind: "network", nodes: N4,
       edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "d" }] },
   };
   Object.keys(specs).forEach((kind) => {
@@ -477,4 +602,27 @@ test("render: кегль подписей общий на всю схему", ()
   const sizes = new Set(host.innerHTML.split("data-node-id").slice(1)
     .map((chunk) => (chunk.match(/font-size:(\d+)px/) || [])[1]));
   assert.strictEqual(sizes.size, 1, `разнобой кеглей: ${[...sizes].join(", ")}`);
+});
+
+test("render: каждый тип каталога рисуется и таскается за узел", () => {
+  // data-node-id — ручка drag'а редактора: тип без неё нельзя двигать руками
+  const specs = {
+    gantt_lite: GANTT, steps: { kind: "steps", nodes: [
+      { id: "a", label: "Раз" }, { id: "b", label: "Два" }] },
+    mindmap: MIND, network: NET,
+  };
+  Object.keys(specs).forEach((kind) => {
+    const host = fakeHost();
+    D.render(host, specs[kind]);
+    assert.ok(host.innerHTML.startsWith("<svg"), `${kind}: заглушка вместо схемы`);
+    specs[kind].nodes.forEach((n) => assert.ok(
+      host.innerHTML.includes(`data-node-id="${n.id}"`),
+      `${kind}: узел ${n.id} без ручки drag'а`));
+  });
+});
+
+test("render: у плана-графика есть шкала периодов", () => {
+  const host = fakeHost();
+  D.render(host, Object.assign({ meta: { x_axis: "Месяцы" } }, GANTT));
+  assert.ok(host.innerHTML.includes("Месяцы"), "подпись шкалы потерялась");
 });

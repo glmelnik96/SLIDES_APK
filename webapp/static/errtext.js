@@ -67,9 +67,19 @@
     hub_spoke: { min: 3, text: "Хабу нужен центр и минимум два луча" },
     matrix: { min: 4, max: 4, text: "У матрицы ровно 4 квадранта" },
     venn: { min: 2, max: 3, text: "У диаграммы Венна 2 или 3 множества" },
+    gantt_lite: { min: 2, max: 8, text: "В плане-графике от 2 до 8 работ" },
+    steps: { min: 2, max: 6, text: "В лестнице от 2 до 6 ступеней" },
+    mindmap: { min: 3, text: "Карте нужен центр и минимум две ветви" },
+    network: { min: 3, text: "В графе связей минимум 3 узла" },
   };
-  var DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes"];
+  var DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "network"];
   var DGM_LANE_FIELD = { comparison: "сторона", swimlanes: "исполнитель" };
+  // Типы, чьи рёбра обязаны складываться в дерево: второе ребро к тому же узлу
+  // раскладка молча теряет — связь, заданная автором, просто не появится.
+  var DGM_TREE_FIELD = {
+    hierarchy: "В оргсхеме у узла один руководитель, а у ",
+    mindmap: "В карте у ветви одна родительская ветвь, а у ",
+  };
 
   function diagramClaims(spec) {
     if (!spec || !spec.kind) return [];
@@ -94,6 +104,19 @@
     if (spec.kind === "flowchart" && nodes.length >= 2 && !edges.length) {
       out.push("В блок-схеме нужна хотя бы одна связь между узлами");
     }
+    if (spec.kind === "gantt_lite") {
+      // Длительность — единственное, что задаёт ширину полосы: без числа работа
+      // не «нулевая», её просто нечем нарисовать.
+      var noDur = nodes.filter(function (n) {
+        var m = /-?\d+(?:[.,]\d+)?/.exec(String(n.value == null ? "" : n.value));
+        var v = m ? Number(m[0].replace(",", ".")) : 0;
+        return !(v > 0 && v <= 12);
+      }).map(function (n) { return n.id; });
+      if (noDur.length) {
+        out.push("Укажите длительность (от 1 до 12 периодов) у работ " +
+                 names(noDur));
+      }
+    }
     var laneField = DGM_LANE_FIELD[spec.kind];
     if (laneField) {
       var blank = nodes.filter(function (n) { return !(n.lane || "").trim(); });
@@ -110,16 +133,24 @@
         out.push("Дорожек должно быть от 2 до 5 — сейчас " + lanes.length);
       }
     }
-    if (spec.kind === "hierarchy") {
+    if (spec.kind === "network" && !edges.length) {
+      out.push("В графе связей нужна хотя бы одна связь — без связей это " +
+               "россыпь плашек");
+    }
+    if (spec.kind === "mindmap" && edges.some(function (e) {
+      return e.to === nodes[0].id;
+    })) {
+      out.push("Центр карты «" + (nodes[0].label || nodes[0].id) +
+               "» не может быть подветвью — связь ведёт в него");
+    }
+    var treeText = DGM_TREE_FIELD[spec.kind];
+    if (treeText) {
       var parent = {}, twice = [], ring = [];
       edges.forEach(function (e) {
         if (parent[e.to]) { if (twice.indexOf(e.to) < 0) twice.push(e.to); }
         else parent[e.to] = e.from;
       });
-      if (twice.length) {
-        out.push("В оргсхеме у узла один руководитель, а у " + names(twice) +
-                 " их несколько");
-      }
+      if (twice.length) out.push(treeText + names(twice) + " их несколько");
       Object.keys(parent).forEach(function (id) {
         var hops = 0, cur = id;
         while (parent[cur]) {
