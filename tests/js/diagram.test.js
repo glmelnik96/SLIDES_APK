@@ -650,3 +650,18 @@ test("render: у плана-графика есть шкала периодов"
   D.render(host, Object.assign({ meta: { x_axis: "Месяцы" } }, GANTT));
   assert.ok(host.innerHTML.includes("Месяцы"), "подпись шкалы потерялась");
 });
+
+test("render: подпись переносится по словам, а не рвётся посреди слова", () => {
+  // word-break:break-word в Chromium работает как anywhere — рвёт слово, лишь бы
+  // добить текущую строку: «Задание на комплектацию» уезжало в «комплектаци» +
+  // «ю» отдельной строкой, хотя слово целиком влезало следующей.
+  const host = fakeHost();
+  D.render(host, { kind: "flowchart",
+    nodes: [{ id: "a", label: "Задание на комплектацию" },
+            { id: "b", label: "Автоконтроль качества" }],
+    edges: [{ from: "a", to: "b" }] });
+  assert.ok(host.innerHTML.includes("overflow-wrap:break-word"),
+    "подписи без переноса длинных слов — они вылезут за плашку");
+  assert.ok(!/word-break\s*:/.test(host.innerHTML),
+    "word-break рвёт слова там, где перенос уместился бы целиком");
+});

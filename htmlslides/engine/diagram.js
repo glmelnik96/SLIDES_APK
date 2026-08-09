@@ -820,7 +820,12 @@
       '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;' +
       'align-items:center;justify-content:' + a[0] + ';text-align:' + a[1] + ';overflow:hidden;' +
       'font-size:' + fitFont(n.label, p.w, p.h, fontSize) + 'px;line-height:1.15;' +
-      'letter-spacing:-.3px;word-break:break-word;' +
+      /* overflow-wrap, а НЕ word-break:break-word: последний в Chromium работает
+         как anywhere — рвёт слово, лишь бы добить текущую строку, и «Задание на
+         комплектацию» превращалось в «комплектаци» + «ю» отдельной строкой,
+         хотя слово целиком влезало следующей. overflow-wrap сначала переносит
+         слово и режет только то, что не помещается в строку вообще. */
+      'letter-spacing:-.3px;overflow-wrap:break-word;' +
       'color:' + color + ';">' + esc(n.label) + "</div></foreignObject>";
   }
 
