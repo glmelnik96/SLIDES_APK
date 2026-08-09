@@ -836,6 +836,22 @@ test("render: у плана-графика есть шкала периодов"
   assert.ok(host.innerHTML.includes("Месяцы"), "подпись шкалы потерялась");
 });
 
+test("render: у полос плана прямые углы — как у всех плашек деки", () => {
+  // --radius:0 в deck.css заявлен инвариантом бренда, шаблоны графиков пишут
+  // rx="0" явно, скругления отвергает и филлер, и vision-QA. Полосы плана были
+  // единственным скруглённым элементом движка: рядом с прямоугольными плашками
+  // остальных схем это читалось как чужая вставка.
+  const host = fakeHost();
+  D.render(host, GANTT);
+  const bars = host.innerHTML.split("data-node-id").slice(1);
+  bars.forEach((chunk) => assert.ok(!/^[^>]*\brx=/.test(chunk.slice(chunk.indexOf("<rect"))),
+    "полоса плана снова скруглена"));
+  // у блок-схемы капсула start/end остаётся — это нотация, а не украшение
+  const fc = fakeHost();
+  D.render(fc, { kind: "flowchart", nodes: [{ id: "a", label: "Старт", shape: "start" }] });
+  assert.ok(/rx="/.test(fc.innerHTML), "капсула терминатора блок-схемы пропала");
+});
+
 test("render: подпись переносится по словам, а не рвётся посреди слова", () => {
   // word-break:break-word в Chromium работает как anywhere — рвёт слово, лишь бы
   // добить текущую строку: «Задание на комплектацию» уезжало в «комплектаци» +
