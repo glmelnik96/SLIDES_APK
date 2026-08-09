@@ -872,11 +872,13 @@
   var BREAK_RE = /[^\S\u00a0\u202f]+/;
   var BREAK_KEEP_RE = /([^\S\u00a0\u202f]+)/;
 
-  function fitFont(label, w, h, base) {
+  /* fitFont/clampLabel меряют ПЛАШКУ (габарит минус поля по 12px). Подписи в
+   * точном прямоугольнике — колонка дорожек swimlanes — знают свой чистый размер,
+   * им нужны те же расчёты без вычитания полей: отсюда пара *Box. */
+  function fitFontBox(label, inner, box, base) {
     var text = String(label == null ? "" : label).trim();
     var max = base || 28;
     if (!text) return max;
-    var inner = Math.max(24, w - 24), box = Math.max(24, h - 24);
     var words = text.split(BREAK_RE);
     var longest = 0;
     words.forEach(function (word) { longest = Math.max(longest, word.length); });
@@ -896,6 +898,10 @@
       if (lines * fs * 1.16 <= box) return fs;
     }
     return 16;
+  }
+
+  function fitFont(label, w, h, base) {
+    return fitFontBox(label, Math.max(24, w - 24), Math.max(24, h - 24), base);
   }
 
   /* Сколько строк займёт подпись при ширине строки perLine (в символах). Слово
@@ -928,9 +934,8 @@
    * + габарит + кегль), поэтому запечённый в деку SVG воспроизводится байт в
    * байт. Когда fitFont нашёл кегль (fs > 16), обрезка не срабатывает по
    * построению: он и выбирал его по условию «строки помещаются». */
-  function clampLabel(label, w, h, fs) {
+  function clampLabelBox(label, inner, box, fs) {
     var text = String(label == null ? "" : label).trim();
-    var inner = Math.max(24, w - 24), box = Math.max(24, h - 24);
     var perLine = Math.max(1, Math.floor(inner / (fs * 0.6)));
     var maxLines = Math.max(1, Math.floor(box / (fs * 1.16)));
     if (!text || labelLines(text, perLine) <= maxLines) return text;
@@ -943,6 +948,10 @@
       if (labelLines(cut, perLine) <= maxLines) return cut;
     }
     return text.slice(0, Math.max(1, perLine * maxLines - 1)) + "…";
+  }
+
+  function clampLabel(label, w, h, fs) {
+    return clampLabelBox(label, Math.max(24, w - 24), Math.max(24, h - 24), fs);
   }
 
   var FO_ALIGN = { left: ["flex-start", "left"], right: ["flex-end", "right"] };
@@ -1186,11 +1195,19 @@
         out += '<line x1="0" y1="' + (i * laneH) + '" x2="' + W + '" y2="' + (i * laneH) +
           '" stroke="var(--fg-muted)" stroke-width="1.5" opacity="0.35"/>';
       }
-      out += '<foreignObject x="16" y="' + (i * laneH + 10) + '" width="' + (labelW - 40) +
-        '" height="' + (laneH - 20) + '">' +
+      /* Колонка подписей узкая и фиксированная, поэтому здесь тот же контракт,
+         что и у подписей узлов: подбор кегля, перенос на обёртке с min-width:0 и
+         явная обрезка с многоточием. Без него «Отдел клиентского сопровождения»
+         молча срезалось overflow:hidden до «…сопровождени» с половинкой буквы. */
+      var lw = Math.max(24, labelW - 40), lh = Math.max(24, laneH - 20);
+      var lfs = fitFontBox(lane, lw, lh, 26);
+      out += '<foreignObject x="16" y="' + (i * laneH + 10) + '" width="' + lw +
+        '" height="' + lh + '">' +
         '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;' +
-        'display:flex;align-items:center;overflow:hidden;font-size:26px;' +
-        'line-height:1.15;color:var(--fg-muted);">' + esc(lane) + "</div></foreignObject>";
+        'display:flex;align-items:center;overflow:hidden;font-size:' + lfs + 'px;' +
+        'line-height:1.15;color:var(--fg-muted);">' +
+        '<div style="min-width:0;max-width:100%;overflow-wrap:break-word;">' +
+        esc(clampLabelBox(lane, lw, lh, lfs)) + "</div></div></foreignObject>";
     });
     return out;
   }

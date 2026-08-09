@@ -688,6 +688,22 @@ test("render: перенос слова живёт в обёртке, котор
     "перенос остался на флекс-контейнере");
 });
 
+test("render: длинная подпись дорожки не срезается молча", () => {
+  // Колонка подписей swimlanes узкая и фиксированная. Подпись стояла там одной
+  // строкой без переноса и без подбора кегля, под overflow:hidden — «Отдел
+  // клиентского сопровождения» превращалось в «…сопровождени» с половинкой «я».
+  const host = fakeHost();
+  const lane = "Отдел клиентского сопровождения";
+  D.render(host, { kind: "swimlanes", nodes: [
+    { id: "a", label: "Приём", lane: lane },
+    { id: "b", label: "Оплата", lane: "Бухгалтерия" }] });
+  const i = host.innerHTML.indexOf("Отдел клиентского");
+  assert.ok(i > 0, "подписи дорожки нет в разметке");
+  const frag = host.innerHTML.slice(host.innerHTML.lastIndexOf("<foreignObject", i), i);
+  assert.ok(/min-width:0/.test(frag) && /overflow-wrap:break-word/.test(frag),
+    `подпись дорожки не переносится: ${frag}`);
+});
+
 test("render: кегль подписи попадает в разметку", () => {
   const host = fakeHost();
   D.render(host, { kind: "swimlanes",
