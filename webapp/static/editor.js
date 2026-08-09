@@ -221,6 +221,22 @@ function handleFrameLoad(loaded) {
           }
           syncDraftSlideHtml(i);
         });
+      } else {
+        // Собранная дека — HTML-as-truth, и правка на слайде жила только в
+        // кадре: человек правил текст, уходил «На главную» (или закрывал
+        // вкладку) — и правки не оставалось, без единого предупреждения.
+        // Сохраняем так же, как черновик: по уходу из блока.
+        el.addEventListener("focus", () => { el.__origHtml = el.innerHTML; });
+        el.addEventListener("blur", () => {
+          const changed = el.__origHtml !== undefined
+            && el.innerHTML !== el.__origHtml;
+          el.__origHtml = undefined;
+          if (!changed) return;
+          if (el.hasAttribute("data-count-final")) {   // см. коммент выше
+            el.setAttribute("data-count-final", el.textContent);
+          }
+          saveDeckEdit();
+        });
       }
     }
   }));
@@ -608,6 +624,23 @@ document.getElementById("save").onclick = async () => {
   flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
 
+// Автосейв правки на слайде собранной деки (у черновика своя ветка — plan.json).
+// Строго по очереди: дека уходит целиком, поэтому один повтор после текущего
+// сейва добирает всё, что накопилось, пока запрос был в полёте.
+let deckEditSaving = false, deckEditPending = false;
+async function saveDeckEdit() {
+  if (deckEditSaving) { deckEditPending = true; return; }
+  deckEditSaving = true;
+  let ok = false;
+  try {
+    ok = await saveDeck();
+  } catch (_) { ok = false; } finally {
+    deckEditSaving = false;
+    flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
+    if (deckEditPending) { deckEditPending = false; await saveDeckEdit(); }
+  }
+}
+
 // Перекрас деки (тёмная ↔ светлая). Тема — атрибут data-theme на <html> деки:
 // сервер флипает его в deck.html (и в plan.json у черновика), все токены deck.css
 // пересчитываются сами, экспорт перерендерит из deck.html. Ярлык кнопки — ЦЕЛЬ
@@ -816,10 +849,17 @@ htmlLink?.addEventListener("click", async (e) => {
   if (await confirmExportWithPlaceholders()) location.href = htmlLink.href;
 });
 
+// Подпись возвращаем ту, что была ДО первой вспышки: два срабатывания подряд
+// (двойной клик по «Сохранить», автосейв следом за ручным) запоминали уже
+// вспыхнувший текст, и кнопка навсегда оставалась «Сохранено».
 function flash(btn, text) {
-  const orig = btn.textContent;
+  if (btn.__flashOrig === undefined) btn.__flashOrig = btn.textContent;
+  clearTimeout(btn.__flashTimer);
   btn.textContent = text;
-  setTimeout(() => { btn.textContent = orig; }, 1500);
+  btn.__flashTimer = setTimeout(() => {
+    btn.textContent = btn.__flashOrig;
+    btn.__flashOrig = undefined;
+  }, 1500);
 }
 
 // К§17 — бренд-диалоги вместо нативных alert/confirm (стиль .picker, прямые углы,
