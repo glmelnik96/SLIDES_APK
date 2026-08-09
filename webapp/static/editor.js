@@ -1489,6 +1489,11 @@ function renderDiagramPanel(slide) {
   const nodesNote = hint("");
   nodesNote.id = "dgmNodesNote";
   nodesWrap.appendChild(nodesNote);
+  const fitNote = hint("");
+  fitNote.id = "dgmFitNote";
+  fitNote.className = "field-hint field-hint--over";
+  fitNote.hidden = true;
+  nodesWrap.appendChild(fitNote);
   // Смысловая подсказка типа остаётся; «до N узлов» больше не нужна — число теперь
   // в живом счётчике, а два хинта подряд про одно и то же только шумят.
   if (rules.hint) nodesWrap.appendChild(hint(rules.hint));
@@ -1591,7 +1596,7 @@ function dgmNodeRow(kind, n) {
   label.maxLength = 60;
   label.value = n.label == null ? "" : String(n.label);
   label.dataset.dgm = "label";
-  label.oninput = () => { refreshDgmEdgeSelects(); scheduleSave(); };
+  label.oninput = () => { refreshDgmEdgeSelects(); syncDgmFit(); scheduleSave(); };
   row.appendChild(label);
   if (DGM_VALUE_KINDS[kind]) {
     const val = document.createElement("input");
@@ -1624,7 +1629,7 @@ function dgmNodeRow(kind, n) {
     lane.className = "dgm-lane";
     lane.value = n.lane == null ? "" : String(n.lane);
     lane.dataset.dgm = "lane";
-    lane.oninput = scheduleSave;
+    lane.oninput = () => { syncDgmFit(); scheduleSave(); };   // дорожка меняет ширину плашки
     row.appendChild(lane);
   }
   const acc = document.createElement("label");
@@ -1694,6 +1699,45 @@ function syncDgmCounts() {
       note.textContent = `${n} из ${DGM_MAX_EDGES}`
         + (n >= DGM_MAX_EDGES ? " — предел" : "");
     }
+  }
+  syncDgmFit();   // плашки ужимаются с каждым узлом — предупреждение пересчитываем
+}
+
+/* Чем больше узлов, тем меньше плашка: подпись, законная по схеме (до 60 симв.),
+   в схеме на 9+ узлов физически не помещается и движок сокращает её многоточием.
+   Молча это делать нельзя — в панели полный текст, на слайде обрезанный, и
+   человек читает расхождение как потерю данных. Считаем ТЕМ ЖЕ движком, что и
+   рисует (габарит из layout + clampLabel), поэтому предупреждение не разъедется
+   с картинкой. Движок живёт в кадре превью — до его загрузки просто молчим. */
+function syncDgmFit() {
+  const note = byId("dgmFitNote");
+  const list = byId("dgmNodeList");
+  if (!note || !list) return;
+  const eng = frame.contentDocument?.defaultView?.DiagramEngine;
+  const spec = eng && eng.layout ? collectDiagramFields()?.diagram : null;
+  const pos = spec ? eng.layout(spec) : null;
+  const cut = [];
+  list.querySelectorAll(".dgm-node-row").forEach((row) => {
+    const inp = row.querySelector('[data-dgm="label"]');
+    const text = (inp?.value || "").trim();
+    const p = pos && pos[row.dataset.nodeId];
+    const over = !!(p && text
+      && eng.clampLabel(text, p.w, p.h, eng.fitFont(text, p.w, p.h, 28)) !== text);
+    row.classList.toggle("dgm-node-row--over", over);
+    if (over) cut.push(text);
+  });
+  note.hidden = !cut.length;
+  if (cut.length) {
+    // сами подписи здесь длинные — в перечислении режем их до узнаваемого начала,
+    // иначе предупреждение занимает больше места, чем список узлов
+    const short = (s) => `«${s.length > 22 ? s.slice(0, 21).trim() + "…" : s}»`;
+    const total = list.querySelectorAll(".dgm-node-row").length;
+    note.textContent = cut.length === total && total > 2
+      ? "На слайде подписи всех узлов сократятся многоточием — плашки этого"
+        + " размера столько текста не вмещают."
+      : `На слайде сократятся многоточием: ${cut.slice(0, 2).map(short).join(", ")}`
+        + (cut.length > 2 ? ` и ещё ${cut.length - 2}` : "")
+        + " — плашки этого размера столько текста не вмещают.";
   }
 }
 

@@ -889,23 +889,69 @@
     return 16;
   }
 
+  /* Сколько строк займёт подпись при ширине строки perLine (в символах). Слово
+   * длиннее строки Chromium РВЁТ (overflow-wrap), то есть оно съедает несколько
+   * строк, а не переносится целиком — fitFont такой случай просто пропускает
+   * (ищет кегль поменьше), а здесь его надо посчитать честно: на полу кегля
+   * выбора уже нет. */
+  function labelLines(text, perLine) {
+    var words = String(text == null ? "" : text).trim().split(/\s+/);
+    var lines = 0, cur = 0, i, len;
+    for (i = 0; i < words.length; i++) {
+      len = words[i].length;
+      if (!len) continue;
+      if (len > perLine) {
+        if (cur) lines += 1;
+        lines += Math.ceil(len / perLine) - 1;
+        cur = len % perLine || perLine;
+      } else if (!cur) cur = len;
+      else if (cur + 1 + len <= perLine) cur += 1 + len;
+      else { lines += 1; cur = len; }
+    }
+    return lines + (cur ? 1 : 0);
+  }
+
+  /* Подпись, которая не влезает даже на минимальном кегле (16 — ниже нечитаемо),
+   * до сих пор просто срезалась overflow:hidden. Обрезка шла ПО ЦЕНТРУ плашки:
+   * сверху и снизу оставались половинки строк — на слайде это выглядит не как
+   * «текст сократили», а как испорченные данные. Режем сами, по границе слова,
+   * и ставим многоточие: «сокращено» читается однозначно. Функция чистая (текст
+   * + габарит + кегль), поэтому запечённый в деку SVG воспроизводится байт в
+   * байт. Когда fitFont нашёл кегль (fs > 16), обрезка не срабатывает по
+   * построению: он и выбирал его по условию «строки помещаются». */
+  function clampLabel(label, w, h, fs) {
+    var text = String(label == null ? "" : label).trim();
+    var inner = Math.max(24, w - 24), box = Math.max(24, h - 24);
+    var perLine = Math.max(1, Math.floor(inner / (fs * 0.6)));
+    var maxLines = Math.max(1, Math.floor(box / (fs * 1.16)));
+    if (!text || labelLines(text, perLine) <= maxLines) return text;
+    var words = text.split(/\s+/);
+    for (var n = words.length - 1; n > 0; n--) {
+      var cut = words.slice(0, n).join(" ") + "…";
+      if (labelLines(cut, perLine) <= maxLines) return cut;
+    }
+    return text.slice(0, Math.max(1, perLine * maxLines - 1)) + "…";
+  }
+
   var FO_ALIGN = { left: ["flex-start", "left"], right: ["flex-end", "right"] };
 
   function labelFO(p, n, color, fontSize, align) {
     var pad = 10;
     var a = FO_ALIGN[align] || ["center", "center"];
+    var fs = fitFont(n.label, p.w, p.h, fontSize);
     return '<foreignObject x="' + (p.x - p.w / 2 + pad) + '" y="' + (p.y - p.h / 2 + pad) +
       '" width="' + (p.w - 2 * pad) + '" height="' + (p.h - 2 * pad) + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;' +
       'align-items:center;justify-content:' + a[0] + ';text-align:' + a[1] + ';overflow:hidden;' +
-      'font-size:' + fitFont(n.label, p.w, p.h, fontSize) + 'px;line-height:1.15;' +
+      'font-size:' + fs + 'px;line-height:1.15;' +
       /* overflow-wrap, а НЕ word-break:break-word: последний в Chromium работает
          как anywhere — рвёт слово, лишь бы добить текущую строку, и «Задание на
          комплектацию» превращалось в «комплектаци» + «ю» отдельной строкой,
          хотя слово целиком влезало следующей. overflow-wrap сначала переносит
          слово и режет только то, что не помещается в строку вообще. */
       'letter-spacing:-.3px;overflow-wrap:break-word;' +
-      'color:' + color + ';">' + esc(n.label) + "</div></foreignObject>";
+      'color:' + color + ';">' + esc(clampLabel(n.label, p.w, p.h, fs)) +
+      "</div></foreignObject>";
   }
 
   function shapePath(n, p) {
@@ -1309,6 +1355,7 @@
     layoutGantt: layoutGantt, layoutSteps: layoutSteps,
     layoutMindmap: layoutMindmap, layoutNetwork: layoutNetwork,
     laneList: laneList, trimSegment: trimSegment, fitFont: fitFont,
+    clampLabel: clampLabel, labelLines: labelLines,
     CANVAS: { W: W, H: H },
   };
 

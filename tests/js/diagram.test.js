@@ -612,6 +612,49 @@ test("fitFont: перенос считается по словам, а не де
   assert.ok(D.fitFont("Проверка данных менеджером", 250, 110) <= 24);
 });
 
+test("clampLabel: влезающую подпись не трогает, невлезающую режет по слову", () => {
+  // 250×110 — плашка flowchart на 5 узлов: подпись помещается, кегль нашёлся.
+  const ok = "Проверка данных менеджером";
+  assert.strictEqual(D.clampLabel(ok, 250, 110, D.fitFont(ok, 250, 110, 28)), ok);
+  // 109×110 — плашка того же flowchart на 11 узлов: не влезает и на полу кегля.
+  const long = "Согласование условий с юридической службой заказчика";
+  const cut = D.clampLabel(long, 109, 110, D.fitFont(long, 109, 110, 28));
+  assert.notStrictEqual(cut, long);
+  assert.ok(cut.endsWith("…"), cut);
+  assert.ok(long.startsWith(cut.slice(0, -1)), `обрезка не по началу строки: ${cut}`);
+  assert.ok(!/\s…$/.test(cut), `пробел перед многоточием: ${cut}`);
+  // режем по границе слова, а не посреди
+  assert.ok(long.charAt(cut.length - 1).match(/[\s]/) || cut.length - 1 === long.length,
+    `обрезано посреди слова: ${cut}`);
+});
+
+test("clampLabel: одно длинное слово режется по символам, а не в ноль", () => {
+  const word = "Электроэнцефалографирование";
+  const cut = D.clampLabel(word, 100, 60, 16);
+  assert.ok(cut.endsWith("…") && cut.length > 2, cut);
+  assert.ok(word.startsWith(cut.slice(0, -1)));
+  assert.strictEqual(D.clampLabel("", 100, 60, 16), "");
+});
+
+test("labelLines: слово шире строки съедает несколько строк", () => {
+  assert.strictEqual(D.labelLines("аб вг", 6), 1);
+  assert.strictEqual(D.labelLines("аб вг", 4), 2);
+  assert.strictEqual(D.labelLines("абвгдеёжзи", 5), 2);   // рвётся overflow-wrap
+  assert.strictEqual(D.labelLines("аб абвгдеёжзи", 5), 3);
+});
+
+test("render: невлезающая подпись выходит в разметку сокращённой", () => {
+  const host = fakeHost();
+  const long = "Согласование условий с юридической службой заказчика";
+  const nodes = [];
+  for (let i = 1; i <= 11; i++) nodes.push({ id: "n" + i, label: long });
+  const edges = [];
+  for (let i = 1; i < 11; i++) edges.push({ from: "n" + i, to: "n" + (i + 1) });
+  D.render(host, { kind: "flowchart", nodes: nodes, edges: edges });
+  assert.ok(!host.innerHTML.includes(long), "полная подпись всё ещё в SVG");
+  assert.ok(host.innerHTML.includes("…"), "нет многоточия сокращения");
+});
+
 test("render: кегль подписи попадает в разметку", () => {
   const host = fakeHost();
   D.render(host, { kind: "swimlanes",

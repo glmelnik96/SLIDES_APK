@@ -909,6 +909,9 @@ a { color: var(--accent); }
 .dgm-acc { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
   font-size: var(--fs-cap); color: var(--muted); cursor: pointer; user-select: none; }
 .dgm-acc input { width: auto; accent-color: var(--accent); margin: 0; }
+/* Узел, чья подпись не влезет в плашку и будет сокращена движком: подсвечиваем
+   само поле — иначе строка «сократятся: …» под списком не показывает, какое. */
+.dgm-node-row--over input[data-dgm="label"] { border-color: var(--danger-soft); }
 /* Претензии к схеме над формой: жёлтый — наша проверка до сейва, красный —
    сервер отверг правку. Плашки-состояния канона: подложка 10% + цветной текст */
 .dgm-claims { padding: 10px 12px; margin-bottom: 14px; font-size: var(--fs-cap);
