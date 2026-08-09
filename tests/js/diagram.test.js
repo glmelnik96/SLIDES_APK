@@ -301,6 +301,22 @@ test("layoutSwimlanes: без рёбер — порядок списка, пос
   assert.deepStrictEqual(out.links.map((l) => l.from + "→" + l.to), ["a→b", "b→c"]);
 });
 
+test("render: дорожка не заливается цветом плашки, границы держат линии", () => {
+  // Полоса-зебра заливалась тем же --bg-card, что и плашки узлов, а плашка
+  // лежит НА полосе: в светлой теме её контраст к своей полосе падал до 1.05:1
+  // и она пропадала. Границу дорожек держат линии — они есть у каждой.
+  const host = fakeHost();
+  D.render(host, { kind: "swimlanes", nodes: [
+    { id: "a", label: "Заявка", lane: "Клиент" },
+    { id: "b", label: "Проверка", lane: "Менеджер" },
+    { id: "c", label: "Настройка", lane: "Инженер" },
+  ] });
+  assert.ok(!/<rect[^>]*fill="var\(--bg-card\)"[^>]*fill-opacity/.test(host.innerHTML),
+            "полоса дорожки снова залита цветом плашки");
+  const lines = host.innerHTML.match(/<line[^>]*stroke="var\(--fg-muted\)"/g) || [];
+  assert.strictEqual(lines.length, 2);   // три дорожки — две внутренние границы
+});
+
 test("layoutSwimlanes: одинаковый ранг в одной дорожке не слипается", () => {
   // ветвление: b и c оба ранга 1, обе в дорожке Y — вторую разводим вправо
   const spec = { kind: "swimlanes", nodes: [
