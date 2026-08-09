@@ -167,6 +167,37 @@
         }
       }
     }
+    autofitStatsHeight();
+  }
+
+  /* Тот же слайд по вертикали: блок рядов начинается на y=328, слайд кончается
+     на 1080 — бюджет ~692px. Два ряда по 4 метрики с пояснениями на слотовом
+     капе (label 40, caption 160 симв.) занимают 887px, то есть 200px уезжают
+     ЗА нижний край, а .slide{overflow:hidden} срезает их молча: человек видит
+     ряд без половины пояснений и не понимает, что текст вообще был.
+     Ужимаем подписи и пояснения всех ячеек блока до кегля, при котором ряды
+     влезают (цифру-героя не трогаем — она и есть смысл слайда). Пол
+     читаемости 20px для подписи (база 30) и пропорциональные ~15 для
+     пояснения (база 22). */
+  var _SR_MIN_FS = 20, _SR_BOTTOM = 60;
+  function autofitStatsHeight() {
+    var blocks = document.querySelectorAll(".sr-rows");
+    for (var b = 0; b < blocks.length; b++) {
+      var box = blocks[b];
+      var slide = box.closest ? box.closest(".slide") : null;
+      if (!slide || !slide.clientHeight) continue;
+      var labels = box.querySelectorAll(".sr-label");
+      var caps = box.querySelectorAll(".sr-caption");
+      var i, fs;
+      for (i = 0; i < labels.length; i++) labels[i].style.fontSize = "";   // сброс к базе
+      for (i = 0; i < caps.length; i++) caps[i].style.fontSize = "";
+      var budget = slide.clientHeight - _SR_BOTTOM - box.offsetTop;
+      for (fs = 30; fs > _SR_MIN_FS; fs--) {
+        if (box.offsetHeight <= budget) break;
+        for (i = 0; i < labels.length; i++) labels[i].style.fontSize = (fs - 1) + "px";
+        for (i = 0; i < caps.length; i++) caps[i].style.fontSize = ((fs - 1) * 22 / 30) + "px";
+      }
+    }
   }
 
   /* Плашки grid-2x2 / frames-grid: зона 659px делится между рядами, и текст,
