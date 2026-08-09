@@ -159,7 +159,31 @@ def fill_diagram(client: KimiClient, library: TemplateLibrary,
             # в FillError (иначе номер задваивался в warn-прогрессе).
             raise DiagramFillError("диаграмма не прошла контракт после "
                                    f"ретрая: {'; '.join(errors)}")
+    content["diagram"] = _carry_offsets(slide.content.get("diagram"),
+                                        content["diagram"])
     return slide.model_copy(update={"content": content})
+
+
+def _carry_offsets(old_raw, new_raw: str) -> str:
+    """Вернуть новой схеме ручные сдвиги узлов из прежней (по id).
+
+    Модели запрещено присылать offsets — раскладку считает движок. Но сдвиги
+    ставит РУКА: человек растащил узлы на слайде, а потом нажал «Проверить и
+    улучшить слайды» (или попросил правку в чате) — и схема молча возвращалась
+    к автораскладке, потому что перезаполнение отдаёт спек без offsets. Узлы,
+    которых в новой схеме не осталось, отсеет сама схема при разборе."""
+    if not isinstance(old_raw, str) or not old_raw or not new_raw:
+        return new_raw
+    try:
+        offsets = json.loads(old_raw).get("offsets")
+        if not offsets:
+            return new_raw
+        spec = json.loads(new_raw)
+        spec["offsets"] = offsets
+        return json.dumps(parse_diagram(spec).model_dump(by_alias=True),
+                          ensure_ascii=False, separators=(",", ":"))
+    except (ValueError, AttributeError, DiagramValidationError):
+        return new_raw       # прежний спек не читается — новая схема как есть
 
 
 def _brief(slide: SlidePlan) -> str:

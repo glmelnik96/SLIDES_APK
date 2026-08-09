@@ -142,3 +142,37 @@ def test_system_prompt_menu_is_exactly_available_kinds():
     menu_block = s.split("Контракт diagram:")[0]
     assert tuple(re.findall(r"^- (\w+): ", menu_block, re.M)) == AVAILABLE_KINDS
     assert "- sankey:" not in s
+
+
+def test_manual_offsets_survive_a_refill(library):
+    """Ручные сдвиги узлов переживают перезаполнение схемы.
+
+    Человек растащил узлы на слайде, потом нажал «Проверить и улучшить слайды»
+    (или попросил правку в чате): autofix зовёт филлер заново, а модели запрещено
+    присылать offsets — схема молча возвращалась к автораскладке, и вся ручная
+    работа пропадала без единого слова.
+    """
+    old = {"kind": "flowchart",
+           "nodes": [{"id": "a", "label": "Заявка", "shape": "start"},
+                     {"id": "b", "label": "Готово", "shape": "end"}],
+           "edges": [{"from": "a", "to": "b"}],
+           "offsets": {"a": {"dx": 40, "dy": -20}, "gone": {"dx": 5, "dy": 5}}}
+    content = {"title": "Схема", "subtitle": "",
+               "diagram": json.dumps(old, ensure_ascii=False)}
+    client = FakeClient([_reply()])
+    out = fill_diagram(client, library, _slide(content), extra="замечания QA")
+    spec = json.loads(out.content["diagram"])
+    assert spec["offsets"] == {"a": {"dx": 40, "dy": -20}}  # «gone» отсеян: узла нет
+    assert not library.validate_content("diagram", out.content)
+
+
+def test_refill_without_previous_offsets_is_untouched(library):
+    content = {"title": "Схема", "subtitle": "",
+               "diagram": json.dumps({
+                   "kind": "flowchart",
+                   "nodes": [{"id": "a", "label": "Заявка", "shape": "start"},
+                             {"id": "b", "label": "Готово", "shape": "end"}],
+                   "edges": [{"from": "a", "to": "b"}]}, ensure_ascii=False)}
+    client = FakeClient([_reply()])
+    out = fill_diagram(client, library, _slide(content), extra="замечания QA")
+    assert json.loads(out.content["diagram"]).get("offsets") in (None, {})
