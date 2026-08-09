@@ -111,10 +111,17 @@ test("diagramClaims: карта и граф связей", () => {
     nodes: [{ id: "c", label: "Центр" }, { id: "a", label: "Раз" },
             { id: "b", label: "Два" }],
     edges: [{ from: "a", to: "c" }] })[0], /Центр.*не может быть подветвью/);
-  // одиночки у карты — норма: узел без связи станет ветвью центра
+  // карта БЕЗ связей — законный плоский веер ветвей вокруг центра
   assert.deepStrictEqual(diagramClaims({ kind: "mindmap",
     nodes: [{ id: "c", label: "Центр" }, { id: "a", label: "Раз" },
             { id: "b", label: "Два" }] }), []);
+  // а вот связи есть, но не у всех узлов — уровни карты смешаются
+  const mix = diagramClaims({ kind: "mindmap",
+    nodes: [{ id: "c", label: "Центр" }, { id: "a", label: "Раз" },
+            { id: "a1", label: "Раз-один" }, { id: "b", label: "Два" }],
+    edges: [{ from: "a", to: "a1" }] });
+  assert.strictEqual(mix.length, 1);
+  assert.match(mix[0], /«Центр», «Два».*уровни карты смешаются/);
   // у графа связей одиночка, наоборот, выпадает из раскладки
   const net = diagramClaims({ kind: "network",
     nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" },

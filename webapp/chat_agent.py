@@ -336,6 +336,10 @@ def run_turn(session_id: str, message: str, current_index: int,
                 sp = fill_slide(client, library, sp, deck_title=plan.title,
                                 extra=f"Указание пользователя: {intent.topic or message}")
                 plan = draft.update_slide(plan, current_index, content=sp.content)
+                typed = slide_types.typed_from_content(tid, sp.content)
+                if typed:
+                    cur_slide = plan.slides[current_index - 1]
+                    cur_slide.slide_type, cur_slide.fields = typed
                 draft.save_plan(session_id, plan)
                 result = AgentResult(reply=f"Обновил слайд {current_index}.",
                                      changed=True, go_to=current_index)
@@ -505,6 +509,10 @@ def build_outline(session_id: str, *, client: Any | None = None) -> None:
         # «ИИ сомневается в макете» относилась бы к содержимому, которого нет.
         # Черновик у обоих путей общий — автор может уйти из степпера в чат.
         slide = plan.slides[i - 1]
+        # Схему — в typed-слайд (панель узлов и drag смотрят на slide_type).
+        typed = slide_types.typed_from_content(tid, slide.content)
+        if typed:
+            slide.slide_type, slide.fields = typed
         slide.filled = True
         slide.status = slide.question = slide.candidates = None
         draft.save_plan(session_id, plan)  # save after EACH slide (resilience)

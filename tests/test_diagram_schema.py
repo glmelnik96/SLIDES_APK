@@ -274,13 +274,25 @@ def test_mindmap_multi_parent_rejected():
     assert any("родител" in e for e in ei.value.errors)
 
 
-def test_mindmap_orphans_allowed():
-    """Узел без ребра у карты — законная ветвь центра, претензии быть не должно
-    (в отличие от flowchart, где он выпадает из потока)."""
+def test_mindmap_flat_map_allowed():
+    """Карта БЕЗ рёбер — законный плоский веер ветвей вокруг центра."""
     parse_diagram({"kind": "mindmap",
                    "nodes": [{"id": "c", "label": "Центр"},
                              {"id": "a", "label": "Раз"},
                              {"id": "b", "label": "Два"}]})
+
+
+def test_mindmap_mixed_orphans_rejected():
+    """Есть рёбра, но часть узлов без них — двухуровневая карта схлопывается в
+    плоский веер: модель забыла связи, и это надо переспросить, а не рисовать."""
+    with pytest.raises(DiagramValidationError) as ei:
+        parse_diagram({"kind": "mindmap",
+                       "nodes": [{"id": "c", "label": "Центр"},
+                                 {"id": "a", "label": "Раз"},
+                                 {"id": "a1", "label": "Раз-один"},
+                                 {"id": "b", "label": "Два"}],
+                       "edges": [{"from": "a", "to": "a1"}]})
+    assert any("не ведёт ни одно ребро" in e for e in ei.value.errors)
 
 
 def test_network_requires_edges():

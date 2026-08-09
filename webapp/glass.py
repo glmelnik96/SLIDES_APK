@@ -14,6 +14,7 @@ filler.fill_slide, что у чёрного ящика и чат-агента. D
 """
 from __future__ import annotations
 
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterable
@@ -22,7 +23,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from webapp import draft, draft_render
+from webapp import draft, draft_render, slide_types
+
+_LOG = logging.getLogger(__name__)
 
 # Порог сомнения: слабая уверенность топ-1 ИЛИ топ-1 и топ-2 почти неразличимы.
 CONFIDENCE_FLOOR = 0.6
@@ -42,8 +45,36 @@ MAX_ACTIVE_PER_USER = 10
 _EXCLUDED = {"cover", "cover-image", "contacts", "back-cover",
              "section-dots", "section-frame", "blank"}
 
-_DEFAULT_QUESTION = ("Не уверен, какой макет подойдёт лучше — выберите "
-                     "вариант или уточните, что важно показать.")
+_DEFAULT_QUESTION = ("Раздел одинаково хорошо ложится в несколько макетов — "
+                     "выберите вариант или напишите, что важно показать.")
+
+# Вопрос подбирается под ЧИСЛО вариантов: с одним чипом текст про «несколько
+# макетов» — прямая ложь, и автор решал, что выбор просто не работает.
+_ONE_CANDIDATE_QUESTION = (
+    "ИИ не уверен, что этот макет подходит разделу — подтвердите его, "
+    "выберите другой или напишите, что важно показать.")
+_FALLBACK_QUESTION = (
+    "ИИ не смог подобрать макет для этого раздела (сбой запроса к модели) — "
+    "макет ниже подобран простым правилом по структуре текста. "
+    "Выберите другой или напишите, что важно показать.")
+
+# Косметические дубли: тот же макет в другом цвете (см. intent statement-green —
+# «тот же макет, что statement, но зелёный фон»). Двумя чипами они читаются как
+# «выбора нет, оба одинаковые», а их близкая уверенность вдобавок поднимала
+# ЛОЖНЫЙ вопрос: gap<GAP_FLOOR срабатывал на разнице фона, а не смысла.
+_TWINS = {"statement-green": "statement"}
+
+
+def _dedupe(cands: list["Candidate"]) -> list["Candidate"]:
+    out: list[Candidate] = []
+    seen: set[str] = set()
+    for c in cands:            # порядок = по убыванию уверенности, оставляем первый
+        key = _TWINS.get(c.template_id, c.template_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(c)
+    return out
 
 _GLASS_SYSTEM = """\
 Ты подбираешь макет слайда для ОДНОГО раздела презентации Cloud.ru.
@@ -57,6 +88,10 @@ _GLASS_SYSTEM = """\
 - ДАННЫЕ ВАЖНЕЕ ТЕКСТА: числа/метрики/таблицы → профильный data-шаблон;
   процесс с ветвлениями, цикл, воронка, оргсхема → diagram; этапы с датами →
   timeline; иначе текстовый по числу пунктов.
+- statement/statement-green/quote — АКЦЕНТ, а не макет по умолчанию. Бери их,
+  только когда в разделе ровно одна мысль и её нечем разложить. Есть
+  перечисление, сравнение, причины и следствия, несколько аспектов или ролей —
+  бери карточный/колоночный макет, даже если текст идёт сплошным абзацем.
 - Если выбор неочевиден (раздел ложится в разные макеты одинаково хорошо или
   контента мало) — задай в question ОДИН короткий уточняющий вопрос по-русски
   к автору документа. Если выбор ясен, question = "".
@@ -105,16 +140,32 @@ def plan_section_candidates(client: Any, library, section) -> SectionChoice:
              {"role": "user", "content": f"Текст раздела:\n{text}"}],
             SectionChoice, max_tokens=2048,
             extra_body={"thinking": {"type": "disabled"}})
-        cands = [c for c in choice.candidates if c.template_id in known][:3]
+        cands = _dedupe(
+            [c for c in choice.candidates if c.template_id in known])[:3]
         if cands:
             return SectionChoice(candidates=cands,
                                  question=choice.question.strip())
     except Exception:  # noqa: BLE001 — фолбэк ниже честно помечает сомнение
-        pass
+        # Молча падать нельзя: снаружи сбой выглядел как «ИИ подумал и выбрал
+        # один вариант», и отличить сломанный скоринг от честного сомнения было
+        # невозможно ни автору, ни нам.
+        _LOG.warning("glass: scoring failed, falling back to heuristic",
+                     exc_info=True)
     return SectionChoice(
         candidates=[Candidate(template_id=_fallback_template(section, library),
                               confidence=0.0)],
-        question="")
+        question=_FALLBACK_QUESTION)
+
+
+def _question_for(choice: SectionChoice) -> str:
+    """Текст вопроса под конкретное сомнение.
+
+    Свой вопрос модели важнее заготовки; заготовку выбираем по числу вариантов —
+    «ложится в несколько макетов» при одном чипе читалось как поломка выбора."""
+    if choice.question.strip():
+        return choice.question.strip()
+    return (_DEFAULT_QUESTION if len(choice.candidates) >= 2
+            else _ONE_CANDIDATE_QUESTION)
 
 
 def _doubtful(choice: SectionChoice) -> bool:
@@ -176,7 +227,7 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
             template_id=choice.candidates[0].template_id,
             brief=_section_to_text(section),
             status="needs_input" if doubt else None,
-            question=(choice.question or _DEFAULT_QUESTION) if doubt else None,
+            question=_question_for(choice) if doubt else None,
             candidates=[c.template_id for c in choice.candidates],
         ))
     plan = draft.DraftPlan(title=title, slides=slides, notice=(
@@ -254,6 +305,11 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
         fresh = draft.update_slide(fresh, index, content=content,
                                    template_id=out_tid)
         slide = fresh.slides[index - 1]
+        # Схему переводим в typed-слайд: иначе панель узлов и drag редактора её
+        # не видят (они работают по slide_type+fields), и автор правил бы JSON.
+        typed = slide_types.typed_from_content(out_tid, content)
+        if typed:
+            slide.slide_type, slide.fields = typed
         slide.filled = True
         slide.status = "failed" if failed else None
         slide.question = None

@@ -9,11 +9,15 @@ from __future__ import annotations
 from htmlslides.diagrams import sample_spec, spec_json
 from htmlslides.library import SlotSpec, TemplateLibrary
 
-# Section dividers / back-cover aren't user-fillable content slides.
-# cards-6 скрыт из пикера (правка «дубль 20»): дизайн-дубль новой заливочной grid-2x2.
-# Файл и id ОСТАВЛЕНЫ — на cards-6 завязан конвейер генерации (slide_types/planner/
-# filler/chat_agent), поэтому прячем из ручного пикера, но не удаляем.
-_HIDDEN = {"section-dots", "section-frame", "back-cover", "cards-6"}
+# Section dividers / back-cover aren't user-fillable content slides — их нет в
+# каталоге вообще.
+_NOT_FILLABLE = {"section-dots", "section-frame", "back-cover"}
+
+# cards-6 скрыт из ПИКЕРА (правка «дубль 20»): дизайн-дубль новой заливочной
+# grid-2x2. Файл и id ОСТАВЛЕНЫ — на cards-6 завязан конвейер генерации
+# (slide_types/planner/filler/chat_agent), поэтому не предлагаем руками, но и не
+# скрываем от редактора: слайд такого макета надо уметь назвать и заполнить.
+_HIDDEN_FROM_PICKER = {"cards-6"}
 
 
 def _slot_dict(spec: SlotSpec) -> dict:
@@ -33,20 +37,32 @@ def _slot_dict(spec: SlotSpec) -> dict:
     return out
 
 
-def catalog() -> list[dict]:
-    """All user-fillable templates with their slot contracts, grouped by type."""
+def catalog(include_hidden: bool = False) -> list[dict]:
+    """All user-fillable templates with their slot contracts, grouped by type.
+
+    ``include_hidden`` добавляет скрытые макеты с пометкой ``hidden``. «Скрыт»
+    значит «не предлагаем в пикере», а НЕ «фронт о нём не знает»: конвейер
+    (planner/glass/чат-агент) ставит cards-6 в черновики, и без этой ветки
+    редактор не мог ни назвать такой слайд («Макет: cards-6»), ни построить ему
+    форму — панель оставалась пустой, и текст правился только поверх превью."""
     lib = TemplateLibrary.load()
     out = []
     for t in lib.templates:
-        if t.id in _HIDDEN:
+        if t.id in _NOT_FILLABLE:
             continue
-        out.append({
+        hidden = t.id in _HIDDEN_FROM_PICKER
+        if hidden and not include_hidden:
+            continue
+        item = {
             "id": t.id,
             "type": t.type,
             "intent": t.intent,
             "display_name": t.display_name,
             "slots": {n: _slot_dict(s) for n, s in t.slots.items()},
-        })
+        }
+        if hidden:
+            item["hidden"] = True
+        out.append(item)
     return out
 
 

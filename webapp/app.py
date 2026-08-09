@@ -322,9 +322,12 @@ async def list_drafts(request: Request,
 
 @app.get("/api/templates")
 def list_templates(user=Depends(get_current_user)) -> JSONResponse:
-    """Slide-template catalog with slot contracts (drives the manual builder)."""
+    """Slide-template catalog with slot contracts (drives the manual builder).
+
+    Скрытые макеты приходят помеченными ``hidden``: пикер их отфильтровывает, а
+    формы и имена слайдов, которые поставил конвейер, строятся по ним же."""
     from webapp import templates_api
-    return JSONResponse(templates_api.catalog())
+    return JSONResponse(templates_api.catalog(include_hidden=True))
 
 
 # Правила покоя для статичного превью пикера: копия print-блока

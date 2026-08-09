@@ -425,7 +425,10 @@ function buildThumbs() {
     t.appendChild(prev);
     t.appendChild(cap);
     // Стеклянная сборка: слайд ждёт ответа автора — метка «?» на миниатюре.
-    if (isDraft && draftPlan.slides[i] && draftPlan.slides[i].status === "needs_input") {
+    // Условие ровно то же, что у карточек вопросов (openGlassQuestions):
+    // иначе собранный слайд оставался помеченным, а вопроса к нему уже нет.
+    const ds = isDraft ? draftPlan.slides[i] : null;
+    if (ds && ds.status === "needs_input" && !ds.filled) {
       const qm = document.createElement("span");
       qm.className = "thumb-quest";
       qm.title = "ИИ ждёт вашего ответа по этому слайду";
@@ -1040,6 +1043,9 @@ async function reloadDraft(goToIndex) {
 }
 
 function tplOf(id) { return catalog.find((t) => t.id === id); }
+// Каталог знает и скрытые макеты (их ставит конвейер) — чтобы назвать слайд и
+// построить ему форму. Предлагать их в пикере при этом нельзя.
+function pickableTemplates() { return catalog.filter((t) => !t.hidden); }
 
 function renderBuilderForm() {
   const form = byId("builderForm");
@@ -1085,7 +1091,7 @@ function renderBuilderForm() {
     return;
   }
   const tpl = tplOf(slide.template_id);
-  const tplIdx = catalog.findIndex((t) => t.id === slide.template_id);
+  const tplIdx = pickableTemplates().findIndex((t) => t.id === slide.template_id);
   const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
   tplBox.innerHTML =
     `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
@@ -1425,18 +1431,24 @@ function renderDiagramPanel(slide) {
 
   // Сбросить ручную раскладку — только когда сдвиги есть
   if (spec.offsets && Object.keys(spec.offsets).length) {
-    form.appendChild(dgmResetLayoutButton(f));
+    form.appendChild(dgmResetLayoutButton());
   }
 }
 
-function dgmResetLayoutButton(f) {
+function dgmResetLayoutButton() {
   const reset = document.createElement("button");
   reset.type = "button"; reset.className = "btn btn-ghost btn-sm";
   reset.id = "dgmResetLayout";
   reset.textContent = "Сбросить раскладку";
   reset.title = "Убрать ручные сдвиги узлов — вернуть авто-расстановку";
   reset.onclick = () => {
-    f.diagram = { ...(f.diagram || {}), offsets: {} };
+    // Поля берём из плана НА МОМЕНТ КЛИКА: saveDiagramSlide подменяет
+    // slide.fields новым объектом, и замыкание на старом мутировало бы сироту —
+    // кнопка исчезала, а сдвиги оставались (и локально, и на сервере).
+    const slide = draftPlan && draftPlan.slides && draftPlan.slides[current];
+    if (!slide || !slide.fields) return;
+    slide.fields = { ...slide.fields,
+                     diagram: { ...(slide.fields.diagram || {}), offsets: {} } };
     liveRenderDiagram(current);
     scheduleSave();
     reset.remove();
@@ -2271,12 +2283,13 @@ async function openPicker(onPick) {
   // открывался пустым и «не работал с первого раза». Ждём ту же загрузку.
   await ensureCatalog();
   if (seq !== pickerSeq) return;       // пикер успели открыть заново
-  if (!catalog.length) {
+  const pickable = pickableTemplates();
+  if (!pickable.length) {
     grid.innerHTML = '<p class="picker-empty">Не удалось загрузить макеты — ' +
       "проверьте соединение и откройте список ещё раз.</p>";
     return;
   }
-  catalog.forEach((t, i) => {
+  pickable.forEach((t, i) => {
     const card = document.createElement("button");
     card.type = "button"; card.className = "picker-item";
     // visual preview: a scaled iframe of the real one-slide render (lazy src)
@@ -2806,8 +2819,58 @@ function startGlassMode() {
     byId("glassDone").classList.add("hidden");
     glassLoop();
   });
+  // Каталог макетов грузится лениво, а карточки вопросов появляются на первых же
+  // шагах — без этого чип-кандидат подписывался сырым id («cards-6»).
+  ensureCatalog().then(refreshGlassChipNames);
   renderGlassPanel(null);
   glassLoop();
+}
+
+// Короткое «что это» для чипа: первая фраза intent'а. По всей библиотеке intent
+// начинается определением макета («Цитата или важная фраза», «Слайд „в цифрах“»),
+// а целиком это абзац на 300 символов — в чип не влезает.
+function tplGist(tid) {
+  const t = tplOf(tid);
+  if (!t || !t.intent) return "";
+  const cut = t.intent.search(/[:.]/);
+  const s = (cut > 0 ? t.intent.slice(0, cut) : t.intent).trim();
+  return s.length > 80 ? s.slice(0, 79) + "…" : s;
+}
+
+// Переподписать чипы, когда каталог доехал позже карточек.
+function refreshGlassChipNames() {
+  document.querySelectorAll(".glass-chip__name[data-tid]").forEach((el) => {
+    const tpl = tplOf(el.dataset.tid);
+    if (tpl) el.textContent = tpl.display_name;
+  });
+  document.querySelectorAll(".glass-chip__gist[data-tid]").forEach((el) => {
+    el.textContent = tplGist(el.dataset.tid);
+  });
+}
+
+// Шаг обычно 5-15 с, но под нагрузкой на модель доходил до 3 минут: без этой
+// строки полоса прогресса просто стояла и сборка выглядела зависшей.
+const GLASS_SLOW_MS = 25000;
+let glassSlowTimer = null;
+function glassSlowStart() {
+  glassSlowStop();
+  const el = byId("glassSlow");
+  if (!el) return;
+  const t0 = Date.now();
+  const tick = () => {
+    el.textContent = `Шаг идёт дольше обычного (${Math.round((Date.now() - t0) / 1000)} с) — ` +
+      "модель под нагрузкой. Сборка продолжается, закрывать вкладку не нужно.";
+    el.classList.remove("hidden");
+  };
+  glassSlowTimer = setTimeout(() => {
+    tick();
+    glassSlowTimer = setInterval(tick, 5000);
+  }, GLASS_SLOW_MS);
+}
+function glassSlowStop() {
+  if (glassSlowTimer) { clearTimeout(glassSlowTimer); clearInterval(glassSlowTimer); }
+  glassSlowTimer = null;
+  byId("glassSlow")?.classList.add("hidden");
 }
 
 async function glassLoop() {
@@ -2817,10 +2880,13 @@ async function glassLoop() {
     let out;
     try {
       out = await glassEnqueue(async () => {
-        const r = await fetch(U(`/api/drafts/${sessionId}/glass/step`),
-                              { method: "POST" });
-        if (!r.ok) throw new Error(await r.text());
-        return r.json();
+        glassSlowStart();
+        try {
+          const r = await fetch(U(`/api/drafts/${sessionId}/glass/step`),
+                                { method: "POST" });
+          if (!r.ok) throw new Error(await r.text());
+          return r.json();
+        } finally { glassSlowStop(); }
       });
     } catch (e) {
       if (++failures >= 3) { glassFail(); return; }
@@ -2838,9 +2904,11 @@ async function glassLoop() {
   if (!openGlassQuestions().length) exitGlassMode();
 }
 
+// Заполненный слайд вопросом больше не считается, даже если метку не сняли:
+// карточка на готовый слайд — это «слева собрано, справа всё ещё спрашивают».
 function openGlassQuestions() {
   return (draftPlan.slides || [])
-    .map((s, i) => (s && s.status === "needs_input" ? i + 1 : 0))
+    .map((s, i) => (s && s.status === "needs_input" && !s.filled ? i + 1 : 0))
     .filter(Boolean);
 }
 
@@ -2897,21 +2965,77 @@ function renderGlassQuestions(open) {
   const box = byId("glassQuestions");
   if (!box) return;
   Object.keys(glassCards).forEach((k) => {
-    if (!open.includes(+k)) { glassCards[k].remove(); delete glassCards[k]; }
+    const s = draftPlan.slides[+k - 1];
+    // Карточки привязаны к номеру слайда, а номера «плывут» при удалении и
+    // перестановке: карточка на чужой брифинг спрашивала бы про другой раздел.
+    const stale = !open.includes(+k) || !s ||
+      glassCards[k].dataset.brief !== (s.brief || "");
+    if (stale) { glassCards[k].remove(); delete glassCards[k]; }
   });
   open.forEach((idx) => {
-    if (!glassCards[idx]) glassCards[idx] = box.appendChild(makeGlassCard(idx));
+    if (glassCards[idx]) return;
+    const card = box.appendChild(makeGlassCard(idx));
+    glassCards[idx] = card;
+    card._syncExcerpt?.();      // обрезку фрагмента видно только после вставки
   });
+  const empty = byId("glassEmpty");
+  if (empty) empty.classList.toggle("hidden", open.length > 0);
 }
 
+// Фрагмент документа, который ИИ собирается положить на слайд. Без него автор
+// видел только номер слайда и общий вопрос — «непонятно, о какой информации
+// вообще речь», и решение принять было нельзя.
 function makeGlassCard(idx) {
   const s = draftPlan.slides[idx - 1] || {};
   const card = document.createElement("div");
   card.className = "glass-q";
-  const num = document.createElement("div");
+  card.dataset.brief = s.brief || "";
+  const head = document.createElement("div");
+  head.className = "glass-q__head";
+  const num = document.createElement("span");
   num.className = "glass-q__num";
   num.textContent = `Слайд ${idx}`;
-  card.appendChild(num);
+  head.appendChild(num);
+  const goto = document.createElement("button");
+  goto.type = "button";
+  goto.className = "glass-q__goto";
+  goto.textContent = "Показать на сцене";
+  goto.onclick = () => goTo(idx - 1);
+  head.appendChild(goto);
+  card.appendChild(head);
+  // О чём вопрос: в панели виден только номер, а на сцене может стоять другой
+  // слайд — без темы раздела автор отвечает вслепую.
+  const lines = (s.brief || "").split("\n");
+  const topic = (lines[0] || "").trim();
+  if (topic) {
+    const t = document.createElement("div");
+    t.className = "glass-q__topic";
+    t.textContent = topic.length > 90 ? topic.slice(0, 89) + "…" : topic;
+    card.appendChild(t);
+  }
+  const body = lines.slice(1).join("\n").trim();
+  if (body) {
+    const ex = document.createElement("div");
+    ex.className = "glass-q__excerpt";
+    ex.textContent = body;
+    card.appendChild(ex);
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "glass-q__more hidden";
+    more.textContent = "Показать фрагмент целиком";
+    more.onclick = () => {
+      const open = !ex.classList.contains("is-open");
+      ex.classList.toggle("is-open", open);
+      more.textContent = open ? "Свернуть фрагмент"
+                              : "Показать фрагмент целиком";
+    };
+    card.appendChild(more);
+    // Обрезку меряем, а не угадываем по длине строки: панель узкая, и один и
+    // тот же фрагмент то влезает в пять строк, то нет. Меряется только в DOM —
+    // отсюда хук, который дёргает renderGlassQuestions после вставки.
+    card._syncExcerpt = () =>
+      more.classList.toggle("hidden", ex.scrollHeight <= ex.clientHeight + 2);
+  }
   const q = document.createElement("p");
   q.className = "glass-q__text";
   q.textContent = s.question || "Какой макет выбрать для этого слайда?";
@@ -2920,11 +3044,29 @@ function makeGlassCard(idx) {
   // Чипы-кандидаты: живое превью макета (тот же рендер, что боевой слайд).
   const chips = document.createElement("div");
   chips.className = "glass-chips";
+  chips.setAttribute("role", "radiogroup");
   let picked = null;
-  (s.candidates || []).forEach((tid) => {
+  // Отклик на выбор: раньше единственным сигналом была 1px рамка канона, и на
+  // широкой тёмной плашке она не читалась — казалось, что клик не срабатывает.
+  const syncPick = () => {
+    chips.querySelectorAll(".glass-chip").forEach((c) => {
+      const on = c.dataset.tid === picked;
+      c.classList.toggle("is-picked", on);
+      c.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    apply.disabled = !picked && !ta.value.trim();
+    apply.textContent = picked
+      ? `Применить: ${(tplOf(picked) || {}).display_name || picked}`
+      : "Ответить";
+  };
+  const addChip = (tid) => {
+    if (chips.querySelector(`.glass-chip[data-tid="${CSS.escape(tid)}"]`)) return;
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "glass-chip";
+    chip.dataset.tid = tid;
+    chip.setAttribute("role", "radio");
+    chip.setAttribute("aria-checked", "false");
     const prev = document.createElement("span");
     prev.className = "glass-chip__prev";
     const ifr = document.createElement("iframe");
@@ -2934,22 +3076,67 @@ function makeGlassCard(idx) {
     ifr.src = U(`/api/templates/${tid}/preview?static=1`);
     prev.appendChild(ifr);
     chip.appendChild(prev);
+    const meta = document.createElement("span");
+    meta.className = "glass-chip__meta";
+    const row = document.createElement("span");
+    row.className = "glass-chip__row";
     const name = document.createElement("span");
     name.className = "glass-chip__name";
+    name.dataset.tid = tid;
     name.textContent = (tplOf(tid) || {}).display_name || tid;
-    chip.appendChild(name);
+    row.appendChild(name);
+    if (tid === s.template_id) {           // что стоит сейчас — иначе выбор вслепую
+      const cur = document.createElement("i");
+      cur.className = "glass-chip__cur";
+      cur.textContent = "сейчас";
+      row.appendChild(cur);
+    }
+    meta.appendChild(row);
+    const gist = document.createElement("span");
+    gist.className = "glass-chip__gist";
+    gist.dataset.tid = tid;
+    gist.textContent = tplGist(tid);
+    meta.appendChild(gist);
+    chip.appendChild(meta);
+    const mark = document.createElement("span");
+    mark.className = "glass-chip__mark";
+    mark.setAttribute("aria-hidden", "true");
+    chip.appendChild(mark);
     chip.onclick = () => {
       picked = picked === tid ? null : tid; // повторный клик снимает выбор
-      chips.querySelectorAll(".glass-chip").forEach((c) =>
-        c.classList.toggle("is-picked", c === chip && picked !== null));
+      syncPick();
     };
     chips.appendChild(chip);
-  });
+  };
+  (s.candidates || []).forEach(addChip);
   card.appendChild(chips);
+
+  // Кандидаты ИИ — подсказка, а не потолок: вся библиотека макетов должна быть
+  // в руках автора прямо из карточки (иначе выбор из одного чипа = не выбор).
+  const other = document.createElement("button");
+  other.type = "button";
+  other.className = "glass-q__other";
+  other.textContent = "Выбрать из всех макетов…";
+  other.onclick = () => openPicker((tid, kind) => {
+    addChip(tid);
+    picked = tid;
+    // Мастер «Схема» спрашивает ещё и тип диаграммы, а /glass/answer принимает
+    // только макет — доносим выбор до модели уточнением, а не теряем его.
+    if (kind) {
+      const name = (dgmType(kind) || {}).display_name || kind;
+      const hint = `Тип схемы: ${name}.`;
+      if (!ta.value.includes(hint)) {
+        ta.value = (ta.value ? ta.value.trim() + " " : "") + hint;
+      }
+    }
+    syncPick();
+  });
+  card.appendChild(other);
 
   const ta = document.createElement("textarea");
   ta.className = "glass-q__input";
   ta.placeholder = "Уточнение для ИИ (необязательно)";
+  ta.oninput = () => syncPick();
   card.appendChild(ta);
 
   const row = document.createElement("div");
@@ -2964,10 +3151,16 @@ function makeGlassCard(idx) {
   skip.textContent = "На усмотрение ИИ";
   const send = (tid, msg) => {
     apply.disabled = skip.disabled = true;
-    apply.textContent = "Заполняю…";
-    glassEnqueue(() => glassAnswer(idx, tid, msg)).catch(() => {
-      apply.disabled = skip.disabled = false;
-      apply.textContent = "Ответить";
+    // Ответ встаёт в ту же очередь, что шаги сборки, и ждёт текущего шага
+    // (это до минуты). Без «в очереди» карточка выглядела зависшей, пока слева
+    // спокойно собирались соседние слайды.
+    apply.textContent = "Ответ в очереди…";
+    glassEnqueue(() => {
+      apply.textContent = "Заполняю…";
+      return glassAnswer(idx, tid, msg);
+    }).catch(() => {
+      skip.disabled = false;
+      syncPick();                 // вернуть подпись и доступность по выбору
       setSaveStatus("error");
     });
   };
@@ -2976,6 +3169,7 @@ function makeGlassCard(idx) {
   row.appendChild(apply);
   row.appendChild(skip);
   card.appendChild(row);
+  syncPick();       // «Ответить» заперт, пока нечего отвечать: пустой ответ = «На усмотрение ИИ»
   return card;
 }
 

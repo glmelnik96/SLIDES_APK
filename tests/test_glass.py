@@ -96,6 +96,20 @@ def test_candidates_menu_excludes_system_templates(library):
     assert "- three-col " in menu and "- diagram " in menu
 
 
+def test_candidates_collapse_cosmetic_twins(library):
+    """statement и statement-green — один макет в двух цветах. Двумя чипами они
+    предлагают выбор без выбора, а их близкая уверенность поднимала ложный
+    вопрос: разрыв меньше GAP_FLOOR считался сомнением, хотя различался только
+    фон. Схлопываем в один вариант — и вопрос задаётся по существу."""
+    fake = FakeClient([SectionChoice(
+        candidates=[Candidate(template_id="statement", confidence=0.86),
+                    Candidate(template_id="statement-green", confidence=0.8),
+                    Candidate(template_id="quote", confidence=0.4)])])
+    out = glass.plan_section_candidates(fake, library, _section())
+    assert [c.template_id for c in out.candidates] == ["statement", "quote"]
+    assert glass._doubtful(out) is False   # без дубля разрыв 0.46 — вопроса нет
+
+
 def test_doubtful_thresholds():
     ok = lambda *pairs: SectionChoice(candidates=[
         Candidate(template_id="x", confidence=c) for c in pairs])
@@ -140,8 +154,9 @@ def test_start_glass_builds_outline_without_filling(monkeypatch, tmp_path):
     assert (session_dir("s1") / "deck.html").is_file()
 
 
-def test_start_glass_default_question_on_silent_doubt(monkeypatch, tmp_path):
-    """Сомнение без вопроса от модели (фолбэк) → дефолтный вопрос, не пустота."""
+def test_start_glass_names_the_scoring_failure(monkeypatch, tmp_path):
+    """Сбой скоринга не маскируется под вопрос ИИ: у слайда честный текст про
+    осечку модели, а не «раздел ложится в несколько макетов» при одном чипе."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
     src.write_text("# Т\n\n## Раздел\n\nТекст.\n", encoding="utf-8")
@@ -149,7 +164,20 @@ def test_start_glass_default_question_on_silent_doubt(monkeypatch, tmp_path):
                              workers=1)
     s = plan.slides[1]
     assert s.status == "needs_input"
-    assert s.question == glass._DEFAULT_QUESTION
+    assert s.question == glass._FALLBACK_QUESTION
+    assert len(s.candidates) == 1
+
+
+def test_question_text_matches_the_number_of_options():
+    """Заготовка вопроса зависит от числа вариантов: «несколько макетов» при
+    одном чипе — ложь, из-за которой выбор выглядел сломанным."""
+    two = SectionChoice(candidates=[Candidate(template_id="a", confidence=0.5),
+                                    Candidate(template_id="b", confidence=0.45)])
+    one = SectionChoice(candidates=[Candidate(template_id="a", confidence=0.4)])
+    assert glass._question_for(two) == glass._DEFAULT_QUESTION
+    assert glass._question_for(one) == glass._ONE_CANDIDATE_QUESTION
+    one.question = "  Что показать?  "        # свой вопрос модели важнее заготовки
+    assert glass._question_for(one) == "Что показать?"
 
 
 # ── step_fill ────────────────────────────────────────────────────────────────

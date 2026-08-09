@@ -127,6 +127,35 @@ def validate_fields_verbose(slide_type, raw) -> tuple[dict | None, list[str]]:
         return None, _readable(exc)
 
 
+def typed_from_content(template_id, content) -> tuple[str, dict] | None:
+    """Обратная map_typed для схем: контент LLM-филлера → (slide_type, fields).
+
+    Филлер отдаёт диаграмму слотами шаблона (спек — JSON-СТРОКОЙ в ``diagram``),
+    а панель узлов и перетаскивание в редакторе работают только с typed-слайдом.
+    Без этой конверсии схема, собранная ИИ в черновике (стеклянная сборка, чат),
+    правилась лишь как сырой JSON в textarea — при том что руками созданная
+    схема редактировалась полноценно. None — контент не похож на схему (тогда
+    слайд остаётся сырым: рендер у обоих форм одинаковый)."""
+    if template_id != "diagram" or not isinstance(content, dict):
+        return None
+    spec = content.get("diagram")
+    if isinstance(spec, str):
+        try:
+            spec = json.loads(spec)
+        except ValueError:
+            return None
+    if not isinstance(spec, dict):
+        return None
+    norm = validate_fields("diagram", {
+        "heading": str(content.get("title") or ""),
+        "subtitle": str(content.get("subtitle") or ""),
+        "diagram": spec,
+    })
+    if norm is None:
+        return None
+    return "diagram", norm
+
+
 def _clean(items) -> list[str]:
     return [str(x).strip() for x in items if str(x).strip()]
 

@@ -133,3 +133,31 @@ def test_map_diagram_serialises_compact_json():
 
 def test_map_diagram_invalid_falls_back():
     assert st.map_typed("diagram", {"heading": "H", "diagram": {}}) == (None, {})
+
+
+def test_typed_from_content_round_trips_filler_output():
+    """Контент филлера (спек — JSON-строкой) возвращается в typed-поля: без этого
+    ИИ-схема в черновике правилась только сырым JSON, без панели узлов и drag."""
+    _, content = st.map_typed("diagram", _diagram_fields())
+    out = st.typed_from_content("diagram", content)
+    assert out is not None
+    kind, fields = out
+    assert kind == "diagram"
+    assert fields["heading"] == "Как проходит заявка"
+    assert fields["subtitle"] == "Путь клиента"
+    assert fields["diagram"] == st.validate_fields("diagram",
+                                                   _diagram_fields())["diagram"]
+
+
+def test_typed_from_content_accepts_dict_spec():
+    content = {"title": "Как проходит заявка",
+               "diagram": _diagram_fields()["diagram"]}
+    kind, fields = st.typed_from_content("diagram", content)
+    assert kind == "diagram" and fields["subtitle"] == ""
+
+
+def test_typed_from_content_ignores_non_diagrams():
+    assert st.typed_from_content("cards-6", {"title": "H"}) is None
+    assert st.typed_from_content("diagram", {"title": "H"}) is None
+    assert st.typed_from_content("diagram", {"diagram": "не json"}) is None
+    assert st.typed_from_content("diagram", {"diagram": {"kind": "flowchart"}}) is None

@@ -61,10 +61,18 @@
   <aside class="glass hidden" id="glassPanel">
     <div class="glass-head">
       <h3>Прозрачная сборка</h3>
+      <p class="glass-hint">ИИ заполняет слайды по одному — вы видите каждый сразу.
+        Там, где выбор макета неочевиден, он спрашивает вас: ответьте сейчас,
+        позже или доверьте решение ИИ.</p>
       <p class="glass-status" id="glassStatus">Начинаю…</p>
       <div class="glass-bar"><i id="glassBarFill"></i></div>
+      <p class="glass-slow hidden" id="glassSlow" role="status"></p>
     </div>
-    <div class="glass-body" id="glassQuestions"></div>
+    <div class="glass-body">
+      <p class="glass-empty hidden" id="glassEmpty">Вопросов пока нет — ИИ уверен
+        в макетах. Слайды с вопросом помечены «?» в ленте слева.</p>
+      <div id="glassQuestions"></div>
+    </div>
     <div class="glass-foot hidden" id="glassDone">
       <button class="btn hidden" id="glassRetry" type="button">Продолжить сборку</button>
       <button class="btn btn-accent" id="glassFinish" type="button">Перейти к редактированию</button>

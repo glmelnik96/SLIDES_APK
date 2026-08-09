@@ -370,12 +370,17 @@ class StepsSpec(_BaseSpec):
 
 class MindmapSpec(_BaseSpec):
     """Ментальная карта: ПЕРВЫЙ узел — центр, рёбра = ветвь→подветвь. Без рёбер
-    все узлы становятся ветвями центра; узел без ребра тоже уходит к центру —
-    поэтому претензии к одиночкам здесь нет, а к дереву есть."""
+    ВСЕ узлы становятся ветвями центра — это законная плоская карта.
+
+    Но если рёбра есть, узел без ребра тоже молча садится ветвью центра: модель
+    забывает часть связей, и двухуровневая карта схлопывается в плоский веер —
+    визуально не отличимый от задуманного. Поэтому смешанный случай ловим
+    ``isolated_errors`` (он сам пропускает случай «рёбер нет вовсе»)."""
     kind: Literal["mindmap"]
 
     def semantic_errors(self) -> list[str]:
-        errors = super().semantic_errors() + _tree_errors(self.edges)
+        errors = (super().semantic_errors() + _tree_errors(self.edges)
+                  + self.isolated_errors())
         if len(self.nodes) < 3:
             errors.append("mindmap требует минимум 3 узла (центр и две ветви)")
         if any(e.to == self.nodes[0].id for e in self.edges):

@@ -198,8 +198,12 @@ def test_templates_catalog(monkeypatch, tmp_path):
         assert "cover" in ids and "grid-2x2" in ids
         # dividers hidden
         assert "section-dots" not in ids
-        # cards-6 скрыт из пикера (дизайн-дубль заливочной grid-2x2), но остаётся в library
-        assert "cards-6" not in ids
+        # cards-6 скрыт из ПИКЕРА (дизайн-дубль заливочной grid-2x2), но приходит
+        # с пометкой: его ставит конвейер, и редактору нужно имя и слоты, чтобы
+        # построить такому слайду форму.
+        cards6 = next(t for t in cat if t["id"] == "cards-6")
+        assert cards6["hidden"] is True and cards6["display_name"]
+        assert all(not t.get("hidden") for t in cat if t["id"] != "cards-6")
         cover = next(t for t in cat if t["id"] == "cover")
         assert cover["slots"]["title"]["required"] is True
         assert cover["slots"]["title"]["max_chars"] == 20
