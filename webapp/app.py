@@ -476,9 +476,17 @@ async def delete_draft(session_id: str, request: Request,
 
 
 def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
-    """Save the plan and re-render the derived deck.html from it."""
+    """Save the plan and re-render the derived deck.html from it.
+
+    Сначала собираем HTML и только потом пишем оба файла. Порядок «сохранить
+    план, затем отрисовать» разводил plan.json и deck.html навсегда: сборка
+    падала (битый шаблон, неожиданный контент) — план уже уехал вперёд, ответ
+    500, а редактор дальше показывал СТАРУЮ деку, и при перезагрузке тоже.
+    Человек видел, что слайд «прыгнул обратно», тянул его второй раз — и
+    переставлял дважды. Дека — дериват плана, расходиться они не должны."""
+    html = draft_render.build_draft_html(plan)
     draft.save_plan(session_id, plan)
-    draft_render.render_draft(session_id, plan)
+    deck_edit.save_deck(session_id, html)
 
 
 @app.put("/api/drafts/{session_id}")

@@ -1,6 +1,7 @@
 import os
 os.environ["SLIDES_APP_SKIP_SHIM"] = "1"
 
+import pytest
 from fastapi.testclient import TestClient
 import webapp.app as appmod
 import webapp.config as cfg
@@ -271,6 +272,40 @@ def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
         # cross-user → 404 (ownership)
         assert c.put(f"/api/drafts/{sid}", json=snap,
                      headers=H("intruder")).status_code == 404
+
+
+def test_failed_render_leaves_plan_and_deck_in_step(monkeypatch, tmp_path):
+    """План и дека — оригинал и его дериват; разойтись они не должны.
+
+    Порядок «сохранить план, потом отрисовать» это допускал: сборка падала (в
+    жизни — рассинхрон шаблонов и кода), план уже уехал вперёд, ответ 500, а
+    редактор дальше показывал СТАРУЮ деку — и после перезагрузки тоже. Человек
+    видел, что слайд «прыгнул обратно», и тянул его второй раз, переставляя
+    дважды. Падение сборки обязано отменять всё изменение целиком.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"}, headers=H())
+        deck_before = c.get(f"/api/jobs/{sid}/deck", headers=H()).text
+
+        def boom(_plan):
+            raise RuntimeError("шаблон не собрался")
+
+        # снимаем ТОЧЕЧНО, а не monkeypatch.undo(): тот откатил бы и настройки
+        # клиента (workdir, БД), внутри чьего контекста мы ещё работаем
+        orig = draft_render.build_draft_html
+        monkeypatch.setattr(draft_render, "build_draft_html", boom)
+        with pytest.raises(RuntimeError):
+            c.post(f"/api/drafts/{sid}/slides/1/move", json={"to": 2}, headers=H())
+        monkeypatch.setattr(draft_render, "build_draft_html", orig)
+
+        # план не сдвинулся…
+        assert [s["template_id"] for s in
+                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] \
+            == ["cover", "grid-2x2"]
+        # …и дека осталась ровно той же, что была
+        assert c.get(f"/api/jobs/{sid}/deck", headers=H()).text == deck_before
 
 
 def test_old_draft_is_purged_by_retention(monkeypatch, tmp_path):

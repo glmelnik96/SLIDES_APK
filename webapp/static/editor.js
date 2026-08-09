@@ -2166,7 +2166,7 @@ function markFieldErrors(errors) {
 async function changeTemplate(templateId, dgmKind) {
   // Drop any pending debounced save — we take the freshest form values directly.
   clearTimeout(putTimer); putTimer = null;
-  pushUndo();
+  const before = snapshotPlan();   // на случай, если пересадка сорвётся на полпути
   const slide = draftPlan.slides[current];
   const wasDiagram = !!(slide && slide.slide_type === "diagram" && slide.fields);
   // Merge: plan content keeps slots the current form doesn't render (so a swap
@@ -2184,11 +2184,22 @@ async function changeTemplate(templateId, dgmKind) {
   // The content rides along: overlapping slots (title, items, …) carry over; the
   // rest stays in plan.json (draft_render ignores unknown slots), so switching
   // back restores it. Without this the swap silently wiped the slide's content.
-  await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`), { method: "DELETE" });
-  await fetch(U(`/api/drafts/${sessionId}/slides`), {
+  const del = await fetch(U(`/api/drafts/${sessionId}/slides/${current + 1}`),
+                          { method: "DELETE" }).catch(() => null);
+  if (!del || !del.ok) { setSaveStatus("error"); return; }
+  const add = await fetch(U(`/api/drafts/${sessionId}/slides`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ template_id: templateId, at: current + 1, content }),
-  });
+  }).catch(() => null);
+  // Пересадка идёт в два шага, и если второй не прошёл (оффлайн, 500 на
+  // пересборке деки), слайд УЖЕ удалён — без возврата снимка он бы просто
+  // исчез вместе с содержимым, и никто бы не сказал почему.
+  if (!add || !add.ok) {
+    await applyPlan(before);
+    setSaveStatus("error");
+    return;
+  }
+  pushUndo();
   if (dgmKind) {
     await applyDiagramKind(current + 1, dgmKind,
       wasDiagram ? slide.fields : { heading: content.title || "" });
@@ -2202,13 +2213,16 @@ async function changeTemplate(templateId, dgmKind) {
 function addSlideViaPicker() {
   openPicker(async (tid, dgmKind) => {
     await flushPendingSave(); // preserve the current slide's edit before inserting
-    pushUndo();
     // Вставляем новый слайд сразу после активного (1-based позиция at).
     const at = Math.min(current + 2, draftPlan.slides.length + 1);
-    await fetch(U(`/api/drafts/${sessionId}/slides`), {
+    const r = await fetch(U(`/api/drafts/${sessionId}/slides`), {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template_id: tid, at }),
-    });
+    }).catch(() => null);
+    // Без проверки неуспех выглядел как «нажал — ничего не произошло»: пикер
+    // закрывался, слайд не появлялся, причина нигде не показывалась.
+    if (!r || !r.ok) { setSaveStatus("error"); return; }
+    pushUndo();
     // Мастер «Схема»: сразу материализуем выбранный тип примером (typed-поля).
     if (dgmKind) await applyDiagramKind(at, dgmKind, null);
     await reloadDraft(at - 1); // переходим на только что добавленный слайд
@@ -2245,8 +2259,14 @@ byId("builderForm")?.addEventListener("focusout", (e) => {
 async function deleteSlideAt(i) {
   if (!draftPlan.slides[i]) return;
   clearTimeout(putTimer); putTimer = null; // slide is going away — drop pending save
+  const r = await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`),
+                        { method: "DELETE" }).catch(() => null);
+  // Ответ проверяем ДО того, как объявить об удалении: при неуспехе (оффлайн,
+  // 500 на пересборке деки) слайд остаётся на месте, и плашка «Вернуть» врала
+  // бы про удаление, которого не было. Снимок для отмены тоже кладём только
+  // после успеха — иначе Ctrl+Z откатывал бы несостоявшееся действие.
+  if (!r || !r.ok) { setSaveStatus("error"); return; }
   pushUndo();
-  await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`), { method: "DELETE" });
   await reloadDraft(Math.max(0, i - 1));
   showUndoToast(`Слайд ${i + 1} удалён`);
 }
@@ -2406,11 +2426,14 @@ function onThumbDragEnd() {
 async function moveSlide(idx, to1) {
   if (to1 < 1 || to1 > draftPlan.slides.length) return;
   await flushPendingSave(); // preserve the moving slide's edit before reordering
-  pushUndo();
-  await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
+  const r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/move`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to: to1 }),
-  });
+  }).catch(() => null);
+  // Неуспех молча оставлял ленту в старом порядке — человек видел, что слайд
+  // «прыгнул обратно», и тянул его второй раз. Говорим об ошибке и не двигаем.
+  if (!r || !r.ok) { setSaveStatus("error"); return; }
+  pushUndo();
   await reloadDraft(to1 - 1);
 }
 
