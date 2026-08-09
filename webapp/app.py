@@ -778,12 +778,16 @@ async def glass_answer(session_id: str, request: Request,
     except (TypeError, ValueError):
         raise HTTPException(400, "index required")
     template_id = (data.get("template_id") or "").strip() or None
+    # Тип схемы из мастера «Схема» — данными, а не текстом: см. glass.answer.
+    kind = (data.get("kind") or "").strip() or None
     message = str(data.get("message") or "")
     try:
         out = await run_in_threadpool(
-            lambda: glass.answer(session_id, index,
-                                 template_id=template_id, message=message))
+            lambda: glass.answer(session_id, index, template_id=template_id,
+                                 kind=kind, message=message))
     except IndexError as exc:
+        raise HTTPException(400, str(exc))
+    except KeyError as exc:
         raise HTTPException(400, str(exc))
     except glass.AnswerNotExpected:
         # Вкладка отстала: вопрос уже снят (отвечено с другой вкладки или слайд

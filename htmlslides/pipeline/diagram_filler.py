@@ -126,15 +126,25 @@ DIAGRAM_SYSTEM = f"""\
 
 def fill_diagram(client: KimiClient, library: TemplateLibrary,
                  slide: SlidePlan, *, deck_title: str = "",
-                 extra: str = "") -> SlidePlan:
+                 extra: str = "", kind: str = "") -> SlidePlan:
     """Заполнить диаграммный слайд. Контент слайда: title/subtitle + канонический
-    JSON DiagramSpec в слоте diagram (строка — по слот-контракту шаблона)."""
+    JSON DiagramSpec в слоте diagram (строка — по слот-контракту шаблона).
+
+    ``kind`` — тип схемы, выбранный ЧЕЛОВЕКОМ (мастер «Схема»). Это не подсказка,
+    а требование: несовпадение идёт в тот же список претензий, что и поломка
+    контракта, то есть чинится ретраем. Без этого выбор автора («воронка») уходил
+    в модель просто текстом, и она спокойно рисовала блок-схему — «выбираешь один
+    макет, применяется другой»."""
     # Детерминированно готовый слайд (пикер редактора уже положил валидный спек)
     # не гоняем через LLM — симметрично скип-пути _fill_template.
     if not extra and "brief" not in slide.content and not _content_errors(
-            library, slide.content):
+            library, slide.content, kind=kind):
         return slide
     user = f"Заголовок деки: {deck_title}\n\nБриф слайда:\n{_brief(slide)}"
+    if kind:
+        user += (f'\n\nТип схемы выбрал автор: {kind}. Поле "kind" в JSON '
+                 f'должно быть ровно "{kind}" — уложи содержание раздела в '
+                 "этот тип, другой не предлагай.")
     if extra:
         user += "\n\n" + extra
     messages = [{"role": "system", "content": DIAGRAM_SYSTEM},
@@ -142,7 +152,7 @@ def fill_diagram(client: KimiClient, library: TemplateLibrary,
     reply = client.chat_json(messages, DiagramSlideReply,
                              max_tokens=_FILL_MAX_TOKENS,
                              extra_body=_FILL_NO_THINK)
-    content, errors = _to_content(library, reply)
+    content, errors = _to_content(library, reply, kind=kind)
     if errors:
         listed = "; ".join(errors)
         retry = messages + [
@@ -154,7 +164,7 @@ def fill_diagram(client: KimiClient, library: TemplateLibrary,
         reply = client.chat_json(retry, DiagramSlideReply,
                                  max_tokens=_FILL_MAX_TOKENS,
                                  extra_body=_FILL_NO_THINK)
-        content, errors = _to_content(library, reply)
+        content, errors = _to_content(library, reply, kind=kind)
         if errors:
             # Без префикса "slide N" — его добавит fill_slide при переводе
             # в FillError (иначе номер задваивался в warn-прогрессе).
@@ -192,13 +202,16 @@ def _brief(slide: SlidePlan) -> str:
         slide.content, ensure_ascii=False)
 
 
-def _to_content(library: TemplateLibrary,
-                reply: DiagramSlideReply) -> tuple[dict, list[str]]:
+def _to_content(library: TemplateLibrary, reply: DiagramSlideReply, *,
+                kind: str = "") -> tuple[dict, list[str]]:
     """Ответ модели → контент слайда + список претензий (пустой = валидно)."""
     errors: list[str] = []
     diagram_raw = ""
     try:
         spec = parse_diagram(reply.diagram)
+        if kind and spec.kind != kind:
+            errors.append(f'kind: автор выбрал тип "{kind}", а в схеме '
+                          f'"{spec.kind}" — перестрой схему в "{kind}"')
         diagram_raw = json.dumps(spec.model_dump(by_alias=True),
                                  ensure_ascii=False, separators=(",", ":"))
     except DiagramValidationError as exc:
@@ -217,12 +230,18 @@ def _to_content(library: TemplateLibrary,
     return content, errors
 
 
-def _content_errors(library: TemplateLibrary, content: dict) -> list[str]:
-    """Претензии к уже готовому контенту (скип-путь): слоты + сам спек."""
+def _content_errors(library: TemplateLibrary, content: dict, *,
+                    kind: str = "") -> list[str]:
+    """Претензии к уже готовому контенту (скип-путь): слоты + сам спек.
+
+    Чужой ``kind`` — тоже претензия: иначе слайд со старой схемой проскакивал
+    мимо модели, и смена типа автором ничего не меняла."""
     errors = [f"{e.code}:{e.slot}" for e in
               library.validate_content("diagram", content)]
     try:
-        parse_diagram(content.get("diagram", ""))
+        spec = parse_diagram(content.get("diagram", ""))
+        if kind and spec.kind != kind:
+            errors.append(f"kind: {spec.kind} вместо {kind}")
     except DiagramValidationError as exc:
         errors.extend(exc.errors)
     return errors

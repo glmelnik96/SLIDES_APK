@@ -110,16 +110,20 @@ _SECTION = re.compile(r"<section\b.*</section>", re.DOTALL)
 
 
 def fill_slide(client: KimiClient, library: TemplateLibrary, slide: SlidePlan, *,
-               deck_title: str = "", extra: str = "") -> SlidePlan:
-    """Заполнить один слайд. extra — доп. указания (исходный контент + замечания QA)."""
+               deck_title: str = "", extra: str = "",
+               diagram_kind: str = "") -> SlidePlan:
+    """Заполнить один слайд. extra — доп. указания (исходный контент + замечания QA).
+
+    diagram_kind — тип схемы, выбранный человеком в мастере «Схема»: жёсткое
+    требование к филлеру диаграмм, а не пожелание."""
     try:
         if slide.freeform:
             return _fill_freeform(client, slide, deck_title=deck_title, extra=extra)
         if slide.template_id == "diagram":
             # Схема — структура, не текст: свой филлер со строгим DiagramSpec
             # (единая точка входа: fill_deck-параллель, chat-агент, rewrite).
-            return fill_diagram(client, library, slide,
-                                deck_title=deck_title, extra=extra)
+            return fill_diagram(client, library, slide, deck_title=deck_title,
+                                extra=extra, kind=diagram_kind)
         return _fill_template(client, library, slide,
                               deck_title=deck_title, extra=extra)
     except (LLMFormatError, DiagramFillError) as exc:

@@ -293,8 +293,27 @@ def _next_index(plan: draft.DraftPlan, busy: set[int] | None = None) -> int | No
     return None
 
 
+def _blocking_index(plan: draft.DraftPlan) -> int | None:
+    """Первый по порядку слайд, который ЖДЁТ ответа автора и стоит раньше всего,
+    что ещё предстоит заполнить.
+
+    Сборка на нём останавливается. Раньше степпер такие слайды просто обходил:
+    автор читал вопрос, а лента слева в это время продолжала расти — «непонятный
+    процесс, ИИ заполняет слайды, пока ты отвечаешь». Пауза делает порядок
+    честным: дошли до сомнительного места — стоим, ответили — идём дальше.
+    Осечки (failed) не блокируют: их чинят в редакторе, а не паузой."""
+    for i, s in enumerate(plan.slides, start=1):
+        if not s.brief or s.filled:
+            continue
+        if s.status == "needs_input":
+            return i
+        if s.status is None:
+            return None            # раньше вопроса есть что заполнять
+    return None
+
+
 def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
-              client: Any) -> draft.DraftPlan:
+              client: Any, *, kind: str = "") -> draft.DraftPlan:
     """Заполнить ОДИН слайд через тот же fill_slide, что и чёрный ящик.
 
     Осечка модели не роняет шаг: слайд деградирует на blank с темой в заголовке
@@ -313,7 +332,8 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
                    content={"brief": brief})
     failed = False
     try:
-        sp = fill_slide(client, library, sp, deck_title=plan.title)
+        sp = fill_slide(client, library, sp, deck_title=plan.title,
+                        diagram_kind=kind)
         content, out_tid = sp.content, tid
     except Exception:  # noqa: BLE001 — честная заглушка вместо выдумки
         failed = True
@@ -342,10 +362,24 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
         slide.slide_type, slide.fields = typed if typed else (None, None)
         slide.filled = True
         slide.status = "failed" if failed else None
-        slide.question = None
+        # Осечка меняет МАКЕТ слайда (выбранный → blank), и молчать об этом
+        # нельзя: со стороны автора это выглядело как «выбрал один макет,
+        # применился другой». Причину кладём в тот же question — панель покажет
+        # её карточкой с чипами, и ответ (тот же /glass/answer) заполнит заново.
+        slide.question = (
+            f"Не удалось заполнить макет «{_tpl_name(library, tid)}» — слайд "
+            "стоит заглушкой с темой в заголовке. Выберите макет ещё раз или "
+            "уточните, что показать: попробую снова." if failed else None)
         draft.save_plan(session_id, fresh)
         draft_render.render_draft(session_id, fresh)
     return fresh
+
+
+def _tpl_name(library: Any, tid: str) -> str:
+    try:
+        return library.get(tid).display_name or tid
+    except Exception:  # noqa: BLE001 — имя макета не стоит падения шага
+        return tid
 
 
 def _marked(plan: draft.DraftPlan, status: str) -> list[int]:
@@ -353,7 +387,9 @@ def _marked(plan: draft.DraftPlan, status: str) -> list[int]:
 
 
 def _result(plan: draft.DraftPlan, index: int | None, done: bool) -> dict:
-    return {"done": done, "index": index,
+    # blocked — слайд, на котором сборка встала в ожидании ответа автора.
+    # Клиент по нему останавливает цикл шагов (пауза), а не крутит его вхолостую.
+    return {"done": done, "index": index, "blocked": _blocking_index(plan),
             "open_questions": _marked(plan, "needs_input"),
             "failed": _marked(plan, "failed"),
             "plan": plan.model_dump()}
@@ -366,6 +402,10 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
     with lock:
         plan = draft.load_plan(session_id)
         busy = _INFLIGHT.setdefault(session_id, set())
+        # Пауза сильнее шага: дошли до слайда с вопросом — дальше не идём, пока
+        # автор не ответит. Иначе он читает вопрос, а сборка убегает вперёд.
+        if _blocking_index(plan) is not None:
+            return _result(plan, None, False)
         index = _next_index(plan, busy)
         if index is None:
             return _result(plan, None, True)
@@ -381,12 +421,22 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
 
 
 def answer(session_id: str, index: int, *, template_id: str | None = None,
-           message: str = "", client: Any | None = None) -> dict:
+           kind: str | None = None, message: str = "",
+           client: Any | None = None) -> dict:
     """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или уточнение текстом.
 
     Слайд доводится сразу же: выбранный макет (или текущий топ-1) + уточнение,
-    добавленное в brief, идут через обычный fill_slide."""
+    добавленное в brief, идут через обычный fill_slide.
+
+    ``kind`` — тип схемы из мастера «Схема». Едет ДАННЫМИ до филлера диаграмм
+    (жёсткое требование), а не строчкой в тексте уточнения: раньше выбор автора
+    («воронка») был для модели необязательной подсказкой."""
+    from htmlslides.diagrams import AVAILABLE_KINDS
     from htmlslides.library import TemplateLibrary
+
+    kind = (kind or "").strip()
+    if kind and kind not in AVAILABLE_KINDS:
+        raise KeyError(f"unknown diagram kind: {kind}")
 
     with _plan_lock(session_id):
         plan = draft.load_plan(session_id)
@@ -411,5 +461,5 @@ def answer(session_id: str, index: int, *, template_id: str | None = None,
         # навсегда — отвечать было уже не на что.
         slide.filled = False                      # перезаполняем с учётом ответа
         draft.save_plan(session_id, plan)
-    plan = _fill_one(session_id, plan, index, client or _kimi())
+    plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind)
     return _result(plan, index, _next_index(plan) is None)

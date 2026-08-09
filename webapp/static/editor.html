@@ -63,8 +63,8 @@
     <div class="glass-head">
       <h3>Прозрачная сборка</h3>
       <p class="glass-hint">ИИ заполняет слайды по одному — вы видите каждый сразу.
-        Там, где выбор макета неочевиден, он спрашивает вас: ответьте сейчас,
-        позже или доверьте решение ИИ.</p>
+        Дойдя до слайда, где выбор макета неочевиден, он останавливается и
+        спрашивает: ответьте — и сборка пойдёт дальше.</p>
       <p class="glass-status" id="glassStatus">Начинаю…</p>
       <div class="glass-bar"><i id="glassBarFill"></i></div>
       <p class="glass-slow hidden" id="glassSlow" role="status"></p>
@@ -72,6 +72,8 @@
     <div class="glass-body">
       <p class="glass-empty hidden" id="glassEmpty">Вопросов пока нет — ИИ уверен
         в макетах. Слайды с вопросом помечены «?» в ленте слева.</p>
+      <button class="btn btn-ghost btn-sm glass-auto hidden" id="glassAuto"
+              type="button">Решить все на усмотрение ИИ</button>
       <div id="glassQuestions"></div>
     </div>
     <div class="glass-foot hidden" id="glassDone">
@@ -85,6 +87,9 @@
       <span class="save-status" id="saveStatus" aria-live="polite"></span>
     </div>
     <div class="builder-tpl" id="builderTpl"></div>
+    <!-- Контекст слайда: весь его текст (и исходный фрагмент документа, если он
+         есть) рядом с формой — чтобы править поля, не теряя картину целиком. -->
+    <div class="builder-ctx hidden" id="builderCtx"></div>
     <form class="builder-form" id="builderForm"></form>
     <div class="builder-empty" id="builderEmpty">
       Слайдов пока нет.
@@ -97,6 +102,8 @@
     <div class="chat-head">
       <p>Опишите изменение для текущего слайда — модель перепишет его.</p>
     </div>
+    <!-- Тот же контекст слайда, что и в форме слотов: правки вслепую — не правки. -->
+    <div class="builder-ctx hidden" id="chatCtx"></div>
     <div class="outline hidden" id="outline">
       <div class="outline-head">План презентации</div>
       <ol class="outline-list" id="outlineList"></ol>

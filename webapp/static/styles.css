@@ -778,6 +778,22 @@ a { color: var(--accent); }
 .builder-tpl { padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
   display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .tpl-name { font-size: var(--fs-xs); color: var(--muted); }
+/* Контекст слайда над формой: правки идут по одному полю, а решение принимается
+   по слайду целиком. Свёрнутые секции — контекст не должен отжимать форму вниз;
+   утопленная поверхность отделяет «читать» от «править». */
+.builder-ctx { padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
+  display: flex; flex-direction: column; gap: 8px; }
+.builder-ctx__sec > summary { cursor: pointer; list-style: none; font-size: var(--fs-xs);
+  color: var(--muted); user-select: none; }
+.builder-ctx__sec > summary::-webkit-details-marker { display: none; }
+.builder-ctx__sec > summary::before { content: "▸ "; color: var(--muted-2); }
+.builder-ctx__sec[open] > summary::before { content: "▾ "; }
+.builder-ctx__sec > summary:hover { color: var(--text); }
+.builder-ctx__body { margin-top: 8px; max-height: 240px; overflow-y: auto;
+  padding: 8px 10px; background: var(--surface-inset); border-radius: var(--radius-ctl); }
+.builder-ctx__body p { margin: 0 0 6px; font-size: var(--fs-cap); color: var(--muted);
+  line-height: 1.45; }
+.builder-ctx__body p:last-child { margin-bottom: 0; }
 .builder-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
 .builder-note { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
 .builder-empty { padding: 18px 16px; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; }
@@ -886,6 +902,13 @@ a { color: var(--accent); }
 .picker-id { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-base); }
 .picker-intent { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
 .picker-code { font-size: var(--fs-cap); color: var(--muted-2); }  /* К§2 — сырой id макета, приглушённо */
+/* «Схема» — не макет, а вход в каталог типов: превью показывает ОДНУ схему, и без
+   этой пометки карточка читалась как «один макет на выбор». Плашка внизу слева —
+   углы заняты «сейчас» (слева вверху) и номером (справа вверху). */
+.picker-wizard { position: absolute; left: 0; bottom: 0; z-index: 2; padding: 4px 8px;
+  font-size: var(--fs-cap); font-weight: 600; letter-spacing: .04em;
+  color: #000; background: var(--accent); }
+.picker-more { font-size: var(--fs-cap); color: var(--muted-2); line-height: 1.4; }
 
 /* Каталог не приехал: окно уже открыто, поэтому пустоту объясняем словами —
    молчащая сетка читалась как «кнопка не сработала». */
@@ -1109,7 +1132,14 @@ a { color: var(--accent); }
 .glass-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
 #glassQuestions { display: flex; flex-direction: column; gap: 12px; }
 .glass-empty { margin: 0; font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; }
+/* Выход одним движением: когда вопросов несколько, отвечать на каждый — работа,
+   а сборка стоит на паузе. Кнопка второстепенная — решение всё же ИИ. */
+.glass-auto { align-self: flex-start; }
 .glass-q { background: var(--surface); border-radius: var(--radius-card); padding: 12px; }
+/* Осечка заполнения: макет молча подменялся на заглушку, и со стороны автора это
+   выглядело как «выбрал один макет, применился другой». Карточка тревожная. */
+.glass-q--failed { box-shadow: inset 2px 0 0 var(--warn-ink); }
+.glass-q--failed .glass-q__num { color: var(--warn-ink); }
 .glass-q__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .glass-q__num { font-size: var(--fs-cap); color: var(--accent);
   letter-spacing: .04em; text-transform: uppercase; }
@@ -1177,3 +1207,5 @@ a { color: var(--accent); }
 .thumb-quest { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px;
   display: grid; place-items: center; border-radius: 50%; background: var(--accent);
   color: var(--on-accent); font-size: 12px; font-weight: 700; pointer-events: none; }
+/* Осечка — не вопрос: тревожный тон, чтобы «!» не путался с «?» */
+.thumb-quest--failed { background: var(--warn-ink); color: #000; }

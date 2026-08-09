@@ -133,6 +133,42 @@ def test_fill_slide_routes_diagram_and_maps_error_to_fill_error(library):
     assert out.content["title"] == "Как проходит заявка"
 
 
+def test_chosen_kind_is_a_requirement_not_a_hint(library):
+    """Тип схемы, выбранный автором в мастере, — требование к модели.
+
+    Раньше он ехал строкой в брифе, и модель спокойно присылала другой kind:
+    со стороны автора это выглядело как «выбрал одно, применилось другое».
+    Несовпадение идёт в тот же список претензий, что и поломка контракта."""
+    client = FakeClient([_reply(),                       # flowchart вместо funnel
+                         _reply(diagram={"kind": "funnel", "nodes": [
+                             {"id": "a", "label": "Лиды", "value": "100"},
+                             {"id": "b", "label": "Сделки", "value": "10"}]})])
+    out = fill_diagram(client, library, _slide(), kind="funnel")
+    assert json.loads(out.content["diagram"])["kind"] == "funnel"
+    assert len(client.calls) == 2
+    assert "funnel" in client.calls[1]["messages"][-1]["content"]
+    # выбор автора виден и в первом запросе — ретрай не должен быть нормой
+    assert "funnel" in client.calls[0]["messages"][-1]["content"]
+
+
+def test_ready_content_of_a_foreign_kind_is_refilled(library):
+    """Смена типа в мастере на уже заполненном слайде не должна быть пустышкой:
+    старая схема валидна, и скип-путь проносил её мимо модели нетронутой."""
+    from htmlslides.diagrams.catalog import sample_spec
+    content = {"title": "Готовая схема", "subtitle": "",
+               "diagram": json.dumps(sample_spec("cycle"), ensure_ascii=False)}
+    client = FakeClient([_reply(diagram={"kind": "funnel", "nodes": [
+        {"id": "a", "label": "Лиды", "value": "100"},
+        {"id": "b", "label": "Сделки", "value": "10"}]})])
+    out = fill_diagram(client, library, _slide(content), kind="funnel")
+    assert json.loads(out.content["diagram"])["kind"] == "funnel"
+    assert len(client.calls) == 1
+    # тот же контент без смены типа модель по-прежнему не тревожит
+    same = FakeClient([])
+    assert fill_diagram(same, library, _slide(content), kind="cycle"
+                        ).content == content
+
+
 def test_system_prompt_menu_is_exactly_available_kinds():
     """Меню промпта собирается из каталога: только реализованные типы. Тип со
     снятым available обязан из меню исчезать — иначе модель выберет то, чего

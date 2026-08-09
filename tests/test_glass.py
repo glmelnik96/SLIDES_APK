@@ -57,7 +57,7 @@ def _section(heading="Процесс", text="Заявка проходит со�
     return Section(heading=heading, level=2, blocks=[TextBlock(text=text)])
 
 
-def _fake_fill(client, library, sp, *, deck_title="", extra=""):
+def _fake_fill(client, library, sp, *, deck_title="", extra="", diagram_kind=""):
     return sp.model_copy(update={
         "content": {"title": f"Слайд {sp.index}", "brief": sp.content.get("brief", "")}})
 
@@ -201,35 +201,47 @@ def test_question_text_matches_the_number_of_options():
 
 
 # ── step_fill ────────────────────────────────────────────────────────────────
-def _outline_plan():
-    return draft.DraftPlan(title="Т", slides=[
+def _outline_plan(*, question=True, at=2):
+    """question=False — аутлайн без вопроса: сборка не встаёт на паузу.
+
+    at — номер слайда с вопросом. Пауза стоит на ПЕРВОМ спорном слайде, поэтому
+    вопрос в хвосте оставляет шагам работу перед собой (нужно для гонок)."""
+    plan = draft.DraftPlan(title="Т", slides=[
         draft.DraftSlide(template_id="cover", content={"title": "Т"}, filled=True),
-        draft.DraftSlide(template_id="three-col", brief="спорный",
-                         status="needs_input", question="Какой макет?",
-                         candidates=["three-col", "timeline"]),
+        draft.DraftSlide(template_id="three-col", brief="спорный"),
         draft.DraftSlide(template_id="stats-row", brief="метрики"),
         draft.DraftSlide(template_id="timeline", brief="этапы"),
     ])
+    if question:
+        plan.slides[at - 1] = plan.slides[at - 1].model_copy(update={
+            "status": "needs_input", "question": "Какой макет?",
+            "candidates": ["three-col", "timeline"]})
+    return plan
 
 
-def test_step_fill_skips_needs_input_and_finishes(monkeypatch, tmp_path):
+def test_step_fill_pauses_on_needs_input(monkeypatch, tmp_path):
+    """Дойдя до вопроса, сборка ВСТАЁТ и ждёт ответа.
+
+    Раньше степпер такой слайд пропускал и уходил вперёд: автор читал вопрос,
+    а лента под ним продолжала заполняться — процесс выглядел неуправляемым."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
     monkeypatch.setattr(filler, "fill_slide", _fake_fill)
     draft.save_plan("s3", _outline_plan())
 
     out1 = glass.step_fill("s3", client=FakeClient([]))
-    assert out1["index"] == 3 and out1["done"] is False   # needs_input пропущен
-    assert out1["open_questions"] == [2]
+    assert out1["index"] is None and out1["done"] is False
+    assert out1["blocked"] == 2 and out1["open_questions"] == [2]
+    assert draft.load_plan("s3").slides[2].filled is False   # вперёд не убежали
+
+    glass.answer("s3", 2, template_id="timeline", client=FakeClient([]))
     out2 = glass.step_fill("s3", client=FakeClient([]))
-    assert out2["index"] == 4 and out2["done"] is True
-    plan = draft.load_plan("s3")
-    assert plan.slides[2].filled and plan.slides[2].content["title"] == "Слайд 3"
-    assert plan.slides[1].filled is False                 # вопрос всё ещё ждёт
-    # шаги кончились, но вопрос остался открыт
+    assert out2["index"] == 3 and out2["blocked"] is None
     out3 = glass.step_fill("s3", client=FakeClient([]))
-    assert out3["done"] is True and out3["index"] is None
-    assert out3["open_questions"] == [2]
+    assert out3["index"] == 4 and out3["done"] is True
+    plan = draft.load_plan("s3")
+    assert plan.slides[2].content["title"] == "Слайд 3"
+    assert all(s.filled for s in plan.slides)
 
 
 def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
@@ -243,17 +255,40 @@ def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
     import htmlslides.pipeline.filler as filler
 
     def _boom(client, library, sp, **kw):
-        raise filler.FillError("slide 3: сеть упала")
+        raise filler.FillError("slide 2: сеть упала")
     monkeypatch.setattr(filler, "fill_slide", _boom)
-    draft.save_plan("s4", _outline_plan())
+    draft.save_plan("s4", _outline_plan(question=False))
 
     out = glass.step_fill("s4", client=FakeClient([]))
-    assert out["index"] == 3
-    assert out["failed"] == [3]
-    s = draft.load_plan("s4").slides[2]
+    assert out["index"] == 2
+    assert out["failed"] == [2]
+    s = draft.load_plan("s4").slides[1]
     assert s.filled and s.status == "failed"
     assert s.template_id == "blank" and s.content.get("title")
     assert s.brief                       # тема цела — слайд можно дописать руками
+    # Подмену макета объясняем словами: молчащая заглушка читалась как
+    # «выбрал один макет, применился другой».
+    assert s.question and "не удалось заполнить макет" in s.question.lower()
+
+
+def test_failed_slide_does_not_pause_the_build(monkeypatch, tmp_path):
+    """Осечка — не вопрос: её чинят в редакторе, а сборка идёт дальше."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    calls = []
+
+    def _boom_once(client, library, sp, **kw):
+        calls.append(sp.index)
+        if len(calls) == 1:
+            raise filler.FillError("сеть упала")
+        return _fake_fill(client, library, sp, **kw)
+    monkeypatch.setattr(filler, "fill_slide", _boom_once)
+    draft.save_plan("s4b", _outline_plan(question=False))
+
+    out1 = glass.step_fill("s4b", client=FakeClient([]))
+    assert out1["failed"] == [2] and out1["blocked"] is None
+    out2 = glass.step_fill("s4b", client=FakeClient([]))
+    assert out2["index"] == 3 and out2["blocked"] is None
 
 
 # ── answer ───────────────────────────────────────────────────────────────────
@@ -417,12 +452,15 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
 
         seen = {}
 
-        def _fake_answer(session_id, index, *, template_id=None, message=""):
+        def _fake_answer(session_id, index, *, template_id=None, kind=None,
+                         message=""):
             if index < 1 or index == 99:      # как настоящий answer
                 raise IndexError(f"slide {index} out of range")
             if template_id == "ghost":
                 raise SlotValidationError("unknown template: ghost")
-            seen["call"] = (session_id, index, template_id, message)
+            if kind == "ghost-kind":
+                raise KeyError("unknown diagram kind: ghost-kind")
+            seen["call"] = (session_id, index, template_id, kind, message)
             return {"index": index, "open_questions": [], "plan": {}}
         monkeypatch.setattr(glass, "answer", _fake_answer)
 
@@ -430,7 +468,15 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
                    json={"index": 2, "template_id": "timeline",
                          "message": "покажи даты"})
         assert r.status_code == 200
-        assert seen["call"] == (sid, 2, "timeline", "покажи даты")
+        assert seen["call"] == (sid, 2, "timeline", None, "покажи даты")
+        # Тип схемы едет данными: выбор автора в мастере «Схема» — требование к
+        # филлеру, а не пожелание в тексте, которое модель вольна не заметить.
+        r = c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
+                   json={"index": 2, "template_id": "diagram", "kind": "funnel"})
+        assert r.status_code == 200
+        assert seen["call"] == (sid, 2, "diagram", "funnel", "")
+        assert c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
+                      json={"index": 2, "kind": "ghost-kind"}).status_code == 400
         assert c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
                       json={"message": "без индекса"}).status_code == 400
         assert c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
@@ -445,7 +491,7 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
 # снимок поверх нового. Гейт ниже воспроизводит перехлёст детерминированно.
 def _gated_fill(gate, released):
     """fill_slide, который замирает на входе, пока тест не отпустит гейт."""
-    def _fill(client, library, sp, *, deck_title="", extra=""):
+    def _fill(client, library, sp, *, deck_title="", extra="", diagram_kind=""):
         released.set()
         gate.wait(5)
         return _fake_fill(client, library, sp, deck_title=deck_title)
@@ -460,21 +506,23 @@ def test_step_does_not_clobber_answer_written_during_llm_call(monkeypatch, tmp_p
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     gate, entered = threading.Event(), threading.Event()
     monkeypatch.setattr(filler, "fill_slide", _gated_fill(gate, entered))
-    draft.save_plan("c1", _outline_plan())
+    # Вопрос в хвосте: перед ним шагу есть что заполнять, и работа шага
+    # перекрывается с ответом автора — иначе сборка просто стоит на паузе.
+    draft.save_plan("c1", _outline_plan(at=4))
 
     step = threading.Thread(target=glass.step_fill,
                             kwargs={"session_id": "c1", "client": FakeClient([])})
     step.start()
-    assert entered.wait(5)                      # шаг взял слайд 3 и завис в LLM
+    assert entered.wait(5)                      # шаг взял слайд 2 и завис в LLM
     monkeypatch.setattr(filler, "fill_slide", _fake_fill)
-    glass.answer("c1", 2, template_id="timeline", message="покажи этапы",
-                 client=FakeClient([]))         # автор ответил на вопрос слайда 2
+    glass.answer("c1", 4, template_id="timeline", message="покажи этапы",
+                 client=FakeClient([]))         # автор ответил на вопрос слайда 4
     gate.set()
     step.join(5)
 
-    s2 = draft.load_plan("c1").slides[1]
-    assert s2.template_id == "timeline" and s2.filled and s2.status is None
-    assert "Уточнение автора: покажи этапы" in s2.brief
+    s4 = draft.load_plan("c1").slides[3]
+    assert s4.template_id == "timeline" and s4.filled and s4.status is None
+    assert "Уточнение автора: покажи этапы" in s4.brief
 
 
 def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
@@ -486,14 +534,14 @@ def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
     seen, guard = [], threading.Lock()
     ready = threading.Barrier(2, timeout=5)
 
-    def _fill(client, library, sp, *, deck_title="", extra=""):
+    def _fill(client, library, sp, *, deck_title="", extra="", diagram_kind=""):
         with guard:
             seen.append(sp.index)
         ready.wait()                             # оба шага заняты одновременно
         return _fake_fill(client, library, sp, deck_title=deck_title)
 
     monkeypatch.setattr(filler, "fill_slide", _fill)
-    draft.save_plan("c2", _outline_plan())
+    draft.save_plan("c2", _outline_plan(question=False))
 
     threads = [threading.Thread(target=glass.step_fill,
                                 kwargs={"session_id": "c2", "client": FakeClient([])})
@@ -503,9 +551,9 @@ def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
     for t in threads:
         t.join(5)
 
-    assert sorted(seen) == [3, 4]
+    assert sorted(seen) == [2, 3]
     plan = draft.load_plan("c2")
-    assert plan.slides[2].filled and plan.slides[3].filled
+    assert plan.slides[1].filled and plan.slides[2].filled
 
 
 def test_answer_refuses_a_slide_that_is_not_waiting(monkeypatch, tmp_path):
