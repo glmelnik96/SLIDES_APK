@@ -337,7 +337,7 @@ function suppressDeckNavOnEdit(doc) {
 function attachDiagramDrag(doc) {
   if (!window.DiagramDrag) return;
   const eng = doc.defaultView && doc.defaultView.DiagramEngine;
-  if (!eng) return;
+  if (!eng || !eng.layout || !eng.render) return;   // старая запечённая версия
   let any = false;
   if (!isDraft) {
     doc.querySelectorAll(".diagram-host").forEach((host) => {
@@ -1773,8 +1773,13 @@ function syncDgmFit() {
   const note = byId("dgmFitNote");
   const list = byId("dgmNodeList");
   if (!note || !list) return;
-  const eng = frame.contentDocument?.defaultView?.DiagramEngine;
-  const spec = eng && eng.layout ? collectDiagramFields()?.diagram : null;
+  // Движок — ЗАПЕЧЁННЫЙ в деке, то есть той версии, что была на момент сборки:
+  // у старой деки нужных функций может не быть вовсе. Спрашиваем каждую, а не
+  // только layout: необъявленный вызов ронял весь renderBuilderForm, и переход
+  // на диаграммный слайд оставлял человека без панели правки.
+  const e0 = frame.contentDocument?.defaultView?.DiagramEngine;
+  const eng = e0 && e0.layout && e0.clampLabel && e0.fitFont ? e0 : null;
+  const spec = eng ? collectDiagramFields()?.diagram : null;
   const pos = spec ? eng.layout(spec) : null;
   const cut = [];
   list.querySelectorAll(".dgm-node-row").forEach((row) => {
