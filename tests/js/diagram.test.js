@@ -464,6 +464,48 @@ test("layoutNetwork: связанные узлы ближе несвязанны
   assert.ok(dist("api", "auth") < dist("api", "mon"));
 });
 
+test("render: подписи связей графа не заезжают на плашки узлов", () => {
+  // У косой связи графа поднять метку некуда — над ней такая же плашка, как под
+  // ней. Зазор в 56px хватал только стрелке, а блок метки шириной 200 ложился
+  // разом на ОБЕ плашки: «при по» съедала одна, «ложительном/решении» вылезало
+  // наружу обрубком — слайд читался как испорченный файл.
+  // Десять узлов, а не пять: на пятерых холст раздвигает плашки на весь бюджет
+  // метки, и одной раскладки хватило бы. На десяти места уже нет — подпись
+  // обязана сузиться до фактического просвета и оборваться, если не влезла.
+  const spec = { kind: "network", nodes: [], edges: [] };
+  for (let i = 0; i < 10; i++) spec.nodes.push({ id: "n" + i, label: "Узел " + i });
+  for (let i = 1; i < 10; i++) {
+    spec.edges.push({ from: "n" + (i % 3 === 0 ? 0 : i - 1), to: "n" + i,
+                      label: "при положительном решении" });
+  }
+  const host = fakeHost();
+  D.render(host, spec);
+  const out = D.layoutNetwork(spec);
+  const texts = host.innerHTML.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
+  assert.strictEqual(texts.length, spec.edges.length, "подписи связей потерялись");
+  // Плашки ЭТОЙ связи, а не все подряд: длинная связь силовой раскладки может
+  // пройти над посторонним узлом — это вопрос трассировки рёбер, а не подписи.
+  texts.forEach((t, i) => {
+    const link = out.links[i];
+    const plates = [out.nodes[link.from], out.nodes[link.to]];
+    const x = Number(t.match(/x="([\d.-]+)"/)[1]);
+    const y = Number(t.match(/y="([\d.-]+)"/)[1]);
+    const fs = Number(t.match(/font-size="([\d.-]+)"/)[1]);
+    const lines = (t.match(/<tspan[^>]*>([^<]*)<\/tspan>/g) || [])
+      .map((s) => s.replace(/<[^>]*>/g, ""));
+    assert.ok(lines.length && lines.join("").trim(), "подпись связи пустая");
+    const w = Math.max(...lines.map((s) => s.length)) * fs * 0.6;
+    const lead = Math.round(fs * 1.16);
+    const box = { x0: x - w / 2, x1: x + w / 2,
+                  y0: y - fs, y1: y + (lines.length - 1) * lead };
+    plates.forEach((p) => {
+      const over = box.x0 < p.x + p.w / 2 && box.x1 > p.x - p.w / 2 &&
+                   box.y0 < p.y + p.h / 2 && box.y1 > p.y - p.h / 2;
+      assert.ok(!over, `подпись «${lines.join(" ")}» легла на плашку`);
+    });
+  });
+});
+
 test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
     ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",

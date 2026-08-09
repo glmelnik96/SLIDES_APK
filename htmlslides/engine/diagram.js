@@ -738,7 +738,13 @@
        в 4px. Разводим прямоугольники ПОСЛЕ вписывания — до него общий масштаб
        снова съел бы зазор. Зазор в 56px, а не впритык: стрелке нужна длина,
        иначе она читается царапиной между плашками. */
-    separateBoxes(pos, 56);
+    /* Подписанные связи требуют места: блоку метки нужно 200px, а зазора в 56
+       хватает только стрелке — «при положительном решении» ложилось разом на обе
+       плашки. Просвет закладываем в РАСКЛАДКУ, а не подгоняем метку постфактум:
+       у косой связи графа поднять метку некуда, над ней такая же плашка. Шире
+       зазор берём только когда подписи есть — иначе граф без подписей без нужды
+       расползся бы по краям холста. */
+    separateBoxes(pos, edges.some(function (e) { return e.label; }) ? EDGE_W : 56);
     var links = edges.filter(function (e) { return pos[e.from] && pos[e.to]; })
       .map(function (e) {
         return { from: e.from, to: e.to, label: e.label || "",
@@ -1065,7 +1071,7 @@
       var pts = link.points;
       var p0 = pts[1] || pts[0], p1 = pts[2] || pts[1] || p0;
       var lx = (p0[0] + p1[0]) / 2, ly = (p0[1] + p1[1]) / 2 - 12;
-      var anchor = "middle";
+      var anchor = "middle", budget = EDGE_W;
       if (pts.length === 2) {              // прямой сегмент (hub_spoke): середина
         lx = (pts[0][0] + pts[1][0]) / 2; ly = (pts[0][1] + pts[1][1]) / 2 - 12;
         /* Соседи по одной дорожке соединяются прямой горизонталью, и промежуток
@@ -1077,6 +1083,21 @@
         if (Math.abs(pts[0][1] - pts[1][1]) < 1 &&
             Math.abs(pts[1][0] - pts[0][0]) < EDGE_W) {
           ly = pts[0][1] - (boxes && boxes[link.from] ? boxes[link.from].h : 0) / 2 - 12;
+        } else if (!link.arc && !link.curve) {
+          /* Косая связь графа: поднимать метку некуда — над ней такая же плашка,
+           * как под ней. Значит бюджет метки должен равняться просвету, а не
+           * фиксированным 200: у семи узлов графа связи между плашками бывают по
+           * 40px, и блок 200×56 ложился разом на ОБЕ плашки — «при по» съедала
+           * одна, «ложительном / решении» вылезало наружу обрубком. Сужаем блок
+           * до длины сегмента, дальше подпись сама уменьшит кегль и, если не
+           * влезет, честно оборвётся многоточием — тем же clampLabelBox, что и
+           * подписи узлов. Пола у бюджета нет намеренно: «подпись не шире
+           * просвета» — инвариант, и пол его ломает, оставляя огрызок поверх
+           * плашки. Плотно набитый граф с подписью на каждой связи честно
+           * скажет «…», а не притворится, будто всё поместилось. */
+          var segLen = Math.sqrt(Math.pow(pts[1][0] - pts[0][0], 2) +
+                                 Math.pow(pts[1][1] - pts[0][1], 2));
+          budget = Math.min(EDGE_W, segLen);
         }
       } else if (Math.abs(p0[0] - p1[0]) < 1 && Math.abs(p0[1] - p1[1]) < 1 &&
                  Math.abs(pts[0][1] - pts[pts.length - 1][1]) < 1) {
@@ -1104,10 +1125,10 @@
        * clampLabelBox, что и подписи узлов, и раскладываем на tspan'ы. Блок
        * растёт ВВЕРХ: нижняя строка остаётся на прежней базовой линии, то есть
        * короткие «да»/«нет» стоят там же, где стояли. */
-      var efs = fitFontBox(link.label, EDGE_W, EDGE_H, EDGE_FS);
+      var efs = fitFontBox(link.label, budget, EDGE_H, EDGE_FS);
       var lead = Math.round(efs * 1.16);
-      var elines = wrapLines(clampLabelBox(link.label, EDGE_W, EDGE_H, efs),
-                             Math.max(1, Math.floor(EDGE_W / (efs * 0.6))));
+      var elines = wrapLines(clampLabelBox(link.label, budget, EDGE_H, efs),
+                             Math.max(1, Math.floor(budget / (efs * 0.6))));
       out += '<text x="' + lx + '" y="' + (ly - (elines.length - 1) * lead) +
         '" text-anchor="' + anchor + '" font-size="' + efs + '" ' +
         'fill="var(--fg-muted)">' +
