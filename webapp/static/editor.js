@@ -245,8 +245,15 @@ frameB.addEventListener("load", () => handleFrameLoad(frameB));
 
 // Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
 let draftHtmlSaving = false;
+// Правки, пришедшие ПОКА идёт сейв, раньше просто отбрасывались. Человек правит
+// заголовок, тут же переходит к подзаголовку — сейв первого ещё в полёте, и
+// второй blur уходил в никуда: на экране текст есть, в плане его нет, статус
+// говорит «сохранено». После перезагрузки правка исчезала без следа. Копим их и
+// досинхронизируем сразу после текущего сейва (PUT шлёт весь слайд целиком, так
+// что один повтор добирает всё, что накопилось).
+const draftHtmlPending = new Set();
 async function syncDraftSlideHtml(i) {
-  if (draftHtmlSaving) return;
+  if (draftHtmlSaving) { draftHtmlPending.add(i); return; }
   const doc = frame.contentDocument;
   const section = doc && doc.querySelectorAll(".slide")[i];
   if (!section) return;
@@ -267,15 +274,8 @@ async function syncDraftSlideHtml(i) {
   });
   draftHtmlSaving = true;
   try {
-    // К§1: снапшот {template_id, content} ДО перевода слайда в freeform — переживает
-    // reload вкладки (sessionStorage), питает кнопку «Вернуть макет».
-    const slide = draftPlan.slides[i];
-    if (slide && !slide.freeform) {
-      try {
-        sessionStorage.setItem(`freeform-snap:${sessionId}:${i + 1}`,
-          JSON.stringify({ template_id: slide.template_id, content: slide.content }));
-      } catch (_) { /* sessionStorage может быть недоступен — не критично */ }
-    }
+    // К§1: макет, из которого уходим, запоминает сервер (prev_layout на слайде) —
+    // он питает кнопку «Вернуть макет».
     const r = await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}/html`), {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html: clone.outerHTML }),
@@ -285,6 +285,13 @@ async function syncDraftSlideHtml(i) {
     if (mode === "manual") renderBuilderForm(); // slide is now freeform
   } finally {
     draftHtmlSaving = false;
+    // Слепок DOM снят В НАЧАЛЕ этого сейва, поэтому правка того же слайда,
+    // прилетевшая по ходу PUT, в него не попала — свой же индекс не вычёркиваем.
+    const next = draftHtmlPending.values().next();
+    if (!next.done) {
+      draftHtmlPending.delete(next.value);
+      await syncDraftSlideHtml(next.value);
+    }
   }
 }
 
@@ -1068,23 +1075,36 @@ function renderBuilderForm() {
     // К§1: честная записка (без выдуманной истории про чат) + возврат к макету.
     form.innerHTML = `<p class="builder-note">Свободный слайд — он больше не привязан к макету, ` +
       `поэтому полей здесь нет. Правьте текст прямо на слайде или опишите изменение в чате справа.</p>`;
-    const snapKey = `freeform-snap:${sessionId}:${current + 1}`;
-    const snapRaw = sessionStorage.getItem(snapKey);
-    if (snapRaw) {
+    // Макет, из которого ушли, лежит на самом слайде (plan.json), поэтому кнопка
+    // переживает перезагрузку, едет со слайдом при перестановке и появляется
+    // после правки через чат — раньше снимок жил в sessionStorage по НОМЕРУ
+    // позиции и после перестановки возвращал чужой макет.
+    const snap = slide.prev_layout;
+    if (snap && snap.template_id) {
       const revert = document.createElement("button");
       revert.type = "button";
       revert.className = "btn btn-ghost btn-sm";
       revert.style.marginTop = "8px";
       revert.textContent = "Вернуть макет";
       revert.onclick = async () => {
-        let snap; try { snap = JSON.parse(snapRaw); } catch (_) { return; }
         const n = current + 1;
-        await fetch(U(`/api/drafts/${sessionId}/slides/${n}`), { method: "DELETE" });
-        await fetch(U(`/api/drafts/${sessionId}/slides`), {
+        // Возврат идёт в два шага (снести свободный слайд → поставить макетный), и
+        // без проверки ответов провал второго уносил слайд СОВСЕМ — человек жал
+        // «Вернуть макет» и слайд просто исчезал, молча.
+        const before = snapshotPlan();
+        const del = await fetch(U(`/api/drafts/${sessionId}/slides/${n}`),
+                                { method: "DELETE" }).catch(() => null);
+        if (!del || !del.ok) { setSaveStatus("error"); return; }
+        const add = await fetch(U(`/api/drafts/${sessionId}/slides`), {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ template_id: snap.template_id, at: n, content: snap.content }),
-        });
-        sessionStorage.removeItem(snapKey);
+        }).catch(() => null);
+        if (!add || !add.ok) {
+          await applyPlan(before);
+          setSaveStatus("error");
+          return;
+        }
+        pushUndo();
         await reloadDraft(current);
       };
       form.appendChild(revert);
@@ -2658,10 +2678,13 @@ async function applyDiagramKind(index1, kind, prev) {
     diagram: DiagramDrag.carryLabels(JSON.parse(JSON.stringify(t.sample)),
                                 prev && prev.diagram),
   };
-  await fetch(U(`/api/drafts/${sessionId}/slides/${index1}/fields`), {
+  // Без проверки ответа выбранный тип молча не применялся: человек нажимал
+  // «Воронка», а получал схему по умолчанию — и решал, что нажал не туда.
+  const r = await fetch(U(`/api/drafts/${sessionId}/slides/${index1}/fields`), {
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ slide_type: "diagram", fields }),
-  });
+  }).catch(() => null);
+  if (!r || !r.ok) setSaveStatus("error");
 }
 
 async function initDraftBuilder() {

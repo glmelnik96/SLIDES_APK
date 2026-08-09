@@ -457,6 +457,40 @@ def test_inline_html_edit_makes_slide_freeform(monkeypatch, tmp_path):
                      headers=H()).status_code == 404
 
 
+def test_prev_layout_travels_with_the_slide(monkeypatch, tmp_path):
+    """«Вернуть макет» должен возвращать макет ЭТОГО слайда.
+
+    Снимок жил в sessionStorage по номеру позиции, поэтому после перестановки
+    кнопка на одном свободном слайде подставляла макет и текст другого — правка
+    подменялась чужим содержимым, и понять, откуда оно взялось, было невозможно.
+    Держим макет на самом слайде: он едет вместе с ним.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover",
+                                                  "content": {"title": "Обложка"}},
+               headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "quote",
+                                                  "content": {"quote": "Цитата"}},
+               headers=H())
+        for i in (1, 2):
+            c.put(f"/api/drafts/{sid}/slides/{i}/html",
+                  json={"html": f'<section class="slide"><p>правка {i}</p></section>'},
+                  headers=H())
+        plan = c.post(f"/api/drafts/{sid}/slides/2/move", json={"to": 1},
+                      headers=H()).json()
+        assert [s["prev_layout"]["template_id"] for s in plan["slides"]] \
+            == ["quote", "cover"]
+        assert plan["slides"][0]["prev_layout"]["content"] == {"quote": "Цитата"}
+
+        # повторная правка уже свободного слайда не затирает исходный макет —
+        # иначе «вернуть» было бы некуда
+        plan = c.put(f"/api/drafts/{sid}/slides/1/html",
+                     json={"html": '<section class="slide"><p>ещё</p></section>'},
+                     headers=H()).json()
+        assert plan["slides"][0]["prev_layout"]["template_id"] == "quote"
+
+
 # ── rebuild draft through the engine (mode=htmlpolish) ──────────────────────
 def test_rebuild_draft_dispatches_htmlpolish(monkeypatch, tmp_path):
     """The rebuild endpoint runs the same session through the engine via the job

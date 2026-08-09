@@ -475,6 +475,22 @@ async def delete_draft(session_id: str, request: Request,
     return JSONResponse({"ok": True})
 
 
+def _to_freeform(plan: draft.DraftPlan, index: int,
+                 section: str) -> draft.DraftPlan:
+    """Перевести слайд в свободный режим, запомнив макет, из которого ушли.
+
+    Запоминаем один раз — при ПЕРВОМ уходе с макета: дальше слайд правится уже
+    как свободный, и перезапись стёрла бы то единственное состояние, куда
+    осмысленно возвращаться."""
+    was = plan.slides[index - 1]
+    plan = draft.update_slide(plan, index, content={"html": section})
+    s = plan.slides[index - 1]
+    s.freeform = True
+    if not was.freeform:
+        s.prev_layout = {"template_id": was.template_id, "content": was.content}
+    return plan
+
+
 def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
     """Save the plan and re-render the derived deck.html from it.
 
@@ -561,8 +577,7 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     section = chat_edit.nth_section(html, 1) or html  # accept a bare <section>
     if not (1 <= index <= len(plan.slides)):
         raise HTTPException(404, "slide not found")
-    plan = draft.update_slide(plan, index, content={"html": section})
-    plan.slides[index - 1].freeform = True
+    plan = _to_freeform(plan, index, section)
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
@@ -1010,9 +1025,7 @@ async def post_chat(session_id: str, request: Request,
         if section:
             plan = draft.load_plan(session_id)
             if 1 <= slide_index <= len(plan.slides):
-                plan = draft.update_slide(plan, slide_index,
-                                          content={"html": section})
-                plan.slides[slide_index - 1].freeform = True
+                plan = _to_freeform(plan, slide_index, section)
                 draft.save_plan(session_id, plan)
     return JSONResponse({"ok": True})
 
