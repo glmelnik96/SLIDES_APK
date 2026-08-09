@@ -949,6 +949,14 @@
     return out;
   }
 
+  /* Цвет подписи, лежащей ПОВЕРХ заливки графика. Хвост серой шкалы в тёмной
+     теме почти сливается с фоном (--chart-4 #525252 против --bg #222 — контраст
+     2:1), и «Допущены к пилотам» на четвёртой полосе воронки читалось как тень.
+     Пары «заливка → подпись» живут в теме, здесь только выбор индекса. */
+  function onChart(i, accent) {
+    return "var(--on-chart-" + (accent ? 1 : Math.min(i, 5) + 1) + ")";
+  }
+
   function renderFunnel(spec, pos) {
     var parts = [];
     spec.nodes.forEach(function (n, i) {
@@ -960,7 +968,8 @@
         (p.x - wTop / 2) + "," + (p.y - p.h / 2) + " " + (p.x + wTop / 2) + "," + (p.y - p.h / 2) + " " +
         (p.x + wBot / 2) + "," + (p.y + p.h / 2) + " " + (p.x - wBot / 2) + "," + (p.y + p.h / 2) +
         '" fill="' + fill + '"/>' +
-        labelFO({ x: p.x, y: p.y, w: Math.min(wTop, wBot) + 40, h: p.h }, n, "var(--bg)") +
+        labelFO({ x: p.x, y: p.y, w: Math.min(wTop, wBot) + 40, h: p.h }, n,
+                onChart(i, n.accent)) +
         (n.value ? '<text x="' + (p.x + 640) + '" y="' + p.y +
           '" dominant-baseline="middle" font-size="30" font-weight="500" ' +
           'fill="var(--fg-body)">' + esc(n.value) + "</text>" : "") +
@@ -1007,7 +1016,8 @@
          текст молча резался бы по границе полосы. */
       var box, color, align;
       if (p.w >= 300) {
-        box = { x: p.x, y: p.y, w: p.w, h: p.h }; color = "var(--bg)"; align = "center";
+        box = { x: p.x, y: p.y, w: p.w, h: p.h };
+        color = onChart(i, n.accent); align = "center";
       } else if (W - (p.x + p.w / 2) >= 280) {
         var lw = Math.min(420, W - (p.x + p.w / 2) - 16);
         box = { x: p.x + p.w / 2 + 16 + lw / 2, y: p.y, w: lw, h: p.h };

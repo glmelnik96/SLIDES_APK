@@ -721,3 +721,19 @@ test("layout: одиннадцать лучей hub_spoke не перекрыв�
     Object.assign(chain("hub_spoke", 12), { edges: [] }));
   assert.deepEqual(boxOverlap(L), [], "лучи внизу эллипса налезли друг на друга");
 });
+
+test("render: подпись поверх заливки берёт контрастный цвет темы", () => {
+  // Хвост серой шкалы в тёмной теме почти сливается с фоном (--chart-4 #525252
+  // против --bg #222), и подпись четвёртой полосы воронки читалась как тень.
+  const host = fakeHost();
+  D.render(host, { kind: "funnel", nodes: [
+    { id: "a", label: "Лонг-лист", value: "34" },
+    { id: "b", label: "Техпроверка", value: "19" },
+    { id: "c", label: "Финпроверка", value: "11" },
+    { id: "d", label: "Допущены к пилотам", value: "4" },
+    { id: "e", label: "Контракты", value: "2", accent: true }] });
+  assert.ok(host.innerHTML.includes("var(--on-chart-4)"),
+    "тёмная полоса без контрастной подписи — текст сливается с заливкой");
+  assert.ok(!host.innerHTML.includes("color:var(--bg)"),
+    "цвет фона в роли подписи не зависит от того, насколько тёмная заливка");
+});
