@@ -360,6 +360,24 @@ test("layoutSteps: ступени идут вправо и вверх", () => {
   assert.strictEqual(out.links.length, 0);
 });
 
+test("render: у ступени есть линия проступи, а не только заливка", () => {
+  // Подступенок — тот же --bg-card, что и плашка, в 0.45 прозрачности. В светлой
+  // теме между фоном (#FFF) и плашкой (#F2F2F2) всего 13 пунктов, половина — 6:
+  // контраст плашки к своему столбу падал до 1.05:1, и лестница читалась как
+  // простые столбцы. Третьего тона в палитре нет — грань держит линия.
+  const host = fakeHost();
+  const spec = { kind: "steps", nodes: [
+    { id: "a", label: "Раз" }, { id: "b", label: "Два" }, { id: "c", label: "Три" }] };
+  D.render(host, spec);
+  const pos = D.layoutSteps(spec).nodes;
+  ["b", "c"].forEach((id) => {          // у нижней ступени столба нет — она на полу
+    const y = pos[id].y + pos[id].h / 2;
+    const re = new RegExp('<line[^>]*y1="' + y + '"[^>]*y2="' + y +
+      '"[^>]*stroke="var\\(--fg-muted\\)"');
+    assert.ok(re.test(host.innerHTML), "нет линии проступи у ступени " + id);
+  });
+});
+
 const MIND = { kind: "mindmap", nodes: [
   { id: "core", label: "Центр" }, { id: "r1", label: "Право" },
   { id: "l1", label: "Лево" }, { id: "r2", label: "Ещё право" },
