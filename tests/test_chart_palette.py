@@ -78,9 +78,12 @@ def test_stacked_colors_by_index_and_label_contrast():
     # логотип _chrome.html красится var(--accent) в КАЖДОМ слайде → остаётся ровно 1;
     # важно, что сегменты/свотчи бара им больше не красятся (было 13: 12 + логотип)
     assert html.count('fill="var(--accent)"') == 1
-    # %-метка фиксированно-графитовая (контраст в обеих темах); старый var(--bg) ушёл
+    # %-метка красится парным к заливке токеном --on-chart-N: фиксированный графит
+    # тонул на тёмном хвосте шкалы (#525252 в тёмной теме — контраст 2:1)
     # (трек остаётся var(--bg-card) — это другая строка, её не задеваем)
-    assert 'fill="var(--cl-graphite)"' in html
+    for n in range(1, 5):
+        assert f'fill="var(--on-chart-{n})"' in html
+    assert 'fill="var(--cl-graphite)"' not in html
     assert 'fill="var(--bg)"' not in html
 
 
