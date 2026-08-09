@@ -85,14 +85,24 @@ _OVERFLOW_JS = """
         bottom: r.bottom + (dy > 0.15 * lh ? dy : 0) * scale,
       };
     };
+    // У SVG-элементов className — это SVGAnimatedString, и String() от него даёт
+    // «[object SVGAnimatedString]». Именно SVG у нас все графики, то есть самое
+    // интересное место замера описывалось для vision-QA мусорной строкой.
+    const name = el => el.getAttribute('class') || el.tagName;
+    // Декор (line-art облаков, стрелок, паттерны точек) намеренно уходит за кадр:
+    // .quote-art--clouds сдвинут на right:-259px, у .quote-art--arrows внутренний
+    // SVG стоит на left:-502px — это кроп из референса, а не поломка. Весь такой
+    // декор помечен aria-hidden, контент — никогда. Без этой отсечки ЗДОРОВАЯ дека
+    // отдавала vision-QA 4 «вылета за край» (quote и timeline), и модель шла
+    // чинить слайды, с которыми всё в порядке.
     slide.querySelectorAll('*').forEach(el => {
+      if (el.closest('[aria-hidden="true"]')) return;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) return;
       const b = bounds(el, r);
       if (r.left < sb.left - tolerance || b.right > sb.right + tolerance ||
           r.top < sb.top - tolerance || b.bottom > sb.bottom + tolerance) {
-        out.push({slide: si + 1, code: 'overflow',
-                  detail: String(el.className || el.tagName)});
+        out.push({slide: si + 1, code: 'overflow', detail: name(el)});
       }
     });
     if (slide.dataset.template === 'freeform') {
@@ -109,8 +119,7 @@ _OVERFLOW_JS = """
         const b = bounds(el, r);
         if (r.left < safe.left - tolerance || b.right > safe.right + tolerance ||
             r.top < safe.top - tolerance || b.bottom > safe.bottom + tolerance) {
-          out.push({slide: si + 1, code: 'safe_zone',
-                    detail: String(el.className)});
+          out.push({slide: si + 1, code: 'safe_zone', detail: name(el)});
         }
       });
     }

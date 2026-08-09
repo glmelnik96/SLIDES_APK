@@ -86,7 +86,8 @@ class JobRunner:
         self._timed_out: set[str] = set()      # sessions killed by the watchdog
         self._wrapup: set[str] = set()         # sessions told to skip optional polish
         self._timers: dict[str, list[threading.Timer]] = {}
-        self._queues: dict[str, asyncio.Queue] = {}
+        # session_id -> очереди подписчиков (каждая вкладка своя, см. subscribe)
+        self._queues: dict[str, set[asyncio.Queue]] = {}
         self._results: dict[str, str | None] = {}
         self._status: dict[str, dict] = {}     # session_id -> latest event dict
         self._meta: dict[str, dict] = {}       # session_id -> {mode}
@@ -106,8 +107,43 @@ class JobRunner:
         self._loop = loop
 
     # ── introspection ────────────────────────────────────────────────────
-    def queue(self, session_id: str) -> "asyncio.Queue | None":
-        return self._queues.get(session_id)
+    def subscribe(self, session_id: str) -> "asyncio.Queue | None":
+        """Свежая очередь событий сессии; None — сессии нет.
+
+        Fan-out, а не одна очередь на всех: подписчик ЗАБИРАЕТ событие из своей
+        очереди, так что общая очередь делилась бы между вкладками. Сборка идёт
+        минутами, и вторая вкладка на той же деке — обычное дело; при общей
+        очереди каждая видела случайную половину прогресса, а вкладка, которой
+        не досталось терминальное событие, висела на «Улучшаю слайды…» вечно
+        (поток не закрывается, ошибки нет, ретраиться нечему).
+        """
+        subs = self._queues.get(session_id)
+        if subs is None:
+            return None
+        q: asyncio.Queue = asyncio.Queue()
+        subs.add(q)
+        return q
+
+    def unsubscribe(self, session_id: str, q: "asyncio.Queue") -> None:
+        subs = self._queues.get(session_id)
+        if subs is not None:
+            subs.discard(q)
+
+    def _publish(self, session_id: str, data: dict) -> None:
+        """Разослать событие всем подписчикам сессии (из рабочего потока)."""
+        if self._loop is None:
+            return
+        if data.get("terminal"):
+            # Снимаем подписки ДО рассылки: очередь того, кто уже отключился
+            # (закрытая вкладка, очередь из start()), иначе копила бы события до
+            # ретеншена. Уже разосланное подписчики дочитают из своих очередей —
+            # они держат их сами, — а опоздавший получит терминальный снапшот
+            # из status().
+            subs = self._queues.pop(session_id, None) or ()
+        else:
+            subs = list(self._queues.get(session_id) or ())
+        for q in subs:
+            asyncio.run_coroutine_threadsafe(q.put(data), self._loop)
 
     def result_path(self, session_id: str) -> str | None:
         return self._results.get(session_id)
@@ -218,9 +254,7 @@ class JobRunner:
             if data.get("terminal") and self._terminal_hook and self._loop:
                 asyncio.run_coroutine_threadsafe(
                     self._terminal_hook(sid, data), self._loop)
-            q = self._queues.get(sid)
-            if q is not None and self._loop is not None:
-                asyncio.run_coroutine_threadsafe(q.put(data), self._loop)
+            self._publish(sid, data)
 
         prog.publish = sink  # type: ignore[assignment]
         self._sink_installed = True
@@ -287,8 +321,9 @@ class JobRunner:
                     f"{self._max_per_user}) — дождитесь завершения")
         self._install_sink()
         session_id = inp.session_id
-        queue: asyncio.Queue = asyncio.Queue()
-        self._queues[session_id] = queue
+        self._queues[session_id] = set()
+        queue = self.subscribe(session_id)
+        assert queue is not None
         self._results[session_id] = None
         self._meta[session_id] = {"mode": _mode_of(inp), "user_id": user_id,
                                   "source_filename": getattr(inp, "source_filename", None),
@@ -390,7 +425,5 @@ class JobRunner:
             if self._loop is not None and self._terminal_hook:
                 asyncio.run_coroutine_threadsafe(
                     self._terminal_hook(session_id, ev), self._loop)
-            q = self._queues.get(session_id)
-            if q is not None and self._loop is not None:
-                asyncio.run_coroutine_threadsafe(q.put(ev), self._loop)
+            self._publish(session_id, ev)
         return True

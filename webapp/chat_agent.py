@@ -36,7 +36,8 @@ from webapp.paths import session_dir
 _TEMPLATE_HINT = (
     "Выбор макета по смыслу: числа/метрики → stats-row/kpi; проценты → donut-chart; "
     "перечисление 2–6 пунктов → cards-6/grid-2x2/three-col; сравнение → two-col-cards; "
-    "этапы → timeline; акцентная мысль → statement; титул → cover; контакты → contacts."
+    "этапы с датами → timeline; процесс с ветвлениями/цикл/воронка/оргсхема → diagram; "
+    "акцентная мысль → statement; титул → cover; контакты → contacts."
 )
 
 
@@ -327,14 +328,30 @@ def run_turn(session_id: str, message: str, current_index: int,
             library = TemplateLibrary.load()
             cur = plan.slides[current_index - 1]
             tid = cur.template_id or "blank"
+            base = cur.content or {}
+            # У typed-слайда (схема) истина — в fields, а content остаётся с
+            # момента последнего заполнения: панель узлов пишет только fields.
+            # Без пересчёта в чат уезжала ПРЕЖНЯЯ схема, и просьба «упрости»
+            # молча откатывала всё, что автор наменял руками на слайде.
+            if cur.slide_type and cur.fields:
+                typed_tid, mapped = slide_types.map_typed(cur.slide_type,
+                                                          cur.fields)
+                if typed_tid:
+                    tid, base = typed_tid, mapped
             spec = library.get(tid)
             sp = SlidePlan(index=current_index, type=spec.type, template_id=tid,
-                           content={"brief": intent.topic or message,
-                                    **(cur.content or {})})
+                           content={"brief": intent.topic or message, **base})
             try:
                 sp = fill_slide(client, library, sp, deck_title=plan.title,
                                 extra=f"Указание пользователя: {intent.topic or message}")
-                plan = draft.update_slide(plan, current_index, content=sp.content)
+                plan = draft.update_slide(plan, current_index,
+                                          content=sp.content, template_id=tid)
+                # Присваиваем ВСЕГДА: typed-поля старше template_id (draft_render
+                # рисует слайд из них), поэтому уцелевшие поля прежней схемы
+                # показывали бы её вместо только что переписанного содержимого.
+                typed = slide_types.typed_from_content(tid, sp.content)
+                cur_slide = plan.slides[current_index - 1]
+                cur_slide.slide_type, cur_slide.fields = typed or (None, None)
                 draft.save_plan(session_id, plan)
                 result = AgentResult(reply=f"Обновил слайд {current_index}.",
                                      changed=True, go_to=current_index)
@@ -500,7 +517,16 @@ def build_outline(session_id: str, *, client: Any | None = None) -> None:
                                       template_id=tid)
         except Exception:  # noqa: BLE001 — keep template only, never crash
             plan = draft.update_slide(plan, i, template_id=tid)
-        plan.slides[i - 1].filled = True
+        # Вопрос стеклянной сборки снимаем: слайд уже заполнен здесь, и карточка
+        # «ИИ сомневается в макете» относилась бы к содержимому, которого нет.
+        # Черновик у обоих путей общий — автор может уйти из степпера в чат.
+        slide = plan.slides[i - 1]
+        # Схему — в typed-слайд (панель узлов и drag смотрят на slide_type).
+        typed = slide_types.typed_from_content(tid, slide.content)
+        if typed:
+            slide.slide_type, slide.fields = typed
+        slide.filled = True
+        slide.status = slide.question = slide.candidates = None
         draft.save_plan(session_id, plan)  # save after EACH slide (resilience)
     draft_render.render_draft(session_id, plan)  # final render
 

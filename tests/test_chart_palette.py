@@ -1,5 +1,6 @@
 """Регресс палитры графиков: --chart-* определены, мёртвые токены удалены,
 шаблоны красят сегменты по индексу без opacity-лесенок."""
+import re
 from importlib import resources
 
 from htmlslides.assembler import assemble
@@ -42,7 +43,10 @@ def test_vivid_reserve_and_used_tokens_kept():
 def _assemble_one(template_id, content, theme="dark"):
     plan = DeckPlan(title="qa", slides=[SlidePlan(
         index=1, type="content", template_id=template_id, content=content)])
-    return assemble(plan, theme=theme)
+    html = assemble(plan, theme=theme)
+    # Инлайновые движки (deck.js/diagram.js) содержат свои литералы
+    # fill-opacity/var(--accent) — тесты судят только разметку слайдов.
+    return re.sub(r"<script>.*?</script>", "", html, flags=re.S)
 
 
 def test_donut_colors_by_index_no_opacity():
@@ -74,9 +78,12 @@ def test_stacked_colors_by_index_and_label_contrast():
     # логотип _chrome.html красится var(--accent) в КАЖДОМ слайде → остаётся ровно 1;
     # важно, что сегменты/свотчи бара им больше не красятся (было 13: 12 + логотип)
     assert html.count('fill="var(--accent)"') == 1
-    # %-метка фиксированно-графитовая (контраст в обеих темах); старый var(--bg) ушёл
+    # %-метка красится парным к заливке токеном --on-chart-N: фиксированный графит
+    # тонул на тёмном хвосте шкалы (#525252 в тёмной теме — контраст 2:1)
     # (трек остаётся var(--bg-card) — это другая строка, её не задеваем)
-    assert 'fill="var(--cl-graphite)"' in html
+    for n in range(1, 5):
+        assert f'fill="var(--on-chart-{n})"' in html
+    assert 'fill="var(--cl-graphite)"' not in html
     assert 'fill="var(--bg)"' not in html
 
 

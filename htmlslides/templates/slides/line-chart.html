@@ -28,6 +28,8 @@
       fill-opacity 0.14, stroke none). Подписи значений (display|value) над
       точками: показываем ВСЕ при N<=5, иначе только первую и последнюю (защита от
       коллизий на плотной линии). Подписи оси X (label) под каждой точкой.
+      У крайних точек подписи прижаты к точке (start/end), а не центрированы —
+      иначе широкая подпись уезжала за viewBox и молча срезалась.
       Без gradient/shadow/CSS-rounding, без inline style — только SVG-атрибуты. -#}
 {% set points = content.points %}
 {% set n = points | length %}
@@ -67,11 +69,17 @@
     {% set vx = origin_x + (loop.index0 / (n - 1) * plot_w if n > 1 else plot_w / 2) %}
     {% set vy = baseline_y - (vals[loop.index0] - vmin) / span * plot_h %}
     <rect class="line-fade" x="{{ vx - 8 }}" y="{{ vy - 8 }}" width="16" height="16" fill="var(--accent)"/>
+    {#- Крайние точки стоят в 80px от края viewBox, а подпись центрируется по
+        точке: подпись шире 160px вылезала за viewBox и SVG срезал ей хвост
+        молча. У первой/последней точки прижимаем текст к точке (start/end) —
+        подпись остаётся при своей точке и целиком внутри поля. При n==1 точка
+        в центре, там центрирование безопасно. -#}
+    {% set anchor = "middle" if n == 1 else ("start" if loop.first else ("end" if loop.last else "middle")) %}
     {% if n <= 5 or loop.first or loop.last %}
-    <text x="{{ vx }}" y="{{ vy - 26 }}" text-anchor="middle"
+    <text x="{{ vx }}" y="{{ vy - 26 }}" text-anchor="{{ anchor }}"
           font-size="28" font-weight="500" fill="var(--fg-body)">{{ p.display or p.value }}</text>
     {% endif %}
-    <text x="{{ vx }}" y="{{ baseline_y + 40 }}" text-anchor="middle"
+    <text x="{{ vx }}" y="{{ baseline_y + 40 }}" text-anchor="{{ anchor }}"
           font-size="26" font-weight="400" fill="var(--fg-muted)">{{ p.label }}</text>
     {% endfor %}
   </svg>

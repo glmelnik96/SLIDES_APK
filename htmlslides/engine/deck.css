@@ -39,6 +39,10 @@ html[data-theme="dark"]{
   --image-bg:var(--cl-blue-lt);
   --chart-2:#989898; --chart-3:#737373; --chart-4:#525252;   /* серые gray3–5 */
   --chart-5:#5D779F; --chart-6:#8372A1;   /* ultramarine/purple приглушённые (хвост) */
+  /* Подпись ПОВЕРХ заливки: тёмный хвост шкалы почти сливается с --bg (#525252
+     против #222 — контраст 2:1), и текст на полосе читался как тень. */
+  --on-chart-1:#222222; --on-chart-2:#222222; --on-chart-3:#FFFFFF;
+  --on-chart-4:#FFFFFF; --on-chart-5:#FFFFFF; --on-chart-6:#FFFFFF;
 }
 html[data-theme="light"]{
   --bg:#FFFFFF; --fg:#222222; --fg-body:#000000; --fg-muted:#595959;
@@ -47,6 +51,10 @@ html[data-theme="light"]{
   --image-bg:var(--cl-blue-lt);
   --chart-2:#A6A6A6; --chart-3:#8C8C8C; --chart-4:#737373;   /* серые gray3–5 */
   --chart-5:#9CADCE; --chart-6:#BDB0D2;   /* ultramarine/purple пастельные (хвост) */
+  /* См. тёмную тему: пары «заливка → подпись поверх неё». Здесь тёмный только
+     gray5 — на нём белый текст, на остальных графитовый. */
+  --on-chart-1:#222222; --on-chart-2:#222222; --on-chart-3:#222222;
+  --on-chart-4:#FFFFFF; --on-chart-5:#222222; --on-chart-6:#222222;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;border-radius:var(--radius);}
 html,body{height:100%;}
@@ -290,6 +298,11 @@ html[data-theme="dark"] .contacts-arrows{color:var(--accent);}
 .kpi-cell:nth-child(1){width:766px;}     /* первая цифра width 766 @ x=53 */
 .kpi-cell:nth-child(2){width:490px;margin-left:150px;}  /* вторая @ x=969 (53+766+150) — ближе к центру */
 .kpi-value{color:var(--accent);white-space:nowrap;line-height:1;}
+/* Значение в 4 знака (слотовый максимум) в колонку макета не влезает: без
+   ужатия единица+описание первой пары наезжали на цифру второй (перекрытие
+   94px), а вторая пара уходила за правый край слайда. Класс ставит шаблон по
+   САМОМУ длинному значению — обеим парам сразу, чтобы цифры были одного размера. */
+.kpi-grid--tight .kpi-value{font-size:250px;}
 html[data-theme="light"] .kpi-value{color:var(--fg-body);}
 .kpi-side{padding-left:24px;padding-top:52px;width:280px;flex:none;}  /* верх unit ≈ верхний край глифа цифры */
 .kpi-unit{color:var(--fg);}               /* типографика — роль .t-head-36 */
@@ -325,6 +338,14 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
    справа. Бар var(--chart-{index+1}) по индексу (зелёный-герой + 3 серых + 2 доп
    в хвосте, правило ≤3 хроматических цвета), трек var(--bg-card), подписи var(--fg-body). */
 .bar-svg{position:absolute;left:60px;top:328px;width:1800px;height:620px;overflow:visible;}
+
+/* ---- diagram (не из Figma; платформа диаграмм, рисует engine/diagram.js) ----
+   host в контент-зоне как .freeform-zone (left60/top300/1800×720); JS кладёт
+   внутрь SVG viewBox 0 0 1800 720 — холст синхронизирован со схемой
+   (diagrams/schema.py CANVAS_W/H). Узлы var(--bg-card)/var(--accent), связи
+   var(--fg-muted), воронка var(--chart-1..6) — всё перекрашивается темой. */
+.diagram-host{position:absolute;left:60px;top:300px;width:1800px;height:720px;}
+.diagram-host svg{display:block;width:100%;height:100%;overflow:visible;}
 
 /* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----
    контейнер в контент-зоне x60..1860=1800px; вся геометрия — в SVG-атрибутах

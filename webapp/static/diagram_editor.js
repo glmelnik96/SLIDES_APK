@@ -1,0 +1,322 @@
+/* Drag узлов диаграммы в превью редактора (гибридная раскладка).
+ *
+ * Единственный жест на слайде-схеме — перетаскивание узла [data-node-id]:
+ * дельта в координатах холста (1800×720) пишется в spec.offsets[id],
+ * DiagramEngine из iframe перерисовывает вживую, на отпускание — onCommit(spec)
+ * (редактор дебаунс-сейвит offsets через PUT /fields). Правка текста узлов —
+ * в боковой панели, не на слайде (решение владельца).
+ *
+ * Магнитное выравнивание: узел притягивается к осям и краям соседей, к центру
+ * холста и к своему авто-месту (возврат «как было»); совпавшая ось подсвечивается
+ * пунктирной направляющей. Alt при перетаскивании отключает магнит.
+ *
+ * Слушатели висят на .diagram-host (переживает host.innerHTML = "" при живой
+ * перерисовке), pointer capture — тоже на host: узел под пальцем пересоздаётся
+ * каждый кадр, а жест продолжает жить.
+ */
+(function (global) {
+  "use strict";
+
+  var CANVAS_W = 1800, CANVAS_H = 720;
+  var DRAG_THRESHOLD = 4; // px экрана: меньше — это клик, не перетаскивание
+  var SNAP = 14;          // единиц холста (~7 px на экране): радиус магнита
+
+  /* Опоры узла по оси: центр и два края. Вид опоры («c»/«min»/«max») важен —
+     магнитим только одноимённые (центр к центру, левый край к левому). Совпадение
+     центра с чужим краем — визуальный шум, а не выравнивание. */
+  function anchors(p, axis) {
+    var c = axis === "x" ? p.x : p.y;
+    // Трапеции (воронка, пирамида) шире по нижней грани: габарит по широкой
+    // стороне, иначе край-магнит целился бы в невидимую линию.
+    var size = axis === "y" ? p.h
+      : (p.wBottom == null ? p.w : Math.max(p.w, p.wBottom));
+    var half = size / 2;
+    return [{ k: "c", v: c }, { k: "min", v: c - half }, { k: "max", v: c + half }];
+  }
+
+  /* Ближайший магнит по одной оси. want — желаемый сдвиг узла, from — его опоры
+     в авто-раскладке, to — опоры целей. Возвращает {adj, at} (adj — доводка
+     сдвига, at — координата направляющей) или null, если целей в допуске нет. */
+  function snapAxis(want, from, to, tol) {
+    var best = null;
+    // «Домой»: рядом с авто-местом магнит возвращает узел ровно на него.
+    if (Math.abs(want) <= tol) best = { adj: -want, at: from[0].v, k: "c" };
+    for (var i = 0; i < from.length; i++) {
+      for (var j = 0; j < to.length; j++) {
+        if (from[i].k !== to[j].k) continue;
+        var d = to[j].v - (from[i].v + want);
+        if (Math.abs(d) > tol) continue;
+        var cand = { adj: d, at: to[j].v, k: from[i].k };
+        if (!best || better(cand, best)) best = cand;
+      }
+    }
+    return best;
+  }
+
+  /* Кто победил при равном расстоянии. У узлов одного размера центр и края
+     совпадают одновременно — тогда направляющую ведём по центрам: она
+     объясняет выравнивание, а линия по краю выглядит случайной. Допуск EPS —
+     от плавающей точки: без него «равные» доводки решал порядок перебора. */
+  function better(a, b) {
+    var da = Math.abs(a.adj), db = Math.abs(b.adj);
+    if (da < db - 1e-6) return true;
+    if (db < da - 1e-6) return false;
+    return a.k === "c" && b.k !== "c";
+  }
+
+  /* want: {dx,dy} — сдвиг «как тянет мышь». ctx: {auto, others, tol}, где auto —
+     позиция узла в авто-раскладке {x,y,w,h}, others — позиции остальных узлов
+     (как они нарисованы, со своими сдвигами). */
+  function snapOffset(want, ctx) {
+    var tol = ctx.tol == null ? SNAP : ctx.tol;
+    var a = ctx.auto;
+    // Центр холста — тоже ось (только для центра узла).
+    var xs = [{ k: "c", v: CANVAS_W / 2 }], ys = [{ k: "c", v: CANVAS_H / 2 }];
+    (ctx.others || []).forEach(function (p) {
+      xs = xs.concat(anchors(p, "x"));
+      ys = ys.concat(anchors(p, "y"));
+    });
+    var bx = snapAxis(want.dx, anchors(a, "x"), xs, tol);
+    var by = snapAxis(want.dy, anchors(a, "y"), ys, tol);
+    var guides = [];
+    if (bx) guides.push({ axis: "x", at: bx.at });
+    if (by) guides.push({ axis: "y", at: by.at });
+    return {
+      dx: want.dx + (bx ? bx.adj : 0),
+      dy: want.dy + (by ? by.adj : 0),
+      guides: guides,
+    };
+  }
+
+  /* Нулевые сдвиги не храним: пустой offsets = чистый авто-режим (и панель тогда
+     не показывает «Сбросить раскладку»). */
+  function pruneZero(offsets) {
+    Object.keys(offsets || {}).forEach(function (id) {
+      var o = offsets[id];
+      if (Math.abs(o.dx || 0) < 0.5 && Math.abs(o.dy || 0) < 0.5) delete offsets[id];
+    });
+    return offsets;
+  }
+
+  /* Сколько узлов допускает тип — зеркало semantic_errors в
+     htmlslides/diagrams/schema.py. Типы, которых здесь нет, ограничены только
+     общим капом схемы (12). */
+  var NODE_RANGE = {
+    cycle: [3, 8], funnel: [2, 12], matrix: [4, 4], pyramid: [3, 12],
+    hub_spoke: [3, 12], comparison: [2, 12], venn: [2, 3], gantt_lite: [2, 8],
+    steps: [2, 6], mindmap: [3, 12], network: [3, 12],
+  };
+  /* Типы, у которых смысл держится на рёбрах: узлы адресуются из edges по id,
+     поэтому их список нельзя ни наращивать, ни резать. */
+  var EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "mindmap", "network"];
+
+  /* Перенести подписи узлов в пример нового типа при смене типа схемы. Раньше в
+     слайд записывался голый пример каталога: шесть написанных этапов цикла молча
+     заменялись «Аудитом инфраструктуры», а заголовок слайда оставался прежним —
+     слайд начинал противоречить сам себе. Структуру (рёбра, дорожки, формы,
+     величины) берём у примера — она и есть смысл типа, — а тексты подставляем из
+     старой схемы по порядку. Мутирует пример и возвращает его же. */
+  function carryLabels(sample, prevSpec) {
+    var src = ((prevSpec && prevSpec.nodes) || [])
+      .map(function (n) { return (n && n.label) || ""; })
+      .filter(function (s) { return s; });
+    var base = sample.nodes || [];
+    if (!src.length || !base.length) return sample;
+    var range = NODE_RANGE[sample.kind] || [1, 12];
+    var n = EDGE_KINDS.indexOf(sample.kind) >= 0
+      ? base.length
+      : Math.min(Math.max(src.length, range[0]), range[1]);
+    var used = {}, out = [], i;
+    base.forEach(function (b) { used[b.id] = 1; });
+    for (i = 0; i < n; i++) {
+      var node = Object.assign({}, base[i] || base[base.length - 1]);
+      if (!base[i]) {
+        // узел сверх примера: свой id и без акцента — иначе клон последнего узла
+        // размножил бы зелёную заливку по всей схеме
+        var k = i + 1, id;
+        do { id = "n" + k++; } while (used[id]);
+        used[id] = 1;
+        node.id = id;
+        delete node.accent;
+        /* Числа и сроки — данные, а не структура типа: клон тащил величину
+           последнего узла примера, и на слайде появлялся хвост одинаковых
+           «280», которых человек не вводил (в воронке они ещё и задавали
+           ширину ступени). Форма, дорожка и уровень остаются — без них
+           узел не нарисуется. */
+        delete node.value;
+        if (sample.kind === "gantt_lite") delete node.level;
+      }
+      if (src[i]) node.label = src[i];
+      out.push(node);
+    }
+    sample.nodes = out;
+    return sample;
+  }
+
+  function drawGuides(host, guides) {
+    if (!guides || !guides.length) return;
+    var svg = host.querySelector("svg.diagram-svg");
+    if (!svg) return;
+    var s = "";
+    guides.forEach(function (g) {
+      var p = g.axis === "x" ? [g.at, 0, g.at, CANVAS_H] : [0, g.at, CANVAS_W, g.at];
+      s += '<line class="dgm-guide" x1="' + p[0] + '" y1="' + p[1] + '" x2="' + p[2] +
+        '" y2="' + p[3] + '" stroke="var(--accent)" stroke-width="2" ' +
+        'stroke-dasharray="12 10" opacity="0.85" pointer-events="none"/>';
+    });
+    svg.insertAdjacentHTML("beforeend", s);
+  }
+
+  /* Правка подписи узла прямо на схеме — для собранных дек, где боковой панели
+     нет вообще: без этого опечатку в узле нельзя было исправить никак (текст
+     схемы исключён из inline-правки деки, а панель есть только у черновиков).
+     Редактируемость включаем на один клик и снимаем на blur: движок
+     перерисовывает хост целиком, и постоянный contenteditable не пережил бы
+     ни одного перетаскивания. */
+  function nodeOf(spec, id) {
+    var nodes = (spec && spec.nodes) || [];
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodes[i];
+    return null;
+  }
+
+  function startEdit(host, id, e, opts) {
+    var g = null, gs = host.querySelectorAll("[data-node-id]");
+    for (var i = 0; i < gs.length; i++) {
+      if (gs[i].getAttribute("data-node-id") === id) { g = gs[i]; break; }
+    }
+    var div = g && g.querySelector("foreignObject div");
+    var spec = opts.getSpec();
+    var node = nodeOf(spec, id);
+    if (!div || !node) return;
+    var orig = node.label == null ? "" : String(node.label);
+    div.setAttribute("contenteditable", "true");
+    div.style.cursor = "text";
+    div.textContent = orig;   // движок мог обрезать подпись многоточием — правим полную
+    div.focus();
+    var doc = host.ownerDocument;
+    try {                      // каретка — туда, куда кликнули
+      var range = doc.caretRangeFromPoint && doc.caretRangeFromPoint(e.clientX, e.clientY);
+      if (range) {
+        var sel = doc.defaultView.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } catch (_) { /* каретка в конец — как поставил focus() */ }
+    div.addEventListener("keydown", function (ke) {
+      // Подпись однострочная: Enter завершает правку, Esc откатывает.
+      if (ke.key === "Enter") { ke.preventDefault(); div.blur(); }
+      if (ke.key === "Escape") { ke.preventDefault(); div.textContent = orig; div.blur(); }
+    });
+    div.addEventListener("blur", function () {
+      div.removeAttribute("contenteditable");
+      var text = (div.textContent || "").replace(/\s+/g, " ").trim().slice(0, 60);
+      var fresh = opts.getSpec();
+      var n = nodeOf(fresh, id);
+      // Пустая подпись схему не проходит — возвращаем прежнюю (перерисовкой).
+      if (!n || !text || text === orig) { opts.engine.render(host, fresh); return; }
+      n.label = text;
+      opts.engine.render(host, fresh);
+      opts.onCommit(fresh);
+    });
+  }
+
+  function attach(host, opts) {
+    if (host.__dgmDrag) return;      // повторный load кадра — не дублируем
+    host.__dgmDrag = true;
+    host.style.touchAction = "none"; // жест целиком наш, без скролла страницы
+    host.style.cursor = "grab";
+    // Подсказка там, где жест: курсор-«рука» говорит «можно тянуть», тултип — что
+    // именно произойдёт. В черновике текст правится в панели, в собранной деке —
+    // кликом по узлу; обещать панель там, где её нет, нельзя.
+    host.title = "Перетащите узел, чтобы сдвинуть. Узел выравнивается по соседям "
+      + "и центру, Alt — без выравнивания. Текст узлов "
+      + (opts.editText ? "правится кликом по узлу." : "правится в панели справа.");
+    var drag = null;
+
+    host.addEventListener("pointerdown", function (e) {
+      var g = e.target && e.target.closest && e.target.closest("[data-node-id]");
+      var svg = e.target && e.target.closest && e.target.closest("svg.diagram-svg");
+      if (!g || !svg) return;
+      var spec = opts.getSpec();
+      if (!spec) return;
+      var box = svg.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      var id = g.getAttribute("data-node-id");
+      var base = (spec.offsets && spec.offsets[id]) || { dx: 0, dy: 0 };
+      if (!spec.offsets) spec.offsets = {};
+      // Магнит считаем по раскладке движка, а не по DOM: позиции соседей берём
+      // как нарисованы (со сдвигами), авто-место тянущегося узла — из раскладки
+      // без сдвигов вообще.
+      // Дека, собранная до появления layout() (движок запечён в её HTML),
+      // просто перетаскивается без магнита.
+      var lay = opts.engine.layout;
+      var drawn = lay ? (lay(spec) || {}) : {};
+      var autoAll = lay
+        ? (lay(Object.assign({}, spec, { offsets: {} })) || {}) : {};
+      var others = Object.keys(drawn)
+        .filter(function (k) { return k !== id; })
+        .map(function (k) { return drawn[k]; });
+      drag = {
+        spec: spec, id: id,
+        baseDx: base.dx || 0, baseDy: base.dy || 0,
+        auto: autoAll[id], others: others,
+        x0: e.clientX, y0: e.clientY,
+        // масштаб: экранные px → единицы viewBox (дека масштабируется transform'ом,
+        // getBoundingClientRect уже учитывает его)
+        kx: CANVAS_W / box.width, ky: CANVAS_H / box.height,
+        moved: false,
+      };
+      if (host.setPointerCapture) {
+        try { host.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+      e.preventDefault();
+    });
+
+    host.addEventListener("pointermove", function (e) {
+      if (!drag) return;
+      var want = {
+        dx: drag.baseDx + (e.clientX - drag.x0) * drag.kx,
+        dy: drag.baseDy + (e.clientY - drag.y0) * drag.ky,
+      };
+      if (!drag.moved &&
+          Math.abs(e.clientX - drag.x0) < DRAG_THRESHOLD &&
+          Math.abs(e.clientY - drag.y0) < DRAG_THRESHOLD) return;
+      drag.moved = true;
+      host.style.cursor = "grabbing";
+      // Alt — «без магнита»: точная ручная доводка, когда выравнивание мешает.
+      var res = (e.altKey || !drag.auto)
+        ? { dx: want.dx, dy: want.dy, guides: [] }
+        : snapOffset(want, { auto: drag.auto, others: drag.others });
+      // Кламп не нужен: applyOffsets движка держит центр узла в холсте,
+      // а серверная схема клампит саму дельту при сейве.
+      drag.spec.offsets[drag.id] = { dx: res.dx, dy: res.dy };
+      opts.engine.render(host, drag.spec);
+      drawGuides(host, res.guides);
+    });
+
+    function finish(e) {
+      if (!drag) return;
+      var d = drag;
+      drag = null;
+      host.style.cursor = "grab";
+      // Клик без сдвига = «хочу поправить текст» (там, где панели нет).
+      if (!d.moved) {
+        if (opts.editText && e && e.type === "pointerup") startEdit(host, d.id, e, opts);
+        return;
+      }
+      pruneZero(d.spec.offsets);
+      opts.engine.render(host, d.spec);   // финальный кадр — уже без направляющих
+      opts.onCommit(d.spec);
+    }
+    host.addEventListener("pointerup", finish);
+    host.addEventListener("pointercancel", finish);
+  }
+
+  var api = {
+    attach: attach, snapOffset: snapOffset, snapAxis: snapAxis,
+    anchors: anchors, pruneZero: pruneZero, SNAP: SNAP,
+    carryLabels: carryLabels, NODE_RANGE: NODE_RANGE, EDGE_KINDS: EDGE_KINDS,
+  };
+  global.DiagramDrag = api;
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+})(typeof window !== "undefined" ? window : this);

@@ -1,0 +1,20 @@
+{#- diagram: НЕ из Figma — слайд-носитель платформы диаграмм.
+    Шаблон рендерит только каркас (chrome + шапка + host); саму диаграмму рисует
+    engine/diagram.js по JSON-спеку из data-diagram (детерминированный SVG на
+    токенах темы, авто-layout + ручные offsets). JSON лежит в data-атрибуте:
+    autoescape Jinja экранирует кавычки в &#34;, браузер при чтении атрибута
+    декодирует их обратно — JSON.parse получает исходную строку (в отличие от
+    <script type="application/json">, где сущности НЕ декодируются). Фильтр
+    |asdata обязателен: он экранирует сам и уводит JSON из-под finalize-типографики
+    (иначе в подписи узла приезжает NBSP и она молча обрезается — см. assembler).
+    Контентный макет — малый логотип (.slide--chrome-sm). Шапка H3+подзаголовок.
+    Зона диаграммы .diagram-host = 1800×720 @ left60/top300 (deck.css), холст
+    синхронизирован со схемой (diagrams/schema.py CANVAS_W/H). -#}
+<section class="slide slide--chrome-sm" data-template="diagram">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.subtitle %}<p class="content-head-sub t-sub-36" data-slot="subtitle">{{ content.subtitle }}</p>{% endif %}
+  </div>
+  <div class="diagram-host" data-slot="diagram" data-diagram="{{ content.diagram|asdata }}"></div>
+</section>

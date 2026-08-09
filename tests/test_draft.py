@@ -1,6 +1,7 @@
 import os
 os.environ["SLIDES_APP_SKIP_SHIM"] = "1"
 
+import pytest
 from fastapi.testclient import TestClient
 import webapp.app as appmod
 import webapp.config as cfg
@@ -61,6 +62,30 @@ def test_load_save_roundtrip(monkeypatch, tmp_path):
     assert back.title == "T" and back.slides[0].content == {"title": "X"}
     # missing file → empty plan
     assert draft.load_plan("nope").slides == []
+
+
+def test_save_failure_leaves_previous_plan_readable(monkeypatch, tmp_path):
+    """Обрыв на записи не должен стоить черновика: план — единственная истина,
+    а обрезанный JSON её уничтожает. Пишем во временный файл и переименовываем."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    good = draft.DraftPlan(title="Было", slides=[
+        draft.DraftSlide(template_id="cover", content={"title": "X"})])
+    draft.save_plan("sid-crash", good)
+
+    def boom(self, data, **kw):
+        self.write_bytes(data.encode("utf-8")[:20])   # успели половину
+        raise OSError("диск кончился")
+
+    with monkeypatch.context() as mp:       # снять только этот патч, не setenv
+        mp.setattr(draft.Path, "write_text", boom)
+        try:
+            draft.save_plan("sid-crash", draft.DraftPlan(title="Стало"))
+            assert False, "ожидали пробрасывания OSError"
+        except OSError:
+            pass
+    assert draft.load_plan("sid-crash").title == "Было"
+    # мусор за собой не оставляем
+    assert not list(draft.plan_path("sid-crash").parent.glob("*.tmp"))
 
 
 def test_draftslide_typed_fields_roundtrip(monkeypatch, tmp_path):
@@ -174,8 +199,12 @@ def test_templates_catalog(monkeypatch, tmp_path):
         assert "cover" in ids and "grid-2x2" in ids
         # dividers hidden
         assert "section-dots" not in ids
-        # cards-6 скрыт из пикера (дизайн-дубль заливочной grid-2x2), но остаётся в library
-        assert "cards-6" not in ids
+        # cards-6 скрыт из ПИКЕРА (дизайн-дубль заливочной grid-2x2), но приходит
+        # с пометкой: его ставит конвейер, и редактору нужно имя и слоты, чтобы
+        # построить такому слайду форму.
+        cards6 = next(t for t in cat if t["id"] == "cards-6")
+        assert cards6["hidden"] is True and cards6["display_name"]
+        assert all(not t.get("hidden") for t in cat if t["id"] != "cards-6")
         cover = next(t for t in cat if t["id"] == "cover")
         assert cover["slots"]["title"]["required"] is True
         assert cover["slots"]["title"]["max_chars"] == 20
@@ -243,6 +272,40 @@ def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
         # cross-user → 404 (ownership)
         assert c.put(f"/api/drafts/{sid}", json=snap,
                      headers=H("intruder")).status_code == 404
+
+
+def test_failed_render_leaves_plan_and_deck_in_step(monkeypatch, tmp_path):
+    """План и дека — оригинал и его дериват; разойтись они не должны.
+
+    Порядок «сохранить план, потом отрисовать» это допускал: сборка падала (в
+    жизни — рассинхрон шаблонов и кода), план уже уехал вперёд, ответ 500, а
+    редактор дальше показывал СТАРУЮ деку — и после перезагрузки тоже. Человек
+    видел, что слайд «прыгнул обратно», и тянул его второй раз, переставляя
+    дважды. Падение сборки обязано отменять всё изменение целиком.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"}, headers=H())
+        deck_before = c.get(f"/api/jobs/{sid}/deck", headers=H()).text
+
+        def boom(_plan):
+            raise RuntimeError("шаблон не собрался")
+
+        # снимаем ТОЧЕЧНО, а не monkeypatch.undo(): тот откатил бы и настройки
+        # клиента (workdir, БД), внутри чьего контекста мы ещё работаем
+        orig = draft_render.build_draft_html
+        monkeypatch.setattr(draft_render, "build_draft_html", boom)
+        with pytest.raises(RuntimeError):
+            c.post(f"/api/drafts/{sid}/slides/1/move", json={"to": 2}, headers=H())
+        monkeypatch.setattr(draft_render, "build_draft_html", orig)
+
+        # план не сдвинулся…
+        assert [s["template_id"] for s in
+                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] \
+            == ["cover", "grid-2x2"]
+        # …и дека осталась ровно той же, что была
+        assert c.get(f"/api/jobs/{sid}/deck", headers=H()).text == deck_before
 
 
 def test_old_draft_is_purged_by_retention(monkeypatch, tmp_path):
@@ -341,6 +404,29 @@ def test_update_slide_fields_endpoint(monkeypatch, tmp_path):
                      headers=H("intruder")).status_code == 404
 
 
+def test_broken_diagram_edit_is_rejected_with_claims(monkeypatch, tmp_path):
+    """Ручная правка может сломать схему по смыслу — 400 обязан объяснить чем,
+    иначе панель показывает молчаливый «error», а слайд остаётся прежним."""
+    from htmlslides.diagrams import sample_spec
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        good = {"heading": "Как проходит заявка", "diagram": sample_spec("flowchart")}
+        assert c.put(f"/api/drafts/{sid}/slides/1/fields",
+                     json={"slide_type": "diagram", "fields": good},
+                     headers=H()).status_code == 200
+        broken = {"heading": "Как проходит заявка",
+                  "diagram": {**sample_spec("flowchart"), "edges": []}}
+        r = c.put(f"/api/drafts/{sid}/slides/1/fields",
+                  json={"slide_type": "diagram", "fields": broken}, headers=H())
+        assert r.status_code == 400
+        claims = r.json()["detail"]["errors"]
+        assert any("ребро" in x for x in claims), claims
+        # слайд не тронут: план всё ещё несёт принятую схему
+        r = c.get(f"/api/drafts/{sid}", headers=H())
+        assert r.json()["slides"][0]["fields"]["diagram"]["edges"]
+
+
 def test_build_guard_ignores_typed_only_deck(monkeypatch, tmp_path):
     # a deck whose only slide is typed has nothing to LLM-build → 400 guard.
     with _client(monkeypatch, tmp_path) as c:
@@ -369,6 +455,40 @@ def test_inline_html_edit_makes_slide_freeform(monkeypatch, tmp_path):
                      headers=H()).status_code == 400
         assert c.put(f"/api/drafts/{sid}/slides/9/html", json={"html": section},
                      headers=H()).status_code == 404
+
+
+def test_prev_layout_travels_with_the_slide(monkeypatch, tmp_path):
+    """«Вернуть макет» должен возвращать макет ЭТОГО слайда.
+
+    Снимок жил в sessionStorage по номеру позиции, поэтому после перестановки
+    кнопка на одном свободном слайде подставляла макет и текст другого — правка
+    подменялась чужим содержимым, и понять, откуда оно взялось, было невозможно.
+    Держим макет на самом слайде: он едет вместе с ним.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover",
+                                                  "content": {"title": "Обложка"}},
+               headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "quote",
+                                                  "content": {"quote": "Цитата"}},
+               headers=H())
+        for i in (1, 2):
+            c.put(f"/api/drafts/{sid}/slides/{i}/html",
+                  json={"html": f'<section class="slide"><p>правка {i}</p></section>'},
+                  headers=H())
+        plan = c.post(f"/api/drafts/{sid}/slides/2/move", json={"to": 1},
+                      headers=H()).json()
+        assert [s["prev_layout"]["template_id"] for s in plan["slides"]] \
+            == ["quote", "cover"]
+        assert plan["slides"][0]["prev_layout"]["content"] == {"quote": "Цитата"}
+
+        # повторная правка уже свободного слайда не затирает исходный макет —
+        # иначе «вернуть» было бы некуда
+        plan = c.put(f"/api/drafts/{sid}/slides/1/html",
+                     json={"html": '<section class="slide"><p>ещё</p></section>'},
+                     headers=H()).json()
+        assert plan["slides"][0]["prev_layout"]["template_id"] == "quote"
 
 
 # ── rebuild draft through the engine (mode=htmlpolish) ──────────────────────

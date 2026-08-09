@@ -25,11 +25,19 @@ _EMPTY_TITLE = "Новая презентация"
 _EMPTY_SUBTITLE = "Добавьте слайд или попросите ассистента в чате"
 
 
+def build_draft_html(plan: DraftPlan) -> str:
+    """Собрать HTML деки из черновика, ничего не записывая на диск.
+
+    Отдельно от записи, чтобы вызывающий мог убедиться, что дека собирается,
+    ДО того как сохранит план: иначе при поломке сборки план уезжает вперёд
+    деривата и они расходятся навсегда (см. _persist_draft в app.py)."""
+    theme = plan.theme if plan.theme in deck_edit.THEMES else "dark"
+    return assemble(_to_deck_plan(plan), theme=theme)
+
+
 def render_draft(session_id: str, plan: DraftPlan) -> Path:
     """Render the draft to deck.html (derived artifact) and return its path."""
-    theme = plan.theme if plan.theme in deck_edit.THEMES else "dark"
-    html = assemble(_to_deck_plan(plan), theme=theme)
-    return deck_edit.save_deck(session_id, html)
+    return deck_edit.save_deck(session_id, build_draft_html(plan))
 
 
 def _to_deck_plan(plan: DraftPlan) -> DeckPlan:

@@ -322,9 +322,12 @@ async def list_drafts(request: Request,
 
 @app.get("/api/templates")
 def list_templates(user=Depends(get_current_user)) -> JSONResponse:
-    """Slide-template catalog with slot contracts (drives the manual builder)."""
+    """Slide-template catalog with slot contracts (drives the manual builder).
+
+    Скрытые макеты приходят помеченными ``hidden``: пикер их отфильтровывает, а
+    формы и имена слайдов, которые поставил конвейер, строятся по ним же."""
     from webapp import templates_api
-    return JSONResponse(templates_api.catalog())
+    return JSONResponse(templates_api.catalog(include_hidden=True))
 
 
 # Правила покоя для статичного превью пикера: копия print-блока
@@ -363,6 +366,34 @@ def template_preview(template_id: str, static: bool = False,
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type=spec.type, template_id=template_id,
         content=templates_api.sample_content(template_id))])
+    html = assemble(plan)
+    if static:
+        html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return HTMLResponse(html)
+
+
+@app.get("/api/diagrams/catalog")
+def diagrams_catalog(user=Depends(get_current_user)) -> JSONResponse:
+    """Каталог типов диаграмм для «большого блока выбора» в редакторе:
+    все карточки, будущие волны — с available=false («скоро»)."""
+    from webapp import diagrams_api
+    return JSONResponse(diagrams_api.catalog())
+
+
+@app.get("/api/diagrams/{kind}/preview", response_class=HTMLResponse)
+def diagram_kind_preview(kind: str, static: bool = False,
+                         user=Depends(get_current_user)):
+    """Однослайдовая дека-превью конкретного ТИПА диаграммы (пикер типов).
+    Тот же движок, что и боевой рендер, — превью совпадает с результатом 1:1."""
+    from htmlslides.assembler import assemble
+    from htmlslides.models import DeckPlan, SlidePlan
+    from webapp import diagrams_api
+    try:
+        content = diagrams_api.preview_content(kind)
+    except KeyError:
+        raise HTTPException(404, "unknown or unimplemented diagram kind")
+    plan = DeckPlan(title="", slides=[SlidePlan(
+        index=1, type="content", template_id="diagram", content=content)])
     html = assemble(plan)
     if static:
         html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
@@ -444,10 +475,34 @@ async def delete_draft(session_id: str, request: Request,
     return JSONResponse({"ok": True})
 
 
+def _to_freeform(plan: draft.DraftPlan, index: int,
+                 section: str) -> draft.DraftPlan:
+    """Перевести слайд в свободный режим, запомнив макет, из которого ушли.
+
+    Запоминаем один раз — при ПЕРВОМ уходе с макета: дальше слайд правится уже
+    как свободный, и перезапись стёрла бы то единственное состояние, куда
+    осмысленно возвращаться."""
+    was = plan.slides[index - 1]
+    plan = draft.update_slide(plan, index, content={"html": section})
+    s = plan.slides[index - 1]
+    s.freeform = True
+    if not was.freeform:
+        s.prev_layout = {"template_id": was.template_id, "content": was.content}
+    return plan
+
+
 def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
-    """Save the plan and re-render the derived deck.html from it."""
+    """Save the plan and re-render the derived deck.html from it.
+
+    Сначала собираем HTML и только потом пишем оба файла. Порядок «сохранить
+    план, затем отрисовать» разводил plan.json и deck.html навсегда: сборка
+    падала (битый шаблон, неожиданный контент) — план уже уехал вперёд, ответ
+    500, а редактор дальше показывал СТАРУЮ деку, и при перезагрузке тоже.
+    Человек видел, что слайд «прыгнул обратно», тянул его второй раз — и
+    переставлял дважды. Дека — дериват плана, расходиться они не должны."""
+    html = draft_render.build_draft_html(plan)
     draft.save_plan(session_id, plan)
-    draft_render.render_draft(session_id, plan)
+    deck_edit.save_deck(session_id, html)
 
 
 @app.put("/api/drafts/{session_id}")
@@ -522,8 +577,7 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     section = chat_edit.nth_section(html, 1) or html  # accept a bare <section>
     if not (1 <= index <= len(plan.slides)):
         raise HTTPException(404, "slide not found")
-    plan = draft.update_slide(plan, index, content={"html": section})
-    plan.slides[index - 1].freeform = True
+    plan = _to_freeform(plan, index, section)
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
@@ -533,14 +587,19 @@ async def update_draft_slide_fields(session_id: str, index: int, request: Reques
                                     user=Depends(get_current_user)) -> JSONResponse:
     """Set a slide's typed structured content (slide_type + fields). Validated
     against the type contract; on success the slide renders deterministically
-    (no LLM). Invalid fields → 400 (the slide is left untouched)."""
+    (no LLM). Invalid fields → 400 (the slide is left untouched), with the list
+    of readable claims in the body: this endpoint answers a человек, and a bare
+    400 left the diagram panel with a silent «error» — правку отвергли, а что
+    именно сломано (узел без связей, одна дорожка вместо двух) не сказали."""
     from webapp import slide_types
     plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     slide_type = data.get("slide_type")
-    norm = slide_types.validate_fields(slide_type, data.get("fields"))
+    norm, claims = slide_types.validate_fields_verbose(slide_type,
+                                                       data.get("fields"))
     if norm is None:
-        raise HTTPException(400, "invalid slide_type or fields")
+        raise HTTPException(400, {"error": "invalid slide_type or fields",
+                                  "errors": claims})
     if not 1 <= index <= len(plan.slides):
         raise HTTPException(404, "slide not found")
     plan.slides[index - 1] = plan.slides[index - 1].model_copy(
@@ -648,6 +707,93 @@ async def build_draft(session_id: str, request: Request,
     return JSONResponse(draft.load_plan(session_id).model_dump())
 
 
+# ── «Стеклянная сборка» — прозрачный конвейер черновика (webapp/glass.py).
+# Клиент-управляемый степпинг вместо раннера: каждый /glass/step заполняет ОДИН
+# слайд (~15-60с, как /agent), лента растёт без SSE; сомнительные слайды ждут
+# /glass/answer, не блокируя остальные шаги.
+
+@app.post("/api/drafts/{session_id}/glass/start")
+async def glass_start(session_id: str, request: Request,
+                      file: UploadFile = File(...),
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Документ → прозрачный аутлайн (обложка + слайд на раздел с кандидатами
+    макета и вопросами ИИ). Быстрый: parse + лёгкий скоринг, без заполнения."""
+    from webapp import glass
+    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    if plan.slides:
+        raise HTTPException(409, "черновик не пуст — стеклянная сборка "
+                                 "начинается с чистой сессии")
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _ALLOWED["htmlnew"]:
+        raise HTTPException(400, f"bad file type {suffix}")
+    # Стеклянная сборка идёт мимо очереди раннера, а с ней и мимо его лимита
+    # MAX_PER_USER. Свой потолок считаем по недозаполненным аутлайнам автора:
+    # именно они держат вызовы модели и место на диске.
+    async with request.app.state.sessionmaker() as s:
+        drafts = await jobs_repo.list_drafts_for_user(
+            s, user.id, limit=glass.MAX_ACTIVE_PER_USER + 1)
+    busy = await run_in_threadpool(
+        glass.unfinished_outlines,
+        [j.session_id for j in drafts if j.session_id != session_id])
+    if busy >= glass.MAX_ACTIVE_PER_USER:
+        raise HTTPException(429, f"у вас {busy} незавершённых сборок — "
+                                 "дособерите или удалите их, прежде чем "
+                                 "начинать новую")
+    raw = await file.read()
+    from htmlslides.parsers.base import decode_smart as _decode_smart
+    if not raw.strip() or (suffix in (".md", ".txt")
+                           and not _decode_smart(raw).strip()):
+        raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
+    dest = session_dir(session_id) / f"input{suffix}"
+    dest.write_bytes(raw)
+    try:
+        out = await run_in_threadpool(glass.start_glass, session_id, dest)
+    except Exception as exc:  # noqa: BLE001 — parse/скоринг: причина пользователю
+        logger.exception("glass start failed (session %s)", session_id)
+        raise HTTPException(500, "не удалось разобрать документ — попробуйте "
+                                 "другой файл") from exc
+    return JSONResponse(out.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/glass/step")
+async def glass_step(session_id: str, request: Request,
+                     user=Depends(get_current_user)) -> JSONResponse:
+    """Один шаг: заполнить следующий слайд (needs_input пропускается)."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    return JSONResponse(await run_in_threadpool(glass.step_fill, session_id))
+
+
+@app.post("/api/drafts/{session_id}/glass/answer")
+async def glass_answer(session_id: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
+    """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или текст уточнения;
+    слайд доводится сразу."""
+    from htmlslides.library import SlotValidationError
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    data = await _json_body(request)
+    try:
+        index = int(data.get("index") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "index required")
+    template_id = (data.get("template_id") or "").strip() or None
+    message = str(data.get("message") or "")
+    try:
+        out = await run_in_threadpool(
+            lambda: glass.answer(session_id, index,
+                                 template_id=template_id, message=message))
+    except IndexError as exc:
+        raise HTTPException(400, str(exc))
+    except glass.AnswerNotExpected:
+        # Вкладка отстала: вопрос уже снят (отвечено с другой вкладки или слайд
+        # заполнился сам). 409, а не 400 — запрос корректный, изменилось состояние.
+        raise HTTPException(409, "вопрос уже закрыт — обновите страницу")
+    except SlotValidationError:
+        raise HTTPException(400, f"unknown template: {template_id}")
+    return JSONResponse(out)
+
+
 @app.get("/api/jobs/active")
 def active_jobs(user=Depends(get_current_user)) -> JSONResponse:
     """The current user's jobs still building, with live stage/pct."""
@@ -742,30 +888,38 @@ async def job_events(session_id: str, request: Request,
 
     await _owned_or_404(request, session_id, user)
     status = runner.status(session_id)
-    queue = runner.queue(session_id)
+    # Своя очередь на каждый стрим: вторая вкладка на той же сборке не должна
+    # разбирать события у первой (см. JobRunner.subscribe).
+    queue = runner.subscribe(session_id)
 
     async def gen():
-        if status is None and queue is None:
-            yield {"data": _json.dumps({"stage": "failed", "terminal": True,
-                                        "error": "Сессия не найдена — возможно, "
-                                                 "удалена по сроку хранения (24 часа)"})}
-            return
-        if status is not None:
-            yield {"data": _json.dumps(status)}
-            if status.get("terminal"):
+        try:
+            if status is None and queue is None:
+                yield {"data": _json.dumps({"stage": "failed", "terminal": True,
+                                            "error": "Сессия не найдена — возможно, "
+                                                     "удалена по сроку хранения (24 часа)"})}
                 return
-        if queue is None:
-            return
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue  # keep the connection alive, re-check disconnect
-            yield {"data": _json.dumps(event)}
-            if event.get("terminal"):
-                break
+            if status is not None:
+                yield {"data": _json.dumps(status)}
+                if status.get("terminal"):
+                    return
+            if queue is None:
+                return
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue  # keep the connection alive, re-check disconnect
+                yield {"data": _json.dumps(event)}
+                if event.get("terminal"):
+                    break
+        finally:
+            # Отписка обязательна: иначе очередь мёртвой вкладки копит события
+            # сессии до самого ретеншена.
+            if queue is not None:
+                runner.unsubscribe(session_id, queue)
 
     return EventSourceResponse(gen())
 
@@ -879,9 +1033,7 @@ async def post_chat(session_id: str, request: Request,
         if section:
             plan = draft.load_plan(session_id)
             if 1 <= slide_index <= len(plan.slides):
-                plan = draft.update_slide(plan, slide_index,
-                                          content={"html": section})
-                plan.slides[slide_index - 1].freeform = True
+                plan = _to_freeform(plan, slide_index, section)
                 draft.save_plan(session_id, plan)
     return JSONResponse({"ok": True})
 

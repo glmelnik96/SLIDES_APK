@@ -30,7 +30,8 @@
   <!-- Thumbnail rail -->
   <aside class="thumbs">
     <div class="thumbs-title">Слайды</div>
-    <button class="btn btn-ghost addslide hidden" id="addSlide">+ Добавить слайд</button>
+    <button class="btn btn-ghost addslide hidden" id="addSlide"
+            title="Новый слайд встанет сразу после текущего">+ Добавить слайд</button>
     <div id="thumbs"></div>
   </aside>
 
@@ -57,6 +58,27 @@
       <button class="rpanel-tab" id="tabFields" type="button">Содержание</button>
       <button class="rpanel-tab" id="tabChat" type="button">Правки в чате</button>
     </div>
+  <!-- Прозрачная сборка (?glass=1): статус степпера + вопросы ИИ с чипами-кандидатами -->
+  <aside class="glass hidden" id="glassPanel">
+    <div class="glass-head">
+      <h3>Прозрачная сборка</h3>
+      <p class="glass-hint">ИИ заполняет слайды по одному — вы видите каждый сразу.
+        Там, где выбор макета неочевиден, он спрашивает вас: ответьте сейчас,
+        позже или доверьте решение ИИ.</p>
+      <p class="glass-status" id="glassStatus">Начинаю…</p>
+      <div class="glass-bar"><i id="glassBarFill"></i></div>
+      <p class="glass-slow hidden" id="glassSlow" role="status"></p>
+    </div>
+    <div class="glass-body">
+      <p class="glass-empty hidden" id="glassEmpty">Вопросов пока нет — ИИ уверен
+        в макетах. Слайды с вопросом помечены «?» в ленте слева.</p>
+      <div id="glassQuestions"></div>
+    </div>
+    <div class="glass-foot hidden" id="glassDone">
+      <button class="btn hidden" id="glassRetry" type="button">Продолжить сборку</button>
+      <button class="btn btn-accent" id="glassFinish" type="button">Перейти к редактированию</button>
+    </div>
+  </aside>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
     <div class="builder-head">
@@ -97,6 +119,12 @@
   </div><!-- /.editor-main -->
 </div>
 
+<!-- Отмена удаления слайда: Ctrl+Z есть, но о нём не догадаться — даём кнопку -->
+<div class="undo-toast hidden" id="undoToast" role="status" aria-live="polite">
+  <span class="undo-toast__text"></span>
+  <button class="btn btn-ghost btn-sm" type="button" id="undoToastBtn">Вернуть</button>
+</div>
+
 <!-- Template picker (manual mode) -->
 <div class="picker hidden" id="picker">
   <div class="picker-card">
@@ -108,7 +136,20 @@
   </div>
 </div>
 
+<!-- Пикер типов схем (второй шаг после мастера «Схема») -->
+<div class="picker hidden" id="dgmPicker">
+  <div class="picker-card">
+    <div class="picker-head">
+      <h3>Выберите тип схемы</h3>
+      <button class="btn btn-ghost btn-sm" id="dgmPickerClose" title="Закрыть" aria-label="Закрыть выбор типа схемы">&#10005;</button>
+    </div>
+    <div class="picker-grid" id="dgmPickerGrid"></div>
+  </div>
+</div>
+
 <script src="/static/errtext.js"></script>
+<script src="/static/slotmap.js"></script>
+<script src="/static/diagram_editor.js"></script>
 <script src="/static/editor.js"></script>
 </body>
 </html>

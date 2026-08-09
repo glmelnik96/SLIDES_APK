@@ -8,6 +8,7 @@ from html import escape as html_escape
 from importlib import resources
 
 from jinja2 import Environment, FunctionLoader, select_autoescape
+from markupsafe import Markup
 
 from .fonts import fonts_css
 from .library import SlotValidationError, TemplateLibrary
@@ -37,6 +38,9 @@ _PAGE = """<!DOCTYPE html>
 <div class="deck-progress"></div>
 <script>
 {deck_js}
+</script>
+<script>
+{diagram_js}
 </script>
 </body>
 </html>
@@ -140,6 +144,46 @@ def _glue_nbsp(value):
     return value
 
 
+def _asdata(value) -> Markup:
+    """Машиночитаемый payload в data-атрибуте (JSON диаграммы): экранируем сами и
+    возвращаем Markup — так значение минует finalize-типографику (_glue_nbsp берёт
+    только `type is str`) и не экранируется повторно autoescape'ом.
+
+    Типографика в JSON — это порча данных, а не косметика. «Задание на
+    комплектацию» приезжало в движок как «Задание на\u00a0комплектацию»: Chromium
+    такой токен (15 символов) не переносит, а diagram.js мерил ширину по /\\s+/,
+    где \\s ловит и NBSP, — видел два коротких слова, брал крупный кегль, обрезку
+    не применял, и подпись молча срезалась overflow:hidden. Вдобавок редактор
+    читает data-diagram обратно и сохраняет NBSP в план."""
+    return Markup(html_escape(str(value), quote=True))
+
+
+def _text_w(value, size: float = 30.0) -> float:
+    """Оценка ширины строки в px при данном кегле — для SVG-шаблонов, где текст
+    надо уместить в viewBox, а <text> не умеет мериться на сервере.
+
+    SVG режет всё, что вышло за viewBox, МОЛЧА: подпись «1 200 млрд» у самого
+    длинного бара превращалась в «1 200 мл», и это читается как испорченные
+    данные, а не как обрезка. Поэтому оценка сознательно завышена — лучше
+    зря отдать бару 30px, чем срезать подпись.
+
+    Замер в Chromium (шрифт деки, font-size 30, Medium), px на символ:
+    цифры 17.2, строчная кириллица 17.5, заглавные 22–31 (Ш/Щ/Ю/Ж/М — худшие),
+    пробел ~8. Берём 31 на заглавную, 19 на остальное, 9 на пробел — верхняя
+    граница по каждому классу. Чистая функция → вёрстка воспроизводима.
+    """
+    s = str(value or "")
+    w = 0.0
+    for ch in s:
+        if ch.isspace():
+            w += 9.0
+        elif ch.isupper():
+            w += 31.0
+        else:
+            w += 19.0
+    return w * size / 30.0
+
+
 def _jinja_env() -> Environment:
     env = Environment(
         loader=FunctionLoader(_load_slide_template),
@@ -147,6 +191,8 @@ def _jinja_env() -> Environment:
         finalize=_glue_nbsp,
     )
     env.filters["num"] = _num
+    env.filters["textw"] = _text_w
+    env.filters["asdata"] = _asdata
     env.globals["asset"] = _asset_data_uri
     return env
 
@@ -220,5 +266,6 @@ def assemble(plan: DeckPlan, *, theme: str = "dark") -> str:
         deck_css=_read_pkg("engine/deck.css"),
         motion_css=_read_pkg("engine/motion.css"),
         deck_js=_read_pkg("engine/deck.js"),
+        diagram_js=_read_pkg("engine/diagram.js"),
         slides=slides_html,
     )

@@ -59,7 +59,7 @@ def test_templatespec_display_name_defaults_empty():
 
 def test_library_every_template_has_display_name():
     lib = TemplateLibrary.load()
-    assert len(lib.templates) == 25
+    assert len(lib.templates) == 26  # 25 + diagram («Схема»)
     for t in lib.templates:
         assert t.display_name, f"{t.id}: пустой display_name"
 
@@ -113,3 +113,14 @@ def test_catalog_slot_dict_emits_label_and_hint_only_when_set():
     v1 = by_id["stacked-bar"]["slots"]["bars"]["item_slots"]["v1"]
     assert v1["label"] == "Доля 1, %"
     assert v1["hint"] == "По порядку легенды"
+
+
+def test_catalog_marks_slots_that_render_filler_when_empty():
+    """Пустой текстовый слот рендерится примером — редактор по флагу предупреждает
+    перед экспортом. Слоты со своим шаблонным дефолтом не помечаем."""
+    by_id = {c["id"]: c for c in templates_api.catalog()}
+    assert by_id["cover"]["slots"]["subtitle"]["filler"] is True
+    assert "filler" not in by_id["cover-image"]["slots"]["image"]   # дефолт в шаблоне
+    assert "filler" not in by_id["bar-chart"]["slots"]["bars"]      # список — не рыба
+    display = by_id["bar-chart"]["slots"]["bars"]["item_slots"]["display"]
+    assert "filler" not in display                                 # падает на value

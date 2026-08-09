@@ -167,6 +167,64 @@
         }
       }
     }
+    autofitStatsHeight();
+  }
+
+  /* Тот же слайд по вертикали: блок рядов начинается на y=328, слайд кончается
+     на 1080 — бюджет ~692px. Два ряда по 4 метрики с пояснениями на слотовом
+     капе (label 40, caption 160 симв.) занимают 887px, то есть 200px уезжают
+     ЗА нижний край, а .slide{overflow:hidden} срезает их молча: человек видит
+     ряд без половины пояснений и не понимает, что текст вообще был.
+     Ужимаем подписи и пояснения всех ячеек блока до кегля, при котором ряды
+     влезают (цифру-героя не трогаем — она и есть смысл слайда). Пол
+     читаемости 20px для подписи (база 30) и пропорциональные ~15 для
+     пояснения (база 22). */
+  var _SR_MIN_FS = 20, _SR_BOTTOM = 60;
+  function autofitStatsHeight() {
+    var blocks = document.querySelectorAll(".sr-rows");
+    for (var b = 0; b < blocks.length; b++) {
+      var box = blocks[b];
+      var slide = box.closest ? box.closest(".slide") : null;
+      if (!slide || !slide.clientHeight) continue;
+      var labels = box.querySelectorAll(".sr-label");
+      var caps = box.querySelectorAll(".sr-caption");
+      var i, fs;
+      for (i = 0; i < labels.length; i++) labels[i].style.fontSize = "";   // сброс к базе
+      for (i = 0; i < caps.length; i++) caps[i].style.fontSize = "";
+      var budget = slide.clientHeight - _SR_BOTTOM - box.offsetTop;
+      for (fs = 30; fs > _SR_MIN_FS; fs--) {
+        if (box.offsetHeight <= budget) break;
+        for (i = 0; i < labels.length; i++) labels[i].style.fontSize = (fs - 1) + "px";
+        for (i = 0; i < caps.length; i++) caps[i].style.fontSize = ((fs - 1) * 22 / 30) + "px";
+      }
+    }
+  }
+
+  /* Плашки grid-2x2 / frames-grid: зона 659px делится между рядами, и текст,
+     который в плашку не влез, просто срезался overflow:hidden — БЕЗ всякого
+     признака, что часть текста не показана. А влезть легко не может: 2 ряда по
+     4 плашки с текстом на слотовом капе (140 симв.) уже теряли 84px, 3×5 —
+     325px, то есть больше половины. Ужимаем кегль текста плашек до того,
+     который вмещает САМУЮ плотную плашку сетки, и ставим его всем плашкам —
+     как в autofitStats: у дизайнера плашки одного кегля. Пол читаемости 20px
+     (база 30): ниже текст перестаёт читаться с экрана, лучше подрезать. */
+  var _CELL_MIN_FS = 20;
+  function autofitCells() {
+    var grids = document.querySelectorAll(".g22-grid, .fg-grid");
+    for (var g = 0; g < grids.length; g++) {
+      var cells = grids[g].querySelectorAll(".g22-cell, .fg-frame");
+      var texts = grids[g].querySelectorAll(".g22-text, .fg-text");
+      var i, fs;
+      for (i = 0; i < texts.length; i++) texts[i].style.fontSize = "";   // сброс к базе
+      for (fs = 30; fs > _CELL_MIN_FS; fs--) {
+        var fits = true;
+        for (i = 0; i < cells.length; i++) {
+          if (cells[i].scrollHeight > cells[i].clientHeight + 1) { fits = false; break; }
+        }
+        if (fits) break;
+        for (i = 0; i < texts.length; i++) texts[i].style.fontSize = (fs - 1) + "px";
+      }
+    }
   }
 
   function init() {
@@ -191,7 +249,10 @@
     rescale();
     autofitExact();
     autofitStats();
-    window.addEventListener("load", function () { autofitExact(); autofitStats(); });   // пересчёт после подгрузки шрифтов/картинок
+    autofitCells();
+    window.addEventListener("load", function () {   // пересчёт после подгрузки шрифтов/картинок
+      autofitExact(); autofitStats(); autofitCells();
+    });
     window.addEventListener("resize", rescale);
     document.addEventListener("visibilitychange", rescale);
 

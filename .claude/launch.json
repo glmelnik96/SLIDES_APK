@@ -10,8 +10,8 @@
     {
       "name": "slides-dev",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["scripts/devserver.py", "--port", "8020"],
-      "port": 8020
+      "runtimeArgs": ["scripts/devserver.py", "--port", "8021"],
+      "port": 8021
     }
   ]
 }
