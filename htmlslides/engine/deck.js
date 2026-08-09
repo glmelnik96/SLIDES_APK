@@ -169,6 +169,33 @@
     }
   }
 
+  /* Плашки grid-2x2 / frames-grid: зона 659px делится между рядами, и текст,
+     который в плашку не влез, просто срезался overflow:hidden — БЕЗ всякого
+     признака, что часть текста не показана. А влезть легко не может: 2 ряда по
+     4 плашки с текстом на слотовом капе (140 симв.) уже теряли 84px, 3×5 —
+     325px, то есть больше половины. Ужимаем кегль текста плашек до того,
+     который вмещает САМУЮ плотную плашку сетки, и ставим его всем плашкам —
+     как в autofitStats: у дизайнера плашки одного кегля. Пол читаемости 20px
+     (база 30): ниже текст перестаёт читаться с экрана, лучше подрезать. */
+  var _CELL_MIN_FS = 20;
+  function autofitCells() {
+    var grids = document.querySelectorAll(".g22-grid, .fg-grid");
+    for (var g = 0; g < grids.length; g++) {
+      var cells = grids[g].querySelectorAll(".g22-cell, .fg-frame");
+      var texts = grids[g].querySelectorAll(".g22-text, .fg-text");
+      var i, fs;
+      for (i = 0; i < texts.length; i++) texts[i].style.fontSize = "";   // сброс к базе
+      for (fs = 30; fs > _CELL_MIN_FS; fs--) {
+        var fits = true;
+        for (i = 0; i < cells.length; i++) {
+          if (cells[i].scrollHeight > cells[i].clientHeight + 1) { fits = false; break; }
+        }
+        if (fits) break;
+        for (i = 0; i < texts.length; i++) texts[i].style.fontSize = (fs - 1) + "px";
+      }
+    }
+  }
+
   function init() {
     slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
     if (!slides.length) return;
@@ -191,7 +218,10 @@
     rescale();
     autofitExact();
     autofitStats();
-    window.addEventListener("load", function () { autofitExact(); autofitStats(); });   // пересчёт после подгрузки шрифтов/картинок
+    autofitCells();
+    window.addEventListener("load", function () {   // пересчёт после подгрузки шрифтов/картинок
+      autofitExact(); autofitStats(); autofitCells();
+    });
     window.addEventListener("resize", rescale);
     document.addEventListener("visibilitychange", rescale);
 
