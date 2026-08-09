@@ -81,6 +81,45 @@ def test_intent_move(monkeypatch, tmp_path):
     assert [s.template_id for s in draft.load_plan("s").slides] == ["cards-6", "cover"]
 
 
+def test_rewrite_of_a_diagram_sends_the_current_schema(monkeypatch, tmp_path):
+    """Схема правится в панели узлов (PUT /fields), и content слайда при этом
+    остаётся с момента заполнения. В чат уезжал именно он — просьба «упрости»
+    молча откатывала всё, что автор наменял руками."""
+    from webapp import slide_types
+    import htmlslides.pipeline.filler as filler
+    fields = slide_types.validate_fields("diagram", {
+        "heading": "Как проходит заявка", "subtitle": "",
+        "diagram": {"kind": "process", "nodes": [
+            {"id": "a", "label": "Заявка"}, {"id": "b", "label": "Запуск"}],
+            "offsets": {"a": {"dx": 40, "dy": -20}}}})
+    _seed(tmp_path, monkeypatch, slides=[draft.DraftSlide(
+        template_id="diagram", slide_type="diagram", fields=fields,
+        content={"title": "Старое", "subtitle": "",
+                 "diagram": '{"kind":"process","nodes":['
+                            '{"id":"z","label":"Позавчерашний узел"}]}'})])
+    seen = {}
+
+    def _spy(client, library, sp, *, deck_title="", extra=""):
+        seen["content"] = dict(sp.content)
+        seen["template_id"] = sp.template_id
+        return sp.model_copy(update={"content": {
+            "title": "Новое", "subtitle": "",
+            "diagram": '{"kind":"process","nodes":['
+                       '{"id":"a","label":"Заявка"}]}'}})
+    monkeypatch.setattr(filler, "fill_slide", _spy)
+
+    res = chat_agent.run_turn("s", "упрости схему", 1,
+                              client=FakeClient({"action": "rewrite"}))
+    assert res.changed
+    assert seen["template_id"] == "diagram"
+    assert "Позавчерашний узел" not in seen["content"]["diagram"]
+    assert '"a"' in seen["content"]["diagram"]      # схема из панели, не из content
+    assert seen["content"]["title"] == "Как проходит заявка"
+    s = draft.load_plan("s").slides[0]
+    assert s.fields["heading"] == "Новое"           # правка доехала до typed-полей
+    assert s.fields["diagram"]["nodes"][0]["id"] == "a"
+
+
 def test_intent_plan_is_conversational(monkeypatch, tmp_path):
     _seed(tmp_path, monkeypatch)
     c = FakeClient({"action": "plan"}, text="Предлагаю 5 слайдов: …")

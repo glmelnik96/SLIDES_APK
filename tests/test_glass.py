@@ -279,6 +279,61 @@ def test_answer_chip_and_message_refill(monkeypatch, tmp_path):
     assert seen["template_id"] == "timeline"
 
 
+def _diagram_fields():
+    from webapp import slide_types
+    return slide_types.validate_fields("diagram", {
+        "heading": "Как проходит заявка", "subtitle": "",
+        "diagram": {"kind": "process", "nodes": [
+            {"id": "a", "label": "Заявка"}, {"id": "b", "label": "Запуск"}]}})
+
+
+def test_answer_away_from_a_diagram_drops_its_typed_fields(monkeypatch, tmp_path):
+    """Ответ «нет, это не схема» должен менять СЛАЙД, а не только template_id.
+
+    draft_render рисует typed-слайд из slide_type+fields и игнорирует
+    template_id — уцелевшие поля прежней схемы оставляли на слайде ту же
+    диаграмму: автор выбирал другой макет, платил за перезаполнение и не видел
+    никакой разницы."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    plan = _outline_plan()
+    plan.slides[1] = plan.slides[1].model_copy(update={
+        "template_id": "diagram", "slide_type": "diagram",
+        "fields": _diagram_fields(), "candidates": ["diagram", "stats-row"]})
+    draft.save_plan("s5d", plan)
+
+    glass.answer("s5d", 2, template_id="stats-row", client=FakeClient([]))
+    s = draft.load_plan("s5d").slides[1]
+    assert s.template_id == "stats-row"
+    assert s.slide_type is None and s.fields is None
+    from webapp.paths import session_dir
+    # не по классу и не по атрибуту: и CSS деки, и инлайн-движок поминают их
+    # всегда — ищем сам хост, который ставит шаблон diagram.html
+    assert '<div class="diagram-host"' not in (
+        session_dir("s5d") / "deck.html").read_text("utf-8")
+
+
+def test_failed_fill_hides_the_diagram_it_replaced(monkeypatch, tmp_path):
+    """Аварийный blank не должен прятаться за прежней схемой."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+
+    def _boom(client, library, sp, **kw):
+        raise filler.FillError("slide 2: сеть упала")
+    monkeypatch.setattr(filler, "fill_slide", _boom)
+    plan = _outline_plan()
+    plan.slides[1] = plan.slides[1].model_copy(update={
+        "template_id": "diagram", "slide_type": "diagram",
+        "fields": _diagram_fields()})
+    draft.save_plan("s5e", plan)
+
+    glass.answer("s5e", 2, message="перезаполни", client=FakeClient([]))
+    s = draft.load_plan("s5e").slides[1]
+    assert s.template_id == "blank" and s.status == "failed"
+    assert s.slide_type is None and s.fields is None
+
+
 def test_answer_rejects_bad_index_and_unknown_template(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     draft.save_plan("s6", _outline_plan())

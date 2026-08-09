@@ -333,9 +333,13 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
         slide = fresh.slides[index - 1]
         # Схему переводим в typed-слайд: иначе панель узлов и drag редактора её
         # не видят (они работают по slide_type+fields), и автор правил бы JSON.
+        # Присваиваем ВСЕГДА, а не только при удачном разборе: typed-поля старше
+        # template_id — draft_render рисует слайд из них и игнорирует макет. Ответ
+        # «нет, это не схема, а сравнение 2×2» менял template_id, перезаполнял
+        # содержимое — и на слайде оставалась прежняя схема. То же и на аварийном
+        # blank: заглушка пряталась за диаграммой, которой в плане уже нет.
         typed = slide_types.typed_from_content(out_tid, content)
-        if typed:
-            slide.slide_type, slide.fields = typed
+        slide.slide_type, slide.fields = typed if typed else (None, None)
         slide.filled = True
         slide.status = "failed" if failed else None
         slide.question = None

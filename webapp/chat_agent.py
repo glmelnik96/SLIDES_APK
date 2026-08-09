@@ -328,18 +328,30 @@ def run_turn(session_id: str, message: str, current_index: int,
             library = TemplateLibrary.load()
             cur = plan.slides[current_index - 1]
             tid = cur.template_id or "blank"
+            base = cur.content or {}
+            # У typed-слайда (схема) истина — в fields, а content остаётся с
+            # момента последнего заполнения: панель узлов пишет только fields.
+            # Без пересчёта в чат уезжала ПРЕЖНЯЯ схема, и просьба «упрости»
+            # молча откатывала всё, что автор наменял руками на слайде.
+            if cur.slide_type and cur.fields:
+                typed_tid, mapped = slide_types.map_typed(cur.slide_type,
+                                                          cur.fields)
+                if typed_tid:
+                    tid, base = typed_tid, mapped
             spec = library.get(tid)
             sp = SlidePlan(index=current_index, type=spec.type, template_id=tid,
-                           content={"brief": intent.topic or message,
-                                    **(cur.content or {})})
+                           content={"brief": intent.topic or message, **base})
             try:
                 sp = fill_slide(client, library, sp, deck_title=plan.title,
                                 extra=f"Указание пользователя: {intent.topic or message}")
-                plan = draft.update_slide(plan, current_index, content=sp.content)
+                plan = draft.update_slide(plan, current_index,
+                                          content=sp.content, template_id=tid)
+                # Присваиваем ВСЕГДА: typed-поля старше template_id (draft_render
+                # рисует слайд из них), поэтому уцелевшие поля прежней схемы
+                # показывали бы её вместо только что переписанного содержимого.
                 typed = slide_types.typed_from_content(tid, sp.content)
-                if typed:
-                    cur_slide = plan.slides[current_index - 1]
-                    cur_slide.slide_type, cur_slide.fields = typed
+                cur_slide = plan.slides[current_index - 1]
+                cur_slide.slide_type, cur_slide.fields = typed or (None, None)
                 draft.save_plan(session_id, plan)
                 result = AgentResult(reply=f"Обновил слайд {current_index}.",
                                      changed=True, go_to=current_index)
