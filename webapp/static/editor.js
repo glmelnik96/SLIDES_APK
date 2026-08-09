@@ -895,10 +895,24 @@ function _dialog(text, buttons) {
       resolve(val);
     }
     function onKey(e) { if (e.key === "Escape") close(cancelVal); }
+    if (buttons.some((b) => b.desc)) row.classList.add("dialog-actions--modes");
     buttons.forEach((b, idx) => {
       const btn = document.createElement("button");
       btn.className = b.className;
-      btn.textContent = b.label;
+      if (b.cancel) btn.classList.add("dialog-cancel");
+      // Кнопка-карточка: название + что произойдёт. Способы не «ок и отмена», а
+      // равнозначная пара — без пояснения выбор делался бы наугад по глаголу.
+      if (b.desc) {
+        const name = document.createElement("span");
+        name.className = "mode-card__name";
+        name.textContent = b.label;
+        const desc = document.createElement("span");
+        desc.className = "mode-card__desc";
+        desc.textContent = b.desc;
+        btn.append(name, desc);
+      } else {
+        btn.textContent = b.label;
+      }
       btn.onclick = () => close(b.value);
       row.appendChild(btn);
       if (idx === 0) setTimeout(() => btn.focus(), 0);
@@ -918,6 +932,14 @@ function confirmDialog(text, okLabel, cancelLabel) {
 }
 function alertDialog(text) {
   return _dialog(text, [{ label: "Понятно", className: "btn", value: true }]);
+}
+// Выбор способа: несколько равнозначных карточек + отмена. options —
+// [{label, desc, value}]; возвращает value выбранной или null.
+function chooseDialog(text, options) {
+  return _dialog(text, options.map((o) => ({
+    label: o.label, desc: o.desc, value: o.value, className: "btn mode-card",
+  })).concat([{ label: "Отмена", className: "btn btn-ghost", value: null,
+                cancel: true }]));
 }
 
 /* ---- chat ---- */
@@ -1302,7 +1324,7 @@ function renderBuilderForm() {
   tplBox.innerHTML =
     `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
     `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
-  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind),
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplateAsked(tid, kind),
                                                { id: slide.template_id });
 
   form.innerHTML = "";
@@ -1616,7 +1638,7 @@ function renderDiagramPanel(slide) {
     const nameEl = tplBox.querySelector(".tpl-name");
     if (t && nameEl) nameEl.textContent = `Схема: ${t.display_name}`;
   });
-  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplate(tid, kind),
+  byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplateAsked(tid, kind),
                                                { id: "diagram", kind: spec.kind });
   byId("changeDgmKind").onclick = () => openDiagramPicker(async (kind) => {
     if (kind === spec.kind) return;
@@ -2503,6 +2525,113 @@ async function changeTemplate(templateId, dgmKind) {
   }
   await reloadDraft(current);
   showUndoToast("Макет слайда изменён");
+}
+
+// Спрашиваем способ ПОСЛЕ выбора макета: до него вопрос был бы про
+// несуществующий макет, а модификатором у кнопки («перезаполнять ИИ» галочкой)
+// второй способ читался бы настройкой первого — ровно та ошибка, из-за которой
+// пошаговая сборка на главной пряталась чекбоксом.
+async function changeTemplateAsked(templateId, dgmKind) {
+  // Пока идёт перезаполнение, менять макет нельзя — и молчать об этом тоже:
+  // закрытый оверлеем кадр не объясняет, почему выбор в пикере ничего не сделал.
+  if (refillBusy) {
+    await alertDialog("Слайд ещё перезаполняется — дождитесь окончания.");
+    return;
+  }
+  const slide = draftPlan.slides[current];
+  const brief = ((slide && slide.brief) || "").trim();
+  const ctx = brief || (slide ? slideTextLines(slide).join(" ") : "");
+  // Перезаполнять нечем (пустой слайд) — выбора нет, идёт обычный перенос.
+  if (!ctx) return changeTemplate(templateId, dgmKind);
+  const tpl = tplOf(templateId);
+  // Для схемы автор выбирал ДВА шага — макет и тип; называть в вопросе только
+  // «Схема» значит подтверждать не тот выбор, который он сделал последним.
+  const dgm = dgmKind ? dgmType(dgmKind) : null;
+  const name = ((tpl && tpl.display_name) || templateId)
+    + (dgm ? `: ${dgm.display_name}` : "");
+  const mode = await chooseDialog(
+    `Новый макет — «${name}». Что сделать с содержимым слайда?`, [
+      // Перенос в схему — не перенос: слоты макета и узлы схемы несопоставимы,
+      // и механическая пересадка ставит ПРИМЕР со старым заголовком. Обещать
+      // «текст переедет как есть» тут нельзя — это прямая неправда.
+      { label: dgmKind ? "Поставить пример схемы" : "Перенести текст",
+        value: "carry",
+        desc: dgmKind
+          ? "Мгновенно: заголовок сохранится, схема встанет образцом — подписи "
+            + "узлов и связи вы впишете сами."
+          : "Мгновенно: текст переезжает в новый макет как есть. Что в него не "
+            + "помещается, остаётся в черновике и вернётся при обратной смене." },
+      { label: "Перезаполнить по документу", value: "refill",
+        desc: (brief ? "ИИ перечитает исходный фрагмент документа"
+                     : "ИИ перечитает текст слайда")
+          + (dgmKind
+            ? " и построит схему этого типа по нему — с вашими этапами, а не "
+              + "образцовыми."
+            : " и напишет содержимое заново — под то, что новый макет умеет "
+              + "показать.")
+          + " Занимает до минуты." },
+    ]);
+  if (!mode) return;
+  if (mode === "carry") return changeTemplate(templateId, dgmKind);
+  return refillTemplate(templateId, dgmKind);
+}
+
+// Смена макета руками ИИ: содержимое пишется заново под новый макет по тому же
+// фрагменту документа, что и на сборке. Долгая операция (до минуты) — закрываем
+// кадр оверлеем со счётчиком: без него «нажал и ничего не происходит».
+let refillBusy = false;
+async function refillTemplate(templateId, dgmKind) {
+  // Второй запуск поверх идущего: панели под оверлеем остаются кликабельными, а
+  // два перезаполнения одного слайда — это гонка за то, чей ответ ляжет последним.
+  if (refillBusy) return;
+  refillBusy = true;
+  clearTimeout(putTimer); putTimer = null;  // форму старого макета не сейвим
+  // Слайд запоминаем: за минуту автор успевает уйти на другой, и возврат к
+  // «current» показал бы результат не на том слайде, который он менял.
+  const idx = current;
+  const noteWas = buildNote ? buildNote.textContent : "";
+  const t0 = Date.now();
+  showOverlay(true);
+  if (buildTitle) buildTitle.textContent = "Перезаполняю слайд…";
+  if (buildSub) {
+    buildSub.textContent = "Пишу содержимое заново под новый макет.";
+  }
+  const tick = setInterval(() => {
+    if (buildNote) {
+      buildNote.textContent = `${Math.round((Date.now() - t0) / 1000)} с — `
+        + "не закрывайте страницу.";
+    }
+  }, 1000);
+  let r;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}/slides/${idx + 1}/refill`), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template_id: templateId, kind: dgmKind || "" }),
+    });
+  } catch (_) { r = null; }
+  clearInterval(tick);
+  refillBusy = false;
+  showOverlay(false);
+  if (buildNote) buildNote.textContent = noteWas;
+  if (!r || !r.ok) {
+    setSaveStatus("error");
+    let detail = "";
+    if (r) { try { detail = (await r.json()).detail || ""; } catch (_) { /* не JSON */ } }
+    await alertDialog(detail || "Не удалось перезаполнить слайд — попробуйте ещё "
+      + "раз или смените макет с переносом текста.");
+    return;
+  }
+  pushUndo();
+  await reloadDraft(idx);
+  // Осечка модели вернула заглушку: молчать нельзя — со стороны автора это
+  // «выбрал макет, применился blank». Причину сервер кладёт в question слайда.
+  const s = draftPlan.slides[idx];
+  if (s && s.status === "failed") {
+    await alertDialog(s.question || "Не удалось заполнить макет — на слайде "
+      + "заглушка с темой в заголовке.");
+    return;
+  }
+  showUndoToast("Слайд перезаполнен под новый макет");
 }
 
 // К§4 — общий обработчик добавления слайда: кнопка рейла (#addSlide), кнопка пустой

@@ -15,6 +15,7 @@ filler.fill_slide, что у чёрного ящика и чат-агента. D
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterable
@@ -102,6 +103,10 @@ _GLASS_SYSTEM = """\
 
 class AnswerNotExpected(Exception):
     """Ответ пришёл слайду, который его не ждёт (устаревшая вкладка, повтор)."""
+
+
+class NoContext(Exception):
+    """Перезаполнять нечем: у слайда нет ни брифа, ни собственного текста."""
 
 
 class Candidate(BaseModel):
@@ -313,13 +318,19 @@ def _blocking_index(plan: draft.DraftPlan) -> int | None:
 
 
 def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
-              client: Any, *, kind: str = "") -> draft.DraftPlan:
+              client: Any, *, kind: str = "",
+              context: str | None = None) -> draft.DraftPlan:
     """Заполнить ОДИН слайд через тот же fill_slide, что и чёрный ящик.
 
     Осечка модели не роняет шаг: слайд деградирует на blank с темой в заголовке
     (ровно как в чёрном ящике) и помечается failed. Пустой content оставлять
     нельзя — draft_render дорисовывает пустые слоты образцами из каталога, и
-    автор принял бы выдуманную схему за свою."""
+    автор принял бы выдуманную схему за свою.
+
+    ``context`` — чем заполнять, если это не brief слайда (перезаполнение слайда,
+    добавленного руками: там брифа нет, а текст на слайде есть). В план не
+    попадает: brief — это «фрагмент исходного документа», и подменять его текстом
+    самого слайда значит соврать в панели контекста."""
     from htmlslides.library import TemplateLibrary
     from htmlslides.models import SlidePlan
     from htmlslides.pipeline.filler import _fallback_title, fill_slide
@@ -327,7 +338,8 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
     library = TemplateLibrary.load()
     s = plan.slides[index - 1]
     tid = s.template_id or "blank"
-    brief = s.brief
+    plan_brief = s.brief             # чем слайд помечен в плане — для сверки ниже
+    brief = plan_brief if context is None else context
     sp = SlidePlan(index=index, type=library.get(tid).type, template_id=tid,
                    content={"brief": brief})
     failed = False
@@ -346,7 +358,7 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
         fresh = draft.load_plan(session_id)
         if not 1 <= index <= len(fresh.slides):
             return fresh                      # слайд удалили, пока мы работали
-        if fresh.slides[index - 1].brief != brief:
+        if fresh.slides[index - 1].brief != plan_brief:
             return fresh                      # автор уточнил слайд — его ответ доведёт сам
         fresh = draft.update_slide(fresh, index, content=content,
                                    template_id=out_tid)
@@ -462,4 +474,77 @@ def answer(session_id: str, index: int, *, template_id: str | None = None,
         slide.filled = False                      # перезаполняем с учётом ответа
         draft.save_plan(session_id, plan)
     plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind)
+    return _result(plan, index, _next_index(plan) is None)
+
+
+_TAGS = re.compile(r"<[^>]+>")
+
+
+def _slide_context(slide: draft.DraftSlide) -> str:
+    """Текст самого слайда — контекст для перезаполнения слайда без брифа.
+
+    Слайд, добавленный руками, исходного фрагмента документа не имеет, и без
+    этого «перезаполнить по документу» на нём просто не работало бы: автор
+    выбрал бы макет и получил пустоту вместо своего текста."""
+    out: list[str] = []
+
+    def walk(v: Any) -> None:
+        if isinstance(v, str):
+            s = v.strip()
+            if not s or s.startswith("data:"):
+                return                       # картинка — не текст
+            if s.startswith("<"):
+                s = _TAGS.sub(" ", s)        # свободный слайд: разметка модели
+            s = " ".join(s.split())
+            if s:
+                out.append(s)
+        elif isinstance(v, (list, tuple)):
+            for x in v:
+                walk(x)
+        elif isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+
+    # fields старше content: у типизированного слайда (схема) content может быть
+    # пустым, а поля — заполненными.
+    walk(slide.fields if slide.fields else slide.content)
+    return "\n".join(out)
+
+
+def refill_slide(session_id: str, index: int, *, template_id: str | None = None,
+                 kind: str | None = None, client: Any | None = None) -> dict:
+    """Сменить макет готового слайда и заново заполнить его под новый макет.
+
+    Механическая смена макета (в редакторе) переносит текст слот-в-слот: три
+    пункта списка так и остаются тремя пунктами, даже если новый макет — про
+    цифры или схему. Здесь макет меняет ИИ: он перечитывает исходный фрагмент
+    документа и пишет содержимое заново — под то, что новый макет умеет показать.
+
+    В отличие от ``answer`` статус слайда не проверяется: это обычное действие
+    автора над готовым слайдом, а не ответ на вопрос сборки."""
+    from htmlslides.diagrams import AVAILABLE_KINDS
+    from htmlslides.library import TemplateLibrary
+
+    kind = (kind or "").strip()
+    if kind and kind not in AVAILABLE_KINDS:
+        raise KeyError(f"unknown diagram kind: {kind}")
+
+    with _plan_lock(session_id):
+        plan = draft.load_plan(session_id)
+        if not 1 <= index <= len(plan.slides):
+            raise IndexError(f"slide {index} out of range (1..{len(plan.slides)})")
+        slide = plan.slides[index - 1]
+        context = slide.brief.strip() or _slide_context(slide)
+        if not context:
+            raise NoContext(f"slide {index} has no text to refill from")
+        if template_id:
+            TemplateLibrary.load().get(template_id)   # KeyError на чужом id
+            slide.template_id = template_id
+        # Свободный слайд возвращается под макет: иначе draft_render продолжил бы
+        # рисовать старый html и результат заполнения был бы не виден.
+        slide.freeform = False
+        slide.filled = False
+        draft.save_plan(session_id, plan)
+    plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind,
+                     context=context)
     return _result(plan, index, _next_index(plan) is None)

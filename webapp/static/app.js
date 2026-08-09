@@ -596,7 +596,7 @@ async function createGlass() {
   const btn = $("#createGlass");
   // Кнопка — карточка из названия и описания: подменяем описание, а не весь
   // textContent, иначе разметка схлопнется в строку и вернуть её будет нечем.
-  const desc = btn.querySelector(".start-mode__desc");
+  const desc = btn.querySelector(".mode-card__desc");
   const prevDesc = desc ? desc.textContent : "";
   setStartEnabled(false);
   if (desc) desc.textContent = "Раскладываю документ на слайды…";

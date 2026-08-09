@@ -798,6 +798,35 @@ async def glass_answer(session_id: str, request: Request,
     return JSONResponse(out)
 
 
+@app.post("/api/drafts/{session_id}/slides/{index}/refill")
+async def draft_slide_refill(session_id: str, index: int, request: Request,
+                             user=Depends(get_current_user)) -> JSONResponse:
+    """Сменить макет слайда и заново заполнить его ИИ по исходному фрагменту.
+
+    Механическая смена макета в редакторе переносит текст слот-в-слот; здесь
+    содержимое пишется заново под возможности нового макета."""
+    from htmlslides.library import SlotValidationError
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    data = await _json_body(request)
+    template_id = (data.get("template_id") or "").strip() or None
+    kind = (data.get("kind") or "").strip() or None
+    try:
+        out = await run_in_threadpool(
+            lambda: glass.refill_slide(session_id, index,
+                                       template_id=template_id, kind=kind))
+    except IndexError as exc:
+        raise HTTPException(400, str(exc))
+    except KeyError as exc:
+        raise HTTPException(400, str(exc))
+    except glass.NoContext:
+        raise HTTPException(400, "на слайде нет текста — заполнять нечем: "
+                                 "смените макет с переносом текста")
+    except SlotValidationError:
+        raise HTTPException(400, f"unknown template: {template_id}")
+    return JSONResponse(out)
+
+
 @app.get("/api/jobs/active")
 def active_jobs(user=Depends(get_current_user)) -> JSONResponse:
     """The current user's jobs still building, with live stage/pct."""

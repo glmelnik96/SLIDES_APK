@@ -380,6 +380,99 @@ def test_answer_rejects_bad_index_and_unknown_template(monkeypatch, tmp_path):
     assert draft.load_plan("s6").slides[1].status == "needs_input"
 
 
+# ── refill_slide (смена макета с перезаполнением) ────────────────────────────
+def test_refill_uses_the_brief_and_needs_no_question(monkeypatch, tmp_path):
+    """Готовый слайд перезаполняется по исходному фрагменту документа.
+
+    Ответ на вопрос (answer) для этого не годится: он требует status
+    needs_input/failed, а тут автор правит обычный заполненный слайд."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    seen = {}
+
+    def _spy(client, library, sp, **kw):
+        seen["brief"] = sp.content.get("brief", "")
+        seen["template_id"] = sp.template_id
+        return _fake_fill(client, library, sp, **kw)
+    monkeypatch.setattr(filler, "fill_slide", _spy)
+    plan = _outline_plan(question=False)
+    plan.slides[2] = plan.slides[2].model_copy(update={
+        "filled": True, "content": {"title": "старое"}})
+    draft.save_plan("r1", plan)
+
+    out = glass.refill_slide("r1", 3, template_id="timeline",
+                             client=FakeClient([]))
+    assert out["index"] == 3
+    s = draft.load_plan("r1").slides[2]
+    assert s.template_id == "timeline" and s.filled
+    assert s.content["title"] == "Слайд 3"      # содержимое написано заново
+    assert seen["brief"] == "метрики" and seen["template_id"] == "timeline"
+    assert s.brief == "метрики"                 # фрагмент документа цел
+
+
+def test_refill_without_a_brief_falls_back_to_the_slide_text(monkeypatch,
+                                                             tmp_path):
+    """Слайд, добавленный руками, брифа не имеет — контекст берём с него самого.
+
+    Иначе действие на таких слайдах молча выдавало бы пустой слайд. В план этот
+    текст не попадает: brief в панели подписан «фрагмент исходного документа»."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    seen = {}
+
+    def _spy(client, library, sp, **kw):
+        seen["brief"] = sp.content.get("brief", "")
+        return _fake_fill(client, library, sp, **kw)
+    monkeypatch.setattr(filler, "fill_slide", _spy)
+    plan = draft.DraftPlan(title="Т", slides=[
+        draft.DraftSlide(template_id="timeline", filled=True, content={
+            "title": "Что сделали", "items": ["перенесли базу", "выключили старую"],
+            "image": "data:image/png;base64,AAA"})])
+    draft.save_plan("r2", plan)
+
+    glass.refill_slide("r2", 1, template_id="stats-row", client=FakeClient([]))
+    assert "Что сделали" in seen["brief"] and "выключили старую" in seen["brief"]
+    assert "data:" not in seen["brief"]         # картинка — не текст
+    assert draft.load_plan("r2").slides[0].brief == ""
+
+
+def test_refill_rejects_bad_index_template_and_empty_slide(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    draft.save_plan("r3", draft.DraftPlan(title="Т", slides=[
+        draft.DraftSlide(template_id="three-col", brief="тема"),
+        draft.DraftSlide(template_id="blank")]))
+    with pytest.raises(IndexError):
+        glass.refill_slide("r3", 99, client=FakeClient([]))
+    with pytest.raises(SlotValidationError):
+        glass.refill_slide("r3", 1, template_id="ghost", client=FakeClient([]))
+    with pytest.raises(KeyError):
+        glass.refill_slide("r3", 1, kind="ghost-kind", client=FakeClient([]))
+    # Пустой слайд: заполнять нечем — отказ, а не выдуманное содержимое.
+    with pytest.raises(glass.NoContext):
+        glass.refill_slide("r3", 2, template_id="stats-row",
+                           client=FakeClient([]))
+
+
+def test_refill_failure_degrades_like_a_step(monkeypatch, tmp_path):
+    """Осечка модели не теряет слайд: заглушка с темой + объяснение."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+
+    def _boom(client, library, sp, **kw):
+        raise filler.FillError("сеть упала")
+    monkeypatch.setattr(filler, "fill_slide", _boom)
+    plan = _outline_plan(question=False)
+    plan.slides[2] = plan.slides[2].model_copy(update={"filled": True})
+    draft.save_plan("r4", plan)
+
+    out = glass.refill_slide("r4", 3, template_id="timeline",
+                             client=FakeClient([]))
+    assert out["failed"] == [3]
+    s = draft.load_plan("r4").slides[2]
+    assert s.template_id == "blank" and s.status == "failed"
+    assert s.content.get("title") and s.question
+
+
 def test_old_plan_json_valid_without_glass_fields():
     """Старые plan.json без status/question/candidates валидны без миграции."""
     plan = draft.DraftPlan.model_validate_json(

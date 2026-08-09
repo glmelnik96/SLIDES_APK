@@ -440,26 +440,28 @@ a { color: var(--accent); }
 .btn-lg { width: 100%; padding: 14px; font-size: 16px; }
 #createHint { margin-top: 8px; }  /* Г§7 — отступ хинта от полноширинной CTA */
 
-/* ===== Два старта: быстрая / пошаговая сборка =====
-   Кнопки равнозначны по весу — ни одна не «главная»: это не CTA и её настройка,
-   а два разных процесса. Отсюда одинаковая поверхность и размер; акцент несёт
-   только название, чтобы пара читалась как выбор, а не как основное-и-запасное. */
+/* ===== Карточка выбора способа (равнозначная пара) =====
+   Два старта на главной (быстрая / пошаговая сборка) и выбор способа смены
+   макета в редакторе (перенести текст / перезаполнить ИИ). Кнопки равнозначны
+   по весу — ни одна не «главная»: это не CTA и её настройка, а два разных
+   процесса. Отсюда одинаковая поверхность и размер; акцент несёт только
+   название, чтобы пара читалась как выбор, а не как основное-и-запасное. */
 /* Ряды 1fr — обе карточки высотой по большей: разная длина описаний иначе делала
    одну кнопку заметно крупнее, а это ровно та разница в весе, которой тут нет. */
-.start-modes { display: grid; gap: 10px; grid-auto-rows: 1fr; }
-.start-mode { display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+.mode-cards { display: grid; gap: 10px; grid-auto-rows: 1fr; }
+.mode-card { display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
   width: 100%; text-align: left; padding: 14px 16px; font-weight: 400; }
-.start-mode__name { font-family: var(--font-display); font-size: 16px; font-weight: 600;
+.mode-card__name { font-family: var(--font-display); font-size: 16px; font-weight: 600;
   color: var(--accent); line-height: var(--lh-tight); }
-.start-mode__desc { font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
+.mode-card__desc { font-size: var(--fs-xs); line-height: 1.45; color: var(--muted); }
 /* Ховер уводит в акцент весь блок — у .btn это делает color, а тут цвета заданы
    потомкам, и без этого правила карточка на наведении не отзывалась бы. */
-.start-mode:hover { background: var(--surface-active); }
-.start-mode:hover .start-mode__desc { color: var(--text); }
+.mode-card:hover { background: var(--surface-active); }
+.mode-card:hover .mode-card__desc { color: var(--text); }
 /* Нет файла — обе одинаково погашены: причина одна и написана в #createHint. */
-.start-mode:disabled .start-mode__name,
-.start-mode:disabled .start-mode__desc { color: var(--muted); }
-.start-mode:disabled .start-mode__desc { color: var(--muted-2); }
+.mode-card:disabled .mode-card__name,
+.mode-card:disabled .mode-card__desc { color: var(--muted); }
+.mode-card:disabled .mode-card__desc { color: var(--muted-2); }
 .btn-ghost { background: var(--surface-active); color: var(--text); border: 1px solid transparent; }  /* совместимый алиас дефолта */
 .btn-ghost:hover { background: var(--surface-active); color: var(--accent); }
 /* Единственный носитель заливки акцентом */
@@ -986,6 +988,12 @@ a { color: var(--accent); }
   padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .dialog-text { margin: 0; font-size: var(--fs-base); line-height: 1.5; color: var(--text); }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+/* Диалог-выбор (не «ок/отмена», а два способа сделать одно и то же): кнопки
+   становятся теми же карточками, что и старты на главной, и стоят колонкой —
+   в ряд описания сжимались до нечитаемых колонок. */
+.dialog-actions--modes { flex-direction: column; align-items: stretch; gap: 10px; }
+.dialog-card:has(.dialog-actions--modes) { width: min(520px, 100%); }
+.dialog-actions--modes .dialog-cancel { align-self: flex-end; }
 
 /* ===== Чат-панель ===== */
 .chat { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg-soft); }
