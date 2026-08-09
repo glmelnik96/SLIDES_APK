@@ -856,6 +856,36 @@ test("render: подпись связи между соседями по ряд�
     "подпись прижата к краю сегмента, как у вертикального ребра");
 });
 
+test("render: подпись связи внутри дорожки не прячется под плашки", () => {
+  // Соседей по одной дорожке соединяет прямая горизонталь. У четырёх узлов в
+  // дорожке просвет между ними 97px против бюджета метки 200 — подпись пряталась
+  // под обе плашки разом, наружу торчали огрызки.
+  const spec = { kind: "swimlanes",
+    nodes: [{ id: "a", label: "Аттестация", lane: "Инженер" },
+            { id: "b", label: "Настройка", lane: "Инженер" },
+            { id: "c", label: "Приёмка", lane: "Инженер" },
+            { id: "d", label: "Запуск", lane: "Инженер" }],
+    edges: [{ from: "a", to: "b", label: "при положительном решении" }] };
+  const host = fakeHost();
+  D.render(host, spec);
+  const box = D.layoutSwimlanes(spec).nodes.a;
+  const y = Number(host.innerHTML.match(/<text[^>]*y="([\d.-]+)"/)[1]);
+  assert.ok(y < box.y - box.h / 2, `подпись на уровне плашки: y=${y}`);
+});
+
+test("render: подпись луча хаба остаётся на линии — там просвет шире метки", () => {
+  const spec = { kind: "hub_spoke",
+    nodes: [{ id: "h", label: "Платформа" }, { id: "a", label: "Раз" },
+            { id: "b", label: "Два" }, { id: "c", label: "Три" },
+            { id: "d", label: "Четыре" }],
+    edges: [{ from: "h", to: "b", label: "поставляет" }] };
+  const host = fakeHost();
+  D.render(host, spec);
+  const hub = D.layoutHubSpoke(spec).nodes.h;
+  const y = Number(host.innerHTML.match(/<text[^>]*y="([\d.-]+)"/)[1]);
+  assert.ok(Math.abs(y - hub.y) < 40, `луч без нужды поднят над плашкой: y=${y}`);
+});
+
 test("render: у единственного потомка оргсхемы подпись остаётся в просвете", () => {
   // У такой связи средний сегмент тоже вырожден, но ребро вертикально: сдвиг
   // «выше плашки» загнал бы метку ПОД плашку родителя — на слайде из неё
