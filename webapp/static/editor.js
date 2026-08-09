@@ -1731,7 +1731,14 @@ function dgmNodeRow(kind, n) {
     del.title = "Удалить узел";
     del.onclick = () => {
       if (del.disabled) return;   // на минимуме типа схемы удалять нельзя
-      row.remove(); refreshDgmEdgeSelects(); syncDgmCounts(); scheduleSave();
+      row.remove();
+      const dropped = refreshDgmEdgeSelects();
+      syncDgmCounts();
+      // Связи исчезают вместе с узлом — молчать об этом нельзя: человек удалял
+      // один блок, а со слайда уходили ещё и стрелки.
+      const note = byId("dgmEdgesNote");
+      if (dropped && note) note.textContent += ` · с узлом удалено связей: ${dropped}`;
+      scheduleSave();
     };
     row.appendChild(del);
   }
@@ -1772,8 +1779,12 @@ function syncDgmCounts() {
     const n = edges.querySelectorAll(".dgm-edge-row").length;
     const add = byId("dgmAddEdge");
     if (add) {
-      add.disabled = n >= DGM_MAX_EDGES;
-      add.title = add.disabled ? "Больше связей схема не покажет" : "";
+      // Связь из одного узла — это петля, схема её не примет: гасим кнопку, а не
+      // даём человеку добавить строку, которая тут же уедет в «не сохранено».
+      const lone = (byId("dgmNodeList")?.querySelectorAll(".dgm-node-row").length || 0) < 2;
+      add.disabled = n >= DGM_MAX_EDGES || lone;
+      add.title = n >= DGM_MAX_EDGES ? "Больше связей схема не покажет"
+        : lone ? "Связь соединяет два узла — добавьте второй" : "";
     }
     const note = byId("dgmEdgesNote");
     if (note) {
@@ -1871,14 +1882,29 @@ function dgmEdgeRow(e) {
 
 // Пересобрать options селектов связей из текущих строк узлов (id стабилен,
 // подпись — живой текст узла). Выбор сохраняется, пока узел существует.
+// Возвращает число строк связей, выброшенных вместе с удалённым узлом.
 function refreshDgmEdgeSelects() {
   const form = byId("builderForm");
-  if (!form) return;
+  if (!form) return 0;
   const opts = [...form.querySelectorAll(".dgm-node-row")].map((row) => ({
     id: row.dataset.nodeId,
     label: (row.querySelector('[data-dgm="label"]')?.value.trim()
             || row.dataset.nodeId).slice(0, 24),
   }));
+  /* Узел удалили — связи, которые на него ссылались, надо УБРАТЬ, а не оставлять
+     селекту выбирать замену. Раньше select просто терял свой option и падал на
+     первый в списке: удаление «Проверки данных» превращало «Заявка → Проверка» в
+     «Заявка → Заявка», а «Проверка → Согласовано» — в «Заявка → Согласовано».
+     Схема оставалась валидной и молча сохранялась: на слайде появлялись стрелки,
+     которых человек не рисовал, а ветвление разъезжалось. */
+  const alive = {};
+  opts.forEach((o) => { alive[o.id] = 1; });
+  let dropped = 0;
+  form.querySelectorAll(".dgm-edge-row").forEach((row) => {
+    const gone = [...row.querySelectorAll("select")]
+      .some((s) => !alive[s.value || s.dataset.want || ""]);
+    if (gone) { row.remove(); dropped++; }
+  });
   form.querySelectorAll(".dgm-edge-row select").forEach((sel) => {
     const want = sel.value || sel.dataset.want || "";
     sel.innerHTML = "";
@@ -1886,6 +1912,7 @@ function refreshDgmEdgeSelects() {
     if (opts.some((o) => o.id === want)) sel.value = want;
     sel.dataset.want = sel.value;
   });
+  return dropped;
 }
 
 function dgmNewId() {
