@@ -954,6 +954,30 @@
     return clampLabelBox(label, Math.max(24, w - 24), Math.max(24, h - 24), fs);
   }
 
+  /* Разбить подпись на строки по границам слов — для SVG <text>, который сам не
+   * переносится (подписи рёбер). Тот же жадный алгоритм, по которому мерят
+   * fitFont/labelLines, поэтому число строк совпадает с расчётным. Слово длиннее
+   * строки режем: на этом месте Chromium в foreignObject делает то же самое. */
+  function wrapLines(text, perLine) {
+    var parts = String(text == null ? "" : text).trim().split(BREAK_KEEP_RE);
+    var lines = [], cur = "", i, word, sep;
+    for (i = 0; i < parts.length; i += 2) {
+      word = parts[i];
+      if (!word) continue;
+      sep = i ? parts[i - 1] : "";
+      while (word.length > perLine) {
+        if (cur) { lines.push(cur); cur = ""; }
+        lines.push(word.slice(0, perLine));
+        word = word.slice(perLine);
+      }
+      if (!cur) cur = word;
+      else if (cur.length + sep.length + word.length <= perLine) cur += sep + word;
+      else { lines.push(cur); cur = word; }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
   var FO_ALIGN = { left: ["flex-start", "left"], right: ["flex-end", "right"] };
 
   function labelFO(p, n, color, fontSize, align) {
@@ -1004,6 +1028,14 @@
       '" height="' + h + '" fill="' + fill + '"/>';
   }
 
+  /* Бюджет подписи ребра: 200px — примерно половина промежутка между колонками
+   * узлов, дальше подпись уже заезжает на соседей. Две строки по 26px — всё, что
+   * помещается между рядами, не задевая плашки. 24 — потолок кегля, не константа:
+   * подбор идёт вниз тем же fitFontBox, что и у подписей узлов. Без подбора
+   * «Автоматизированная» (18 символов при 13 на строку) рвалось посреди слова —
+   * SVG не расставляет переносов, и «Автоматизиров/анная» читается как брак. */
+  var EDGE_FS = 24, EDGE_W = 200, EDGE_H = 2 * EDGE_FS * 1.16;
+
   function linkPath(link, markerId) {
     var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="3"' +
       (link.style === "dashed" ? ' stroke-dasharray="10 8"' : "") +
@@ -1039,8 +1071,25 @@
       } else if (Math.abs(p0[0] - p1[0]) < 1) { // вертикальный сегмент: метку вбок
         lx += 14; ly += 12; anchor = "start";
       }
-      out += '<text x="' + lx + '" y="' + ly + '" text-anchor="' + anchor + '" font-size="24" ' +
-        'fill="var(--fg-muted)">' + esc(link.label) + "</text>";
+      /* SVG <text> НЕ переносится и ничем не ограничен по ширине. Схема
+       * разрешает подпись ребра до 60 символов, и «Согласование условий
+       * договора» растягивалось одной строкой на пол-холста — поперёк соседних
+       * узлов и поверх второй такой же подписи. Даём подписи бюджет (две строки
+       * по ~13 символов — половина шага сетки узлов), сокращаем лишнее тем же
+       * clampLabelBox, что и подписи узлов, и раскладываем на tspan'ы. Блок
+       * растёт ВВЕРХ: нижняя строка остаётся на прежней базовой линии, то есть
+       * короткие «да»/«нет» стоят там же, где стояли. */
+      var efs = fitFontBox(link.label, EDGE_W, EDGE_H, EDGE_FS);
+      var lead = Math.round(efs * 1.16);
+      var elines = wrapLines(clampLabelBox(link.label, EDGE_W, EDGE_H, efs),
+                             Math.max(1, Math.floor(EDGE_W / (efs * 0.6))));
+      out += '<text x="' + lx + '" y="' + (ly - (elines.length - 1) * lead) +
+        '" text-anchor="' + anchor + '" font-size="' + efs + '" ' +
+        'fill="var(--fg-muted)">' +
+        elines.map(function (line, i) {
+          return '<tspan x="' + lx + '"' + (i ? ' dy="' + lead + '"' : "") +
+            ">" + esc(line) + "</tspan>";
+        }).join("") + "</text>";
     }
     return out;
   }
@@ -1408,7 +1457,7 @@
     layoutGantt: layoutGantt, layoutSteps: layoutSteps,
     layoutMindmap: layoutMindmap, layoutNetwork: layoutNetwork,
     laneList: laneList, trimSegment: trimSegment, fitFont: fitFont,
-    clampLabel: clampLabel, labelLines: labelLines,
+    clampLabel: clampLabel, labelLines: labelLines, wrapLines: wrapLines,
     CANVAS: { W: W, H: H },
   };
 

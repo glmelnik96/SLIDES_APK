@@ -723,6 +723,23 @@ test("render: подпись пересечения venn не наезжает �
   assert.ok(w > 0 && w <= 180, `подпись пересечения шире линзы: ${w}`);
 });
 
+test("render: длинная подпись ребра переносится и сокращается", () => {
+  // Схема разрешает подписи рёбер до 60 символов, а рисовались они голым <text>
+  // без переноса: «Согласование условий договора» растягивалось на пол-холста
+  // поперёк соседних узлов и второй такой же подписи.
+  const host = fakeHost();
+  D.render(host, { kind: "flowchart",
+    nodes: [{ id: "a", label: "А" }, { id: "b", label: "Б" }, { id: "c", label: "В" }],
+    edges: [{ from: "a", to: "b", label: "Согласование условий договора" },
+            { from: "a", to: "c", label: "да" }] });
+  assert.ok(!host.innerHTML.includes("Согласование условий договора"),
+    "длинная подпись ребра ушла в разметку целиком, одной строкой");
+  assert.ok(host.innerHTML.includes("Согласование"), "подпись ребра пропала совсем");
+  assert.ok(/>да</.test(host.innerHTML), "короткую подпись ребра тронули зря");
+  D.wrapLines("аб вг де", 5).forEach(function (l) { assert.ok(l.length <= 5, l); });
+  assert.deepStrictEqual(D.wrapLines("аб вг де", 5), ["аб вг", "де"]);
+});
+
 test("render: кегль подписи попадает в разметку", () => {
   const host = fakeHost();
   D.render(host, { kind: "swimlanes",
