@@ -863,12 +863,21 @@
    * детерминированным (сейв запекает SVG). 0.6 кегля — ширина символа Inter
    * по кириллице с запасом (замер canvas.measureText дал 0.56–0.60 на живых
    * подписях), 1.16 — межстрочный интервал плюс поле. */
+  /* Границы переноса, а НЕ весь \s: неразрывный пробел (U+00A0, его ставит
+   * типографика ассемблера — «на\u00a0комплектацию») и узкий неразрывный
+   * (U+202F) Chromium не рвёт, для него это ОДНО слово. JS-класс \s их ловит,
+   * поэтому split(/\s+/) считал два коротких слова там, где браузер видит одно
+   * длинное: кегль брался крупный, обрезка не срабатывала, и подпись молча
+   * срезалась overflow:hidden («Задание на комплектацию» → «…комплектацис»). */
+  var BREAK_RE = /[^\S\u00a0\u202f]+/;
+  var BREAK_KEEP_RE = /([^\S\u00a0\u202f]+)/;
+
   function fitFont(label, w, h, base) {
     var text = String(label == null ? "" : label).trim();
     var max = base || 28;
     if (!text) return max;
     var inner = Math.max(24, w - 24), box = Math.max(24, h - 24);
-    var words = text.split(/\s+/);
+    var words = text.split(BREAK_RE);
     var longest = 0;
     words.forEach(function (word) { longest = Math.max(longest, word.length); });
     for (var fs = max; fs > 15; fs -= 2) {
@@ -895,7 +904,7 @@
    * (ищет кегль поменьше), а здесь его надо посчитать честно: на полу кегля
    * выбора уже нет. */
   function labelLines(text, perLine) {
-    var words = String(text == null ? "" : text).trim().split(/\s+/);
+    var words = String(text == null ? "" : text).trim().split(BREAK_RE);
     var lines = 0, cur = 0, i, len;
     for (i = 0; i < words.length; i++) {
       len = words[i].length;
@@ -925,9 +934,12 @@
     var perLine = Math.max(1, Math.floor(inner / (fs * 0.6)));
     var maxLines = Math.max(1, Math.floor(box / (fs * 1.16)));
     if (!text || labelLines(text, perLine) <= maxLines) return text;
-    var words = text.split(/\s+/);
-    for (var n = words.length - 1; n > 0; n--) {
-      var cut = words.slice(0, n).join(" ") + "…";
+    /* Сплит с захватом разделителей: склеивать обратно через " " нельзя — так
+     * NBSP из типографики подменялся обычным пробелом, и обрезанная подпись
+     * начинала переноситься не там, где мерил движок. */
+    var parts = text.split(BREAK_KEEP_RE), count = (parts.length + 1) / 2;
+    for (var n = count - 1; n > 0; n--) {
+      var cut = parts.slice(0, 2 * n - 1).join("") + "…";
       if (labelLines(cut, perLine) <= maxLines) return cut;
     }
     return text.slice(0, Math.max(1, perLine * maxLines - 1)) + "…";
@@ -949,9 +961,16 @@
          комплектацию» превращалось в «комплектаци» + «ю» отдельной строкой,
          хотя слово целиком влезало следующей. overflow-wrap сначала переносит
          слово и режет только то, что не помещается в строку вообще. */
-      'letter-spacing:-.3px;overflow-wrap:break-word;' +
-      'color:' + color + ';">' + esc(clampLabel(n.label, p.w, p.h, fs)) +
-      "</div></foreignObject>";
+      'letter-spacing:-.3px;' +
+      'color:' + color + ';"><div style="min-width:0;max-width:100%;' +
+      /* Внутренняя обёртка с min-width:0 обязательна. Текст прямо во флекс-боксе
+         становится анонимным флекс-элементом, а тот не сжимается уже своей
+         min-content ширины — для overflow-wrap:break-word это ЦЕЛОЕ длинное
+         слово (break-word, в отличие от anywhere, intrinsic-размер не уменьшает).
+         Слово шире плашки поэтому не переносилось, а вылезало и молча срезалось
+         overflow:hidden: «Задание на комплектацию» → «…комплектацис». */
+      'overflow-wrap:break-word;">' + esc(clampLabel(n.label, p.w, p.h, fs)) +
+      "</div></div></foreignObject>";
   }
 
   function shapePath(n, p) {

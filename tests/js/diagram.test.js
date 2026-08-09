@@ -643,6 +643,22 @@ test("labelLines: слово шире строки съедает несколь
   assert.strictEqual(D.labelLines("аб абвгдеёжзи", 5), 3);
 });
 
+test("NBSP: неразрывный пробел — часть слова, а не граница переноса", () => {
+  // Chromium по U+00A0 не переносит: «на\u00a0комплектацию» для него один токен
+  // в 15 символов. JS \s ловит NBSP, поэтому раньше движок видел «на» +
+  // «комплектацию», брал крупный кегль и подпись срезалась overflow:hidden.
+  const nb = "Задание на\u00a0комплектацию";
+  const plain = "Задание на комплектацию";
+  assert.ok(D.fitFont(nb, 250, 110) <= D.fitFont(plain, 250, 110),
+    `NBSP-подпись не ужалась: ${D.fitFont(nb, 250, 110)}`);
+  assert.strictEqual(D.labelLines(nb, 12), D.labelLines("Задание нкомплектацию", 12));
+  // обрезка не должна подменять NBSP обычным пробелом при склейке
+  const long = "Согласование условий с\u00a0юридической службой заказчика";
+  const cut = D.clampLabel(long, 109, 110, D.fitFont(long, 109, 110, 28));
+  assert.ok(cut.endsWith("…") && long.startsWith(cut.slice(0, -1)),
+    `обрезка потеряла исходные пробелы: ${JSON.stringify(cut)}`);
+});
+
 test("render: невлезающая подпись выходит в разметку сокращённой", () => {
   const host = fakeHost();
   const long = "Согласование условий с юридической службой заказчика";
@@ -653,6 +669,23 @@ test("render: невлезающая подпись выходит в разме
   D.render(host, { kind: "flowchart", nodes: nodes, edges: edges });
   assert.ok(!host.innerHTML.includes(long), "полная подпись всё ещё в SVG");
   assert.ok(host.innerHTML.includes("…"), "нет многоточия сокращения");
+});
+
+test("render: перенос слова живёт в обёртке, которая умеет сжиматься", () => {
+  // Текст прямо во флекс-боксе — анонимный флекс-элемент: он не сжимается ниже
+  // своей min-content ширины, а overflow-wrap:break-word (в отличие от anywhere)
+  // intrinsic-размер не уменьшает. Длинное слово поэтому не переносилось, а
+  // вылезало и молча срезалось overflow:hidden. Перенос обязан висеть на
+  // внутреннем div с min-width:0.
+  const host = fakeHost();
+  D.render(host, { kind: "flowchart",
+    nodes: [{ id: "a", label: "Электроэнцефалография" }, { id: "b", label: "Б" }],
+    edges: [{ from: "a", to: "b" }] });
+  const m = host.innerHTML.match(/<div style="min-width:0;[^"]*"/);
+  assert.ok(m, "нет внутренней обёртки подписи");
+  assert.ok(/overflow-wrap:break-word/.test(m[0]), `перенос не на обёртке: ${m[0]}`);
+  assert.ok(!/display:flex;[^"]*overflow-wrap/.test(host.innerHTML),
+    "перенос остался на флекс-контейнере");
 });
 
 test("render: кегль подписи попадает в разметку", () => {

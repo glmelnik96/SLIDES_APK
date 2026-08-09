@@ -46,7 +46,29 @@ def test_data_diagram_json_roundtrips_through_escaping():
     assert decoded["kind"] == "flowchart"
     assert [n["id"] for n in decoded["nodes"]] == \
         [n["id"] for n in raw["nodes"]]
-    # NBSP от _glue_nbsp допустим внутри строк JSON — парсинг выше это доказал
+
+
+def test_data_diagram_is_not_touched_by_typography():
+    """JSON диаграммы — машинные данные, а не проза: типографика _glue_nbsp здесь
+    ПОРТИТ payload. «Задание на комплектацию» превращалось в «Задание на\u00a0…»,
+    браузер такое слово (15 символов) разорвать не мог, движок же считал ширину
+    по /\\s+/ (а \\s в JS ловит и NBSP) и видел два коротких слова — выбирал
+    крупный кегль, обрезку не применял, и подпись молча срезалась overflow:hidden
+    до «Задание на комплектацис». Плюс редактор читает атрибут обратно и сохраняет
+    NBSP в план — порча расползается."""
+    raw = {"version": 1, "kind": "flowchart", "direction": "right",
+           "nodes": [{"id": "n1", "label": "Задание на комплектацию",
+                      "shape": "process"},
+                     {"id": "n2", "label": "Отгрузка за 180 млн", "shape": "end"}],
+           "edges": [{"from": "n1", "to": "n2"}]}
+    page = assemble(_plan(spec_json(raw)))
+    start = page.index('data-diagram="') + len('data-diagram="')
+    decoded = json.loads(html.unescape(page[start:page.index('"', start)]))
+    assert [n["label"] for n in decoded["nodes"]] == \
+        [n["label"] for n in raw["nodes"]]
+    assert "\u00a0" not in json.dumps(decoded, ensure_ascii=False)
+    # проза слайда типографику по-прежнему получает
+    assert "От\u00a0заявки" in page
 
 
 def test_missing_diagram_slot_fails_contract():
