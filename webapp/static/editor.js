@@ -2092,11 +2092,14 @@ async function changeTemplate(templateId, dgmKind) {
   // Merge: plan content keeps slots the current form doesn't render (so a swap
   // A→B→A restores A's slots), form values win for the slots the user can see.
   // Диаграммный typed-слайд живёт в fields, а не в content — переносим шапку.
-  const content = wasDiagram
+  const raw = wasDiagram
     ? { title: slide.fields.heading || "", subtitle: slide.fields.subtitle || "" }
     : slide && !slide.freeform
       ? { ...(slide.content || {}), ...collectContent() }
       : (slide && slide.content) || {};
+  const content = wasDiagram
+    ? raw
+    : remapLists(tplOf(slide && slide.template_id), tplOf(templateId), raw);
   // template change = delete + re-add at the same position with the new template.
   // The content rides along: overlapping slots (title, items, …) carry over; the
   // rest stays in plan.json (draft_render ignores unknown slots), so switching
@@ -2111,6 +2114,7 @@ async function changeTemplate(templateId, dgmKind) {
       wasDiagram ? slide.fields : { heading: content.title || "" });
   }
   await reloadDraft(current);
+  showUndoToast("Макет слайда изменён");
 }
 
 // К§4 — общий обработчик добавления слайда: кнопка рейла (#addSlide), кнопка пустой
