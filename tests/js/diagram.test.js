@@ -597,6 +597,42 @@ test("render: подпись возвратной связи не налезае
   });
 });
 
+test("render: подписи связей не печатаются одна поверх другой", () => {
+  // Две связи, входящие в узел с одной стороны, дают почти совпадающие середины:
+  // «при положительном решении» ложилось поверх такого же, и вместо двух подписей
+  // выходила нечитаемая гребёнка из наложенных букв — на глаз это битый рендер.
+  const spec = {
+    kind: "network",
+    nodes: [{ id: "api", label: "API" }, { id: "auth", label: "Авторизация" },
+            { id: "cat", label: "Каталог" }, { id: "bill", label: "Биллинг" },
+            { id: "db", label: "Хранилище" }, { id: "que", label: "Очередь" },
+            { id: "mon", label: "Мониторинг" }],
+    edges: [{ from: "api", to: "auth" }, { from: "api", to: "cat" },
+            { from: "api", to: "bill" }, { from: "auth", to: "db" },
+            { from: "cat", to: "db" }, { from: "bill", to: "db" },
+            { from: "bill", to: "que" }, { from: "que", to: "mon" }]
+      .map((e) => ({ ...e, label: "при положительном решении" })),
+  };
+  const host = fakeHost();
+  D.render(host, spec);
+  const boxes = (host.innerHTML.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [])
+    .map((t) => {
+      const x = Number(t.match(/x="([\d.-]+)"/)[1]);
+      const y = Number(t.match(/y="([\d.-]+)"/)[1]);
+      const fs = Number(t.match(/font-size="([\d.-]+)"/)[1]);
+      const lines = (t.match(/<tspan[^>]*>([^<]*)<\/tspan>/g) || [])
+        .map((s) => s.replace(/<[^>]*>/g, ""));
+      const w = Math.max(...lines.map((s) => s.length)) * fs * 0.6;
+      return { x0: x - w / 2, x1: x + w / 2, y0: y - fs,
+               y1: y + (lines.length - 1) * Math.round(fs * 1.16) };
+    });
+  assert.strictEqual(boxes.length, spec.edges.length, "подписи связей потерялись");
+  boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => {
+    const over = a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+    assert.ok(!over, "две подписи связей наложились друг на друга");
+  }));
+});
+
 test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
     ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",

@@ -1079,7 +1079,7 @@
     return room;
   }
 
-  function linkPath(link, markerId, boxes) {
+  function linkPath(link, markerId, boxes, taken) {
     var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="3"' +
       (link.style === "dashed" ? ' stroke-dasharray="10 8"' : "") +
       ' marker-end="url(#' + markerId + ')"';
@@ -1205,6 +1205,37 @@
             fit(room);
           }
         }
+      }
+      /* Две подписи могут сойтись в одну кашу и без всяких плашек: в графе две
+       * связи, входящие в один узел с одной стороны, дают почти совпадающие
+       * середины, и «при положительном решении» печаталось поверх такого же —
+       * получалась нечитаемая гребёнка из наложенных букв. Разводим блоки по
+       * вертикали в порядке отрисовки (он фиксирован, повторный рендер даст те
+       * же координаты): следующий уходит ПОД занятый, если под ним есть место,
+       * иначе НАД. Если тесно с обеих сторон — оставляем как есть: гребёнка
+       * плоха, но подпись поверх плашки хуже. */
+      var lw = Math.max.apply(null, elines.map(function (s) { return s.length; }))
+        * efs * 0.6;
+      var lx0 = anchor === "start" ? lx : lx - lw / 2;
+      var lbox = { x0: lx0, x1: lx0 + lw, y0: ly - (elines.length - 1) * lead - efs,
+                   y1: ly + 4 };
+      if (taken) {
+        for (var pass = 0; pass < 4; pass++) {
+          var hit = null;
+          for (var t = 0; t < taken.length; t++) {
+            var o = taken[t];
+            if (lbox.x0 < o.x1 && lbox.x1 > o.x0 && lbox.y0 < o.y1 && lbox.y1 > o.y0) {
+              hit = o; break;
+            }
+          }
+          if (!hit) break;
+          var dn = hit.y1 - lbox.y0 + 6, up = lbox.y1 - hit.y0 + 6, move = 0;
+          if (boxes && clearance(boxes, lbox.x0, lbox.x1, lbox.y1, 1) >= dn) move = dn;
+          else if (boxes && clearance(boxes, lbox.x0, lbox.x1, lbox.y0, -1) >= up) move = -up;
+          if (!move) break;
+          ly += move; lbox.y0 += move; lbox.y1 += move;
+        }
+        taken.push(lbox);
       }
       out += '<text x="' + lx + '" y="' + (ly - (elines.length - 1) * lead) +
         '" text-anchor="' + anchor + '" font-size="' + efs + '" ' +
@@ -1573,7 +1604,10 @@
       '<path d="M0 0L10 5L0 10z" fill="var(--fg-muted)"/></marker></defs>');
     var decor = DECOR[spec.kind];
     if (decor) parts.push(decor(spec, result, markerId));
-    result.links.forEach(function (link) { parts.push(linkPath(link, markerId, result.nodes)); });
+    var taken = [];   // занятые подписями места — чтобы не печатать их друг на друге
+    result.links.forEach(function (link) {
+      parts.push(linkPath(link, markerId, result.nodes, taken));
+    });
     var custom = NODE_RENDERERS[spec.kind];
     if (custom) {
       parts.push(custom(spec, result.nodes));
