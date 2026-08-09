@@ -888,30 +888,38 @@ async def job_events(session_id: str, request: Request,
 
     await _owned_or_404(request, session_id, user)
     status = runner.status(session_id)
-    queue = runner.queue(session_id)
+    # Своя очередь на каждый стрим: вторая вкладка на той же сборке не должна
+    # разбирать события у первой (см. JobRunner.subscribe).
+    queue = runner.subscribe(session_id)
 
     async def gen():
-        if status is None and queue is None:
-            yield {"data": _json.dumps({"stage": "failed", "terminal": True,
-                                        "error": "Сессия не найдена — возможно, "
-                                                 "удалена по сроку хранения (24 часа)"})}
-            return
-        if status is not None:
-            yield {"data": _json.dumps(status)}
-            if status.get("terminal"):
+        try:
+            if status is None and queue is None:
+                yield {"data": _json.dumps({"stage": "failed", "terminal": True,
+                                            "error": "Сессия не найдена — возможно, "
+                                                     "удалена по сроку хранения (24 часа)"})}
                 return
-        if queue is None:
-            return
-        while True:
-            if await request.is_disconnected():
-                break
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue  # keep the connection alive, re-check disconnect
-            yield {"data": _json.dumps(event)}
-            if event.get("terminal"):
-                break
+            if status is not None:
+                yield {"data": _json.dumps(status)}
+                if status.get("terminal"):
+                    return
+            if queue is None:
+                return
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue  # keep the connection alive, re-check disconnect
+                yield {"data": _json.dumps(event)}
+                if event.get("terminal"):
+                    break
+        finally:
+            # Отписка обязательна: иначе очередь мёртвой вкладки копит события
+            # сессии до самого ретеншена.
+            if queue is not None:
+                runner.unsubscribe(session_id, queue)
 
     return EventSourceResponse(gen())
 

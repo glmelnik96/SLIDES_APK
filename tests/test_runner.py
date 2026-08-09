@@ -38,7 +38,7 @@ async def test_run_forwards_events_and_captures_result(monkeypatch, tmp_path):
 
     inp = types.SimpleNamespace(session_id="s1", mode="verstai")
     q = r.start(inp)
-    assert r.queue("s1") is q
+    assert q in r._queues["s1"]
     events = []
     while True:
         ev = await asyncio.wait_for(q.get(), timeout=2)
@@ -136,7 +136,7 @@ async def test_duplicate_start_same_session_rejected(monkeypatch):
     except runner.CapacityError:
         pass
     # the original job is untouched: same queue, still active
-    assert r.queue("s1") is q and "s1" in r._active
+    assert r._queues["s1"] == {q} and "s1" in r._active
     release.set()
 
 
@@ -158,6 +158,54 @@ async def test_active_jobs_carries_section_count(monkeypatch):
         assert jobs and jobs[0]["section_count"] == 7
     finally:
         release.set()
+
+
+async def test_every_listener_gets_every_event(monkeypatch, tmp_path):
+    """Две вкладки на одной сборке обязаны видеть ОДИН и тот же поток событий.
+
+    Была одна общая asyncio.Queue на сессию, а /events читал её через get() —
+    то есть подписчики её РАЗБИРАЛИ. Вторая вкладка (частый сценарий: сборка
+    идёт 8–16 минут, пользователь открывает деку ещё раз посмотреть прогресс)
+    забирала половину событий, а если ей доставался терминальный — первая
+    вкладка навсегда оставалась на «Улучшаю слайды…»: поток не закрывался,
+    ошибки не было, ретраиться нечему."""
+    r = runner.JobRunner()
+    r.bind_loop(asyncio.get_running_loop())
+    prog = types.SimpleNamespace(publish=None)
+    monkeypatch.setattr(runner, "_progress_module", lambda: prog)
+    out = tmp_path / "out.html"
+    out.write_text("<html></html>", encoding="utf-8")
+
+    release = threading.Event()
+
+    def fake_run(inp):
+        release.wait(timeout=5)
+        prog.publish(_Event(stage="rendering"))
+        prog.publish(_Event(terminal=True, stage="done", result_path=str(out)))
+
+    monkeypatch.setattr(runner, "_pipeline_run", fake_run)
+
+    r.start(types.SimpleNamespace(session_id="s1", mode="htmlpolish"))
+    tab_a = r.subscribe("s1")
+    tab_b = r.subscribe("s1")           # вторая вкладка подключилась позже
+    assert tab_a is not tab_b
+    release.set()
+
+    async def drain(q):
+        seen = []
+        while True:
+            ev = await asyncio.wait_for(q.get(), timeout=2)
+            seen.append(ev["stage"])
+            if ev["terminal"]:
+                return seen
+
+    assert await drain(tab_a) == ["rendering", "done"]
+    assert await drain(tab_b) == ["rendering", "done"]
+
+    # После терминального подписки сброшены — очередь отключившейся вкладки не
+    # копит события до ретеншена; опоздавший читает терминальный status().
+    assert r._queues.get("s1") is None
+    assert r.subscribe("s1") is None and r.status("s1")["terminal"] is True
 
 
 async def test_cancel_queued_job_emits_cancelled(monkeypatch):
