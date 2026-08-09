@@ -132,14 +132,19 @@ test("layoutProcess: последовательные линки без рёбе
   assert.deepStrictEqual(links.map((l) => l.from + "→" + l.to), ["a→b", "b→c"]);
 });
 
-test("layoutCycle: узлы на окружности, старт сверху, линки замыкаются", () => {
+test("layoutCycle: узлы на эллипсе, старт сверху, линки замыкаются", () => {
   const spec = { kind: "cycle", nodes: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }] };
   const { nodes: pos, links } = D.layoutCycle(spec);
   inCanvas(pos);
   assert.ok(pos.a.y < pos.c.y);             // старт сверху, противоположный снизу
   assert.strictEqual(links.length, 4);      // замкнутый круг
   assert.strictEqual(links[3].to, "a");
-  links.forEach((l) => assert.ok(l.arc && l.arc.r > 0));
+  // Дуга эллиптическая (rx≠ry): окружность r=265 оставляла по 600px пустоты
+  // по бокам холста 1800×720 и зажимала плашки в узкий сектор.
+  links.forEach((l) => {
+    assert.ok(l.arc && l.arc.rx > 0 && l.arc.ry > 0);
+    assert.ok(l.arc.rx > l.arc.ry);
+  });
 });
 
 test("layoutFunnel: ширины по value убывают, без value — линейное сужение", () => {
@@ -736,4 +741,22 @@ test("render: подпись поверх заливки берёт контра
     "тёмная полоса без контрастной подписи — текст сливается с заливкой");
   assert.ok(!host.innerHTML.includes("color:var(--bg)"),
     "цвет фона в роли подписи не зависит от того, насколько тёмная заливка");
+});
+
+test("layout: стрелки цикла упираются в край плашки, а не внутрь неё", () => {
+  // Фиксированный угловой отступ не учитывал ширину плашки: широкий узел
+  // наверху круга съедал больший угол, и наконечник прятался под самой плашкой
+  // (у стрелки «Формирование гипотезы → Пилот» головы просто не было).
+  for (const n of [3, 4, 5, 6, 8, 12]) {
+    const L = D.LAYOUTS.cycle(chain("cycle", n));
+    assert.deepEqual(boxOverlap(L), [], `cycle n=${n}: плашки перекрылись`);
+    L.links.forEach((l) => {
+      const [q, p] = [l.points[0], l.points[l.points.length - 1]];
+      const t = L.nodes[l.to], f = L.nodes[l.from];
+      assert.ok(Math.abs(p[0] - t.x) > t.w / 2 || Math.abs(p[1] - t.y) > t.h / 2,
+        `cycle n=${n}: ${l.from}→${l.to} — наконечник под плашкой`);
+      assert.ok(Math.abs(q[0] - f.x) > f.w / 2 || Math.abs(q[1] - f.y) > f.h / 2,
+        `cycle n=${n}: ${l.from}→${l.to} начинается внутри плашки`);
+    });
+  }
 });

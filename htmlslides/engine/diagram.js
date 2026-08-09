@@ -194,25 +194,46 @@
   function layoutCycle(spec) {
     var nodes = spec.nodes, n = nodes.length;
     var cx = W / 2, cy = H / 2;
-    var r = Math.min(H / 2 - 70, 265);
+    /* Эллипс, а не окружность: холст 1800×720, и круг r=265 оставлял по 600px
+       пустоты слева и справа, зажимая плашки в узкий сектор — от шести этапов
+       на подписи оставалось по 200px, а стрелки между ними сходили на нет. */
+    var ry = Math.min(H / 2 - 70, 265), rx = Math.min(W / 2 - 320, 640);
+    var perim = Math.PI * (3 * (rx + ry) -
+      Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));   // приближение Рамануджана
     var pos = {}, links = [];
+    function at(a) { return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]; }
     nodes.forEach(function (node, i) {
       var a = -Math.PI / 2 + (2 * Math.PI * i) / n;   // старт сверху, по часовой
+      var p = at(a);
       pos[node.id] = {
-        x: cx + r * Math.cos(a), y: cy + r * Math.sin(a),
-        w: Math.min(300, 2 * Math.PI * r / n - 40), h: 96,
-        angle: a,
+        // От девяти этапов плашки жмутся на боках эллипса — иначе стрелка между
+        // ними снова сжимается в царапину.
+        x: p[0], y: p[1], w: Math.min(300, perim / n - 40),
+        h: n > 8 ? 74 : 96, angle: a,
       };
     });
+    /* Где дуга выходит из плашки — считаем по самой плашке, а не фиксированным
+       0.42·π/n: широкий узел наверху занимает больший угол, чем такой же сбоку,
+       и дуга упиралась ВНУТРЬ плашки. Наконечник рисуется до узлов и закрывался
+       ими — у стрелки «Формирование гипотезы → Пилот» просто не было головы.
+       Шаг перебора мелкий и фиксированный: раскладка обязана быть повторяемой. */
+    function edgeAngle(p, sign) {
+      var lim = (Math.PI / n) * 0.92, step = Math.PI / 720;
+      for (var d = step; d < lim; d += step) {
+        var q = at(p.angle + sign * d);
+        if (Math.abs(q[0] - p.x) > p.w / 2 + 16 ||
+            Math.abs(q[1] - p.y) > p.h / 2 + 16) return p.angle + sign * d;
+      }
+      return p.angle + sign * lim;
+    }
     for (var i = 0; i < n; i++) {
       var from = nodes[i].id, to = nodes[(i + 1) % n].id;
-      var a1 = pos[from].angle + (Math.PI / n) * 0.42;
-      var a2 = pos[to].angle - (Math.PI / n) * 0.42;
+      var a1 = edgeAngle(pos[from], 1);
+      var a2 = edgeAngle(pos[to], -1);
       links.push({
         from: from, to: to, label: "", style: "solid",
-        arc: { cx: cx, cy: cy, r: r, a1: a1, a2: a2 },
-        points: [[cx + r * Math.cos(a1), cy + r * Math.sin(a1)],
-                 [cx + r * Math.cos(a2), cy + r * Math.sin(a2)]],
+        arc: { cx: cx, cy: cy, rx: rx, ry: ry, a1: a1, a2: a2 },
+        points: [at(a1), at(a2)],
       });
     }
     return { nodes: pos, links: links };
@@ -917,9 +938,10 @@
     if (link.arc) {
       var a = link.arc;
       var large = (a.a2 - a.a1) % (2 * Math.PI) > Math.PI ? 1 : 0;
-      d = "M" + (a.cx + a.r * Math.cos(a.a1)) + " " + (a.cy + a.r * Math.sin(a.a1)) +
-        " A" + a.r + " " + a.r + " 0 " + large + " 1 " +
-        (a.cx + a.r * Math.cos(a.a2)) + " " + (a.cy + a.r * Math.sin(a.a2));
+      var arx = a.rx == null ? a.r : a.rx, ary = a.ry == null ? a.r : a.ry;
+      d = "M" + (a.cx + arx * Math.cos(a.a1)) + " " + (a.cy + ary * Math.sin(a.a1)) +
+        " A" + arx + " " + ary + " 0 " + large + " 1 " +
+        (a.cx + arx * Math.cos(a.a2)) + " " + (a.cy + ary * Math.sin(a.a2));
     } else if (link.curve && link.points.length === 2) {
       /* Ветвь ментальной карты: горизонтальные касательные у обоих концов —
          ломаная «коленом» читалась бы как оргсхема, а не как карта. */
