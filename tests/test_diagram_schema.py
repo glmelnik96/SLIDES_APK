@@ -1,5 +1,7 @@
 """Схема DiagramSpec + каталог типов (htmlslides/diagrams)."""
 import json
+import pathlib
+import re
 
 import pytest
 
@@ -7,7 +9,7 @@ from htmlslides.diagrams import (AVAILABLE_KINDS, CANVAS_H, CANVAS_W,
                                  DiagramValidationError, catalog_for_ui,
                                  get_type, parse_diagram, sample_spec,
                                  spec_json, validate_diagram)
-from htmlslides.diagrams.schema import MAX_CYCLE
+from htmlslides.diagrams.schema import MAX_CYCLE, MAX_GANTT_ROWS, MAX_STEPS
 
 
 # ── сэмплы каталога = живой контракт ─────────────────────────────────────────
@@ -426,3 +428,30 @@ def test_edgeless_kinds_keep_their_nodes():
     parse_diagram({"kind": "swimlanes",
                    "nodes": [{"id": "a", "label": "Раз", "lane": "Продажи"},
                              {"id": "b", "label": "Два", "lane": "Юристы"}]})
+
+
+# ── счётные капы: у схемы два зеркала в браузере, и они обязаны совпадать ─────
+_STATIC = pathlib.Path(__file__).resolve().parents[1] / "webapp" / "static"
+# Капы, у которых есть ИМЕНОВАННАЯ константа схемы: только их и сверяем — у
+# остальных типов потолок общий (MAX_NODES) и сверять нечего.
+_COUNTED = {"cycle": MAX_CYCLE, "steps": MAX_STEPS, "gantt_lite": MAX_GANTT_ROWS}
+
+
+def _js_maxes(name: str, pattern: str) -> dict[str, int]:
+    src = (_STATIC / name).read_text(encoding="utf-8")
+    return {kind: int(re.search(pattern.format(kind=kind), src).group(1))
+            for kind in _COUNTED}
+
+
+def test_browser_mirrors_repeat_the_schema_caps():
+    """Счётные капы типов живут в трёх местах, и расхождение стоит пользователю
+    тупика: NODE_RANGE в diagram_editor.js решает, сколько узлов даст добавить
+    панель и до скольких ужать список при смене типа, DGM_COUNT в errtext.js —
+    что сказать до сейва, а схема — принять или отвергнуть. Когда MAX_CYCLE
+    опустили с 12 до 8, NODE_RANGE остался прежним: панель разрешала добавить
+    девятую стадию, а сохранить её было уже нельзя. Тест держит зеркала на
+    правде схемы — расхождение падает здесь, а не в руках у человека."""
+    assert _js_maxes("diagram_editor.js",
+                     r"{kind}:\s*\[\s*\d+\s*,\s*(\d+)\s*\]") == _COUNTED
+    assert _js_maxes("errtext.js",
+                     r"{kind}:\s*\{{[^}}]*max:\s*(\d+)") == _COUNTED

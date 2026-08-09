@@ -175,6 +175,18 @@ test("смена типа не ломает жёсткие капы (матри�
   assert.deepStrictEqual(out.meta, { x_axis: "Стоимость", y_axis: "Эффект" });
 });
 
+test("смена типа режет список до верхнего капа типа", () => {
+  // Схема пускает в цикл максимум 8 стадий (дальше стрелки короче наконечника).
+  // Пока NODE_RANGE обещал 12, воронка из десяти слоёв переносилась в цикл
+  // целиком — и тот же редактор, который её собрал, отказывался её сохранить.
+  const ten = { kind: "funnel", nodes: Array.from({ length: 10 },
+    (_, i) => ({ id: "f" + i, label: "Слой " + (i + 1) })) };
+  const out = Drag.carryLabels(clone(CYCLE6), ten);
+  assert.strictEqual(out.nodes.length, 8);
+  assert.strictEqual(out.nodes[7].label, "Слой 8");
+  assert.strictEqual(new Set(out.nodes.map((n) => n.id)).size, 8);
+});
+
 test("смена типа добивает узлы до минимума типа", () => {
   // Две стороны сравнения → цикл: три узла минимум, третий берётся из примера.
   const two = { kind: "comparison", nodes: [{ id: "a", label: "Своё" }, { id: "b", label: "Облако" }] };

@@ -102,7 +102,7 @@
      htmlslides/diagrams/schema.py. Типы, которых здесь нет, ограничены только
      общим капом схемы (12). */
   var NODE_RANGE = {
-    cycle: [3, 12], funnel: [2, 12], matrix: [4, 4], pyramid: [3, 12],
+    cycle: [3, 8], funnel: [2, 12], matrix: [4, 4], pyramid: [3, 12],
     hub_spoke: [3, 12], comparison: [2, 12], venn: [2, 3], gantt_lite: [2, 8],
     steps: [2, 6], mindmap: [3, 12], network: [3, 12],
   };
