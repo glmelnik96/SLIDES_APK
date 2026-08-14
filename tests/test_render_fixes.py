@@ -105,6 +105,21 @@ def test_stats_row_empty_second_row_not_rendered():
     assert "--sr-cols:4" in html                         # 4 метрики → 4 колонки
 
 
+def test_stats_row_block_is_centred_in_its_budget():
+    """Ряд метрик стоит по центру своей зоны, а не прижат к её верху.
+
+    Верх блока (top:328) в CSS задан под ДВА ряда по четыре метрики, а типичный
+    слайд — один ряд из трёх: он занимал ~250px из 690, и нижние 45% слайда
+    оставались пустыми (прод-замер, дека «Юнит-экономика», слайд 41). Сдвиг
+    считает deck.js по факту (высоту знает только браузер), поэтому здесь —
+    контракт: код доехал в деку и сбрасывает прошлый сдвиг перед пересчётом
+    (сейв редактора запекает HTML, и без сброса блок уползал бы с каждой
+    перерисовкой)."""
+    html = _stats_row_two()
+    assert "budget - box.offsetHeight" in html          # остаток бюджета считается
+    assert 'box.style.top = ""' in html                 # пересчёт идемпотентен
+
+
 # --- Fix 3: число не отрывается от единицы (неразрывный пробел) ----------------
 
 _NBSP = " "
@@ -135,3 +150,17 @@ def test_units_not_glued_in_exact_verbatim():
     out = assemble(plan, theme="dark")
     assert "18 мес." in out          # ровно как в источнике, обычный пробел
     assert f"18{_NBSP}мес." not in out
+
+
+# --- Fix 4: хвост стаггера не уезжает в кадр прозрачным ------------------------
+
+def test_stagger_delay_zeroed_under_reduced_motion():
+    """Скриншот-пайплайн (reduced-motion + 200мс) обязан видеть ВСЕ плитки.
+
+    Правила каскада `.is-active .m-stagger>*:nth-child(6)` адресуют плитку точнее,
+    чем reduced-motion-правило `.is-active .m-stagger>*`, поэтому без !important
+    задержка 420мс выживала: 4-я, 5-я и 6-я плитки cards-6 попадали в PNG/PPTX
+    ПРОЗРАЧНЫМИ (замер на реальной деке: opacity 0 у 6-й через 400мс), экспорт
+    молча терял контент, а vision-QA видел «пустое поле снизу»."""
+    html = _cards6(6)
+    assert "animation-delay:0ms !important" in html

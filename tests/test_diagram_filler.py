@@ -169,6 +169,39 @@ def test_ready_content_of_a_foreign_kind_is_refilled(library):
                         ).content == content
 
 
+def test_edges_in_a_side_by_side_kind_send_the_model_back(library):
+    """Связи у сравнения — это выбранный не тот тип, а не лишний ключ.
+
+    Прод-замер (дека «Партнёры», 12 схем): модель брала comparison для
+    процессного раздела, объявляла три перехода — и движок рисовал две колонки
+    плашек без единой стрелки. Связи, ради которых раздел и стал схемой, молча
+    исчезали. Теперь это претензия с ретраем, и в её тексте названы типы, где
+    переходы рисуются."""
+    bad = _reply(diagram={
+        "kind": "comparison",
+        "nodes": [{"id": "a", "label": "Заявка", "lane": "Было"},
+                  {"id": "b", "label": "Согласование", "lane": "Было"},
+                  {"id": "c", "label": "Автопроверка", "lane": "Стало"}],
+        "edges": [{"from": "a", "to": "b"}]})
+    client = FakeClient([bad, _reply()])
+    out = fill_diagram(client, library, _slide(), deck_title="Дека")
+    assert json.loads(out.content["diagram"])["kind"] == "flowchart"
+    claim = client.calls[1]["messages"][-1]["content"]
+    assert "flowchart" in claim and "process" in claim
+
+
+def test_side_by_side_without_edges_is_fine(library):
+    """Претензия — именно к связям: честное сравнение проходит с первого раза."""
+    client = FakeClient([_reply(diagram={
+        "kind": "comparison",
+        "nodes": [{"id": "a", "label": "Своё железо", "lane": "Было"},
+                  {"id": "b", "label": "Оплата по потреблению", "lane": "Стало"}],
+    })])
+    out = fill_diagram(client, library, _slide(), deck_title="Дека")
+    assert json.loads(out.content["diagram"])["kind"] == "comparison"
+    assert len(client.calls) == 1
+
+
 def test_system_prompt_menu_is_exactly_available_kinds():
     """Меню промпта собирается из каталога: только реализованные типы. Тип со
     снятым available обязан из меню исчезать — иначе модель выберет то, чего

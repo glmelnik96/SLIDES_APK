@@ -1164,6 +1164,10 @@ a { color: var(--accent); }
 /* Выход одним движением: когда вопросов несколько, отвечать на каждый — работа,
    а сборка стоит на паузе. Кнопка второстепенная — решение всё же ИИ. */
 .glass-auto { align-self: flex-start; }
+/* Хвост документа сверх потолка: кнопка второстепенная — это не часть текущей
+   сборки, а заявка на вторую деку. */
+.glass-rest { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.glass-rest-note { margin: 0; font-size: var(--fs-cap); color: var(--muted); line-height: 1.45; }
 .glass-q { background: var(--surface); border-radius: var(--radius-card); padding: 12px; }
 /* Осечка заполнения: макет молча подменялся на заглушку, и со стороны автора это
    выглядело как «выбрал один макет, применился другой». Карточка тревожная. */

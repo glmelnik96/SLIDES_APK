@@ -153,6 +153,23 @@ class _BaseSpec(BaseModel):
             del self.offsets[k]
         return errors
 
+    def dropped_edge_errors(self) -> list[str]:
+        """Претензия к связям у типов, где движок их не рисует ВООБЩЕ.
+
+        У сравнения, матрицы и Венна раскладку задают не связи, а стороны и
+        множества — заданные рёбра молча пропадают. Замер на живой модели
+        (декa «Партнёры») показал, зачем это ловить: модель выбирала
+        ``comparison`` для процессного раздела, объявляла три перехода, и на
+        слайде оставались две колонки плашек без единой стрелки — связи, ради
+        которых раздел и брали в схему, исчезали без следа. Наличие рёбер здесь
+        — сигнал не «лишний ключ», а «выбран не тот тип», поэтому и текст
+        претензии зовёт сменить kind."""
+        if not self.edges:
+            return []
+        return [f"{self.kind}: связи (edges) в этом типе не рисуются — если "
+                "между блоками есть переходы, возьми flowchart, process или "
+                "swimlanes; если переходов нет, убери edges"]
+
     def isolated_errors(self) -> list[str]:
         """Претензия к узлам, до которых не ведёт и от которых не идёт ни одно
         ребро — для типов, где раскладку задают именно рёбра.
@@ -263,7 +280,7 @@ class MatrixSpec(_BaseSpec):
         if len(self.nodes) != 4:
             errors.append("matrix требует ровно 4 узла (по одному на квадрант: "
                           "верх-лево, верх-право, низ-лево, низ-право)")
-        return errors
+        return errors + self.dropped_edge_errors()
 
 
 class PyramidSpec(_BaseSpec):
@@ -301,7 +318,7 @@ class ComparisonSpec(_BaseSpec):
         elif len(_lanes(self.nodes)) != 2:
             errors.append("comparison требует ровно 2 стороны "
                           f"(разных lane), сейчас {len(_lanes(self.nodes))}")
-        return errors
+        return errors + self.dropped_edge_errors()
 
 
 class VennSpec(_BaseSpec):
@@ -312,7 +329,7 @@ class VennSpec(_BaseSpec):
         errors = super().semantic_errors()
         if not 2 <= len(self.nodes) <= 3:
             errors.append("venn требует 2 или 3 узла-множества")
-        return errors
+        return errors + self.dropped_edge_errors()
 
 
 class SwimlanesSpec(_BaseSpec):

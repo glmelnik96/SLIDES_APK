@@ -1247,3 +1247,64 @@ test("layout: стрелки цикла упираются в край плаш�
     });
   }
 });
+
+function bbox(pos) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const id of Object.keys(pos)) {
+    const p = pos[id];
+    x0 = Math.min(x0, p.x - p.w / 2); x1 = Math.max(x1, p.x + p.w / 2);
+    y0 = Math.min(y0, p.y - p.h / 2); y1 = Math.max(y1, p.y + p.h / 2);
+  }
+  return { x0, x1, y0, y1 };
+}
+
+test("layout: схема стоит по центру холста, а не жмётся к краю", () => {
+  // Раскладки считают позиции от «идеальной» геометрии (корень карты — в
+  // середине, ветви расходятся в обе стороны). На НЕсимметричных данных схема
+  // уезжала к краю: карта с ОДНОЙ ветвью оставляла 745px пустоты слева и 45
+  // справа — слайд выглядел сломанным, хотя каждый узел стоял «правильно».
+  const one = { version: 1, kind: "mindmap", direction: "right",
+    nodes: [{ id: "a", label: "Тема" }, { id: "b", label: "Ветвь" },
+            { id: "c", label: "Лист" }],
+    edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }] };
+  const raw = bbox(D.LAYOUTS.mindmap(one).nodes);
+  assert.ok(raw.x0 - (W - raw.x1) > 300, "сэмпл должен быть несимметричным");
+
+  for (const kind of ["mindmap", "cycle", "flowchart", "hierarchy", "network",
+                      "process", "funnel", "pyramid", "hub_spoke", "venn"]) {
+    const spec = kind === "mindmap" ? one : chain(kind, 5);
+    const b = bbox(D.placed(spec).nodes);
+    assert.ok(Math.abs(b.x0 - (W - b.x1)) <= 2,
+      `${kind}: поля по X ${Math.round(b.x0)}/${Math.round(W - b.x1)}`);
+    assert.ok(Math.abs(b.y0 - (H - b.y1)) <= 2,
+      `${kind}: поля по Y ${Math.round(b.y0)}/${Math.round(H - b.y1)}`);
+  }
+});
+
+test("layout: схему с фоновой разметкой не центрируем", () => {
+  // Оси матрицы, дорожки, сетка Ганта и ступени нарисованы в АБСОЛЮТНЫХ
+  // координатах холста: сдвинь узлы — и подпись дорожки уедет от своей полосы.
+  for (const kind of ["matrix", "swimlanes", "gantt_lite", "steps",
+                      "comparison"]) {
+    const spec = chain(kind, 4);
+    assert.deepEqual(D.placed(spec).nodes, D.LAYOUTS[kind](spec).nodes, kind);
+  }
+});
+
+test("layout: граф связей читается слева направо", () => {
+  // Силовая модель симметрична — направление рёбер на неё не влияло, и цепочка
+  // a→b→c с равным успехом ложилась справа налево: граф читался задом наперёд.
+  const fwd = D.placed(chain("network", 5)).nodes;
+  for (let i = 1; i < 5; i++) {
+    assert.ok(fwd["n" + i].x > fwd["n" + (i - 1)].x,
+      `n${i - 1}→n${i}: поток идёт назад`);
+  }
+  // Те же узлы, рёбра объявлены с конца — раскладка обязана совпасть.
+  const back = chain("network", 5);
+  back.edges = back.edges.map((e) => ({ from: e.to, to: e.from })).reverse();
+  const pos = D.placed(back).nodes;
+  for (let i = 1; i < 5; i++) {
+    assert.ok(pos["n" + i].x < pos["n" + (i - 1)].x,
+      `n${i}→n${i - 1}: поток идёт назад`);
+  }
+});

@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Iterator
 
@@ -14,6 +15,17 @@ from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from .base import (Block, ImageBlock, InputDoc, ListBlock, Section, TableBlock,
                    TextBlock)
+
+# Мягкий перенос строки (<a:br/>) python-pptx отдаёт как \x0b, разрыв колонки —
+# как \x0c. В нашей модели блок и заголовок — ОДНА строка, и эти символы ехали
+# в неё как есть: заголовок деки «Миграция,\x0bрезервное копирование» рвался
+# посреди фразы, а на обложке хвост уходил в подзаголовок отдельным предложением.
+_SOFT_BREAKS = re.compile(r"[\x0b\x0c\r\u2028\u2029]+")
+
+
+def _clean(text: str | None) -> str:
+    """Текст из pptx -> одна строка: мягкие переносы становятся пробелом."""
+    return " ".join(_SOFT_BREAKS.sub(" ", text or "").split())
 
 
 def _walk_shapes(shapes) -> Iterator:
@@ -50,7 +62,7 @@ def _chart_blocks(shape) -> list[Block]:
     blocks: list[Block] = []
     try:
         if chart.has_title and chart.chart_title.has_text_frame:
-            title = chart.chart_title.text_frame.text.strip()
+            title = _clean(chart.chart_title.text_frame.text)
             if title:
                 blocks.append(TextBlock(text=title))
     except Exception:
@@ -122,7 +134,8 @@ def _slide_notes(slide) -> str:
     if not slide.has_notes_slide:
         return ""
     try:
-        return slide.notes_slide.notes_text_frame.text.strip()
+        # Заметки многострочны по смыслу — сносим только мягкие переносы.
+        return _SOFT_BREAKS.sub(" ", slide.notes_slide.notes_text_frame.text).strip()
     except Exception:
         return ""
 
@@ -133,7 +146,7 @@ def parse_pptx(path: str | Path) -> InputDoc:
     for number, slide in enumerate(prs.slides, start=1):
         title_shape = slide.shapes.title
         title_id = title_shape.shape_id if title_shape is not None else None
-        heading = (title_shape.text or "").strip() if title_shape is not None else ""
+        heading = _clean(title_shape.text) if title_shape is not None else ""
         if number == 1 and heading and not doc.title:
             doc.title = heading
         section = Section(heading=heading or f"Слайд {number}", level=1)
@@ -145,7 +158,7 @@ def parse_pptx(path: str | Path) -> InputDoc:
                 continue
             if getattr(shape, "has_table", False):
                 section.blocks.append(TableBlock(
-                    rows=[[cell.text.strip() for cell in row.cells]
+                    rows=[[_clean(cell.text) for cell in row.cells]
                           for row in shape.table.rows]))
                 continue
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -154,8 +167,8 @@ def parse_pptx(path: str | Path) -> InputDoc:
                     section.blocks.append(block)
                 continue
             if shape.has_text_frame:
-                paragraphs = [p.text.strip()
-                              for p in shape.text_frame.paragraphs if p.text.strip()]
+                paragraphs = [t for t in (_clean(p.text)
+                                          for p in shape.text_frame.paragraphs) if t]
                 if len(paragraphs) > 1:
                     section.blocks.append(ListBlock(items=paragraphs))
                 elif paragraphs:

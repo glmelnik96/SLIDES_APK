@@ -157,7 +157,14 @@
 @media (prefers-reduced-motion: reduce){
   .is-active .m-enter,.is-active .m-enter-left,.is-active .m-enter-right,
   .is-active .m-enter-scale,.is-active .m-fade,
-  .is-active .m-stagger>*{animation:m-fade 1ms linear forwards;animation-delay:0ms;}
+  /* !important у задержки обязателен: правила каскада выше адресуют плитку
+     точнее (`.m-stagger>*:nth-child(6)`), и без него у шестой плитки оставалась
+     задержка 420мс. Снимок для PNG/PPTX-экспорта и vision-QA берётся через 200мс
+     после перехода на слайд — четвёртая, пятая и шестая плитки cards-6 (и любой
+     хвост стаггера) уезжали из кадра ПРОЗРАЧНЫМИ: экспорт молча терял контент,
+     а модель на ревью видела «пустое поле снизу». */
+  .is-active .m-stagger>*{animation:m-fade 1ms linear forwards;
+    animation-delay:0ms !important;}
   .is-active .m-loop-pulse,.is-active .m-loop-drift,
   .is-active .m-loop-draw,.is-active .m-loop-float{animation:none;}
   .m-loop-pulse,.m-loop-draw{opacity:1;transform:none;}

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterable
@@ -25,6 +26,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from webapp import draft, draft_render, slide_types
+from webapp.paths import session_dir
 
 _LOG = logging.getLogger(__name__)
 
@@ -130,14 +132,18 @@ def _menu(library) -> str:
                      for t in library.templates if t.id not in _EXCLUDED)
 
 
-def plan_section_candidates(client: Any, library, section) -> SectionChoice:
+def plan_section_candidates(client: Any, library, section, *,
+                            text: str | None = None) -> SectionChoice:
     """Top-3 кандидата макета с уверенностью для одного раздела.
+
+    ``text`` — готовый бриф, если он уже посчитан и дополнен (раздел, прочитанный
+    с картинки исходного слайда). По умолчанию берём текст самого раздела.
 
     Любой сбой (сеть/формат/чужие id) → эвристика planner._fallback_template с
     confidence 0.0 — честное «место сомнения», а не тихий уверенный выбор."""
     from htmlslides.pipeline.planner import (_fallback_template,
                                              _section_to_text)
-    text = _section_to_text(section)
+    text = _section_to_text(section) if text is None else text
     known = {t.id for t in library.templates if t.id not in _EXCLUDED}
     try:
         choice = client.chat_json(
@@ -173,6 +179,110 @@ def _question_for(choice: SectionChoice) -> str:
             else _ONE_CANDIDATE_QUESTION)
 
 
+# Раздел, от которого в тексте остались одни картинки. Стеклянная сборка идёт
+# мимо vision-ветки чёрного ящика (там раздел дополняется рендером исходного
+# слайда), и филлер на таком брифе не «собирал хуже» — он ДОСОЧИНЯЛ: на слайде
+# появлялись тезисы и цифры, которых в документе нет вообще. Молчать об этом
+# нельзя, поэтому такой раздел уходит в needs_input с прямым вопросом.
+_IMAGE_MARK = re.compile(r"\[картинка:[^\]]*\]")
+MIN_SECTION_CHARS = 80
+
+_IMAGE_ONLY_QUESTION = (
+    "В этом разделе исходника только изображения — текста, по которому можно "
+    "собрать слайд, нет. Опишите, что на них показано: иначе ИИ соберёт слайд "
+    "по одному заголовку и додумает остальное.")
+
+
+def _image_only(section: Any, text: str) -> bool:
+    """В разделе есть картинки, а текста — меньше одной фразы.
+
+    Меряем по тексту БЕЗ пометок «[картинка: …]»: сами пометки к содержанию
+    отношения не имеют, но длину брифа раздували, и раздел из шести картинок
+    выглядел насыщенным."""
+    from htmlslides.parsers.base import ImageBlock
+    if not any(isinstance(b, ImageBlock) for b in getattr(section, "blocks", [])):
+        return False
+    body = _IMAGE_MARK.sub(" ", text or "")
+    return len(" ".join(body.split())) < MIN_SECTION_CHARS
+
+
+_VISION_SYSTEM = """\
+Ты читаешь ОДИН слайд чужой презентации по его картинке. Верни ТОЛЬКО JSON
+{"text": "..."} — что на слайде написано и нарисовано, по-русски.
+
+Правила:
+- Сначала перепиши ВЕСЬ видимый текст: заголовок, пункты, подписи, числа с их
+  единицами. Дословно, ничего не сокращая по смыслу.
+- Потом одной-двумя фразами опиши, что показывает картинка: схема (что с чем
+  связано), график (что по осям, куда идёт), таблица (какие колонки), логотипы,
+  фото.
+- НЕ добавляй выводов, оценок и того, чего на слайде нет. Не видно — не пиши.
+- Пусто или неразборчиво — верни "".
+"""
+
+# Заметка в брифе: автор в панели контекста должен видеть, что этот текст пришёл
+# не из документа, а прочитан с картинки — и мог его поправить.
+_IMAGE_READ_NOTE = "Прочитано с изображения исходного слайда:"
+
+
+class _SlideRead(BaseModel):
+    text: str = ""
+
+
+def _read_one(client: Any, png: Path) -> str:
+    from htmlslides.pipeline.client import image_part
+    try:
+        got = client.chat_json(
+            [{"role": "system", "content": _VISION_SYSTEM},
+             {"role": "user", "content": [
+                 {"type": "text", "text": "Прочитай этот слайд."},
+                 image_part(png)]}],
+            _SlideRead, max_tokens=2048, retries=1)
+        return " ".join((got.text or "").split())
+    except Exception:  # noqa: BLE001 — не прочиталось, останется вопрос автору
+        _LOG.warning("glass: vision read failed for %s", png, exc_info=True)
+        return ""
+
+
+def _read_blind_sections(source: Path, session_id: str, pairs: list,
+                         briefs: list[str], client: Any,
+                         workers: int) -> dict[int, str]:
+    """Дочитать «слепые» разделы pptx с картинок исходных слайдов.
+
+    Стеклянная сборка идёт мимо vision-ветки чёрного ящика (там скриншот
+    исходного слайда прикладывается к планировщику), и раздел, где весь смысл
+    лежит в картинке, приезжал в филлер пустым — а тот не «собирал хуже», он
+    ДОСОЧИНЯЛ тезисы и цифры. Рендерим ЛЕНИВО: только для pptx и только когда
+    слепые разделы вообще есть — LibreOffice на деку стоит десятки секунд, и
+    платить их за документ без картинок незачем. Отдаём {позиция: описание};
+    что не прочиталось, останется вопросом автору."""
+    from htmlslides.parsers.render import RenderUnavailable, render_pptx_pngs
+
+    blind = [i for i, (_, s) in enumerate(pairs) if _image_only(s, briefs[i])]
+    if not blind or source.suffix.lower() != ".pptx":
+        return {}
+    try:
+        pngs = render_pptx_pngs(source, session_dir(session_id) / "source-slides")
+    except (RenderUnavailable, OSError, ValueError) as exc:
+        _LOG.warning("glass: source render unavailable (%s)", exc)
+        return {}
+    except Exception:  # noqa: BLE001 — споткнулись на файле, не роняем старт
+        _LOG.warning("glass: source render failed", exc_info=True)
+        return {}
+
+    # Картинки идут 1:1 с ИСХОДНЫМИ разделами документа, поэтому в pairs хранится
+    # исходный индекс: отфильтрованный пустой раздел иначе сдвинул бы весь ряд.
+    jobs = [(i, pngs[pairs[i][0]]) for i in blind if pairs[i][0] < len(pngs)]
+    if not jobs:
+        return {}
+    pool = ThreadPoolExecutor(max_workers=max(1, workers))
+    try:
+        texts = list(pool.map(lambda j: _read_one(client, j[1]), jobs))
+    finally:
+        pool.shutdown()
+    return {i: t for (i, _), t in zip(jobs, texts) if t}
+
+
 def _doubtful(choice: SectionChoice) -> bool:
     cands = choice.candidates
     if not cands or cands[0].confidence < CONFIDENCE_FLOOR:
@@ -180,6 +290,49 @@ def _doubtful(choice: SectionChoice) -> bool:
     if len(cands) >= 2 and cands[0].confidence - cands[1].confidence < GAP_FLOOR:
         return True
     return False
+
+
+# Разделы скорятся ПАРАЛЛЕЛЬНО и независимо, поэтому однородный документ давал
+# однородную деку: на реальном прогоне семь разделов подряд получили cards-6 —
+# 45% деки одним макетом. Модель тут не ошибается (каждый раздел правда ложится
+# в карточки), ошибается процесс: соседа она не видит. Разводим повторы уже
+# ПОСЛЕ скоринга, вторым кандидатом самой модели.
+REPEAT_RUN = 3          # столько одинаковых подряд — уже узор, а не выбор
+# Годность запасного макета меряем ПО НЕМУ САМОМУ, а не по отрыву от первого:
+# замер на живой модели (Партнёры, 28 разделов) дал разрыв топ-1/топ-2 в
+# 0.35–0.47 практически везде — любой относительный порог либо не срабатывал
+# никогда, либо срабатывал всегда. При этом сам запасной вариант шёл на 0.45–0.65
+# («тоже подходит, просто хуже»), и такой макет раз в три слайда честнее, чем
+# восемь одинаковых сеток подряд.
+SWAP_FLOOR = 0.45
+
+
+def _varied_templates(choices: list[SectionChoice]) -> list[str]:
+    """Макет на раздел, с разведением подряд идущих повторов.
+
+    Меняем ТОЛЬКО применяемый макет, не трогая уверенность и чипы: `_doubtful`
+    считается по честному ответу модели, иначе разведение повторов начало бы
+    плодить вопросы на ровном месте. Запасной берём не любой, а от SWAP_FLOOR:
+    разнообразие не стоит макета, который разделу не подходит."""
+    picked: list[str] = []
+    run = 0
+    for choice in choices:
+        cands = choice.candidates
+        if not cands:
+            picked.append("")
+            run = 0
+            continue
+        top = cands[0].template_id
+        prev = picked[-1] if picked else None
+        if top == prev and run >= REPEAT_RUN - 1:
+            alt = next((c for c in cands[1:]
+                        if c.template_id != prev and c.confidence >= SWAP_FLOOR),
+                       None)
+            if alt:
+                top = alt.template_id
+        run = run + 1 if top == prev else 1
+        picked.append(top)
+    return picked
 
 
 def unfinished_outlines(session_ids: Iterable[str]) -> int:
@@ -223,12 +376,40 @@ def _cover_content(title: str, library: Any) -> dict:
     return out
 
 
+def _deck_title(doc: Any, origin_name: str | None, sections: list) -> str:
+    """Название деки: титул документа -> имя ЗАГРУЖЕННОГО файла -> первый раздел.
+
+    Раньше здесь стоял `source.stem`, но source — это путь на диске сервиса, куда
+    загрузка всегда ложится как `input.pptx`: у любой pptx без титульного текста
+    обложка выходила с надписью «INPUT». Имя файла автора мы теперь получаем
+    отдельным аргументом; подчёркивания в нём — почти всегда пробелы
+    («Партнёры_Инфраструктура_для_ИИ»)."""
+    title = " ".join((getattr(doc, "title", "") or "").split())
+    if title:
+        return title
+    stem = Path(origin_name or "").stem.replace("_", " ")
+    stem = " ".join(stem.split())
+    if stem:
+        return stem
+    for section in sections:
+        heading = " ".join((section.heading or "").split())
+        if heading:
+            return heading
+    return "Презентация"
+
+
 def start_glass(session_id: str, source: Path, *, client: Any | None = None,
-                workers: int = 4) -> draft.DraftPlan:
+                workers: int = 4, origin_name: str | None = None,
+                offset: int = 0, title: str | None = None) -> draft.DraftPlan:
     """Документ → прозрачный аутлайн: обложка + слайд на раздел с кандидатами.
 
     Слайды НЕ заполняются здесь (это делают шаги /glass/step) — старт быстрый:
-    parse + параллельный скоринг кандидатов (лёгкий вызов на раздел)."""
+    parse + параллельный скоринг кандидатов (лёгкий вызов на раздел).
+
+    ``offset`` — сколько подходящих разделов пропустить сверху: так вторая дека
+    забирает хвост документа, не влезший в потолок (см. continue_glass).
+    ``title`` — готовый титул для такой деки: имя файла на диске всегда
+    `input.pptx`, и выводить его заново означало бы получить другую обложку."""
     from htmlslides.library import TemplateLibrary
     from htmlslides.parsers import parse_file
     from htmlslides.pipeline.planner import (_has_content, _is_part_title,
@@ -237,36 +418,100 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     client = client or _kimi()
     library = TemplateLibrary.load()
     doc = parse_file(source)
-    title = (doc.title or source.stem or "Презентация").strip()
-    sections = [s for s in doc.sections
-                if _has_content(s) and not _is_part_title(s)]
-    dropped = max(0, len(sections) - MAX_GLASS_SLIDES)
-    sections = sections[:MAX_GLASS_SLIDES]
+    # Исходный номер раздела едет рядом: по нему берётся картинка исходного
+    # слайда (см. _read_blind_sections) — выпавший раздел иначе сдвинул бы ряд.
+    pairs = [(i, s) for i, s in enumerate(doc.sections)
+             if _has_content(s) and not _is_part_title(s)]
+    offset = max(0, offset)
+    pairs = pairs[offset:]
+    dropped = max(0, len(pairs) - MAX_GLASS_SLIDES)
+    pairs = pairs[:MAX_GLASS_SLIDES]
+    if not pairs:
+        raise ValueError("в документе не осталось разделов для сборки")
+    sections = [s for _, s in pairs]
+    title = " ".join((title or "").split()) or _deck_title(doc, origin_name,
+                                                           sections)
+
+    briefs = [_section_to_text(s) for s in sections]
+    for pos, text in _read_blind_sections(source, session_id, pairs, briefs,
+                                          client, workers).items():
+        briefs[pos] = f"{briefs[pos]}\n\n{_IMAGE_READ_NOTE} {text}".strip()
 
     pool = ThreadPoolExecutor(max_workers=max(1, workers))
     try:
+        # Скорим по обогащённому брифу: раздел, прочитанный с картинки, для
+        # выбора макета ничем не хуже раздела с текстом в XML.
         choices = list(pool.map(
-            lambda s: plan_section_candidates(client, library, s), sections))
+            lambda p: plan_section_candidates(client, library, p[0], text=p[1]),
+            list(zip(sections, briefs))))
     finally:
         pool.shutdown()
 
     slides = [draft.DraftSlide(template_id="cover",
                                content=_cover_content(title, library), filled=True)]
-    for section, choice in zip(sections, choices):
-        doubt = _doubtful(choice)
+    for section, brief, choice, tid in zip(sections, briefs, choices,
+                                           _varied_templates(choices)):
+        blind = _image_only(section, brief)
+        doubt = blind or _doubtful(choice)
         slides.append(draft.DraftSlide(
-            template_id=choice.candidates[0].template_id,
-            brief=_section_to_text(section),
+            template_id=tid or choice.candidates[0].template_id,
+            brief=brief,
             status="needs_input" if doubt else None,
-            question=_question_for(choice) if doubt else None,
+            question=(_IMAGE_ONLY_QUESTION if blind else _question_for(choice))
+            if doubt else None,
             candidates=[c.template_id for c in choice.candidates],
         ))
-    plan = draft.DraftPlan(title=title, slides=slides, notice=(
-        f"Документ длиннее потолка: взяли первые {MAX_GLASS_SLIDES} разделов, "
-        f"ещё {dropped} не вошли — соберите их отдельной декой." if dropped else ""))
+    plan = draft.DraftPlan(
+        title=title, slides=slides,
+        # Хвост называем числом и оставляем адрес, с которого его продолжать:
+        # кнопка в панели сборки заводит вторую деку ровно отсюда, так что
+        # обрезка перестала быть безвозвратной.
+        rest=dropped, rest_from=(offset + len(pairs)) if dropped else 0,
+        notice=(f"Документ длиннее потолка: взяли разделы "
+                f"{offset + 1}–{offset + len(pairs)}, ещё {dropped} не вошли."
+                if dropped else ""))
     draft.save_plan(session_id, plan)
     draft_render.render_draft(session_id, plan)
     return plan
+
+
+def continue_glass(prev_session_id: str, session_id: str, *,
+                   client: Any | None = None,
+                   workers: int = 4) -> draft.DraftPlan:
+    """Вторая дека из хвоста документа, не влезшего в потолок первой.
+
+    Потолок в 40 разделов поднимать некуда (сорок слайдов автор и так собирает
+    по одному больше получаса), но и терять хвост молча нельзя: раньше notice
+    просто советовал «соберите их отдельной декой», а как — автор придумывал
+    сам, обычно резал исходный файл руками. Исходник уже лежит в сессии, номер
+    первого невзятого раздела — в плане, титул наследуем от первой деки (на
+    диске файл всегда `input.<ext>`, и вывод имени дал бы обложку «INPUT»)."""
+    prev = draft.load_plan(prev_session_id)
+    if not prev.rest_from:
+        raise ValueError("в документе не осталось разделов для сборки")
+    src = _source_file(prev_session_id)
+    if src is None:
+        raise FileNotFoundError("исходный документ этой сборки уже удалён")
+    dest = session_dir(session_id) / src.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dest)
+    out = start_glass(session_id, dest, client=client, workers=workers,
+                      offset=prev.rest_from, title=prev.title)
+    # Хвост забран — снимаем заявку с первой деки, иначе её панель предлагала бы
+    # собрать то же самое ещё раз (предложение живёт в плане, а не во вкладке).
+    with _plan_lock(prev_session_id):
+        fresh = draft.load_plan(prev_session_id)
+        fresh.rest = fresh.rest_from = 0
+        draft.save_plan(prev_session_id, fresh)
+    return out
+
+
+def _source_file(session_id: str) -> Path | None:
+    """Загруженный документ сессии (`input.<ext>`, кладёт /glass/start)."""
+    for path in sorted(session_dir(session_id).glob("input.*")):
+        if path.is_file():
+            return path
+    return None
 
 
 # Шаг и ответ — два писателя одного plan.json, и оба держат снимок плана всё

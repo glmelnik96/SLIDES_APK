@@ -787,6 +787,18 @@
        зазор берём только когда подписи есть — иначе граф без подписей без нужды
        расползся бы по краям холста. */
     separateBoxes(pos, edges.some(function (e) { return e.label; }) ? EDGE_W : 56);
+    /* Силовая модель симметрична: направление стрелок на неё не влияет, и
+       цепочка a→b→c ложилась справа налево ровно так же, как слева направо —
+       граф читался задом наперёд. Разворачиваем ОТРАЖЕНИЕМ по X: расстояния
+       между узлами (единственное, о чём говорит силовая модель) сохраняются, а
+       поток идёт слева направо, как читают. */
+    var drift = 0;
+    edges.forEach(function (e) {
+      if (pos[e.from] && pos[e.to]) drift += pos[e.to].x - pos[e.from].x;
+    });
+    if (drift < 0) {
+      Object.keys(pos).forEach(function (id) { pos[id].x = W - pos[id].x; });
+    }
     var links = edges.filter(function (e) { return pos[e.from] && pos[e.to]; })
       .map(function (e) {
         return { from: e.from, to: e.to, label: e.label || "",
@@ -1628,8 +1640,46 @@
     return out;
   }
 
-  function build(spec) {
+  /* Сдвинуть схему так, чтобы её габарит стоял по центру холста.
+
+     Раскладки считают позиции от «идеальной» геометрии: корень карты — в
+     середине, ранги дерева — от середины. На НЕсимметричных данных схема
+     прижималась к краю: карта с одной ветвью оставляла 745px пустоты слева и
+     45px справа — слайд выглядел сломанным, хотя каждый узел стоял «правильно».
+     Только перенос: масштаб трогать нельзя, он соврал бы про расстояния. */
+  function recenter(result) {
+    var pos = result.nodes, ids = Object.keys(pos || {});
+    if (!ids.length) return result;
+    var x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    ids.forEach(function (id) {
+      var p = pos[id];
+      x0 = Math.min(x0, p.x - p.w / 2); x1 = Math.max(x1, p.x + p.w / 2);
+      y0 = Math.min(y0, p.y - p.h / 2); y1 = Math.max(y1, p.y + p.h / 2);
+    });
+    // Схема шире/выше холста: любой сдвиг по этой оси только срежет край.
+    var dx = x1 - x0 > W ? 0 : (W - x1 - x0) / 2;
+    var dy = y1 - y0 > H ? 0 : (H - y1 - y0) / 2;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return result;
+    ids.forEach(function (id) { pos[id].x += dx; pos[id].y += dy; });
+    (result.links || []).forEach(function (l) {
+      (l.points || []).forEach(function (pt) { pt[0] += dx; pt[1] += dy; });
+      if (l.arc) { l.arc.cx += dx; l.arc.cy += dy; }
+    });
+    return result;
+  }
+
+  /* Раскладка + центрирование — ОДНА точка входа для отрисовки и для редактора:
+     разойдись они, магнит при перетаскивании считал бы по другим координатам,
+     чем видит автор. Кинды с фоновой разметкой (оси матрицы, дорожки, сетка
+     Ганта, ступени) не центрируем: их декор нарисован в абсолютных координатах
+     холста и уехал бы от узлов. */
+  function placed(spec) {
     var result = LAYOUTS[spec.kind](spec);
+    return DECOR[spec.kind] ? result : recenter(result);
+  }
+
+  function build(spec) {
+    var result = placed(spec);
     var auto = snapshot(result.nodes);
     applyOffsets(result.nodes, spec.offsets);
     relink(result, auto);
@@ -1674,7 +1724,7 @@
     var clean = sanitize(spec);
     if (!clean) return null;
     try {
-      return applyOffsets(LAYOUTS[clean.kind](clean).nodes, clean.offsets);
+      return applyOffsets(placed(clean).nodes, clean.offsets);
     } catch (e) {
       return null;   // нет раскладки — редактор просто тащит узел без магнита
     }
@@ -1688,7 +1738,7 @@
 
   var api = {
     render: render, renderAll: renderAll, layout: computeLayout,
-    LAYOUTS: LAYOUTS, applyOffsets: applyOffsets, num: num,
+    LAYOUTS: LAYOUTS, placed: placed, applyOffsets: applyOffsets, num: num,
     relink: relink, reroute: reroute, sideOf: sideOf,
     layoutFlowchart: layoutFlowchart, layoutProcess: layoutProcess,
     layoutCycle: layoutCycle, layoutFunnel: layoutFunnel,

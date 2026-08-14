@@ -179,7 +179,7 @@
      влезают (цифру-героя не трогаем — она и есть смысл слайда). Пол
      читаемости 20px для подписи (база 30) и пропорциональные ~15 для
      пояснения (база 22). */
-  var _SR_MIN_FS = 20, _SR_BOTTOM = 60;
+  var _SR_MIN_FS = 20, _SR_BOTTOM = 60, _SR_SLACK = 40;
   function autofitStatsHeight() {
     var blocks = document.querySelectorAll(".sr-rows");
     for (var b = 0; b < blocks.length; b++) {
@@ -191,12 +191,21 @@
       var i, fs;
       for (i = 0; i < labels.length; i++) labels[i].style.fontSize = "";   // сброс к базе
       for (i = 0; i < caps.length; i++) caps[i].style.fontSize = "";
-      var budget = slide.clientHeight - _SR_BOTTOM - box.offsetTop;
+      box.style.top = "";                 // сброс сдвига: пересчёт идемпотентен
+      var top0 = box.offsetTop;
+      var budget = slide.clientHeight - _SR_BOTTOM - top0;
       for (fs = 30; fs > _SR_MIN_FS; fs--) {
         if (box.offsetHeight <= budget) break;
         for (i = 0; i < labels.length; i++) labels[i].style.fontSize = (fs - 1) + "px";
         for (i = 0; i < caps.length; i++) caps[i].style.fontSize = ((fs - 1) * 22 / 30) + "px";
       }
+      /* Остаток бюджета делим пополам. Верх блока задан константой в CSS под
+         ДВА ряда по четыре метрики, а типичный слайд — один ряд из трёх: он
+         занимал ~250px из 690, и нижние 45% слайда оставались пустыми (прод-замер,
+         дека «Юнит-экономика», слайд 41). Двигаем блок, а не переписываем CSS:
+         ужим выше меряет ту же коробку, и фиксированная высота сломала бы его. */
+      var free = budget - box.offsetHeight;
+      if (free > _SR_SLACK) box.style.top = (top0 + free / 2) + "px";
     }
   }
 

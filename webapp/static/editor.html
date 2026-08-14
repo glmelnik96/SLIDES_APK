@@ -74,6 +74,13 @@
         в макетах. Слайды с вопросом помечены «?» в ленте слева.</p>
       <button class="btn btn-ghost btn-sm glass-auto hidden" id="glassAuto"
               type="button">Решить все на усмотрение ИИ</button>
+      <!-- Хвост документа, не влезший в потолок: потолок не поднимаем (сорок
+           слайдов автор и так проходит по одному больше получаса), но потерю
+           делаем обратимой — вторая дека с первого невзятого раздела. -->
+      <div class="glass-rest hidden" id="glassRest">
+        <button class="btn btn-ghost btn-sm" id="glassRestBtn" type="button"></button>
+        <p class="glass-rest-note hidden" id="glassRestNote"></p>
+      </div>
       <div id="glassQuestions"></div>
     </div>
     <div class="glass-foot hidden" id="glassDone">

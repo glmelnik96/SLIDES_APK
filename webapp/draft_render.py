@@ -58,30 +58,40 @@ def _to_deck_plan(plan: DraftPlan) -> DeckPlan:
                 spec = library.get(tid)
                 slides.append(SlidePlan(
                     index=i, type=spec.type, template_id=tid,
-                    content=_safe_content(library, tid, content)))
+                    content=_safe_content(library, tid, content,
+                                          sample=not s.filled)))
                 continue
             # invalid typed fields → fall through to the raw path below
         tid = s.template_id or "blank"
         spec = library.get(tid)
         slides.append(SlidePlan(index=i, type=spec.type, template_id=tid,
-                                content=_safe_content(library, tid, s.content)))
+                                content=_safe_content(library, tid, s.content,
+                                                      sample=not s.filled)))
     return DeckPlan(title=plan.title, slides=slides)
 
 
 def _safe_content(library: TemplateLibrary, template_id: str,
-                  content: dict) -> dict:
+                  content: dict, *, sample: bool = True) -> dict:
     """Coerce content so it passes the slot contract (so assemble won't raise).
     Only the template's known slots are kept; empty slots get representative filler
     (so a freshly applied master shows example text, not «…»); over-limit
-    text/lists are clamped."""
+    text/lists are clamped.
+
+    sample=False for a FINISHED slide: there an empty optional slot means the
+    author left it empty, not «show me an example». Sampling those was how a glass
+    cover with a short title shipped with the catalogue's «Короткий подзаголовок»
+    under it. Required slots still sample — an empty one would break the layout."""
     slots = library.get(template_id).slots
-    return {name: _coerce_slot(spec, content.get(name), name)
+    return {name: _coerce_slot(spec, content.get(name), name, sample=sample)
             for name, spec in slots.items()}
 
 
-def _coerce_slot(spec: SlotSpec, value, name: str, idx: int = 0):
+def _coerce_slot(spec: SlotSpec, value, name: str, idx: int = 0, *,
+                 sample: bool = True):
     if spec.kind == "text":
         if value in (None, "", []):
+            if not sample and not spec.required:
+                return ""
             # Empty slot → representative filler from the SAME source the picker
             # preview uses, so the input field can stay empty while the slide still
             # shows an example. Template-owned slots (image/lead) sample to "" and

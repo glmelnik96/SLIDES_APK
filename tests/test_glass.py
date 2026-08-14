@@ -8,6 +8,8 @@ Fake-клиент вместо LLM (паттерн test_diagram_filler.py) и fa
 import os
 os.environ["SLIDES_APP_SKIP_SHIM"] = "1"
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -172,6 +174,198 @@ def test_cover_keeps_the_whole_document_title(monkeypatch, tmp_path):
     assert len(cover["title"]) <= cap
     assert long_title[len(cover["title"])] == " "   # разрез по границе слова
     assert cover["title"] + " " + cover["subtitle"] == long_title
+
+
+def test_cover_short_title_ships_without_sample_subtitle(monkeypatch, tmp_path):
+    """Готовый слайд не досочиняется примерами из каталога: у короткого названия
+    подзаголовка нет, и раньше обложка уезжала автору с «Коротким подзаголовком»
+    под ним — текст-рыба на первом же слайде деки."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    src.write_text("# Итоги\n\n## Раздел\n\nТекст про метрики.\n", encoding="utf-8")
+    glass.start_glass("sub", src, client=FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                            confidence=0.9)])]), workers=1)
+    from webapp.paths import session_dir
+    html = (session_dir("sub") / "deck.html").read_text(encoding="utf-8")
+    # Смотрим ТОЛЬКО обложку: у ещё не заполненных слайдов рыба в пустых слотах
+    # законна — это превью макета, пока ИИ до него не дошёл.
+    cover = re.split(r"<section[^>]*\bclass=\"slide", html)[1]
+    assert "Итоги" in cover
+    assert "Короткий подзаголовок" not in cover
+
+
+def test_deck_title_falls_back_to_the_uploaded_file_name(monkeypatch, tmp_path):
+    """У pptx без титульного текста заголовок берётся из имени файла АВТОРА:
+    на диске загрузка всегда `input.<ext>`, и обложка выходила с «INPUT»."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "input.md"
+    src.write_text("## Раздел\n\nТекст про метрики.\n", encoding="utf-8")
+    one = [SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                               confidence=0.9)])]
+    plan = glass.start_glass("t1", src, client=FakeClient(list(one)), workers=1,
+                             origin_name="Партнёры_Инфраструктура_для_ИИ.pptx")
+    assert plan.title == "Партнёры Инфраструктура для ИИ"   # «_» — это пробелы
+
+    # имени файла нет вовсе → заголовок первого раздела, но никогда не «input»
+    plan = glass.start_glass("t2", src, client=FakeClient(list(one)), workers=1)
+    assert plan.title == "Раздел"
+
+
+def test_image_only_section_asks_instead_of_inventing(monkeypatch, tmp_path):
+    """Раздел из одних картинок уходит в needs_input, даже если ИИ уверен.
+
+    Стеклянная сборка идёт мимо vision-ветки чёрного ящика: текста у такого
+    раздела нет, и филлер не «собирал хуже» — он ДОСОЧИНЯЛ тезисы и цифры,
+    которых в документе нет. Спросить автора честнее, чем выдумать."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    src.write_text("# Дека\n\n## Архитектура\n\n![](a.png)\n\n![](b.png)\n",
+                   encoding="utf-8")
+    plan = glass.start_glass("img", src, client=FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                            confidence=0.95),
+                                  Candidate(template_id="three-col",
+                                            confidence=0.2)])]), workers=1)
+    s = plan.slides[1]
+    assert s.status == "needs_input"
+    assert "только изображения" in (s.question or "")
+    assert s.candidates == ["stats-row", "three-col"]   # чипы на месте
+
+
+_PNG = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def _pptx_with_blind_slide(tmp_path):
+    """pptx из двух слайдов: [1] текстовый, [2] одна картинка без текста."""
+    from pptx import Presentation
+    from pptx.util import Inches
+    import io
+
+    prs = Presentation()
+    s1 = prs.slides.add_slide(prs.slide_layouts[5])
+    s1.shapes.title.text_frame.text = "Как устроена платформа"
+    box = s1.shapes.add_textbox(Inches(1), Inches(3), Inches(6), Inches(1))
+    box.text_frame.text = ("Платформа собрана из трёх слоёв: хранение, "
+                           "вычисления и оркестрация задач.")
+    s2 = prs.slides.add_slide(prs.slide_layouts[6])
+    s2.shapes.add_picture(io.BytesIO(_PNG), Inches(1), Inches(1),
+                          Inches(6), Inches(4))
+    out = tmp_path / "input.pptx"
+    prs.save(str(out))
+    return out
+
+
+def test_blind_pptx_section_is_read_from_the_source_slide(monkeypatch, tmp_path):
+    """Раздел без текста дочитывается с картинки исходного слайда.
+
+    Спросить автора честнее, чем выдумать, — но ещё честнее прочитать: у pptx
+    исходный слайд можно отрендерить и показать модели. Прочитанное едет в бриф
+    С ПОМЕТКОЙ (автор видит в панели контекста, откуда текст), раздел перестаёт
+    быть слепым, и вопрос на нём не поднимается."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    png = tmp_path / "slide-02.png"
+    png.write_bytes(_PNG)
+    shots = tmp_path / "shot-01.png"
+    shots.write_bytes(_PNG)
+    monkeypatch.setattr("htmlslides.parsers.render.render_pptx_pngs",
+                        lambda src, out, **kw: [shots, png])
+
+    read = glass._SlideRead(text="Схема потоков данных: источники, шина Kafka, "
+                                 "витрины. Внизу подпись «до 40 ТБ в сутки».")
+    ok = SectionChoice(candidates=[Candidate(template_id="diagram",
+                                             confidence=0.9),
+                                   Candidate(template_id="three-col",
+                                             confidence=0.4)])
+    client = FakeClient([read, ok, ok])
+    plan = glass.start_glass("blind", _pptx_with_blind_slide(tmp_path),
+                             client=client, workers=1)
+
+    blind = plan.slides[2]
+    assert blind.status is None                     # больше не слепой
+    assert "Kafka" in blind.brief
+    assert glass._IMAGE_READ_NOTE in blind.brief    # источник текста назван
+    # читаем ТОЛЬКО слепой раздел: текстовый слайд рендерить и смотреть незачем
+    assert sum(1 for c in client.calls
+               if isinstance(c["messages"][-1]["content"], list)) == 1
+
+
+def test_unreadable_source_still_asks_the_author(monkeypatch, tmp_path):
+    """Нет LibreOffice (или картинка не прочиталась) — возвращаемся к вопросу,
+    а не к выдумке: гард слепого раздела остаётся последней линией."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    from htmlslides.parsers.render import RenderUnavailable
+
+    def boom(src, out, **kw):
+        raise RenderUnavailable("LibreOffice (soffice) not found")
+
+    monkeypatch.setattr("htmlslides.parsers.render.render_pptx_pngs", boom)
+    ok = SectionChoice(candidates=[Candidate(template_id="three-col",
+                                             confidence=0.9)])
+    plan = glass.start_glass("blind2", _pptx_with_blind_slide(tmp_path),
+                             client=FakeClient([ok, ok]), workers=1)
+    assert plan.slides[2].status == "needs_input"
+    assert "только изображения" in (plan.slides[2].question or "")
+
+
+def test_image_section_with_text_goes_through(monkeypatch, tmp_path):
+    """Картинка РЯДОМ с текстом — обычный раздел: гард не должен ловить всё,
+    где вообще есть изображение, иначе вопросы посыплются на ровном месте."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    src.write_text("# Дека\n\n## Архитектура\n\n![](a.png)\n\nПлатформа собрана "
+                   "из трёх слоёв: хранение, вычисления и оркестрация задач.\n",
+                   encoding="utf-8")
+    plan = glass.start_glass("img2", src, client=FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                            confidence=0.95),
+                                  Candidate(template_id="three-col",
+                                            confidence=0.2)])]), workers=1)
+    assert plan.slides[1].status is None
+
+
+def test_same_layout_never_runs_three_in_a_row(monkeypatch, tmp_path):
+    """Однородный документ не превращается в деку из одного макета.
+
+    Разделы скорятся параллельно и независимо: на реальном прогоне СЕМЬ разделов
+    подряд получили cards-6 — 45% деки одной сеткой. Разводим повторы вторым
+    кандидатом самой модели, но только когда он почти так же хорош."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    src.write_text("# Дека\n\n" + "".join(
+        f"## Раздел {i}\n\nТри направления работы: люди, процессы и данные.\n\n"
+        for i in range(1, 8)), encoding="utf-8")
+    same = [SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.9),
+                                      Candidate(template_id="three-col", confidence=0.8)])
+            for _ in range(7)]
+    plan = glass.start_glass("mono", src, client=FakeClient(same), workers=1)
+    used = [s.template_id for s in plan.slides[1:]]
+    assert len(used) == 7
+    assert "three-col" in used
+    run = max_run = 1
+    for a, b in zip(used, used[1:]):
+        run = run + 1 if a == b else 1
+        max_run = max(max_run, run)
+    assert max_run < 3, used
+
+
+def test_variety_never_costs_a_much_worse_layout(monkeypatch, tmp_path):
+    """Разнообразие не стоит плохого макета: если второй кандидат заметно хуже,
+    повтор остаётся — лучше ровная дека, чем разная и мимо смысла."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    src = tmp_path / "doc.md"
+    src.write_text("# Дека\n\n" + "".join(
+        f"## Раздел {i}\n\nТри направления работы: люди, процессы и данные.\n\n"
+        for i in range(1, 5)), encoding="utf-8")
+    same = [SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.95),
+                                      Candidate(template_id="quote", confidence=0.1)])
+            for _ in range(4)]
+    plan = glass.start_glass("mono2", src, client=FakeClient(same), workers=1)
+    assert [s.template_id for s in plan.slides[1:]] == ["cards-6"] * 4
 
 
 def test_start_glass_names_the_scoring_failure(monkeypatch, tmp_path):
@@ -492,8 +686,9 @@ def test_glass_start_endpoint(monkeypatch, tmp_path):
         sid = _new_draft(c)
         seen = {}
 
-        def _fake_start(session_id, source):
+        def _fake_start(session_id, source, *, origin_name=None):
             seen["args"] = (session_id, source.name, source.read_bytes())
+            seen["origin"] = origin_name
             plan = draft.DraftPlan(title="Т", slides=[
                 draft.DraftSlide(template_id="cover", filled=True)])
             draft.save_plan(session_id, plan)   # как настоящий start_glass
@@ -505,6 +700,9 @@ def test_glass_start_endpoint(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert r.json()["title"] == "Т"
         assert seen["args"][0] == sid and seen["args"][1] == "input.md"
+        # на диск файл ложится как input.md, но имя автора обязано доехать до
+        # сборки — иначе обложка документа без титула выходит с надписью «INPUT»
+        assert seen["origin"] == "doc.md"
 
         # непустой черновик → 409 (стекло стартует с чистой сессии)
         assert c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
@@ -755,3 +953,86 @@ def test_start_glass_caps_sections_and_says_so(monkeypatch, tmp_path):
     assert len(plan.slides) == 4              # обложка + 3 раздела
     assert len(fake.calls) == 3               # лишние разделы даже не скорим
     assert "3" in plan.notice and "2" in plan.notice
+    # Хвост назван числом и адресом: с него продолжит вторая дека.
+    assert plan.rest == 2 and plan.rest_from == 3
+
+
+def _capped_deck(monkeypatch, tmp_path, sections=5, cap=3):
+    """Обрезанная по потолку дека, исходник которой лежит в сессии (как после
+    /glass/start: загрузка всегда ложится в session_dir как `input.<ext>`)."""
+    from webapp.paths import session_dir
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    monkeypatch.setattr(glass, "MAX_GLASS_SLIDES", cap)
+    src = session_dir("cap1") / "input.md"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("# Док\n\n" + "".join(
+        f"## Раздел {i}\n\nТекст раздела {i} про метрики.\n\n"
+        for i in range(sections)), encoding="utf-8")
+    fake = FakeClient([SectionChoice(candidates=[
+        Candidate(template_id="stats-row", confidence=0.9)])
+        for _ in range(sections)])
+    return glass.start_glass("cap1", src, client=fake, workers=1)
+
+
+def test_continue_glass_takes_the_tail_into_a_second_deck(monkeypatch, tmp_path):
+    """Потерянный хвост возвращается второй декой, а не резкой файла руками.
+
+    Потолок поднимать некуда (сорок слайдов автор и так проходит по одному
+    больше получаса), поэтому обратимой делаем саму потерю: исходник уже лежит
+    в сессии, номер первого невзятого раздела — в плане."""
+    from webapp.paths import session_dir
+    first = _capped_deck(monkeypatch, tmp_path)
+    fake = FakeClient([SectionChoice(candidates=[
+        Candidate(template_id="stats-row", confidence=0.9)]) for _ in range(2)])
+
+    second = glass.continue_glass("cap1", "cap2", client=fake, workers=1)
+
+    assert len(second.slides) == 3            # обложка + ровно хвост (3 и 4)
+    assert "Раздел 3" in second.slides[1].brief
+    assert "Раздел 4" in second.slides[2].brief
+    assert second.rest == 0 and second.rest_from == 0   # хвоста больше нет
+    assert second.title == first.title        # титул наследуем: на диске «input»
+    assert (session_dir("cap2") / "input.md").is_file()  # исходник свой
+    back = draft.load_plan("cap1")
+    assert back.slides[1].brief == first.slides[1].brief  # первая дека не тронута
+    # …кроме снятой заявки: хвост забран, второй раз предлагать нечего.
+    assert back.rest == 0 and back.rest_from == 0
+
+
+def test_continue_glass_refuses_when_nothing_is_left(monkeypatch, tmp_path):
+    """Продолжать нечего — говорим об этом, а не заводим пустую вторую деку."""
+    _capped_deck(monkeypatch, tmp_path, sections=2, cap=3)
+    with pytest.raises(ValueError):
+        glass.continue_glass("cap1", "cap2", client=FakeClient([]), workers=1)
+
+
+def test_glass_rest_endpoint_returns_a_new_draft(monkeypatch, tmp_path):
+    """API-контракт кнопки: новая сессия-черновик с хвостом, старая не тронута."""
+    monkeypatch.setattr(glass, "MAX_GLASS_SLIDES", 3)
+    monkeypatch.setattr(glass, "_kimi", lambda: FakeClient([SectionChoice(
+        candidates=[Candidate(template_id="stats-row", confidence=0.9)])
+        for _ in range(9)]))
+    doc = ("# Док\n\n" + "".join(f"## Раздел {i}\n\nТекст раздела {i}.\n\n"
+                                 for i in range(5))).encode()
+    with _client_app(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        assert c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                      files={"file": ("Док.md", doc, "text/markdown")}
+                      ).status_code == 200
+
+        r = c.post(f"/api/drafts/{sid}/glass/rest", headers=H())
+        assert r.status_code == 200
+        rest_sid = r.json()["session_id"]
+        assert rest_sid != sid and r.json()["slides"] == 2
+        assert len(draft.load_plan(rest_sid).slides) == 3
+        assert len(draft.load_plan(sid).slides) == 4      # первая дека как была
+        # Вторая дека — своя сессия того же автора: она видна в редакторе.
+        assert c.get(f"/api/drafts/{rest_sid}", headers=H()).status_code == 200
+        assert c.get(f"/api/drafts/{rest_sid}", headers=H("intruder")
+                     ).status_code == 404
+        # Хвоста больше нет — кнопка не заводит пустых деков ни у второй деки,
+        # ни у первой (повторное нажатие с отставшей вкладки).
+        assert c.post(f"/api/drafts/{rest_sid}/glass/rest", headers=H()
+                      ).status_code == 400
+        assert c.post(f"/api/drafts/{sid}/glass/rest", headers=H()
+                      ).status_code == 400

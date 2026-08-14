@@ -3548,6 +3548,7 @@ function startGlassMode() {
     glassLoop();
   });
   byId("glassAuto")?.addEventListener("click", glassAnswerAll);
+  byId("glassRestBtn")?.addEventListener("click", startGlassRest);
   // Каталог макетов грузится лениво, а карточки вопросов появляются на первых же
   // шагах — без этого чип-кандидат подписывался сырым id («cards-6»).
   ensureCatalog().then(refreshGlassChipNames);
@@ -3651,8 +3652,11 @@ async function glassSteps() {
   // Всё заполнено, вопросов и осечек нет → сразу в обычный редактор. Осечка
   // держит панель наравне с вопросом: иначе карточку «макет сменился на
   // заглушку» смахивало бы этим же выходом, и автор оставался с пустым слайдом
-  // без единого слова о том, что случилось.
-  if (!openGlassQuestions().length && !glassFailedSlides().length) exitGlassMode();
+  // без единого слова о том, что случилось. Обрезанный хвост держит её по той же
+  // причине: и уведомление о потере, и кнопка «собрать остальное» живут в этой
+  // панели, и на гладкой сборке автор не увидел бы ни того, ни другого.
+  if (!openGlassQuestions().length && !glassFailedSlides().length &&
+      !(draftPlan.rest || 0)) exitGlassMode();
 }
 
 // Заполненный слайд вопросом больше не считается, даже если метку не сняли:
@@ -3712,6 +3716,7 @@ function renderGlassPanel(out) {
   // Что сборка сделала за спиной автора (документ обрезан по потолку) — говорим
   // сразу, а не оставляем гадать, куда делись разделы.
   if (draftPlan.notice) status.textContent += " " + draftPlan.notice;
+  renderGlassRest();
   renderGlassQuestions(open, failed);
   // «Решить всё на усмотрение ИИ» — выход из паузы одним движением, когда
   // разбирать каждый вопрос не хочется. Без него единственной альтернативой
@@ -3722,6 +3727,67 @@ function renderGlassPanel(out) {
     auto.textContent = `Решить все ${open.length} на усмотрение ИИ`;
   }
   done?.classList.toggle("hidden", !glassLoopDone);
+}
+
+// Хвост документа сверх потолка. Раньше notice лишь сообщал о потере и советовал
+// «соберите их отдельной декой» — как именно, автор придумывал сам и обычно резал
+// исходник руками. Исходник уже лежит в сессии, номер первого невзятого раздела —
+// в плане: кнопка заводит вторую деку ровно оттуда.
+let glassRestBusy = false;
+let glassRestLink = "";     // адрес второй деки после успешного запуска
+
+function renderGlassRest() {
+  const box = byId("glassRest");
+  const btn = byId("glassRestBtn");
+  const note = byId("glassRestNote");
+  if (!box || !btn) return;
+  const rest = draftPlan.rest || 0;
+  box.classList.toggle("hidden", !rest);
+  if (!rest) return;
+  btn.classList.toggle("hidden", !!glassRestLink);
+  btn.disabled = glassRestBusy;
+  btn.textContent = glassRestBusy
+    ? "Раскладываю оставшиеся разделы…"
+    : `Собрать оставшиеся ${rest} ` +
+      `${plural(rest, "раздел", "раздела", "разделов")} отдельной декой`;
+  if (note && !glassRestBusy) note.classList.toggle("hidden", !glassRestLink);
+  if (note && glassRestLink) {
+    note.textContent = "Вторая дека готова к сборке: ";  // сброс прошлого текста
+    const a = document.createElement("a");
+    a.href = glassRestLink;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "открыть в новой вкладке";
+    note.append(a, ". Эта дека остаётся как есть.");
+  }
+}
+
+async function startGlassRest() {
+  if (glassRestBusy || glassRestLink) return;
+  const note = byId("glassRestNote");
+  glassRestBusy = true;
+  renderGlassRest();
+  try {
+    const r = await fetch(U(`/api/drafts/${sessionId}/glass/rest`),
+                          { method: "POST" });
+    if (!r.ok) {
+      let detail = "";
+      try { detail = JSON.parse(await r.text()).detail; } catch (e) { detail = ""; }
+      throw new Error(detail || "не удалось собрать оставшиеся разделы");
+    }
+    const out = await r.json();
+    // Новую вкладку открываем не сами: window.open после await блокируется
+    // браузером как всплывающее окно — даём ссылку, её жмёт автор.
+    glassRestLink = U(`/editor?session=${out.session_id}&mode=manual&glass=1`);
+  } catch (e) {
+    if (note) {
+      note.textContent = e && e.message ? e.message : String(e);
+      note.classList.remove("hidden");
+    }
+  } finally {
+    glassRestBusy = false;
+    renderGlassRest();
+  }
 }
 
 function glassFail() {
@@ -4111,7 +4177,11 @@ if (isDraft) {
       // БЕЗ ?glass=1. Раньше это открывало мёртвый черновик: «?» на миниатюре
       // есть, слайды пустые, а степпера нет и дозаполнить нечем. Решаем по плану,
       // а не по адресу: сборка продолжается с любого входа, включая закладку.
-      if (!isGlass && hasUnfinishedOutline()) isGlass = true;
+      // Незабранный хвост открывает панель на тех же правах: сборка кончилась,
+      // но предложение собрать остаток ещё в силе, и жить оно должно дольше
+      // одной вкладки. Забранный хвост сервер обнуляет — панель больше не лезет.
+      if (!isGlass && (hasUnfinishedOutline() || (draftPlan || {}).rest))
+        isGlass = true;
       if (isGlass) startGlassMode();
     })
     .finally(disableChatEditing);

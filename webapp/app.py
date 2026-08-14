@@ -6,6 +6,7 @@ import datetime as _dt
 import json as _json
 import logging
 import os
+from functools import partial
 from pathlib import Path
 
 if not os.environ.get("SLIDES_APP_SKIP_SHIM"):
@@ -747,12 +748,58 @@ async def glass_start(session_id: str, request: Request,
     dest = session_dir(session_id) / f"input{suffix}"
     dest.write_bytes(raw)
     try:
-        out = await run_in_threadpool(glass.start_glass, session_id, dest)
+        # Имя файла автора передаём отдельно: dest — это всегда `input.<ext>`,
+        # и у документа без титульного текста обложка выходила с «INPUT».
+        out = await run_in_threadpool(partial(glass.start_glass, session_id, dest,
+                                              origin_name=file.filename))
     except Exception as exc:  # noqa: BLE001 — parse/скоринг: причина пользователю
         logger.exception("glass start failed (session %s)", session_id)
         raise HTTPException(500, "не удалось разобрать документ — попробуйте "
                                  "другой файл") from exc
     return JSONResponse(out.model_dump())
+
+
+@app.post("/api/drafts/{session_id}/glass/rest")
+async def glass_rest(session_id: str, request: Request,
+                     user=Depends(get_current_user)) -> JSONResponse:
+    """Хвост длинного документа → вторая дека (новая сессия с тем же исходником).
+
+    Потолок в 40 разделов остаётся: сорок слайдов автор и так проходит по
+    одному больше получаса. Обратимой делаем потерю — не подъёмом потолка, а
+    кнопкой, которая заводит продолжение ровно с первого невзятого раздела."""
+    from uuid import uuid4
+
+    from webapp import glass
+    plan = await _draft_or_404(request, session_id, user)
+    if not plan.rest_from:
+        raise HTTPException(400, "все разделы документа уже разобраны")
+    # Тот же потолок незавершённых сборок, что и у /glass/start: продолжение —
+    # такая же ручная сборка и так же держит вызовы модели и место на диске.
+    async with request.app.state.sessionmaker() as s:
+        drafts = await jobs_repo.list_drafts_for_user(
+            s, user.id, limit=glass.MAX_ACTIVE_PER_USER + 1)
+    busy = await run_in_threadpool(
+        glass.unfinished_outlines,
+        [j.session_id for j in drafts if j.session_id != session_id])
+    if busy >= glass.MAX_ACTIVE_PER_USER:
+        raise HTTPException(429, f"у вас {busy} незавершённых сборок — "
+                                 "дособерите или удалите их, прежде чем "
+                                 "начинать новую")
+    new_id = uuid4().hex[:16]
+    async with request.app.state.sessionmaker() as s:
+        await jobs_repo.create(s, session_id=new_id, user_id=user.id,
+                               mode="manual", kind="draft",
+                               source_filename=None, status="draft")
+        await s.commit()
+    try:
+        out = await run_in_threadpool(
+            partial(glass.continue_glass, session_id, new_id))
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001 — parse/скоринг: причина пользователю
+        logger.exception("glass rest failed (session %s)", session_id)
+        raise HTTPException(500, "не удалось собрать оставшиеся разделы") from exc
+    return JSONResponse({"session_id": new_id, "slides": len(out.slides) - 1})
 
 
 @app.post("/api/drafts/{session_id}/glass/step")

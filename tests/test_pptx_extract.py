@@ -143,6 +143,37 @@ def test_alien_picture_mime_does_not_crash_parse(tmp_path):
     assert "Текст-рядом-с-картинкой" in _all_text(doc.sections[0])
 
 
+def _fixture_soft_break(tmp_path: Path) -> Path:
+    """Слайд, где в заголовке стоит МЯГКИЙ перенос (<a:br/>), а не новый абзац.
+
+    В pptx это обычный приём вёрстки: автор ломает длинную фразу по строкам
+    внутри одного абзаца. python-pptx отдаёт такой перенос как \\x0b прямо
+    внутри `shape.text`."""
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[5])   # Title Only
+    slide.shapes.title.text_frame.text = "Миграция,\x0bрезервное копирование"
+    box = slide.shapes.add_textbox(Inches(1), Inches(3), Inches(4), Inches(1))
+    box.text_frame.text = "Этап 1:\x0bперенос данных"
+    out = tmp_path / "softbreak.pptx"
+    prs.save(str(out))
+    return out
+
+
+def test_soft_break_becomes_a_space(tmp_path):
+    """Мягкий перенос — это пробел, а не символ контента.
+
+    Раньше \\x0b ехал в модель как есть: заголовок деки резался посреди фразы
+    («Миграция,» + невидимый управляющий символ), а на обложке хвост уходил в
+    подзаголовок отдельным предложением. Блок и заголовок у нас — ОДНА строка."""
+    doc = parse_pptx(_fixture_soft_break(tmp_path))
+    section = doc.sections[0]
+    assert section.heading == "Миграция, резервное копирование"
+    assert doc.title == "Миграция, резервное копирование"
+    text = _all_text(section)
+    assert "Этап 1: перенос данных" in text
+    assert "\x0b" not in section.heading and "\x0b" not in text
+
+
 def test_alien_picture_blob_still_captured(tmp_path):
     """Blob сторонней картинки достаём напрямую из part — контент не теряется,
     а нестандартный `image/svg` нормализуется в честный `image/svg+xml`."""
