@@ -1059,3 +1059,52 @@ def test_glass_rest_endpoint_returns_a_new_draft(monkeypatch, tmp_path):
                       ).status_code == 400
         assert c.post(f"/api/drafts/{sid}/glass/rest", headers=H()
                       ).status_code == 400
+
+
+def test_step_done_stays_false_while_tail_question_open(monkeypatch, tmp_path):
+    """1-4 (аудит раунда 2, agent1): шаг, заполнивший последний «обычный» слайд,
+    отвечал done=true при открытом вопросе в хвосте — а ветка паузы для того же
+    состояния отвечает done=false. Семантика: done только когда ни вопросов,
+    ни работы не осталось."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    draft.save_plan("s14", _outline_plan(at=4))
+
+    out2 = glass.step_fill("s14", client=FakeClient([]))
+    assert out2["index"] == 2 and out2["done"] is False
+    out3 = glass.step_fill("s14", client=FakeClient([]))
+    assert out3["index"] == 3
+    assert out3["blocked"] == 4 and out3["open_questions"] == [4]
+    assert out3["done"] is False   # вопрос открыт — сборка не «завершена»
+
+
+def test_step_done_stays_false_while_parallel_step_inflight(monkeypatch, tmp_path):
+    """1-4 (там же): второй степпер получал done=true, пока первый ещё заполнял
+    последний слайд (_next_index не знает про _INFLIGHT). Вторая вкладка видела
+    «сборка завершена» на середине заполнения."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    plan = _outline_plan(question=False)
+    for i in (2, 3):    # слайды 2-3 готовы; 4-й «заполняет» параллельный шаг
+        plan.slides[i - 1] = plan.slides[i - 1].model_copy(
+            update={"filled": True})
+    draft.save_plan("s15", plan)
+    glass._INFLIGHT["s15"] = {4}
+    try:
+        out = glass.step_fill("s15", client=FakeClient([]))
+        assert out["index"] is None
+        assert out["done"] is False   # сосед ещё работает
+    finally:
+        glass._INFLIGHT.pop("s15", None)
+
+
+def test_answer_bad_index_speaks_russian(monkeypatch, tmp_path):
+    """1-6 (аудит раунда 2, agent1): IndexError из glass.answer уходит в 400
+    как есть — текст обязан быть русским."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    draft.save_plan("s16", _outline_plan())
+    with pytest.raises(IndexError) as ei:
+        glass.answer("s16", 99)
+    assert re.search("[а-яА-Я]", str(ei.value)), str(ei.value)

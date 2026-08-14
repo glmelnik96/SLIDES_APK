@@ -42,16 +42,24 @@ async def get_owned(session: AsyncSession, session_id: str,
 
 
 async def list_for_user(session: AsyncSession, user_id: int,
-                        limit: int = 10) -> list[models.Job]:
+                        limit: int | None = None) -> list[models.Job]:
     """История сборок = только завершённые джобы (done/failed/cancelled). Активные
     (queued/running) сюда не попадают — они живут в «Активных сборках» (/api/jobs/
     active). Иначе ещё не собранная презентация светилась бы в истории с кнопкой
-    «Открыть» (а заодно фантомный queued от 429 — он тоже терминальным не является)."""
-    res = await session.execute(
-        select(models.Job).where(
+    «Открыть» (а заодно фантомный queued от 429 — он тоже терминальным не является).
+
+    1-1 (аудит раунда 2, 2026-08-15): жёсткий limit=10 делал 11-ю+ сборку
+    недостижимой из UI, хотя её файлы живы в окне ретеншена — «Открыть» и
+    повторное скачивание пропадали. Рост списка ограничивает ретеншен (24 ч
+    чистит строки jobs), а не срез новейших — тот же довод, что у списка
+    черновиков (B-8/B-9)."""
+    q = (select(models.Job).where(
             models.Job.user_id == user_id,
             models.Job.status.in_(_TERMINAL))
-        .order_by(models.Job.created_at.desc()).limit(limit))
+         .order_by(models.Job.created_at.desc()))
+    if limit is not None:
+        q = q.limit(limit)
+    res = await session.execute(q)
     return list(res.scalars().all())
 
 

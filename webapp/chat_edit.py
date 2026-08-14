@@ -36,7 +36,7 @@ def nth_section(deck_html: str, index: int) -> str:
 def _replace_nth_section(deck_html: str, index: int, new_section: str) -> str:
     spans = [m.span() for m in _SECTION_RE.finditer(deck_html)]
     if not (1 <= index <= len(spans)):
-        raise ValueError(f"slide index {index} out of range 1..{len(spans)}")
+        raise ValueError(f"слайд {index} вне диапазона 1..{len(spans)}")
     start, end = spans[index - 1]
     return deck_html[:start] + new_section + deck_html[end:]
 
@@ -86,7 +86,8 @@ def rewrite_slide(deck_html: str, slide_index: int, instruction: str,
     """Return deck HTML with slide `slide_index` (1-based) rewritten per instruction."""
     sections = _SECTION_RE.findall(deck_html)
     if not (1 <= slide_index <= len(sections)):
-        raise ValueError(f"slide index {slide_index} out of range 1..{len(sections)}")
+        raise ValueError(
+            f"слайд {slide_index} вне диапазона 1..{len(sections)}")
     current = sections[slide_index - 1]
     client = client or _kimi()
     messages = [

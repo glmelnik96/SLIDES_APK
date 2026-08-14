@@ -70,3 +70,14 @@ def test_rewrite_out_of_range():
     fake = _FakeClient("<section></section>")
     with pytest.raises(ValueError):
         chat_edit.rewrite_slide(_DECK, 5, "x", client=fake)
+
+
+def test_out_of_range_error_speaks_russian():
+    """1-6 (аудит раунда 2, agent1): ValueError о номере слайда уходит в 400
+    эндпоинта чата как есть — текст обязан быть русским."""
+    import re
+
+    import pytest
+    with pytest.raises(ValueError) as ei:
+        chat_edit.rewrite_slide("", 5, "поменяй заголовок", client=object())
+    assert re.search("[а-яА-Я]", str(ei.value)), str(ei.value)

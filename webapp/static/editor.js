@@ -636,7 +636,14 @@ document.getElementById("save").onclick = async () => {
   // D-1 (аудит 2026-08-14): без catch обрыв сети в fetch давал unhandled
   // rejection — кнопка молчала вместо «Ошибка» (автосейв ниже уже был защищён).
   let ok = false;
-  try { ok = await saveDeck(); } catch (e) { ok = false; }
+  // 1-3 (аудит раунда 2, 2026-08-15): у черновика правда — plan.json, POST
+  // целой деки сервер теперь отвергает (409); раньше он «сохранял» HTML,
+  // который молча откатывала первая же правка формы. Кнопка добирает
+  // несохранённый дебаунс-ввод per-slide сейвом.
+  try {
+    if (isDraft) { await flushPendingSave(); ok = true; }
+    else ok = await saveDeck();
+  } catch (e) { ok = false; }
   flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
 
@@ -833,7 +840,10 @@ function setupExport(btn) {
     }
     if (!(await confirmExportWithPlaceholders())) return; // К§3 — пример-текст в экспорт?
     toBusy();
-    await saveDeck(true);              // persist in-place edits (no stale-reset: this IS the export)
+    // 1-3: у черновика деку целиком не шлём (сервер ответит 409) — добираем
+    // несохранённый ввод формы; inline-правки черновика синкаются на blur.
+    if (isDraft) await flushPendingSave();
+    else await saveDeck(true);         // persist in-place edits (no stale-reset: this IS the export)
     const r = await fetch(U(`/api/jobs/${sessionId}/export/${fmt}`), { method: "POST" });
     if (!r.ok) { toIdle("Ошибка — повторить"); return; }
     poller = setInterval(poll, 1500);

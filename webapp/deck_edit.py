@@ -110,7 +110,7 @@ def deck_path(session_id: str) -> Path:
 
 def save_deck(session_id: str, html: str) -> Path:
     if not html or not html.strip():
-        raise ValueError("empty deck HTML")
+        raise ValueError("пустой HTML деки — сохранять нечего")
     path = deck_path(session_id)
     path.write_text(
         strip_no_motion(strip_is_active(strip_contenteditable(html))),

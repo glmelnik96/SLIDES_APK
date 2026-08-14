@@ -665,7 +665,10 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
             return _result(plan, None, False)
         index = _next_index(plan, busy)
         if index is None:
-            return _result(plan, None, True)
+            # 1-4 (аудит раунда 2, 2026-08-15): пока сосед заполняет последний
+            # слайд, «работы нет» ≠ «сборка завершена» — вторая вкладка видела
+            # done и сворачивала процесс на середине заполнения.
+            return _result(plan, None, not busy)
         # Заявка на слайд: без неё второй шаг (вторая вкладка, F5 в середине
         # шага) брал тот же индекс и оплачивал вызов модели дважды.
         busy.add(index)
@@ -674,7 +677,15 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
     finally:
         with lock:
             _INFLIGHT.get(session_id, set()).discard(index)
-    return _result(plan, index, _next_index(plan) is None)
+    # 1-4 (аудит раунда 2, 2026-08-15): done считался по одному _next_index —
+    # True при открытом вопросе (ветка паузы для того же состояния отвечает
+    # False) и при идущем параллельном шаге. done — только когда нет ни
+    # вопросов, ни работы, ни занятых соседями слайдов.
+    with lock:
+        busy = _INFLIGHT.get(session_id, set())
+        done = (_blocking_index(plan) is None
+                and _next_index(plan, busy) is None and not busy)
+    return _result(plan, index, done)
 
 
 def answer(session_id: str, index: int, *, template_id: str | None = None,
@@ -698,7 +709,8 @@ def answer(session_id: str, index: int, *, template_id: str | None = None,
     with _plan_lock(session_id):
         plan = draft.load_plan(session_id)
         if not 1 <= index <= len(plan.slides):
-            raise IndexError(f"slide {index} out of range (1..{len(plan.slides)})")
+            raise IndexError(
+                f"слайд {index} вне диапазона (1..{len(plan.slides)})")
         slide = plan.slides[index - 1]
         # Ответ адресован слайду, который его ждёт. Без проверки устаревшая
         # вкладка (индексы «плывут» при правке состава слайдов) перезаполняла
@@ -777,7 +789,8 @@ def refill_slide(session_id: str, index: int, *, template_id: str | None = None,
     with _plan_lock(session_id):
         plan = draft.load_plan(session_id)
         if not 1 <= index <= len(plan.slides):
-            raise IndexError(f"slide {index} out of range (1..{len(plan.slides)})")
+            raise IndexError(
+                f"слайд {index} вне диапазона (1..{len(plan.slides)})")
         slide = plan.slides[index - 1]
         context = slide.brief.strip() or _slide_context(slide)
         if not context:

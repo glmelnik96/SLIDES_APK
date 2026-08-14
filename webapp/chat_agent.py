@@ -120,6 +120,12 @@ def _rule_intent(message: str) -> Intent | None:
                 # B-5: номер из «удали слайд 3» обязан доехать до target, иначе
                 # фолбэк повторит удаление не того слайда.
                 m = re.search(r"слайд[аы]?\s*№?\s*(\d+)", message, re.IGNORECASE)
+                if not m:
+                    # S-6: «удали 3-й слайд» — число ПЕРЕД словом. Суффикс
+                    # порядкового обязателен: «удали 3 слайда» — это
+                    # количество, ложного target быть не должно.
+                    m = re.search(r"(\d+)\s*-?\s*(?:й|ый|ий|ой|го)\s+слайд",
+                                  message, re.IGNORECASE)
                 if m:
                     target = int(m.group(1))
             return Intent(action=action, topic=message.strip(), target=target)
@@ -418,8 +424,12 @@ def run_turn(session_id: str, message: str, current_index: int,
                 # Сейв нашего снимка целиком откатил бы те правки — вклеиваем
                 # ТОЛЬКО свой слайд в СВЕЖИЙ план (как glass._fill_one).
                 plan = draft.load_plan(session_id)
+                # S-1 (аудит диффа, 2026-08-15): сверка по одному brief
+                # вакуумна для слайдов из пикера (brief="") и слепа к
+                # inline-правке того же слайда (brief не меняется). Сверяем
+                # слайд ЦЕЛИКОМ со снимком до fill: любой сдвиг/правка — отказ.
                 if (not 1 <= current_index <= len(plan.slides)
-                        or plan.slides[current_index - 1].brief != cur.brief):
+                        or plan.slides[current_index - 1] != cur):
                     result = AgentResult(
                         reply="Пока я переписывал, слайд изменился или был "
                               "удалён — правку не применил.")
@@ -438,6 +448,9 @@ def run_turn(session_id: str, message: str, current_index: int,
                     # (brief and not filled) и молча перезаписывал правку по
                     # старому brief.
                     cur_slide.filled = True
+                    # S-1 (смежное): rewrite делает слайд снова шаблонным —
+                    # freeform=True при content без "html" рендерился пустотой.
+                    cur_slide.freeform = False
                     draft.save_plan(session_id, plan)
                     result = AgentResult(reply=f"Обновил слайд {current_index}.",
                                          changed=True, go_to=current_index)
@@ -537,9 +550,16 @@ def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
                 continue
             s.brief = item.brief
             applied += 1
-        draft.save_plan(session_id, plan)
+        if applied:
+            draft.save_plan(session_id, plan)
+            return plan, AgentResult(
+                reply=f"Дополнил план деталями ({applied} сл.).", changed=True)
+        # S-4: все предложения отсеяны гардами (план успел измениться) —
+        # «Дополнил (0 сл.)» с changed=True врал об обогащении, которого
+        # не было, и заставлял фронт зря перерисовывать деку.
         return plan, AgentResult(
-            reply=f"Дополнил план деталями ({applied} сл.).", changed=True)
+            reply="Пока я дополнял план, он изменился — ничего не применил. "
+                  "Попробуйте ещё раз.", changed=False)
     return plan, AgentResult(
         reply=_talk(client, _PLAN_SYSTEM, ctx, message), changed=False)
 
@@ -555,6 +575,9 @@ def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
         return plan, AgentResult(
             reply="Нет сырых слайдов для раскладки — сначала набросаем план.",
             changed=False)
+    # S-2: карта brief'ов нужна и сплайс-гардам, и подсказке thin ниже —
+    # СТАРЫЕ индексы нельзя прикладывать к свежему плану (IndexError).
+    old = {i: plan.slides[i - 1].brief for i in targets}
     lines = "\n".join(
         f"{i}. {plan.slides[i - 1].content.get('title', '')} — {plan.slides[i - 1].brief}"
         for i in targets)
@@ -572,7 +595,6 @@ def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
         # C-2 (серверный аудит 2026-08-14): раскладываем по СВЕЖЕМУ плану —
         # сейв снимка откатывал бы правки форм, сделанные пока модель думала.
         # Изменившийся слайд (brief/filled/typed/сдвиг индексов) пропускаем.
-        old = {i: plan.slides[i - 1].brief for i in targets}
         plan = draft.load_plan(session_id)
         for item in proposed.slides:
             if item.index not in targets:
@@ -603,7 +625,9 @@ def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
                    f"аутлайне — {tail}"), changed=True)
     # Ничего не разложилось. Самая частая причина — слишком общие brief'ы
     # (модели не из чего лепить поля). Подскажем обогатить план сначала.
-    thin = all(len(plan.slides[i - 1].brief) < 40 for i in targets)
+    # S-2: считаем по снимку brief'ов, уезжавших в модель, — план мог
+    # укоротиться за время LLM-вызова, старые индексы к нему неприкладны.
+    thin = all(len(old[i]) < 40 for i in targets)
     if thin:
         reply = ("Слайды слишком общие, чтобы разложить по полям. Сначала "
                  "«дополни план деталями» — добавь тезисы, цифры, факты, — "

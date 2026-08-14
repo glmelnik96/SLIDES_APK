@@ -676,3 +676,86 @@ def test_malformed_json_body_returns_400_not_500(monkeypatch, tmp_path):
                    content="{not json", headers={**H(),
                                                  "Content-Type": "application/json"})
         assert r.status_code == 400
+
+
+# ── Раунд 2 аудита, 2026-08-15 (R-2): английские 400/404 на пользовательских
+# ручках черновика. Фронт до них обычно не даёт дойти, но контракт тот же, что
+# чинили в A-2/B-3/B-11: тексты ошибок на пользовательском пути — по-русски.
+
+def _assert_russian(text: str):
+    import re
+    assert re.search(r"[а-яА-Я]", text), f"английский текст ошибки: {text!r}"
+
+
+def test_draft_error_texts_are_russian(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+               headers=H())
+        # PUT плана с невалидной формой → «invalid plan»
+        r = c.put(f"/api/drafts/{sid}", json={"slides": "nope"}, headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # пустое сообщение чату → «message required»
+        r = c.post(f"/api/drafts/{sid}/agent", json={"message": "  "}, headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # PUT слайда без content → «content object required»
+        r = c.put(f"/api/drafts/{sid}/slides/1", json={}, headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # inline-правка без html → «html required»
+        r = c.put(f"/api/drafts/{sid}/slides/1/html", json={"html": ""},
+                  headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # move без to → «to (int) required»
+        r = c.post(f"/api/drafts/{sid}/slides/1/move", json={}, headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # несуществующий слайд → «slide not found»
+        r = c.delete(f"/api/drafts/{sid}/slides/99", headers=H())
+        assert r.status_code == 404
+        _assert_russian(str(r.json()["detail"]))
+        # битый JSON → «malformed JSON body»
+        r = c.post(f"/api/drafts/{sid}/slides", content="{not json",
+                   headers={**H(), "Content-Type": "application/json"})
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+        # неизвестный режим черновика → «unsupported draft mode»
+        r = c.post("/api/drafts", json={"mode": "nonsense"}, headers=H())
+        assert r.status_code == 400
+        _assert_russian(str(r.json()["detail"]))
+
+
+def test_missing_session_dir_is_honest_404(monkeypatch, tmp_path):
+    """1-2 (аудит раунда 2, agent1): пропавший каталог сессии (ретеншен, чистка)
+    выдавался за «черновик уже собран движком — правьте деку в редакторе», хотя
+    деки тоже нет (GET deck → 404). Честный ответ — 404 про удаление файлов."""
+    import shutil
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+               headers=H())
+        shutil.rmtree(draft.plan_path(sid).parent)
+        r = c.get(f"/api/drafts/{sid}", headers=H())
+        assert r.status_code == 404, r.text
+        detail = str(r.json()["detail"])
+        _assert_russian(detail)
+        assert "собран" not in detail   # прежняя ложь про готовую деку
+
+
+def test_post_deck_on_draft_is_refused(monkeypatch, tmp_path):
+    """1-3 (аудит раунда 2, agent1): POST /api/jobs/{sid}/deck на черновике
+    принимался (200), а первая же правка формы пере-рендеривала deck.html из
+    plan.json — сохранённое молча пропадало. У черновика правда — план, целую
+    деку сюда слать нельзя: честный 409 вместо тихой потери."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+               headers=H())
+        r = c.post(f"/api/jobs/{sid}/deck",
+                   content="<!DOCTYPE html><html><body>маркер</body></html>",
+                   headers=H())
+        assert r.status_code == 409, r.text
+        _assert_russian(str(r.json()["detail"]))

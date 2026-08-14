@@ -534,3 +534,125 @@ def test_generate_outline_preserves_concurrent_edit(monkeypatch, tmp_path):
     assert res.changed
     assert len(plan.slides) == 3
     assert plan.slides[1].content["title"] == "Правка руками"
+
+
+# ── Статический аудит диффа a537324, 2026-08-15 (S-1/S-2/S-4/S-6) ──────────────
+
+def test_rewrite_empty_brief_does_not_splice_into_wrong_slide(monkeypatch, tmp_path):
+    """S-1a: у слайдов из пикера brief="" — гард «brief не сменился» вакуумный.
+    Удаление раннего слайда во время fill сдвигает индексы, и rewrite вклеивался
+    в ЧУЖОЙ слайд, затирая его содержимое и рапортуя об успехе."""
+    import htmlslides.pipeline.filler as filler
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(template_id="cover", content={"title": "Обложка"}),
+        draft.DraftSlide(template_id="cards-6", content={"title": "Цены"}),
+        draft.DraftSlide(template_id="cards-6", content={"title": "Команда"})])
+
+    def _fill(client, library, sp, **kw):
+        draft.save_plan("s", draft.delete_slide(draft.load_plan("s"), 1))
+        return sp.model_copy(update={"content": {"title": "Новое"}})
+    monkeypatch.setattr(filler, "fill_slide", _fill)
+
+    res = chat_agent.run_turn("s", "перепиши слайд", 2,
+                              client=FakeClient({"action": "rewrite"}))
+    assert res.changed is False
+    plan = draft.load_plan("s")
+    assert [s.content["title"] for s in plan.slides] == ["Цены", "Команда"]
+
+
+def test_rewrite_during_inline_edit_of_same_slide_refuses(monkeypatch, tmp_path):
+    """S-1b: пока модель переписывала слайд, автор отредактировал его же
+    двойным кликом (freeform html). brief не менялся — старый гард пропускал,
+    update_slide затирал content (ключ "html" исчезал), freeform оставался True
+    → слайд рендерился ПУСТЫМ. Правка руками важнее — честный отказ."""
+    import htmlslides.pipeline.filler as filler
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(template_id="cards-6", brief="метрики",
+                         content={"title": "Старое"})])
+
+    def _fill(client, library, sp, **kw):
+        p = draft.load_plan("s")
+        p.slides[0].freeform = True
+        p.slides[0].content = {"html": "<div>руками</div>"}
+        draft.save_plan("s", p)
+        return sp.model_copy(update={"content": {"title": "Новое"}})
+    monkeypatch.setattr(filler, "fill_slide", _fill)
+
+    res = chat_agent.run_turn("s", "перепиши слайд", 1,
+                              client=FakeClient({"action": "rewrite"}))
+    assert res.changed is False
+    s = draft.load_plan("s").slides[0]
+    assert s.freeform is True
+    assert s.content == {"html": "<div>руками</div>"}
+
+
+def test_rewrite_of_freeform_slide_becomes_template_slide(monkeypatch, tmp_path):
+    """S-1 (смежное, без гонки): rewrite freeform-слайда оставлял freeform=True
+    при content без "html" → draft_render рисовал пустоту вместо результата
+    модели. После правки моделью слайд снова шаблонный."""
+    import htmlslides.pipeline.filler as filler
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(freeform=True, content={"html": "<div>руками</div>"})])
+
+    def _fill(client, library, sp, **kw):
+        return sp.model_copy(update={"content": {"title": "Новое"}})
+    monkeypatch.setattr(filler, "fill_slide", _fill)
+
+    res = chat_agent.run_turn("s", "перепиши слайд", 1,
+                              client=FakeClient({"action": "rewrite"}))
+    assert res.changed
+    s = draft.load_plan("s").slides[0]
+    assert s.freeform is False
+    assert s.content.get("title") == "Новое"
+
+
+def test_propose_content_no_crash_when_plan_shrinks_and_nothing_applies(
+        monkeypatch, tmp_path):
+    """S-2: applied==0 + план укоротился за время LLM-вызова → thin считался
+    по устаревшим targets на СВЕЖЕМ плане → IndexError → нейтральный 500,
+    ход чата терялся."""
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(brief="коротко", filled=False),
+        draft.DraftSlide(brief="тоже коротко", filled=False)])
+
+    def _shrink():
+        draft.save_plan("s", draft.delete_slide(draft.load_plan("s"), 2))
+    proposed = {"slides": [{"index": 2, "slide_type": "bullets",
+                            "fields": {"heading": "H", "bullets": ["a"]}}]}
+    c = _EditsDuringLLM({"action": "propose_content"}, proposed=proposed,
+                        edit=_shrink)
+    res = chat_agent.run_turn("s", "разложи слайды по полям", 1, client=c)
+    assert res.changed is False
+    assert res.reply
+
+
+def test_enrich_briefs_zero_applied_is_honest_refusal(monkeypatch, tmp_path):
+    """S-4: все предложения отсеяны гардами (brief успел смениться) → раньше
+    отвечали «Дополнил план деталями (0 сл.)» с changed=True — ложь об
+    обогащении, которого не было."""
+    _seed(tmp_path, monkeypatch, slides=[
+        draft.DraftSlide(brief="наши сервисы", filled=False)])
+
+    def _change_brief():
+        p = draft.load_plan("s")
+        p.slides[0].brief = "уже другой brief"
+        draft.save_plan("s", p)
+    payloads = {"EnrichedOutline": {"slides": [
+        {"index": 1, "brief": "наши сервисы: аудит и поддержка"}]}}
+    c = _EditsDuringLLM({"action": "enrich"}, payloads=payloads,
+                        edit=_change_brief)
+    res = chat_agent.run_turn("s", "дополни план деталями", 1, client=c)
+    assert res.changed is False
+    assert "0 сл." not in res.reply
+    assert draft.load_plan("s").slides[0].brief == "уже другой brief"
+
+
+def test_rule_fallback_delete_ordinal_number_before_word():
+    """S-6: «удали 3-й слайд» в rule-фолбэке давал target=None → удалялся
+    ТЕКУЩИЙ слайд (B-5 жив в фолбэке для этой формулировки)."""
+    intent = chat_agent._rule_intent("удали 3-й слайд")
+    assert intent is not None and intent.action == "delete"
+    assert intent.target == 3
+    # «удали 3 слайда» — это количество, не номер: ложного target быть не должно
+    intent2 = chat_agent._rule_intent("удали 3 слайда")
+    assert intent2 is not None and intent2.target is None

@@ -96,6 +96,21 @@ def validate_fields(slide_type, raw) -> dict | None:
     return validate_fields_verbose(slide_type, raw)[0]
 
 
+# R-1 (раунд 2 аудита, 2026-08-15): претензии показываются человеку в панели
+# правки — типовые pydantic-сообщения переводим, редкие уходят как есть.
+_PYDANTIC_RU: dict[str, str] = {
+    "missing": "обязательное поле не заполнено",
+    "string_type": "нужна строка",
+    "int_type": "нужно целое число",
+    "float_type": "нужно число",
+    "bool_type": "нужно да/нет",
+    "list_type": "нужен список",
+    "dict_type": "нужен объект",
+    "string_too_long": "текст слишком длинный",
+    "too_long": "слишком много элементов",
+}
+
+
 def _readable(exc: ValidationError) -> list[str]:
     """Претензии Pydantic — по строке на ошибку; вложенный FieldsError
     (диаграмма) разворачивается в свой список: он уже написан по-русски."""
@@ -106,7 +121,8 @@ def _readable(exc: ValidationError) -> list[str]:
             out.extend(inner.errors)
             continue
         loc = ".".join(str(p) for p in err["loc"])
-        out.append(f"{loc or 'fields'}: {err['msg']}")
+        msg = _PYDANTIC_RU.get(err.get("type", ""), err["msg"])
+        out.append(f"{loc or 'поля'}: {msg}")
     return out
 
 

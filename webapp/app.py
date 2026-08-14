@@ -167,7 +167,7 @@ async def _owned_or_404(request: Request, session_id: str, user):
     async with request.app.state.sessionmaker() as s:
         job = await jobs_repo.get_owned(s, session_id, user.id)
     if job is None:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, "не найдено")
     return job
 
 
@@ -194,7 +194,7 @@ async def download_file(name: str,
                         user=Depends(get_current_user)) -> FileResponse:
     mime = _DOWNLOADS.get(name)
     if mime is None:
-        raise HTTPException(404, "not found")
+        raise HTTPException(404, "не найдено")
     path = _settings.downloads_dir / name
     if not path.is_file():
         raise HTTPException(404, "file not provisioned")
@@ -295,7 +295,7 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     data = await _json_body(request)
     mode = (data.get("mode") or "manual")
     if mode not in _DRAFT_MODES:
-        raise HTTPException(400, f"unsupported draft mode: {mode}")
+        raise HTTPException(400, f"неизвестный режим черновика: {mode}")
     session_id = uuid4().hex[:16]
     plan = draft.DraftPlan(title=str(data.get("title") or ""))
     draft.save_plan(session_id, plan)
@@ -395,7 +395,7 @@ def diagram_kind_preview(kind: str, static: bool = False,
     try:
         content = diagrams_api.preview_content(kind)
     except KeyError:
-        raise HTTPException(404, "unknown or unimplemented diagram kind")
+        raise HTTPException(404, "неизвестный или недоступный тип схемы")
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type="content", template_id="diagram", content=content)])
     html = assemble(plan)
@@ -419,9 +419,9 @@ async def _json_body(request: Request) -> dict:
     try:
         data = _json.loads(raw)
     except ValueError:
-        raise HTTPException(400, "malformed JSON body")
+        raise HTTPException(400, "тело запроса — не корректный JSON")
     if not isinstance(data, dict):
-        raise HTTPException(400, "JSON object expected")
+        raise HTTPException(400, "ожидался JSON-объект")
     return data
 
 
@@ -437,6 +437,16 @@ async def _draft_or_404(request: Request, session_id: str, user,
     to the worker that loaded the plan at start."""
     await _owned_or_404(request, session_id, user)
     if not draft.plan_path(session_id).is_file():
+        # 1-2 (аудит раунда 2, 2026-08-15): «plan.json нет» ≠ «собран движком».
+        # После чистки/ретеншена каталога сессии нет ни плана, ни деки — прежний
+        # 409 отправлял «править деку в редакторе», которого не существует.
+        # Критерий деки — тот же, что у GET deck (ensure_deck), чтобы ответы
+        # двух эндпоинтов не противоречили друг другу.
+        if deck_edit.ensure_deck(session_id,
+                                 runner.result_path(session_id)) is None:
+            raise HTTPException(
+                404, "черновик не найден — файлы сессии удалены "
+                     "(мы храним их 24 часа)")
         raise HTTPException(
             409, "черновик уже собран движком — правьте деку в редакторе")
     if mutate:
@@ -469,7 +479,7 @@ async def delete_draft(session_id: str, request: Request,
             job.status == "draft"
             or (job.kind == "draft" and job.status in ("failed", "cancelled")))
         if not deletable:
-            raise HTTPException(404, "not found")
+            raise HTTPException(404, "не найдено")
         await s.delete(job)
         await s.commit()
     exports.registry.drop(session_id)
@@ -523,7 +533,7 @@ async def replace_draft(session_id: str, request: Request,
     try:
         plan = draft.DraftPlan.model_validate(data)
     except ValidationError:
-        raise HTTPException(400, "invalid plan")
+        raise HTTPException(400, "план не проходит по форме — обновите страницу и попробуйте ещё раз")
     # Аудит 2026-08-14 (B-1/B-3): форма плана — не вся правда. Неизвестный
     # template_id раньше доезжал до рендера и падал голым 500 (SlotValidationError
     # не ловился), а битые typed-поля сохранялись молча и рендерились в blank —
@@ -591,12 +601,12 @@ async def update_draft_slide(session_id: str, index: int, request: Request,
     data = await _json_body(request)
     content = data.get("content")
     if not isinstance(content, dict):
-        raise HTTPException(400, "content object required")
+        raise HTTPException(400, "не передано содержимое слайда (content)")
     try:
         target = plan.slides[index - 1]
         plan = draft.update_slide(plan, index, content=content)
     except IndexError:
-        raise HTTPException(404, "slide not found")
+        raise HTTPException(404, "такого слайда нет")
     _persist_draft(session_id, plan)
     # Soft validation: the deck still renders (clamped), but report any contract
     # issues so the UI can flag fields without blocking the edit.
@@ -615,10 +625,10 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     data = await _json_body(request)
     html = (data.get("html") or "").strip()
     if not html:
-        raise HTTPException(400, "html required")
+        raise HTTPException(400, "не передан HTML слайда")
     section = chat_edit.nth_section(html, 1) or html  # accept a bare <section>
     if not (1 <= index <= len(plan.slides)):
-        raise HTTPException(404, "slide not found")
+        raise HTTPException(404, "такого слайда нет")
     plan = _to_freeform(plan, index, section)
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
@@ -640,10 +650,10 @@ async def update_draft_slide_fields(session_id: str, index: int, request: Reques
     norm, claims = slide_types.validate_fields_verbose(slide_type,
                                                        data.get("fields"))
     if norm is None:
-        raise HTTPException(400, {"error": "invalid slide_type or fields",
+        raise HTTPException(400, {"error": "поля не проходят контракт типа",
                                   "errors": claims})
     if not 1 <= index <= len(plan.slides):
-        raise HTTPException(404, "slide not found")
+        raise HTTPException(404, "такого слайда нет")
     plan.slides[index - 1] = plan.slides[index - 1].model_copy(
         update={"slide_type": slide_type, "fields": norm, "filled": False})
     _persist_draft(session_id, plan)
@@ -657,7 +667,7 @@ async def delete_draft_slide(session_id: str, index: int, request: Request,
     try:
         plan = draft.delete_slide(plan, index)
     except IndexError:
-        raise HTTPException(404, "slide not found")
+        raise HTTPException(404, "такого слайда нет")
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
@@ -671,9 +681,9 @@ async def move_draft_slide(session_id: str, index: int, request: Request,
         to = int(data["to"])
         plan = draft.reorder(plan, index, to)
     except (KeyError, TypeError, ValueError):
-        raise HTTPException(400, "to (int) required")
+        raise HTTPException(400, "не передана позиция назначения (to)")
     except IndexError:
-        raise HTTPException(404, "slide not found")
+        raise HTTPException(404, "такого слайда нет")
     _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
@@ -712,7 +722,7 @@ async def draft_agent(session_id: str, request: Request,
     data = await _json_body(request)
     message = (data.get("message") or "").strip()
     if not message:
-        raise HTTPException(400, "message required")
+        raise HTTPException(400, "сообщение пустое — напишите, что сделать со слайдами")
     try:
         current_index = int(data.get("current_index") or 1)
     except (TypeError, ValueError):
@@ -875,7 +885,7 @@ async def glass_answer(session_id: str, request: Request,
     try:
         index = int(data.get("index") or 0)
     except (TypeError, ValueError):
-        raise HTTPException(400, "index required")
+        raise HTTPException(400, "не передан номер слайда (index)")
     template_id = (data.get("template_id") or "").strip() or None
     # Тип схемы из мастера «Схема» — данными, а не текстом: см. glass.answer.
     kind = (data.get("kind") or "").strip() or None
@@ -893,7 +903,7 @@ async def glass_answer(session_id: str, request: Request,
         # заполнился сам). 409, а не 400 — запрос корректный, изменилось состояние.
         raise HTTPException(409, "вопрос уже закрыт — обновите страницу")
     except SlotValidationError:
-        raise HTTPException(400, f"unknown template: {template_id}")
+        raise HTTPException(400, f"неизвестный макет: {template_id}")
     return JSONResponse(out)
 
 
@@ -922,7 +932,7 @@ async def draft_slide_refill(session_id: str, index: int, request: Request,
         raise HTTPException(400, "на слайде нет текста — заполнять нечем: "
                                  "смените макет с переносом текста")
     except SlotValidationError:
-        raise HTTPException(400, f"unknown template: {template_id}")
+        raise HTTPException(400, f"неизвестный макет: {template_id}")
     return JSONResponse(out)
 
 
@@ -1062,7 +1072,7 @@ async def get_deck(session_id: str, request: Request, download: int = 0,
     await _owned_or_404(request, session_id, user)
     path = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if path is None:
-        raise HTTPException(404, "deck not found")
+        raise HTTPException(404, "дека не найдена")
     if download:
         return FileResponse(path, filename="deck.html", media_type="text/html")
     return HTMLResponse(path.read_text("utf-8"))
@@ -1072,11 +1082,19 @@ async def get_deck(session_id: str, request: Request, download: int = 0,
 async def post_deck(session_id: str, request: Request,
                     user=Depends(get_current_user)) -> JSONResponse:
     await _owned_or_404(request, session_id, user)
+    # 1-3 (аудит раунда 2, 2026-08-15): у черновика правда — plan.json, а его
+    # deck.html — производная. Принятый сюда HTML молча откатывался первым же
+    # пере-рендером формы (DeckPlan-as-truth в обход). Честный отказ вместо
+    # тихой потери; правки черновика сохраняются per-slide эндпоинтами.
+    if draft.plan_path(session_id).is_file():
+        raise HTTPException(
+            409, "это черновик — правки сохраняются по слайдам, "
+                 "целиком деку сохранять не нужно")
     body = await request.body()
     try:
         html = body.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(400, "deck HTML must be valid UTF-8")
+        raise HTTPException(400, "HTML деки должен быть в кодировке UTF-8")
     async with _deck_lock(session_id):
         try:
             deck_edit.save_deck(session_id, html)
@@ -1096,11 +1114,11 @@ async def post_theme(session_id: str, request: Request,
     data = await _json_body(request)
     theme = data.get("theme")
     if theme not in deck_edit.THEMES:
-        raise HTTPException(400, "theme must be 'dark' or 'light'")
+        raise HTTPException(400, "тема должна быть 'dark' или 'light'")
     async with _deck_lock(session_id):
         deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
         if deck is None:
-            raise HTTPException(404, "deck not found")
+            raise HTTPException(404, "дека не найдена")
         html = deck.read_text("utf-8")
         deck.write_text(deck_edit.set_theme(html, theme), encoding="utf-8")
         # Drafts re-derive deck.html from plan.json on every form edit, which
@@ -1124,13 +1142,13 @@ async def post_chat(session_id: str, request: Request,
     try:
         slide_index = int(data["slide_index"])
     except (KeyError, TypeError, ValueError):
-        raise HTTPException(400, "slide_index required (int)")
+        raise HTTPException(400, "не передан номер слайда (slide_index)")
     instruction = (data.get("instruction") or "").strip()
     if not instruction:
-        raise HTTPException(400, "instruction required")
+        raise HTTPException(400, "инструкция пустая — напишите, что поменять")
     deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if deck is None:
-        raise HTTPException(404, "deck not found")
+        raise HTTPException(404, "дека не найдена")
     html = deck.read_text("utf-8")
     try:
         new_html = await run_in_threadpool(
@@ -1190,7 +1208,7 @@ async def start_export(session_id: str, fmt: str, request: Request,
     job = await _owned_or_404(request, session_id, user)
     meta = _EXPORT_META.get(fmt)
     if meta is None:
-        raise HTTPException(404, "unknown export format")
+        raise HTTPException(404, "неизвестный формат экспорта")
     # B-12: у пустого черновика deck.html — empty-state-заглушка «Добавьте
     # слайд…», и экспорт честно доводил её до «готового» PPTX. rebuild/build
     # на пустом плане отвечают 400 — экспорт обязан вести себя так же.
@@ -1199,7 +1217,7 @@ async def start_export(session_id: str, fmt: str, request: Request,
                                  "экспортировать")
     deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if deck is None:
-        raise HTTPException(404, "deck not found")
+        raise HTTPException(404, "дека не найдена")
     out = session_dir(session_id) / meta["out"]
 
     async def worker() -> Path:
@@ -1213,7 +1231,7 @@ async def poll_export(session_id: str, fmt: str, request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:
     await _owned_or_404(request, session_id, user)
     if fmt not in _EXPORT_META:
-        raise HTTPException(404, "unknown export format")
+        raise HTTPException(404, "неизвестный формат экспорта")
     return JSONResponse(exports.registry.status(session_id, fmt))
 
 
@@ -1223,10 +1241,10 @@ async def download_export(session_id: str, fmt: str, request: Request,
     await _owned_or_404(request, session_id, user)
     meta = _EXPORT_META.get(fmt)
     if meta is None:
-        raise HTTPException(404, "unknown export format")
+        raise HTTPException(404, "неизвестный формат экспорта")
     path = exports.registry.path(session_id, fmt)
     if path is None or not path.is_file():
-        raise HTTPException(409, "export not ready")
+        raise HTTPException(409, "экспорт ещё не готов")
     return FileResponse(path, filename=meta["download"], media_type=meta["mime"])
 
 

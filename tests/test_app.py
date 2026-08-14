@@ -1011,3 +1011,55 @@ def test_export_error_state_surfaced(monkeypatch, tmp_path):
         st = _poll_export(c, sid, "pptx")
         assert st["state"] == "error"
         assert "chromium" in st["error"]
+
+
+def test_history_is_not_capped_at_ten(monkeypatch, tmp_path):
+    """1-1 (аудит раунда 2, agent1, major): жёсткий limit=10 в списке истории
+    делал 11-ю+ сборку недостижимой из UI, хотя её файлы живы в окне ретеншена.
+    Рост списка ограничивает ретеншен (24 ч чистит строки jobs), а не срез
+    новейших — тот же довод, что у списка черновиков (B-8/B-9)."""
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        for i in range(12):
+            sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                         files={"file": (f"d{i}.md", b"# x", "text/markdown")},
+                         headers=H("u1")).json()["session_id"]
+            _mark_done(sid)
+        items = c.get("/api/history", headers=H("u1")).json()
+        assert len(items) == 12, f"история обрезана: {len(items)} строк"
+
+
+def test_deck_error_texts_are_russian(monkeypatch, tmp_path):
+    """1-6 (аудит раунда 2, agent1): ошибки на путях готовой деки (сейв, тема,
+    чат, экспорт, ownership-404) отвечали по-английски среди русских соседей."""
+    import re
+
+    def _ru(resp, code):
+        assert resp.status_code == code, resp.text
+        detail = str(resp.json()["detail"])
+        assert re.search("[а-яА-Я]", detail), f"английский текст: {detail!r}"
+
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/jobs", data={"mode": "htmlnew"},
+                     files={"file": ("f.md", b"# hi", "text/markdown")},
+                     headers=H()).json()["session_id"]
+        # чужая/несуществующая сессия → ownership-404
+        _ru(c.get("/api/jobs/deadbeef/deck", headers=H()), 404)
+        # тело деки не в UTF-8
+        _ru(c.post(f"/api/jobs/{sid}/deck", content=b"\xff\xfe",
+                   headers=H()), 400)
+        # пустая дека (ValueError из deck_edit.save_deck)
+        _ru(c.post(f"/api/jobs/{sid}/deck", content=b"   ", headers=H()), 400)
+        # кривая тема; корректная тема, но деки ещё нет
+        _ru(c.post(f"/api/jobs/{sid}/theme", json={"theme": "pink"},
+                   headers=H()), 400)
+        _ru(c.post(f"/api/jobs/{sid}/theme", json={"theme": "light"},
+                   headers=H()), 404)
+        # чат: без номера слайда; с пустой инструкцией
+        _ru(c.post(f"/api/jobs/{sid}/chat", json={}, headers=H()), 400)
+        _ru(c.post(f"/api/jobs/{sid}/chat",
+                   json={"slide_index": 1, "instruction": " "}, headers=H()), 400)
+        # экспорт: неизвестный формат; файл до старта экспорта
+        _ru(c.post(f"/api/jobs/{sid}/export/exe", headers=H()), 404)
+        _ru(c.get(f"/api/jobs/{sid}/export/pptx/file", headers=H()), 409)

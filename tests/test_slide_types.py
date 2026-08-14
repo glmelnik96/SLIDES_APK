@@ -161,3 +161,19 @@ def test_typed_from_content_ignores_non_diagrams():
     assert st.typed_from_content("diagram", {"title": "H"}) is None
     assert st.typed_from_content("diagram", {"diagram": "не json"}) is None
     assert st.typed_from_content("diagram", {"diagram": {"kind": "flowchart"}}) is None
+
+
+def test_verbose_claims_are_russian_for_pydantic_errors():
+    """R-1 (раунд 2 аудита, 2026-08-15): конверт 400 русский, а претензии внутри
+    — сырые pydantic-строки («heading: Field required»). Они показываются
+    человеку в панели правки — типовые случаи обязаны быть по-русски."""
+    import re
+    _, claims = st.validate_fields_verbose("diagram", {"kind": "flow"})
+    assert claims
+    for c in claims:
+        assert re.search(r"[а-яА-Я]", c), f"английская претензия: {c!r}"
+    _, claims2 = st.validate_fields_verbose("bullets",
+                                            {"heading": 5, "bullets": ["a"]})
+    assert claims2
+    for c in claims2:
+        assert re.search(r"[а-яА-Я]", c), f"английская претензия: {c!r}"
