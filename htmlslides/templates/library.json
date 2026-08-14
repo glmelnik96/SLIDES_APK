@@ -281,7 +281,7 @@
                      "item_max_chars": 540,
                      "item_slots": {
                        "heading": {"kind": "text", "required": true,  "max_chars": 14,  "label": "Заголовок карточки"},
-                       "body":    {"kind": "text", "required": false, "max_chars": 520, "label": "Текст карточки"}
+                       "body":    {"kind": "text", "required": true,  "max_chars": 520, "label": "Текст карточки"}
                      }}
       }
     },

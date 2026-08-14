@@ -1173,9 +1173,16 @@ function deckSlideTextLines(i) {
   const el = slides[i];
   if (!el) return [];
   const out = [];
+  // Хром слайда (копирайт-колонтитул, номер) — не контент: без фильтра первой
+  // строкой «Текста слайда» показывался «ⓒ 2026 Cloud.ru Любое копирование…».
+  const skip = new Set();
+  el.querySelectorAll(".chrome-note, .chrome-num").forEach((c) => {
+    const line = (c.textContent || "").trim().replace(/\s+/g, " ");
+    if (line) skip.add(line);
+  });
   const push = (s) => {
     const line = (s || "").trim().replace(/\s+/g, " ");
-    if (line && !out.includes(line)) out.push(line);
+    if (line && !skip.has(line) && !out.includes(line)) out.push(line);
   };
   (el.innerText || el.textContent || "").split("\n").forEach(push);
   el.querySelectorAll("svg text").forEach((t) => push(t.textContent));
@@ -3850,8 +3857,10 @@ function makeGlassCard(idx) {
   head.appendChild(goto);
   card.appendChild(head);
   // О чём вопрос: в панели виден только номер, а на сцене может стоять другой
-  // слайд — без темы раздела автор отвечает вслепую.
-  const lines = (s.brief || "").split("\n");
+  // слайд — без темы раздела автор отвечает вслепую. briefDisplay вырезает
+  // пометки парсера «[картинка: …]» — человеку они шум (данные не трогаем:
+  // в dataset.brief и в ответ ИИ уходит полный бриф).
+  const lines = briefDisplay(s.brief).split("\n");
   const topic = (lines[0] || "").trim();
   if (topic) {
     const t = document.createElement("div");

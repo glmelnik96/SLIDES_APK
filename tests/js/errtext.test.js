@@ -282,3 +282,24 @@ test("checkedAgo: секунды, минуты, часы", () => {
   assert.strictEqual(checkedAgo(3600), "1 час назад");
   assert.strictEqual(checkedAgo(7200), "2 часа назад");
 });
+
+// Фикс 6 (прод-прогон «презы путилов»): маркеры парсера «[картинка: …]»
+// показывались дословно во фрагменте брифа карточки вопроса — на pptx-
+// исходниках до шести повторов подряд (дека 2, слайд 17).
+test("briefDisplay: маркеры картинок вырезаны, пустые строки схлопнуты", () => {
+  const { briefDisplay } = require("../../webapp/static/errtext.js");
+  const raw = "Слайд 16\n[картинка: без подписи]\n\n[картинка: без подписи]\n\n" +
+              "[картинка: схема архитектуры]\n\nПрочитано с изображения: KTS";
+  const out = briefDisplay(raw);
+  assert.ok(!out.includes("[картинка"), "маркер остался: " + out);
+  assert.ok(out.startsWith("Слайд 16"));
+  assert.ok(out.includes("Прочитано с изображения: KTS"));
+  assert.ok(!/\n{3,}/.test(out), "тройные переводы строк не схлопнуты");
+});
+
+test("briefDisplay: обычный текст не трогаем, пустой вход — пустая строка", () => {
+  const { briefDisplay } = require("../../webapp/static/errtext.js");
+  assert.strictEqual(briefDisplay("Задача\nРешение"), "Задача\nРешение");
+  assert.strictEqual(briefDisplay(""), "");
+  assert.strictEqual(briefDisplay(null), "");
+});

@@ -618,6 +618,63 @@ test("render: подпись возвратной связи не налезае
   });
 });
 
+test("render: подписи веток развилки не накрываются плашками следующей колонки", () => {
+  // Прод-замер (дека «Выбор по RTO и RPO», слайд 5): у прямого ребра метка стоит
+  // СБОКУ от вертикального коридора с бюджетом 200px, а коридор проходит между
+  // ЦЕНТРАМИ колонок — до плашки соседа остаётся ~86px. Плашки рисуются ПОСЛЕ
+  // рёбер, и «около нуля»/«минуты/часы» превращались в «около н…» без следа
+  // обрезки: текст цел, но накрыт. Метка обязана съехать вдоль сегмента в щель
+  // между рядами (там просвет — вся колонка) или ужаться до фактического
+  // просвета — и не пересекать ни одну нарисованную фигуру.
+  const spec = {
+    kind: "flowchart", direction: "right",
+    nodes: [{ id: "start", label: "Выбор решения", shape: "start" },
+            { id: "rpo", label: "RPO: сколько данных можно потерять?", shape: "decision" },
+            { id: "rto", label: "RTO: сколько можно не работать?", shape: "decision" },
+            { id: "sync", label: "Синхронный резерв" },
+            { id: "repl", label: "Репликация или backup" },
+            { id: "dr", label: "DR или горячий резерв" },
+            { id: "bkp", label: "Backup достаточен" },
+            { id: "cls", label: "Класс защиты сервиса", shape: "end", accent: true }],
+    edges: [{ from: "start", to: "rpo" }, { from: "start", to: "rto" },
+            { from: "rpo", to: "sync", label: "около нуля" },
+            { from: "rpo", to: "repl", label: "минуты/часы" },
+            { from: "rto", to: "dr", label: "минуты" },
+            { from: "rto", to: "bkp", label: "часы–сутки" },
+            { from: "sync", to: "cls" }, { from: "repl", to: "cls" },
+            { from: "dr", to: "cls" }, { from: "bkp", to: "cls" }],
+  };
+  const host = fakeHost();
+  D.render(host, spec);
+  const out = D.LAYOUTS.flowchart(spec);
+  const texts = host.innerHTML.match(/<text[^>]*>[\s\S]*?<\/text>/g) || [];
+  assert.strictEqual(texts.length, 4, "подписи веток потерялись");
+  texts.forEach((t) => {
+    const x = Number(t.match(/x="([\d.-]+)"/)[1]);
+    const y = Number(t.match(/y="([\d.-]+)"/)[1]);
+    const fs = Number(t.match(/font-size="([\d.-]+)"/)[1]);
+    const anchor = (t.match(/text-anchor="(\w+)"/) || [])[1];
+    const lines = (t.match(/<tspan[^>]*>([^<]*)<\/tspan>/g) || [])
+      .map((s) => s.replace(/<[^>]*>/g, ""));
+    // Щель между рядами вмещает подпись целиком — огрызок с «…» был бы
+    // регрессией не хуже накрытой плашкой метки.
+    assert.ok(!lines.join("").includes("…"),
+              `подпись «${lines.join(" ")}» усохла до огрызка`);
+    const w = Math.max(...lines.map((s) => s.length)) * fs * 0.6;
+    const lead = Math.round(fs * 1.16);
+    const x0 = anchor === "start" ? x : x - w / 2;
+    const box = { x0: x0, x1: x0 + w,
+                  y0: y - (lines.length - 1) * lead - fs, y1: y };
+    Object.keys(out.nodes).forEach((id) => {
+      const p = out.nodes[id];
+      const ph = p.hDraw || p.h;      // ромб рисуется выше своей коробки
+      const over = box.x0 < p.x + p.w / 2 && box.x1 > p.x - p.w / 2 &&
+                   box.y0 < p.y + ph / 2 && box.y1 > p.y - ph / 2;
+      assert.ok(!over, `подпись «${lines.join(" ")}» накрыта фигурой «${id}»`);
+    });
+  });
+});
+
 test("render: подписи связей не печатаются одна поверх другой", () => {
   // Две связи, входящие в узел с одной стороны, дают почти совпадающие середины:
   // «при положительном решении» ложилось поверх такого же, и вместо двух подписей

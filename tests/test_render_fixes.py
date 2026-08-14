@@ -13,6 +13,7 @@
           структуру (.sr-row/.sr-cell/.sr-value), по которой функция и меряет.
 """
 from htmlslides.assembler import assemble
+from htmlslides.library import TemplateLibrary
 from htmlslides.models import DeckPlan, SlidePlan
 
 
@@ -150,6 +151,30 @@ def test_units_not_glued_in_exact_verbatim():
     out = assemble(plan, theme="dark")
     assert "18 мес." in out          # ровно как в источнике, обычный пробел
     assert f"18{_NBSP}мес." not in out
+
+
+# --- Fix 5: карточка two-col-cards без текста не проходит контракт -------------
+
+def test_two_col_cards_empty_body_rejected():
+    """body карточки обязателен: на прод-прогоне (FAQ-дека, слайд «Чем backup
+    отличается от DR?») филлер отдал обе карточки с body="" и это молча прошло
+    валидацию — в деке остались две огромные пустые «папки». Все остальные
+    карточные шаблоны (three-col, cards-6, frames-grid…) текст требуют;
+    two-col-cards был единственной дырой. Теперь пустое тело = missing_required
+    → ретрай филлера, а безнадёжный слайд честно падает в фолбэк."""
+    lib = TemplateLibrary.load()
+    errors = lib.validate_content("two-col-cards", {
+        "title": "Чем backup отличается от DR?",
+        "cards": [{"heading": "Бэкап", "body": ""},
+                  {"heading": "DR", "body": ""}]})
+    assert {(e.code, e.slot) for e in errors} == {
+        ("missing_required", "cards[0].body"),
+        ("missing_required", "cards[1].body")}
+    # заполненные тела — контракт чист
+    assert not lib.validate_content("two-col-cards", {
+        "title": "Чем backup отличается от DR?",
+        "cards": [{"heading": "Бэкап", "body": "Хранит копии данных."},
+                  {"heading": "DR", "body": "Держит готовую реплику."}]})
 
 
 # --- Fix 4: хвост стаггера не уезжает в кадр прозрачным ------------------------

@@ -256,7 +256,21 @@
     return h + " " + plural(h, "час", "часа", "часов") + " назад";
   }
 
+  // Бриф для показа человеку: служебные пометки парсера «[картинка: …]»
+  // вырезаем (pptx-исходники дают до шести подряд — фрагмент карточки вопроса
+  // превращался в лесенку маркеров), осиротевшие пустые строки схлопываем.
+  // Только отображение: в данных и в контексте для ИИ бриф остаётся полным.
+  function briefDisplay(brief) {
+    if (!brief) return "";
+    return String(brief)
+      .replace(/\[картинка:[^\]]*\]/g, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
+  root.briefDisplay = briefDisplay;
   root.REBUILD_LABEL = REBUILD_LABEL;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
   root.plural = plural;
@@ -270,6 +284,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
+      briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
       rebuildEstimate: rebuildEstimate,
       healthLine: healthLine, checkedAgo: checkedAgo };

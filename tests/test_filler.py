@@ -113,3 +113,21 @@ def test_cancel_checkpoint_prevents_new_fills_after_stop():
     # Only slide 1 was actually filled; slides 2-5 hit the checkpoint and never
     # called fill_slide — no tokens spent after the stop.
     assert filled == [1]
+
+
+def test_fallback_title_strips_image_markers():
+    """Пометки парсера «[картинка: …]» не должны уезжать в заголовок заглушки.
+
+    Прод-прогон «О Cloud.ru для МНС» (rest-слайды 6/7/12): бриф из pptx
+    начинается картинкой, и blank-фолбэк получал заголовок вида
+    «IT-Разработка [картинка: без подписи] softline 48…» — служебный маркер
+    дословно в деке. Маркеры вырезаются, полезный текст остаётся."""
+    title = filler._fallback_title(
+        "IT-Разработка\n\n[картинка: без подписи]\n\nsoftline\n\n48")
+    assert "[картинка" not in title
+    assert title.startswith("IT-Разработка")
+    # маркер с подписью тоже вырезается, а пустой бриф из одних маркеров
+    # деградирует в нейтральный «Слайд»
+    assert "[картинка" not in filler._fallback_title(
+        "[картинка: схема архитектуры] Награды")
+    assert filler._fallback_title("[картинка: без подписи]") == "Слайд"
