@@ -143,10 +143,7 @@ const CHECK_SVG = `<svg class="st-ico" viewBox="0 0 24 24" width="13" height="13
 // Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
 const histInt = (n) => Number(n).toLocaleString("ru-RU");
 const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
-function histDur(ms) {
-  const s = Math.round(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
+// histDur — из errtext.js (window): «мм:сс», суб-секундное не схлопывается в 0:00.
 
 /* ============================================================================
    ЕДИНЫЙ ФИД «Презентации» — один список всех сборок (активные + черновики +
@@ -495,7 +492,9 @@ $("#feedChips").addEventListener("click", (e) => {
 });
 
 $("#clear").onclick = async () => {
-  await fetch(U("/api/history/clear"), { method: "POST" });
+  // D-3: обрыв сети — не молчаливый unhandled rejection; фид перерисовываем в
+  // любом случае (упавшая очистка = история осталась, список честно покажет её).
+  try { await fetch(U("/api/history/clear"), { method: "POST" }); } catch (e) { /* сеть */ }
   loadFeed();
 };
 
@@ -559,7 +558,17 @@ async function createJob(opts) {
   fd.append("file", selectedFile);
   if (isExact) fd.append("exact_transfer", "true");
   setStartEnabled(false);
-  const res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
+  let res;
+  try {
+    res = await fetch(U("/api/jobs"), { method: "POST", body: fd });
+  } catch (e) {
+    // Аудит 2026-08-14 (D-4): без catch обрыв сети оставлял кнопку «Собрать»
+    // выключенной навсегда и молчал — путь загрузки вставал колом.
+    launchError("Не удалось запустить сборку",
+      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте ещё раз.</p>");
+    setStartEnabled(true);
+    return;
+  }
   if (!res.ok) {
     // Surface the failure in the #result panel (own visual system, SB Sans),
     // not a native alert. 429 = queue full; 400 already carries a Russian

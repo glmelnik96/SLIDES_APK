@@ -633,7 +633,10 @@ async function saveDeck(silent) {
 }
 
 document.getElementById("save").onclick = async () => {
-  const ok = await saveDeck();
+  // D-1 (аудит 2026-08-14): без catch обрыв сети в fetch давал unhandled
+  // rejection — кнопка молчала вместо «Ошибка» (автосейв ниже уже был защищён).
+  let ok = false;
+  try { ok = await saveDeck(); } catch (e) { ok = false; }
   flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
 };
 

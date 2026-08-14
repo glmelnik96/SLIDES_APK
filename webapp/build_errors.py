@@ -22,6 +22,7 @@ def user_message(exc: BaseException) -> str:
     """Понятная пользователю причина сбоя. Неизвестное → GENERIC."""
     return (_openai_message(exc)
             or _pipeline_message(exc)
+            or _unreadable_file_message(exc)
             or _value_error_message(exc)
             or GENERIC)
 
@@ -38,8 +39,41 @@ def error_code(exc: BaseException) -> str:
     нет — сборку останавливает кооперативная отмена по дедлайну.
     """
     return (_openai_code(exc) or _pipeline_code(exc)
+            or ("input_unreadable" if _is_unreadable_file(exc) else None)
             or ("input_invalid" if isinstance(exc, ValueError) else None)
             or "generic")
+
+
+def _is_unreadable_file(exc: BaseException) -> bool:
+    """Битый/недокачанный .pptx или .docx: python-pptx/python-docx кидают свои
+    PackageNotFoundError (у каждой библиотеки — собственный класс), а обрыв
+    посреди архива — голый zipfile.BadZipFile. Раньше всё это проваливалось в
+    GENERIC с советом «попробуйте ещё раз», хотя retry детерминированно
+    воспроизводит тот же провал (аудит 2026-08-14, A-1)."""
+    import zipfile
+    if isinstance(exc, zipfile.BadZipFile):
+        return True
+    for mod_probe in (_pptx_package_error, _docx_package_error):
+        cls = mod_probe()
+        if cls is not None and isinstance(exc, cls):
+            return True
+    return False
+
+
+def _pptx_package_error() -> type[BaseException] | None:
+    try:
+        from pptx.exc import PackageNotFoundError
+    except ImportError:
+        return None
+    return PackageNotFoundError
+
+
+def _docx_package_error() -> type[BaseException] | None:
+    try:
+        from docx.opc.exceptions import PackageNotFoundError
+    except ImportError:
+        return None
+    return PackageNotFoundError
 
 
 def _openai_code(exc: BaseException) -> str | None:
@@ -151,6 +185,17 @@ def _pipeline_message(exc: BaseException) -> str | None:
     if isinstance(exc, RenderUnavailable):
         return ("Не удалось обработать исходные слайды: на сервере недоступен "
                 "рендер. Сообщите администратору.")
+    return None
+
+
+def _unreadable_file_message(exc: BaseException) -> str | None:
+    """Файл не читается как документ своего формата. «Попробуйте ещё раз» здесь
+    врать: повтор из того же исходника гарантированно упадёт так же. Текст без
+    имени файла — путь из исключения библиотеки в UI не течёт."""
+    if _is_unreadable_file(exc):
+        return ("Файл не удалось прочитать — похоже, он повреждён или "
+                "загрузился не полностью. Проверьте, что документ открывается "
+                "у вас на устройстве, и загрузите его заново.")
     return None
 
 

@@ -269,7 +269,17 @@
       .trim();
   }
 
+  // Длительность прогона «мм:сс» для карточек фида. Аудит 2026-08-14: «Точный
+  // перенос» укладывается в сотни мс, и карточка показывала «за 0:00» — как
+  // будто сборки не было. Суб-секундное округляем вверх до 0:01.
+  function histDur(ms) {
+    var s = Math.round(ms / 1000);
+    if (s === 0 && ms > 0) s = 1;
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
+  root.histDur = histDur;
   root.briefDisplay = briefDisplay;
   root.REBUILD_LABEL = REBUILD_LABEL;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
@@ -282,7 +292,8 @@
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { SAVE_STATUS: SAVE_STATUS, REBUILD_LABEL: REBUILD_LABEL,
+    module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
+      REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,

@@ -56,16 +56,23 @@ async def list_for_user(session: AsyncSession, user_id: int,
 
 
 async def list_drafts_for_user(session: AsyncSession, user_id: int,
-                               limit: int = 10) -> list[models.Job]:
+                               limit: int | None = None) -> list[models.Job]:
     """Черновики пользователя = только сессии со status="draft" (незавершённая
     работа конструктора/чата). Держатся отдельно и от истории (терминальные), и от
     активной очереди (queued/running), поэтому имеют свой список — по образцу
-    list_for_user, но по статусу "draft"."""
-    res = await session.execute(
-        select(models.Job).where(
+    list_for_user, но по статусу "draft".
+
+    Аудит 2026-08-14 (B-8/B-9): дефолтный limit=10 резал и список на главной
+    (старые «Продолжить» недостижимы), и окно подсчёта лимита стеклянной сборки
+    (свежие пустые черновики вытесняли незавершённые из окна — потолок обходился).
+    Рост списка ограничивает ретеншен, а не срез новейших."""
+    q = (select(models.Job).where(
             models.Job.user_id == user_id,
             models.Job.status == "draft")
-        .order_by(models.Job.created_at.desc()).limit(limit))
+         .order_by(models.Job.created_at.desc()))
+    if limit is not None:
+        q = q.limit(limit)
+    res = await session.execute(q)
     return list(res.scalars().all())
 
 

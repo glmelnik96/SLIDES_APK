@@ -71,18 +71,23 @@ class Intent(BaseModel):
     action: str          # plan | add | rewrite | delete | move | retitle | enrich | propose_content | build_now | chat
     topic: str = ""      # for add/rewrite: what the slide/edit is about
     to: int | None = None  # for move: target 1-based position
+    # B-5: номер слайда из сообщения («удали слайд 99»). None = текущий слайд.
+    # Раньше номер выбрасывался, и delete всегда бил по current_index — молчаливая
+    # потеря чужого слайда с ложным ответом «Удалил слайд 2».
+    target: int | None = None
 
 
 _INTENT_SYSTEM = (
     "Ты классификатор намерения для конструктора презентаций. По сообщению "
     "пользователя и контексту определи ОДНО действие и верни ТОЛЬКО JSON:\n"
-    '{"action": "...", "topic": "...", "to": null}\n'
+    '{"action": "...", "topic": "...", "to": null, "target": null}\n'
     "Действия:\n"
     "- plan: пользователь хочет обсудить/спланировать структуру всей презентации "
     "или просит предложить план.\n"
     "- add: добавить новый слайд (topic = о чём слайд).\n"
     "- rewrite: переписать/оформить/сократить текущий слайд (topic = что изменить).\n"
-    "- delete: удалить текущий слайд.\n"
+    "- delete: удалить слайд (target = номер слайда, если пользователь назвал "
+    "его явно; null = текущий слайд).\n"
     "- move: переместить текущий слайд (to = новая позиция, 1-based).\n"
     "- retitle: задать заголовок всей презентации (topic = заголовок).\n"
     "- enrich: пользователь просит наполнить/детализировать/раскрыть существующие слайды плана контентом — обогатить их описания (brief). НЕ создаёт слайды.\n"
@@ -110,7 +115,14 @@ _RULE_INTENTS: list[tuple[re.Pattern, str]] = [
 def _rule_intent(message: str) -> Intent | None:
     for pattern, action in _RULE_INTENTS:
         if pattern.search(message):
-            return Intent(action=action, topic=message.strip())
+            target = None
+            if action == "delete":
+                # B-5: номер из «удали слайд 3» обязан доехать до target, иначе
+                # фолбэк повторит удаление не того слайда.
+                m = re.search(r"слайд[аы]?\s*№?\s*(\d+)", message, re.IGNORECASE)
+                if m:
+                    target = int(m.group(1))
+            return Intent(action=action, topic=message.strip(), target=target)
     return None
 
 
@@ -248,6 +260,40 @@ def _kimi():
                       extra_body={"thinking": {"type": "disabled"}})
 
 
+# ── B-6 (аудит 2026-08-14): гард «слайд из заглушек» на пути rewrite ─────────
+# Инцидент: модель на «сократи слайд» вернула stats из прочерков («—»/«Описание
+# не предоставлено»), и rewrite молча затёр реальные цифры, отчитавшись успехом.
+# Больше половины строковых листьев — плейсхолдеры → это заглушка, не контент.
+_STUB_LITERALS = {"—", "-", "–", "…", "?", "n/a", "tbd", "todo"}
+_STUB_PHRASE = re.compile(
+    r"не предоставлен|нет данных|заполните|placeholder|lorem ipsum",
+    re.IGNORECASE)
+
+
+def _string_leaves(value: Any):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from _string_leaves(v)
+    elif isinstance(value, (list, tuple)):
+        for v in value:
+            yield from _string_leaves(v)
+
+
+class _StubbedFill(Exception):
+    """Модель вернула плейсхолдеры вместо содержимого слайда."""
+
+
+def _looks_stubbed(content: dict) -> bool:
+    leaves = [s.strip() for s in _string_leaves(content) if s and s.strip()]
+    if not leaves:
+        return True  # пустой контент вместо живого слайда — тоже порча
+    stub = sum(1 for s in leaves
+               if s.lower() in _STUB_LITERALS or _STUB_PHRASE.search(s))
+    return stub * 2 > len(leaves)
+
+
 def _talk(client: Any, system: str, ctx: str, message: str) -> str:
     reply = client.chat([
         {"role": "system", "content": system},
@@ -281,12 +327,20 @@ def run_turn(session_id: str, message: str, current_index: int,
                              changed=True)
 
     elif intent.action == "delete":
-        if 1 <= current_index <= len(plan.slides):
-            plan = draft.delete_slide(plan, current_index)
+        # B-5: явный номер из сообщения главнее current_index. Несуществующий
+        # номер — отказ, а не молчаливое удаление текущего слайда.
+        idx = intent.target if intent.target is not None else current_index
+        if intent.target is not None and not 1 <= intent.target <= len(plan.slides):
+            n = len(plan.slides)
+            result = AgentResult(
+                reply=f"Слайда {intent.target} нет — в презентации "
+                      f"{'нет слайдов' if not n else f'только {n}'}.")
+        elif 1 <= idx <= len(plan.slides):
+            plan = draft.delete_slide(plan, idx)
             draft.save_plan(session_id, plan)
-            result = AgentResult(reply=f"Удалил слайд {current_index}.",
+            result = AgentResult(reply=f"Удалил слайд {idx}.",
                                  changed=True,
-                                 go_to=max(1, current_index - 1))
+                                 go_to=max(1, idx - 1))
         else:
             result = AgentResult(reply="Нет слайда для удаления.")
 
@@ -317,9 +371,19 @@ def run_turn(session_id: str, message: str, current_index: int,
 
     elif intent.action == "build_now":
         # Сборка — строго по кнопке в UI, чат её не запускает и не сигналит.
-        result = AgentResult(
-            reply="Когда план готов — нажми «Заполнить слайды» справа, чтобы собрать деку.",
-            changed=False)
+        # B-4: кнопка видна только пока есть build-target (hasBuildTargets в
+        # editor.js) — советовать «нажми», когда её нет на экране, тупик.
+        has_targets = any(s.brief and not s.filled and not s.freeform
+                          and not s.slide_type for s in plan.slides)
+        if has_targets:
+            reply = ("Когда план готов — нажми «Заполнить слайды» справа, "
+                     "чтобы собрать деку.")
+        elif plan.slides:
+            reply = ("Все слайды уже разложены и заполнены — дека готова, "
+                     "остаётся проверить и скачать.")
+        else:
+            reply = "План пока пуст — добавь слайды, и я помогу их заполнить."
+        result = AgentResult(reply=reply, changed=False)
 
     elif intent.action == "rewrite":
         if not (1 <= current_index <= len(plan.slides)):
@@ -344,17 +408,44 @@ def run_turn(session_id: str, message: str, current_index: int,
             try:
                 sp = fill_slide(client, library, sp, deck_title=plan.title,
                                 extra=f"Указание пользователя: {intent.topic or message}")
-                plan = draft.update_slide(plan, current_index,
-                                          content=sp.content, template_id=tid)
-                # Присваиваем ВСЕГДА: typed-поля старше template_id (draft_render
-                # рисует слайд из них), поэтому уцелевшие поля прежней схемы
-                # показывали бы её вместо только что переписанного содержимого.
-                typed = slide_types.typed_from_content(tid, sp.content)
-                cur_slide = plan.slides[current_index - 1]
-                cur_slide.slide_type, cur_slide.fields = typed or (None, None)
-                draft.save_plan(session_id, plan)
-                result = AgentResult(reply=f"Обновил слайд {current_index}.",
-                                     changed=True, go_to=current_index)
+                # B-6: модель может вернуть заглушки («—», «не предоставлено»)
+                # вместо содержимого — принять их значит молча затереть живой
+                # слайд и соврать «Обновил». Отказ честнее.
+                if _looks_stubbed(sp.content):
+                    raise _StubbedFill()
+                # Серверный аудит 2026-08-14 (C-2): fill_slide идёт до минуты,
+                # а редактор в это время пишет plan.json (формы, glass-шаг).
+                # Сейв нашего снимка целиком откатил бы те правки — вклеиваем
+                # ТОЛЬКО свой слайд в СВЕЖИЙ план (как glass._fill_one).
+                plan = draft.load_plan(session_id)
+                if (not 1 <= current_index <= len(plan.slides)
+                        or plan.slides[current_index - 1].brief != cur.brief):
+                    result = AgentResult(
+                        reply="Пока я переписывал, слайд изменился или был "
+                              "удалён — правку не применил.")
+                else:
+                    plan = draft.update_slide(plan, current_index,
+                                              content=sp.content,
+                                              template_id=tid)
+                    # Присваиваем ВСЕГДА: typed-поля старше template_id
+                    # (draft_render рисует слайд из них), поэтому уцелевшие поля
+                    # прежней схемы показывали бы её вместо переписанного.
+                    typed = slide_types.typed_from_content(tid, sp.content)
+                    cur_slide = plan.slides[current_index - 1]
+                    cur_slide.slide_type, cur_slide.fields = typed or (None, None)
+                    # B-7: слайд только что заполнен моделью по указанию автора —
+                    # без filled=True «Заполнить слайды» снова видел его в целях
+                    # (brief and not filled) и молча перезаписывал правку по
+                    # старому brief.
+                    cur_slide.filled = True
+                    draft.save_plan(session_id, plan)
+                    result = AgentResult(reply=f"Обновил слайд {current_index}.",
+                                         changed=True, go_to=current_index)
+            except _StubbedFill:
+                result = AgentResult(
+                    reply="Модель вернула заглушки вместо содержимого — "
+                          "слайд не изменил. Попробуйте переформулировать "
+                          "запрос.")
             except Exception:  # noqa: BLE001
                 result = AgentResult(
                     reply="Не получилось переписать слайд — попробуйте иначе.")
@@ -388,6 +479,9 @@ def _generate_outline(client: Any, session_id: str, plan: draft.DraftPlan,
         # Промпт просит 3-12 слайдов, но JSON модели никто не ограничивал —
         # разошедшаяся модель могла вывалить десятки слайдов в план. Жёсткий cap.
         outline.slides = outline.slides[:_OUTLINE_MAX_SLIDES]
+        # C-2 (серверный аудит 2026-08-14): дописываем в СВЕЖИЙ план — пока
+        # модель сочиняла аутлайн, автор мог править слайды в формах.
+        plan = draft.load_plan(session_id)
         for item in outline.slides:
             plan = draft.add_slide(plan, draft.DraftSlide(
                 brief=item.brief or item.title, filled=False,
@@ -426,11 +520,23 @@ def _enrich_briefs(client: Any, session_id: str, plan: draft.DraftPlan,
     except Exception:  # noqa: BLE001
         outline = None
     if outline and outline.slides:
+        # C-2 (серверный аудит 2026-08-14): применяем к СВЕЖЕМУ плану — сейв
+        # снимка откатывал бы правки, сделанные в формах, пока модель писала.
+        # Слайд, который успел измениться (brief/filled/сдвиг индексов), не
+        # трогаем: обогащение адресовано тому brief'у, что уезжал в модель.
+        old = {i: plan.slides[i - 1].brief for i in targets}
+        plan = draft.load_plan(session_id)
         applied = 0
         for item in outline.slides:
-            if item.index in targets:
-                plan.slides[item.index - 1].brief = item.brief
-                applied += 1
+            if item.index not in targets:
+                continue
+            if not 1 <= item.index <= len(plan.slides):
+                continue
+            s = plan.slides[item.index - 1]
+            if s.brief != old[item.index] or s.filled or s.freeform:
+                continue
+            s.brief = item.brief
+            applied += 1
         draft.save_plan(session_id, plan)
         return plan, AgentResult(
             reply=f"Дополнил план деталями ({applied} сл.).", changed=True)
@@ -463,21 +569,38 @@ def _propose_content(client: Any, session_id: str, plan: draft.DraftPlan,
         proposed = None
     applied = 0
     if proposed and proposed.slides:
+        # C-2 (серверный аудит 2026-08-14): раскладываем по СВЕЖЕМУ плану —
+        # сейв снимка откатывал бы правки форм, сделанные пока модель думала.
+        # Изменившийся слайд (brief/filled/typed/сдвиг индексов) пропускаем.
+        old = {i: plan.slides[i - 1].brief for i in targets}
+        plan = draft.load_plan(session_id)
         for item in proposed.slides:
             if item.index not in targets:
+                continue
+            if not 1 <= item.index <= len(plan.slides):
+                continue
+            s = plan.slides[item.index - 1]
+            if (s.brief != old[item.index] or s.filled or s.freeform
+                    or s.slide_type):
                 continue
             norm = slide_types.validate_fields(item.slide_type, item.fields)
             if norm is None:
                 continue  # не ложится в тип → слайд остаётся сырым (fallback)
-            plan.slides[item.index - 1] = plan.slides[item.index - 1].model_copy(
+            plan.slides[item.index - 1] = s.model_copy(
                 update={"slide_type": item.slide_type, "fields": norm,
                         "filled": False})
             applied += 1
     if applied:
         draft.save_plan(session_id, plan)
+        # B-4: «жми „Собрать“» — только если сырые слайды остались (иначе
+        # кнопка скрыта, а типизированная дека уже отрисована сама).
+        remaining = any(s.brief and not s.filled and not s.freeform
+                        and not s.slide_type for s in plan.slides)
+        tail = ("потом жми «Собрать»." if remaining
+                else "дека уже обновилась.")
         return plan, AgentResult(
             reply=(f"Разложил по полям {applied} сл. Проверь и поправь в "
-                   "аутлайне — потом жми «Собрать»."), changed=True)
+                   f"аутлайне — {tail}"), changed=True)
     # Ничего не разложилось. Самая частая причина — слишком общие brief'ы
     # (модели не из чего лепить поля). Подскажем обогатить план сначала.
     thin = all(len(plan.slides[i - 1].brief) < 40 for i in targets)
@@ -513,22 +636,38 @@ def build_outline(session_id: str, *, client: Any | None = None) -> None:
                        content={"brief": s.brief})
         try:
             sp = fill_slide(client, library, sp, deck_title=plan.title)
-            plan = draft.update_slide(plan, i, content=sp.content,
-                                      template_id=tid)
+            content = sp.content
         except Exception:  # noqa: BLE001 — keep template only, never crash
-            plan = draft.update_slide(plan, i, template_id=tid)
+            content = None
+        # Серверный аудит 2026-08-14 (C-6): сборка идёт минутами, автор в это
+        # время правит формы (plan.json пишется без замка) и удаляет слайды.
+        # Сейв нашего снимка целиком откатывал те правки и воскрешал удалённое —
+        # вклеиваем ТОЛЬКО свой слайд в СВЕЖИЙ план; ушедший/изменённый слайд
+        # пропускаем (как glass._fill_one).
+        fresh = draft.load_plan(session_id)
+        if (not 1 <= i <= len(fresh.slides)
+                or fresh.slides[i - 1].brief != s.brief
+                or fresh.slides[i - 1].filled or fresh.slides[i - 1].freeform
+                or fresh.slides[i - 1].slide_type):
+            continue
+        if content is not None:
+            fresh = draft.update_slide(fresh, i, content=content,
+                                       template_id=tid)
+        else:
+            fresh = draft.update_slide(fresh, i, template_id=tid)
         # Вопрос стеклянной сборки снимаем: слайд уже заполнен здесь, и карточка
         # «ИИ сомневается в макете» относилась бы к содержимому, которого нет.
         # Черновик у обоих путей общий — автор может уйти из степпера в чат.
-        slide = plan.slides[i - 1]
+        slide = fresh.slides[i - 1]
         # Схему — в typed-слайд (панель узлов и drag смотрят на slide_type).
         typed = slide_types.typed_from_content(tid, slide.content)
         if typed:
             slide.slide_type, slide.fields = typed
         slide.filled = True
         slide.status = slide.question = slide.candidates = None
-        draft.save_plan(session_id, plan)  # save after EACH slide (resilience)
-    draft_render.render_draft(session_id, plan)  # final render
+        draft.save_plan(session_id, fresh)  # save after EACH slide (resilience)
+        plan = fresh
+    draft_render.render_draft(session_id, draft.load_plan(session_id))
 
 
 def _pick_template(client: Any, library, topic: str, ctx: str) -> str:

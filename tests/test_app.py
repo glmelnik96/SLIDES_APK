@@ -281,6 +281,26 @@ def test_empty_file_rejected(monkeypatch, tmp_path):
         assert ok.status_code == 200
 
 
+def test_validation_400s_speak_russian(monkeypatch, tmp_path):
+    """Аудит 2026-08-14 (A-2): среди русских 400-ок валидации жили две английские
+    f-строки («unsupported mode», «bad file type») — переводим, весь фронт русский."""
+    import re
+    _no_run(monkeypatch)
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "exact"},
+                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
+        assert r.status_code == 400
+        assert re.search("[а-яА-Я]", r.json()["detail"]), r.json()
+
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("x.exe", b"MZ", "application/octet-stream")},
+                   headers=H())
+        assert r.status_code == 400
+        detail = r.json()["detail"]
+        assert re.search("[а-яА-Я]", detail), detail
+        assert ".exe" in detail   # какой именно формат отвергнут — говорим
+
+
 def test_history_includes_error_for_failed(monkeypatch, tmp_path):
     """История отдаёт причину провала, чтобы фронт показал её вместо «Открыть»."""
     _no_run(monkeypatch)

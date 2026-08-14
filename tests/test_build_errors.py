@@ -98,6 +98,39 @@ def test_error_code_never_leaks_error_text():
         assert code.replace("_", "").isalpha()   # только snake_case-латиница
 
 
+# ── нечитаемый исходник (аудит 2026-08-14, A-1): без ложного «попробуйте ещё раз»
+def test_unreadable_pptx_package_is_classified():
+    """Битый/недокачанный .pptx: python-pptx кидает PackageNotFoundError. Раньше
+    падало в GENERIC с советом «попробуйте ещё раз» — retry детерминированно
+    воспроизводит тот же провал, совет врал."""
+    pptx_exc = pytest.importorskip("pptx.exc")
+    exc = pptx_exc.PackageNotFoundError("Package not found at '/tmp/секретный договор.pptx'")
+    assert error_code(exc) == "input_unreadable"
+    msg = user_message(exc)
+    assert msg != GENERIC
+    assert "попробуйте ещё раз" not in msg.lower()
+    assert "файл" in msg.lower()
+    assert "секретный" not in msg  # путь/имя исходника не течёт в UI
+
+
+def test_unreadable_zip_is_classified():
+    """То же для голого zipfile.BadZipFile (обрыв на середине архива)."""
+    import zipfile
+    exc = zipfile.BadZipFile("File is not a zip file")
+    assert error_code(exc) == "input_unreadable"
+    msg = user_message(exc)
+    assert msg != GENERIC
+    assert "попробуйте ещё раз" not in msg.lower()
+
+
+def test_unreadable_docx_package_is_classified():
+    """python-docx кидает СВОЙ PackageNotFoundError (docx.opc.exceptions)."""
+    docx_exc = pytest.importorskip("docx.opc.exceptions")
+    exc = docx_exc.PackageNotFoundError("Package not found at '/tmp/x.docx'")
+    assert error_code(exc) == "input_unreadable"
+    assert user_message(exc) != GENERIC
+
+
 # ── недоступность модели (инцидент 2026-08-04): без ложного «повторите» ───────
 def test_provider_unavailable_has_own_code_and_honest_text():
     """Обе модели молчат: советовать «повторите запуск» — врать. Повтор упрётся

@@ -274,6 +274,51 @@ def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
                      headers=H("intruder")).status_code == 404
 
 
+def test_drafts_list_is_not_capped_at_ten(monkeypatch, tmp_path):
+    """B-9 (аудит 2026-08-14): GET /api/drafts отдавал 10 новейших — старые
+    черновики существовали (и считались в лимитах), но с главной их было не
+    открыть и не удалить: текст 429 «дособерите или удалите» был невыполним."""
+    with _client(monkeypatch, tmp_path) as c:
+        sids = [_new_draft(c) for _ in range(12)]
+        listed = {d["id"] for d in c.get("/api/drafts", headers=H()).json()}
+        assert set(sids) <= listed, f"видно {len(listed)} из {len(sids)}"
+
+
+def test_replace_plan_with_unknown_template_is_400_not_500(monkeypatch, tmp_path):
+    """B-1 (аудит 2026-08-14): валидный по форме план с несуществующим
+    template_id падал голым 500 (SlotValidationError из рендера не ловился).
+    План при этом не бился (рендер до записи), но клиент видел «ошибку сервера»
+    вместо претензии к макету."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        r = c.put(f"/api/drafts/{sid}",
+                  json={"title": "t", "slides": [
+                      {"template_id": "no-such-template", "content": {}}]},
+                  headers=H())
+        assert r.status_code == 400, r.text
+        assert "no-such-template" in str(r.json()["detail"])
+        # прежний план цел
+        assert [s["template_id"] for s in
+                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] == ["cover"]
+
+
+def test_replace_plan_with_broken_typed_fields_is_400(monkeypatch, tmp_path):
+    """B-3: битые typed-поля (diagram без узлов, ребро в никуда) через PUT плана
+    сохранялись молча — рендер тихо падал в blank. Per-slide эндпоинт /fields
+    такое честно отвергает 400 — контракт должен быть один."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        r = c.put(f"/api/drafts/{sid}",
+                  json={"title": "t", "slides": [
+                      {"slide_type": "diagram",
+                       "fields": {"heading": "x",
+                                  "diagram": {"kind": "flowchart", "nodes": [],
+                                              "edges": [{"from": "a", "to": "b"}]}}}]},
+                  headers=H())
+        assert r.status_code == 400, r.text
+
+
 def test_failed_render_leaves_plan_and_deck_in_step(monkeypatch, tmp_path):
     """План и дека — оригинал и его дериват; разойтись они не должны.
 
@@ -435,6 +480,65 @@ def test_build_guard_ignores_typed_only_deck(monkeypatch, tmp_path):
         c.put(f"/api/drafts/{sid}/slides/1/fields",
               json={"slide_type": "title", "fields": {"heading": "H"}}, headers=H())
         assert c.post(f"/api/drafts/{sid}/build", headers=H()).status_code == 400
+
+
+def test_build_guard_text_is_honest_about_typed_deck(monkeypatch, tmp_path):
+    """B-4 (аудит 2026-08-14): при полностью типизированной деке /build отвечал
+    «в плане пока нет слайдов», хотя слайды есть — они уже разложены. Текст
+    уезжает пользователю как есть (editor.js addMsg), поэтому обязан быть честным."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.put(f"/api/drafts/{sid}/slides/1/fields",
+              json={"slide_type": "title", "fields": {"heading": "H"}}, headers=H())
+        r = c.post(f"/api/drafts/{sid}/build", headers=H())
+        assert r.status_code == 400
+        detail = r.json()["detail"]
+        assert "нет слайдов" not in detail, detail
+        assert "уже" in detail, detail
+        # пустой план — прежний текст остаётся верным
+        sid2 = _new_draft(c)
+        r2 = c.post(f"/api/drafts/{sid2}/build", headers=H())
+        assert r2.status_code == 400
+        assert "нет слайдов" in r2.json()["detail"]
+
+
+def test_export_of_empty_draft_is_400(monkeypatch, tmp_path):
+    """B-12 (аудит 2026-08-14): экспорт пустого черновика доходил до ready и
+    отдавал PPTX-заглушку «Добавьте слайд…». rebuild/build на пустом плане
+    честно отвечают 400 — экспорт был единственным путём без проверки."""
+    import webapp.render_pptx as rp
+    monkeypatch.setattr(rp, "export_pptx",
+                        lambda deck, out: (out.write_bytes(b"P"), out)[1])
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        r = c.post(f"/api/jobs/{sid}/export/pptx", headers=H())
+        assert r.status_code == 400
+        assert "нет слайдов" in r.json()["detail"]
+        # непустой черновик стартует экспорт как раньше
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        r2 = c.post(f"/api/jobs/{sid}/export/pptx", headers=H())
+        assert r2.status_code == 200 and r2.json()["state"] == "running"
+
+
+def test_add_slide_template_errors_are_specific(monkeypatch, tmp_path):
+    """B-11 (аудит 2026-08-14): на скрытый cards-6 отвечали «valid template_id
+    required» — id валиден, просто скрыт из пикера. Скрытый макет и неизвестный
+    id — разные ошибки, обе по-русски."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        r = c.post(f"/api/drafts/{sid}/slides",
+                   json={"template_id": "cards-6"}, headers=H())
+        assert r.status_code == 400
+        assert "cards-6" in r.json()["detail"]
+        assert "служебн" in r.json()["detail"]
+        r2 = c.post(f"/api/drafts/{sid}/slides",
+                    json={"template_id": "no-such"}, headers=H())
+        assert r2.status_code == 400
+        assert "неизвестный макет" in r2.json()["detail"]
+        r3 = c.post(f"/api/drafts/{sid}/slides", json={}, headers=H())
+        assert r3.status_code == 400
+        assert "макет" in r3.json()["detail"]
 
 
 # ── in-place (contenteditable) edit → freeform sync ─────────────────────────

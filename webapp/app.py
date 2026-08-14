@@ -208,10 +208,13 @@ async def create_job(request: Request, mode: str = Form(...),
                      user=Depends(get_current_user)) -> JSONResponse:
     from schemas.session import Mode, SessionInput
     if mode not in _ALLOWED:
-        raise HTTPException(400, f"unsupported mode: {mode}")
+        raise HTTPException(400, f"неизвестный режим сборки: {mode}")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in _ALLOWED[mode]:
-        raise HTTPException(400, f"bad file type {suffix} for mode {mode}")
+        allowed = ", ".join(sorted(_ALLOWED[mode]))
+        raise HTTPException(
+            400, f"формат {suffix or 'без расширения'} не поддерживается — "
+                 f"загрузите {allowed}")
 
     exact = exact_transfer.lower() in ("1", "true", "on", "yes")
     if exact and suffix not in _EXACT_ALLOWED:
@@ -513,13 +516,41 @@ async def replace_draft(session_id: str, request: Request,
     a previously-captured snapshot this way; the derived deck re-renders from it.
     Same ownership / lifecycle guards as the slide endpoints."""
     from pydantic import ValidationError
+    from htmlslides.library import SlotValidationError, TemplateLibrary
+    from webapp import slide_types
     await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     try:
         plan = draft.DraftPlan.model_validate(data)
     except ValidationError:
         raise HTTPException(400, "invalid plan")
-    _persist_draft(session_id, plan)
+    # Аудит 2026-08-14 (B-1/B-3): форма плана — не вся правда. Неизвестный
+    # template_id раньше доезжал до рендера и падал голым 500 (SlotValidationError
+    # не ловился), а битые typed-поля сохранялись молча и рендерились в blank —
+    # хотя per-slide эндпоинт /fields тот же спек честно отвергает. Контракт один.
+    library = TemplateLibrary.load()
+    for i, s in enumerate(plan.slides, start=1):
+        if s.freeform:
+            continue
+        if s.slide_type:
+            norm, claims = slide_types.validate_fields_verbose(s.slide_type,
+                                                               s.fields)
+            if norm is None:
+                raise HTTPException(400, {
+                    "error": f"слайд {i}: поля не проходят контракт типа",
+                    "errors": claims})
+            continue
+        tid = s.template_id or "blank"
+        try:
+            library.get(tid)
+        except SlotValidationError:
+            raise HTTPException(400, f"слайд {i}: неизвестный макет «{tid}»")
+    try:
+        _persist_draft(session_id, plan)
+    except SlotValidationError as exc:
+        # Страховка: что бы рендер ни отверг сверх пред-проверки — это претензия
+        # к плану, а не сбой сервера (план на диске цел: рендер идёт до записи).
+        raise HTTPException(400, str(exc))
     return JSONResponse(plan.model_dump())
 
 
@@ -530,8 +561,18 @@ async def add_draft_slide(session_id: str, request: Request,
     plan = await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     template_id = data.get("template_id")
-    if not template_id or template_id not in {t["id"] for t in templates_api.catalog()}:
-        raise HTTPException(400, "valid template_id required")
+    # B-11: скрытый макет (есть в библиотеке, но не в пикере) и неизвестный id —
+    # разные ошибки; «valid template_id required» врал, что cards-6 невалиден.
+    visible = {t["id"] for t in templates_api.catalog()}
+    if not template_id:
+        raise HTTPException(400, "не указан макет — выберите его из каталога")
+    if template_id not in visible:
+        all_ids = {t["id"] for t in templates_api.catalog(include_hidden=True)}
+        if template_id in all_ids:
+            raise HTTPException(
+                400, f"макет «{template_id}» служебный — вручную его добавить "
+                     "нельзя, выберите макет из каталога")
+        raise HTTPException(400, f"неизвестный макет «{template_id}»")
     at = data.get("at")
     # Fields start EMPTY (plan.json keeps the user's raw content); the representative
     # filler ("рыба-текст") is supplied at render time by draft_render, so a fresh
@@ -702,6 +743,12 @@ async def build_draft(session_id: str, request: Request,
     targets = [s for s in plan.slides if s.brief and not s.filled
                and not s.freeform and not s.slide_type]
     if not targets:
+        # B-4: текст уезжает в чат как есть — различаем «план пуст» и «все
+        # слайды уже разложены/заполнены», иначе 400 врёт про пустой план.
+        if plan.slides:
+            raise HTTPException(
+                400, "все слайды уже разложены или заполнены — "
+                     "собирать нечего")
         raise HTTPException(
             400, "в плане пока нет слайдов — добавьте их в чате")
     await run_in_threadpool(chat_agent.build_outline, session_id)
@@ -726,13 +773,17 @@ async def glass_start(session_id: str, request: Request,
                                  "начинается с чистой сессии")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in _ALLOWED["htmlnew"]:
-        raise HTTPException(400, f"bad file type {suffix}")
+        allowed = ", ".join(sorted(_ALLOWED["htmlnew"]))
+        raise HTTPException(
+            400, f"формат {suffix or 'без расширения'} не поддерживается — "
+                 f"загрузите {allowed}")
     # Стеклянная сборка идёт мимо очереди раннера, а с ней и мимо его лимита
     # MAX_PER_USER. Свой потолок считаем по недозаполненным аутлайнам автора:
     # именно они держат вызовы модели и место на диске.
     async with request.app.state.sessionmaker() as s:
-        drafts = await jobs_repo.list_drafts_for_user(
-            s, user.id, limit=glass.MAX_ACTIVE_PER_USER + 1)
+        # B-8: считаем по ВСЕМ черновикам — срез «MAX+1 новейших» позволял
+        # обойти потолок, вытеснив незавершённые из окна свежими пустыми.
+        drafts = await jobs_repo.list_drafts_for_user(s, user.id)
     busy = await run_in_threadpool(
         glass.unfinished_outlines,
         [j.session_id for j in drafts if j.session_id != session_id])
@@ -776,8 +827,9 @@ async def glass_rest(session_id: str, request: Request,
     # Тот же потолок незавершённых сборок, что и у /glass/start: продолжение —
     # такая же ручная сборка и так же держит вызовы модели и место на диске.
     async with request.app.state.sessionmaker() as s:
-        drafts = await jobs_repo.list_drafts_for_user(
-            s, user.id, limit=glass.MAX_ACTIVE_PER_USER + 1)
+        # B-8: считаем по ВСЕМ черновикам — срез «MAX+1 новейших» позволял
+        # обойти потолок, вытеснив незавершённые из окна свежими пустыми.
+        drafts = await jobs_repo.list_drafts_for_user(s, user.id)
     busy = await run_in_threadpool(
         glass.unfinished_outlines,
         [j.session_id for j in drafts if j.session_id != session_id])
@@ -1135,10 +1187,16 @@ _EXPORT_META = {
 @app.post("/api/jobs/{session_id}/export/{fmt}")
 async def start_export(session_id: str, fmt: str, request: Request,
                        user=Depends(get_current_user)) -> JSONResponse:
-    await _owned_or_404(request, session_id, user)
+    job = await _owned_or_404(request, session_id, user)
     meta = _EXPORT_META.get(fmt)
     if meta is None:
         raise HTTPException(404, "unknown export format")
+    # B-12: у пустого черновика deck.html — empty-state-заглушка «Добавьте
+    # слайд…», и экспорт честно доводил её до «готового» PPTX. rebuild/build
+    # на пустом плане отвечают 400 — экспорт обязан вести себя так же.
+    if job.status == "draft" and not draft.load_plan(session_id).slides:
+        raise HTTPException(400, "в черновике нет слайдов — нечего "
+                                 "экспортировать")
     deck = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if deck is None:
         raise HTTPException(404, "deck not found")

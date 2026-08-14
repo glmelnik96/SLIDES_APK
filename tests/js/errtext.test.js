@@ -188,6 +188,17 @@ test("diagramClaims: пустая схема и незнакомый спек", 
   assert.deepStrictEqual(diagramClaims({}), []);
 });
 
+// Аудит 2026-08-14: «Точный перенос» укладывается в сотни мс, и карточка
+// показывала «за 0:00» — как будто сборки не было. Суб-секундное округляем
+// вверх до 0:01, честный ноль остаётся нулём.
+test("histDur: мм:сс, суб-секундное не превращается в 0:00", () => {
+  const { histDur } = require("../../webapp/static/errtext.js");
+  assert.strictEqual(histDur(386), "0:01");
+  assert.strictEqual(histDur(45400), "0:45");
+  assert.strictEqual(histDur(125000), "2:05");
+  assert.strictEqual(histDur(0), "0:00");
+});
+
 test("REBUILD_LABEL — одно имя кнопки в двух состояниях", () => {
   assert.strictEqual(REBUILD_LABEL.idle, "Проверить и улучшить слайды");
   assert.strictEqual(REBUILD_LABEL.busy, "Запускаю…");

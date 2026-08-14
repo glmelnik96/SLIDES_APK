@@ -713,9 +713,12 @@ def test_glass_start_endpoint(monkeypatch, tmp_path):
 def test_glass_start_validation(monkeypatch, tmp_path):
     with _client_app(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        assert c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
-                      files={"file": ("doc.exe", b"x", "application/x-msdownload")}
-                      ).status_code == 400
+        r = c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                   files={"file": ("doc.exe", b"x", "application/x-msdownload")})
+        assert r.status_code == 400
+        import re
+        # A-2: текст ошибки русский, как остальные 400-ки
+        assert re.search("[а-яА-Я]", r.json()["detail"]), r.json()
         assert c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
                       files={"file": ("doc.md", b"   \n", "text/markdown")}
                       ).status_code == 400
@@ -924,6 +927,26 @@ def test_glass_start_refuses_past_the_per_user_ceiling(monkeypatch, tmp_path):
         r = client.post(f"/api/drafts/{sid}/glass/start", headers=H(),
                         files={"file": ("d.md", doc.read_bytes(), "text/markdown")})
     assert r.status_code == 429
+
+
+def test_glass_ceiling_not_bypassed_by_fresh_empty_drafts(monkeypatch, tmp_path):
+    """B-8 (аудит 2026-08-14): окно подсчёта было limit=MAX+1 НОВЕЙШИХ черновиков
+    — достаточно завести несколько свежих пустых, и незавершённые аутлайны
+    «выпадали» из окна: лимит на вызовы модели/диск обходился тривиально."""
+    monkeypatch.setattr(glass, "MAX_ACTIVE_PER_USER", 2)
+    client = _client_app(monkeypatch, tmp_path)
+    doc = tmp_path / "d.md"
+    doc.write_text("# Т\n\n## Раздел\n\nТекст раздела.\n", encoding="utf-8")
+    with client:
+        for _ in range(2):                       # два аутлайна «в работе»
+            sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+            draft.save_plan(sid, _outline_plan())
+        for _ in range(4):                       # свежие ПУСТЫЕ вытесняют их из окна
+            client.post("/api/drafts", headers=H())
+        sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+        r = client.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                        files={"file": ("d.md", doc.read_bytes(), "text/markdown")})
+    assert r.status_code == 429, r.text
 
 
 def test_unfinished_outlines_counts_only_pending(monkeypatch, tmp_path):
