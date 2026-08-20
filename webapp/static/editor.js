@@ -1381,6 +1381,16 @@ function renderBuilderForm() {
     empty.classList.remove("hidden");
     return;
   }
+  // Слайд, заполняемый сейчас, залочен (спека, секция 2): параллельная правка
+  // формы проиграла бы гонку с _fill_one — сервер вклеит свой результат поверх.
+  if (glassRunning && glassLooping &&
+      (glassCurrentTarget(draftPlan) || {}).index === current + 1) {
+    form.innerHTML =
+      '<p class="builder-locked">⟳ Этот слайд сейчас заполняется — форма ' +
+      'откроется, когда ИИ закончит (обычно до минуты).</p>';
+    builtFormFor = -1;          // после заполнения форму перерисовать заново
+    return;
+  }
   empty.classList.add("hidden");
   renderSlideContext(slide);
 
@@ -4021,6 +4031,38 @@ function renderGlassTele() {
       cell.textContent = `⟳ ${Math.round(secs)} с`;
   }
   renderGlassMini(line);
+}
+
+// Индикатор над сценой (спека, секция 2): виден, пока сборка в фоне или висят
+// вопросы. Исчезает, когда все слайды заполнены И вопросов не осталось.
+function renderGlassMini(teleLine) {
+  const mini = byId("glassMini");
+  if (!mini) return;
+  const show = glassRunning && !glassOverlayOn;
+  mini.classList.toggle("hidden", !show);
+  if (!show) return;
+  const targets = (draftPlan.slides || []).filter((s) => s && s.brief);
+  const filled = targets.filter((s) => s.filled).length;
+  const total = targets.length;
+  const open = openGlassQuestions().length + glassFailedSlides().length;
+  const fill = byId("glassMiniFill");
+  if (fill) fill.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
+  const txt = byId("glassMiniText");
+  if (txt) txt.textContent = glassMiniText({
+    working: glassLooping || glassScouting, filled, total,
+    line: teleLine || "", open,
+  });
+  const q = byId("glassMiniQ");
+  if (q) {
+    q.classList.toggle("hidden", !open);
+    q.textContent = `? ${open} ${plural(open, "вопрос", "вопроса", "вопросов")}`;
+  }
+  const rest = byId("glassMiniRest");
+  if (rest) {
+    const n = draftPlan.rest || 0;
+    rest.classList.toggle("hidden", !n);
+    if (n) rest.textContent = `Хвост: ещё ${n} ${plural(n, "раздел", "раздела", "разделов")}`;
+  }
 }
 
 // Крупный центр — последний собранный слайд (обновляет glassSteps через jump).

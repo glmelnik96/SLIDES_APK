@@ -1307,3 +1307,6 @@ a { color: var(--accent); }
 .builder-improve { margin-top: auto; padding-top: 10px; display: flex;
   flex-direction: column; gap: 4px; }
 .improve-note { font-size: var(--fs-cap); color: var(--muted); }
+
+/* Замочек формы: слайд в эту секунду заполняет ИИ — правка проиграла бы гонку */
+.builder-locked { margin: 0; padding: 10px 0; font-size: var(--fs-sm); color: var(--muted); line-height: 1.5; }
