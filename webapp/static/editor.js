@@ -1375,6 +1375,9 @@ function renderBuilderForm() {
   if (!form) return;
   builtFormFor = current;   // mark the form as built for the current slide
   const slide = draftPlan.slides[current];
+  // До ветвлений: у формы несколько ранних return (пусто/замочек/схема), а
+  // кнопка «Улучшить этот слайд» должна обновляться при любом из них.
+  syncImproveButton();
   if (!slide) {
     form.innerHTML = ""; tplBox.innerHTML = "";
     renderSlideContext(null);
@@ -3306,7 +3309,6 @@ async function applyDiagramKind(index1, kind, prev) {
 }
 
 async function initDraftBuilder() {
-  byId("rebuild")?.classList.remove("hidden");   // «Проверить и улучшить слайды» — в обоих режимах
   if (mode === "manual") {
     byId("addSlide")?.classList.remove("hidden");
     byId("builder")?.classList.remove("hidden");
@@ -3318,65 +3320,56 @@ async function initDraftBuilder() {
   if (mode === "chat") renderOutline();
 }
 
-/* ---- rebuild the draft through the engine (mode=htmlpolish) ---- */
-let rebuilding = false;
-byId("rebuild")?.addEventListener("click", async () => {
-  if (rebuilding) return;
-  if (!draftPlan.slides || !draftPlan.slides.length) return;  // К§17: кнопка дизейблится при пустом плане
-  const n = draftPlan.slides.length;
-  // Ч§3: единый копирайт, «вы», без «движка»; продуктовая формулировка + русская плюрализация.
-  const m = rebuildEstimate(n);
-  const ok = await confirmDialog(
-    `Улучшить ${n} ${plural(n, "слайд", "слайда", "слайдов")}? Проверим вёрстку и внешний вид ` +
-    `каждого и исправим ошибки — примерно ${m} ${plural(m, "минуту", "минуты", "минут")}.`,
-    "Улучшить", "Отмена");
-  if (!ok) return;
-  rebuilding = true;
-  const btn = byId("rebuild");
-  btn.disabled = true; btn.textContent = REBUILD_LABEL.busy;
+/* ---- точечное «Улучшить этот слайд» (замена общедековой rebuild-кнопки) ---- */
+let improving = false;
+function syncImproveButton() {
+  const wrap = byId("improveWrap");
+  const btn = byId("improveSlide");
+  const note = byId("improveNote");
+  if (!wrap || !btn) return;
+  const s = (draftPlan.slides || [])[current];
+  wrap.classList.toggle("hidden", mode !== "manual" || !s);
+  if (!s) return;
+  const building = (draftPlan.slides || []).some((x) => x.brief && !x.filled);
+  btn.disabled = improving || building || !!s.freeform;
+  if (note) note.textContent = improving ? "Проверяю и улучшаю…"
+    : building ? "Доступно после завершения сборки"
+    : s.freeform ? "Свободный слайд правится в чате" : "";
+}
+
+byId("improveSlide")?.addEventListener("click", async () => {
+  if (improving) return;
+  improving = true;
+  syncImproveButton();
+  const note = byId("improveNote");
   try {
-    // Make sure the last form edit reached the server's plan.json before rebuild
-    // reads it — otherwise a quick type→rebuild rebuilds a stale deck.
     await flushPendingSave();
-    const r = await fetch(U(`/api/drafts/${sessionId}/rebuild`), { method: "POST" });
-    if (!r.ok) throw new Error(await r.text());
-    watchRebuild();
+    const r = await glassFetch(
+      U(`/api/drafts/${sessionId}/slides/${current + 1}/improve`),
+      { method: "POST" });
+    if (!r.ok) {
+      let detail = "";
+      try { detail = JSON.parse(await r.text()).detail; } catch (e) { detail = ""; }
+      throw new Error(detail || "не удалось улучшить слайд");
+    }
+    const out = await r.json();
+    if (out.plan) draftPlan = out.plan;
+    builtFormFor = -1;
+    loadDeck();
+    // Панель чата в manual скрыта табом — итог пишем в note рядом с кнопкой.
+    if (note) note.textContent = out.improved
+      ? "Слайд проверен и улучшен."
+      : "Слайд проверен — замечаний нет, менять нечего.";
   } catch (e) {
-    rebuilding = false; btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
-    // Ч§3/К§17 — продуктовый текст + бренд-диалог вместо нативного alert.
-    alertDialog("Не удалось запустить улучшение: " + (e && e.message ? e.message : e));
+    alertDialog("Не удалось улучшить слайд: " + (e && e.message ? e.message : e));
+    if (note) note.textContent = "";
+  } finally {
+    improving = false;
+    const keep = note ? note.textContent : "";
+    syncImproveButton();
+    if (note && keep) note.textContent = keep;   // syncImproveButton чистит текст
   }
 });
-
-// Show the build overlay + stream progress; on success reload as a normal built
-// deck (drop the draft mode so the editor switches to HTML-as-truth editing).
-function watchRebuild() {
-  showOverlay(true);
-  buildTitle.textContent = "Улучшаю слайды…";
-  let done = false;
-  const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
-  es.onmessage = (e) => {
-    let ev; try { ev = JSON.parse(e.data); } catch (_) { return; }
-    const pct = ev.progress_pct || 0;
-    const friendly = friendlyDetail(ev.detail) || STAGE_LABEL[ev.stage] || ev.stage || "";
-    buildSub.textContent = `${friendly} · ${pct}%`;
-    if (ev.terminal) {
-      done = true; es.close();
-      if (ev.stage === "done") {
-        // Ч§5 — &rebuilt=1: на готовой деке один раз показать пояснение после улучшения.
-        location.href = U(`/editor?session=${sessionId}&rebuilt=1`); // reload as built deck
-      } else {
-        buildTitle.textContent =
-          ev.stage === "cancelled" ? "Улучшение остановлено" : "Не удалось улучшить слайды";
-        buildSub.textContent = ev.error || "";
-        rebuilding = false;
-        const btn = byId("rebuild");
-        btn.disabled = false; btn.textContent = REBUILD_LABEL.idle;
-      }
-    }
-  };
-  es.onerror = () => { if (!done) { es.close(); setTimeout(watchRebuild, 3000); } };
-}
 
 /* ---- feature 3: slide-building chat agent ---- */
 function setupChatMode() {
@@ -4530,6 +4523,7 @@ function exitGlassMode() {
   setupPanelTabs();      // вернуть обычную правую панель («Поля» по умолчанию)
   builtFormFor = -1;
   renderBuilderForm();
+  syncImproveButton();   // сборка кончилась — точечное улучшение доступно
   loadDeck();            // перерисовать превью уже с contenteditable
   // F5 после выхода — обычный конструктор, а не перезапуск степпера
   const url = new URL(location.href);

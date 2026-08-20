@@ -925,3 +925,78 @@ def refill_slide(session_id: str, index: int, *, template_id: str | None = None,
     plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind,
                      context=context)
     return _result(plan, index, _done(plan, _INFLIGHT.get(session_id, set())))
+
+
+class NotReady(RuntimeError):
+    """Точечное улучшение доступно только после полного завершения сборки."""
+
+
+def _improve_notes(plan_one: Any, html: str, *, vision: bool,
+                   client: Any, theme: str) -> list[str]:
+    """Замечания QA по одному слайду (линт + замер + vision). Вынесено для
+    подмены в тестах: полный QA требует Playwright."""
+    from htmlslides.pipeline.build import _qa_notes
+    notes = _qa_notes(plan_one, html, vision=vision, vision_all=True,
+                      client=client, theme=theme, artifacts=None,
+                      progress=lambda *_: None)
+    return notes.get(1, [])
+
+
+def improve_slide(session_id: str, index: int, *, vision: bool = True,
+                  client: Any | None = None) -> dict:
+    """«Улучшить этот слайд»: QA одного слайда и один автофикс — точечная
+    замена общедековой кнопки rebuild (спека 2026-08-20). Доступно только
+    после полного заполнения аутлайна: до того слайд может перезаполнить сам
+    конвейер, и автофикс проиграл бы гонку."""
+    from htmlslides.library import TemplateLibrary
+    from htmlslides.models import DeckPlan, SlidePlan
+    from htmlslides.pipeline.filler import autofix_slide
+    from webapp import deck_edit
+
+    with _plan_lock(session_id):
+        plan = draft.load_plan(session_id)
+        if any(s.brief and not s.filled for s in plan.slides):
+            raise NotReady("сборка ещё идёт — улучшение доступно после "
+                           "её завершения")
+        if not 1 <= index <= len(plan.slides):
+            raise IndexError(
+                f"слайд {index} вне диапазона (1..{len(plan.slides)})")
+        slide = plan.slides[index - 1]
+        if slide.freeform:
+            raise NoContext("свободный слайд правится в чате — "
+                            "автофикс работает по макету")
+        old_brief = slide.brief
+
+    library = TemplateLibrary.load()
+    deck_html = deck_edit.deck_path(session_id).read_text("utf-8")
+    single = deck_edit.extract_slide(deck_html, index)
+    if single is None:
+        raise IndexError(f"слайда {index} нет в отрендеренной деке")
+    tid = slide.template_id or "blank"
+    content = dict(slide.fields or slide.content or {})
+    sp = SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
+                   content=content)
+    fixes = _improve_notes(DeckPlan(title=plan.title, slides=[sp]), single,
+                           vision=vision, client=client or _kimi(),
+                           theme=plan.theme or "dark")
+    if not fixes:
+        return {"improved": False, "notes": 0, "plan": plan.model_dump()}
+    sp = autofix_slide(client or _kimi(), library, sp, fixes,
+                       deck_title=plan.title)
+    # Вызов модели шёл без замка — вклеиваем только свой слайд в свежий план
+    # (splice-into-fresh, как _fill_one).
+    with _plan_lock(session_id):
+        fresh = draft.load_plan(session_id)
+        if (not 1 <= index <= len(fresh.slides)
+                or fresh.slides[index - 1].brief != old_brief):
+            return {"improved": False, "notes": len(fixes),
+                    "plan": fresh.model_dump()}
+        fresh = draft.update_slide(fresh, index, content=sp.content,
+                                   template_id=sp.template_id or tid)
+        s = fresh.slides[index - 1]
+        typed = slide_types.typed_from_content(sp.template_id or tid, sp.content)
+        s.slide_type, s.fields = typed if typed else (None, None)
+        s.filled = True
+        draft.save_plan(session_id, fresh)
+        draft_render.render_draft(session_id, fresh)
+    return {"improved": True, "notes": len(fixes), "plan": fresh.model_dump()}

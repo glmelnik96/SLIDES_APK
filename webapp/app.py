@@ -711,6 +711,27 @@ async def rebuild_draft(session_id: str, request: Request,
     return JSONResponse({"session_id": session_id, "kind": "htmlpolish"})
 
 
+@app.post("/api/drafts/{session_id}/slides/{index}/improve")
+async def improve_draft_slide(session_id: str, index: int, request: Request,
+                              user=Depends(get_current_user)) -> JSONResponse:
+    """Точечное «Улучшить этот слайд»: QA + автофикс одного слайда (~1-2 мин).
+    409 — пока сборка не завершена (кнопка в UI в это время выключена)."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    try:
+        out = await run_in_threadpool(glass.improve_slide, session_id, index)
+    except glass.NotReady as exc:
+        raise HTTPException(409, str(exc))
+    except (IndexError, glass.NoContext) as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:  # noqa: BLE001 — logged; нейтральная русская ошибка
+        logger.exception("improve slide failed (session %s, slide %s)",
+                         session_id, index)
+        raise HTTPException(500, "не удалось улучшить слайд — "
+                                 "попробуйте ещё раз") from exc
+    return JSONResponse(out)
+
+
 @app.post("/api/drafts/{session_id}/agent")
 async def draft_agent(session_id: str, request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:

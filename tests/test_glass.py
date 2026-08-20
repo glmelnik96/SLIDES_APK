@@ -1329,3 +1329,67 @@ def test_answer_bad_index_speaks_russian(monkeypatch, tmp_path):
     with pytest.raises(IndexError) as ei:
         glass.answer("s16", 99)
     assert re.search("[а-яА-Я]", str(ei.value)), str(ei.value)
+
+
+# ── improve_slide: точечное «Улучшить этот слайд» ────────────────────────────
+def _filled_plan():
+    """Аутлайн, у которого сборка полностью завершена (все brief заполнены)."""
+    plan = _outline_plan(question=False)
+    for i, s in enumerate(plan.slides[1:], start=2):
+        plan.slides[i - 1] = s.model_copy(update={
+            "content": {"title": f"Слайд {i}", "brief": s.brief},
+            "filled": True})
+    return plan
+
+
+def test_improve_slide_gate_and_flow(monkeypatch, tmp_path):
+    """Ворота и поток точечного улучшения: до конца сборки — NotReady (иначе
+    автофикс проиграл бы гонку конвейеру), вне диапазона — IndexError, чистый
+    слайд — improved=False без правок, замечания — автофикс и свежий план."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    from webapp import draft_render
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    draft.save_plan("imp1", _outline_plan(question=False))  # brief без filled
+    with pytest.raises(glass.NotReady):
+        glass.improve_slide("imp1", 1, vision=False, client=FakeClient([]))
+
+    plan = _filled_plan()
+    draft.save_plan("imp1", plan)
+    draft_render.render_draft("imp1", plan)     # deck.html для extract_slide
+    with pytest.raises(IndexError):
+        glass.improve_slide("imp1", 99, vision=False, client=FakeClient([]))
+
+    monkeypatch.setattr(glass, "_improve_notes", lambda *a, **k: [])
+    out = glass.improve_slide("imp1", 2, vision=False, client=FakeClient([]))
+    assert out["improved"] is False and out["notes"] == 0
+
+    monkeypatch.setattr(glass, "_improve_notes",
+                        lambda *a, **k: ["overflow: текст вылез"])
+    out = glass.improve_slide("imp1", 2, vision=False, client=FakeClient([]))
+    assert out["improved"] is True and out["notes"] == 1
+    assert out["plan"]["slides"][1]["filled"] is True
+
+
+def test_improve_endpoint_gate_and_success(monkeypatch, tmp_path):
+    """HTTP-контракт improve: незавершённая сборка → 409 (кнопка в UI в это
+    время выключена), после завершения → 200 с improved, кривой номер → 400."""
+    import htmlslides.pipeline.filler as filler
+    from webapp import draft_render
+    client = _client_app(monkeypatch, tmp_path)
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    monkeypatch.setattr(glass, "_kimi", lambda: FakeClient([]))
+    with client:
+        sid = client.post("/api/drafts", headers=H()).json()["session_id"]
+        draft.save_plan(sid, _outline_plan(question=False))
+        assert client.post(f"/api/drafts/{sid}/slides/2/improve",
+                           headers=H()).status_code == 409
+        plan = _filled_plan()
+        draft.save_plan(sid, plan)
+        draft_render.render_draft(sid, plan)
+        monkeypatch.setattr(glass, "_improve_notes",
+                            lambda *a, **k: ["overflow: текст вылез"])
+        r = client.post(f"/api/drafts/{sid}/slides/2/improve", headers=H())
+        assert r.status_code == 200 and r.json()["improved"] is True
+        assert client.post(f"/api/drafts/{sid}/slides/99/improve",
+                           headers=H()).status_code == 400
