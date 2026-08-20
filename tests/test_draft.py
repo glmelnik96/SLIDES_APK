@@ -759,3 +759,18 @@ def test_post_deck_on_draft_is_refused(monkeypatch, tmp_path):
                    headers=H())
         assert r.status_code == 409, r.text
         _assert_russian(str(r.json()["detail"]))
+
+
+def test_deck_single_slide_param(monkeypatch, tmp_path):
+    """GET /deck?slide=N отдаёт документ с ОДНИМ слайдом — лёгкие миниатюры
+    редактора (переработка UX 2026-08-20): 8 тумбов = 8 лёгких документов."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"}, headers=H())
+        full = c.get(f"/api/jobs/{sid}/deck", headers=H())
+        assert full.status_code == 200 and full.text.count("<section") == 2
+        one = c.get(f"/api/jobs/{sid}/deck?slide=2", headers=H())
+        assert one.status_code == 200
+        assert one.text.count("<section") == 1
+        assert c.get(f"/api/jobs/{sid}/deck?slide=99", headers=H()).status_code == 404

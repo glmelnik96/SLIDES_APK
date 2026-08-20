@@ -84,6 +84,26 @@ def slides_with_hardcoded_colors(html: str) -> list[int]:
     return flagged
 
 
+def extract_slide(html: str, index: int) -> str | None:
+    """Полный HTML-документ, в котором оставлен ТОЛЬКО слайд index (1-based).
+
+    Шапка (стили, токены темы) и хвост (встроенный deck.js) сохраняются —
+    документ остаётся самодостаточным. Лёгкие миниатюры редактора грузят один
+    слайд вместо всей деки: 8 миниатюр = 8 документов, а не 8×N рендеров.
+    Вне диапазона — None."""
+    starts = [m.start() for m in _SLIDE_RE.finditer(html)]
+    if not 1 <= index <= len(starts):
+        return None
+    spans = []
+    for i, start in enumerate(starts):
+        close = html.find("</section>", start)
+        end = close + len("</section>") if close != -1 else (
+            starts[i + 1] if i + 1 < len(starts) else len(html))
+        spans.append((start, end))
+    return (html[:spans[0][0]] + html[spans[index - 1][0]:spans[index - 1][1]]
+            + html[spans[-1][1]:])
+
+
 def strip_contenteditable(html: str) -> str:
     return _CONTENTEDITABLE_RE.sub("", html)
 

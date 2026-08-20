@@ -1079,14 +1079,21 @@ async def job_events(session_id: str, request: Request,
 
 @app.get("/api/jobs/{session_id}/deck", response_class=HTMLResponse)
 async def get_deck(session_id: str, request: Request, download: int = 0,
-                   user=Depends(get_current_user)):
+                   slide: int = 0, user=Depends(get_current_user)):
     await _owned_or_404(request, session_id, user)
     path = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
     if path is None:
         raise HTTPException(404, "дека не найдена")
     if download:
         return FileResponse(path, filename="deck.html", media_type="text/html")
-    return HTMLResponse(path.read_text("utf-8"))
+    html = path.read_text("utf-8")
+    if slide:
+        # Лёгкие миниатюры редактора: документ с одним слайдом вместо всей деки.
+        one = deck_edit.extract_slide(html, slide)
+        if one is None:
+            raise HTTPException(404, f"слайда {slide} в деке нет")
+        return HTMLResponse(one)
+    return HTMLResponse(html)
 
 
 @app.post("/api/jobs/{session_id}/deck")

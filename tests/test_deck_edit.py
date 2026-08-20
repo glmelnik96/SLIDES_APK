@@ -198,3 +198,17 @@ def test_hardcoded_colors_ignores_comment_text():
     html = ('<section class="slide"><!-- фон #222222, полностью непрозрачный -->'
             '<p>A</p></section>')
     assert deck_edit.slides_with_hardcoded_colors(html) == []
+
+
+def test_extract_slide_keeps_head_tail_and_one_section():
+    html = ('<html data-theme="dark"><head><style>.s{}</style></head><body>'
+            '<section class="slide">ONE</section>\n'
+            '<section class="slide">TWO</section>\n'
+            '<section class="slide">THREE</section>'
+            '<script>var deck=1;</script></body></html>')
+    out = deck_edit.extract_slide(html, 2)
+    assert out.count("<section") == 1
+    assert "TWO" in out and "ONE" not in out and "THREE" not in out
+    assert "<style>" in out and "var deck=1" in out       # шапка и хвост живы
+    assert deck_edit.extract_slide(html, 0) is None
+    assert deck_edit.extract_slide(html, 4) is None
