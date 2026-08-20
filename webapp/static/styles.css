@@ -1242,3 +1242,71 @@ a { color: var(--accent); }
   color: var(--on-accent); font-size: 12px; font-weight: 700; pointer-events: none; }
 /* Осечка — не вопрос: тревожный тон, чтобы «!» не путался с «?» */
 .thumb-quest--failed { background: var(--warn-ink); color: #000; }
+
+/* ── Экран сборки (glass): полноэкранный этап поверх редактора ───────────────
+   Переработка UX 2026-08-20 (решение 1а): степпер этапов, честный прогресс,
+   телеметрия с таймером, крупный последний слайд, лента честных скелетов.
+   Канон v5: подложка вместо рамки; пунктирная обводка — только у скелетов
+   (это структурный приём «места под контент», не декоративная рамка). */
+.glass-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 20px 28px; background: var(--bg);
+}
+.glass-overlay__top { display: flex; align-items: center; gap: 16px; }
+.glass-overlay__file { font-weight: 600; color: var(--text); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; max-width: 32ch; }
+.glass-overlay__stepper { display: flex; gap: 14px; font-size: var(--fs-sm); }
+.glo-stage--done { color: var(--accent); }
+.glo-stage--active { color: var(--text); }
+.glo-stage--todo { color: var(--muted); opacity: .6; }
+.glass-overlay__bar { height: 10px; }
+.glass-overlay__tele { display: flex; justify-content: space-between; gap: 16px;
+  font-size: var(--fs-sm); color: var(--muted); min-height: 1.2em; }
+.glass-overlay__scout { opacity: .8; }
+.glass-overlay__err { font-size: var(--fs-sm); color: var(--danger-soft);
+  display: flex; gap: 10px; align-items: center; }
+.glass-overlay__center { display: flex; gap: 14px; flex: 1; min-height: 0; }
+.glass-overlay__stagebox { flex: 2.4; position: relative; min-width: 0;
+  display: flex; flex-direction: column; gap: 6px; }
+.glass-overlay__stagebox iframe { width: 100%; flex: 1; border: 0;
+  border-radius: var(--radius-card); background: var(--surface); }
+.glass-overlay__cap { font-size: var(--fs-cap); color: var(--muted);
+  text-align: center; }
+.glass-overlay__cards { flex: 1; min-width: 260px; max-width: 380px;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.glass-overlay__film { display: flex; gap: 8px; overflow-x: auto;
+  padding-bottom: 4px; }
+.glo-cell { flex: 1 0 110px; max-width: 150px; aspect-ratio: 16/9;
+  border-radius: var(--radius-ctl); background: var(--surface);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px; font-size: var(--fs-cap);
+  color: var(--muted); overflow: hidden; position: relative; }
+.glo-cell--queued { opacity: .55; border: 1px dashed var(--line); }
+.glo-cell--filling { border: 1px dashed var(--warn-ink); }
+.glo-cell--quest { border: 1px dashed var(--accent-line); }
+.glo-cell--quest .glo-cell__mark { color: var(--accent); }
+.glo-cell--failed { border: 1px dashed var(--danger-line); }
+.glo-cell--ready iframe { width: 100%; height: 100%; border: 0;
+  pointer-events: none; }
+.glo-cell__label { padding: 0 6px; text-align: center; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* ── Компакт-индикатор досборки над сценой ─────────────────────────────── */
+.glass-mini { display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-radius: var(--radius-ctl);
+  background: var(--surface); font-size: var(--fs-cap); margin-bottom: 8px; }
+.glass-mini__bar { width: 120px; height: 6px; border-radius: 999px;
+  overflow: hidden; background: var(--surface-inset); flex: none; }
+.glass-mini__bar i { display: block; height: 100%; width: 0;
+  background: var(--accent); transition: width var(--dur-med) var(--ease-productive); }
+.glass-mini__text { color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+/* Слайд заполняется прямо сейчас: нейтральная «⟳» на миниатюре, слайд залочен */
+.thumb-quest--filling { background: var(--neutral-dim); color: var(--muted); }
+
+/* ── Точечное улучшение слайда ─────────────────────────────────────────── */
+.builder-improve { margin-top: auto; padding-top: 10px; display: flex;
+  flex-direction: column; gap: 4px; }
+.improve-note { font-size: var(--fs-cap); color: var(--muted); }

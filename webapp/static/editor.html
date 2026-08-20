@@ -13,7 +13,6 @@
     <a class="home" href="/">&larr; На главную</a>
     <span class="mode-badge" id="modeBadge"></span>
     <span class="sp"></span>
-    <button class="btn hidden" id="rebuild" title="Каждый слайд пройдёт вёрстку, визуальную проверку и автоисправление — примерно 1–2 минуты на слайд. После этого правки — прямо на слайде.">Проверить и улучшить слайды</button>
     <button class="btn btn-ghost hidden" id="themeToggle" title="Перекрасить все слайды в другую тему. Содержание не меняется.">Светлая тема</button>
     <button class="btn btn-accent" id="save">Сохранить</button>
     <details class="toolbar-menu" id="exportMenu">
@@ -37,6 +36,14 @@
 
   <!-- Stage: one big slide -->
   <div class="stage-col">
+    <!-- Компакт-индикатор фоновой досборки (glass): мини-прогресс + телеметрия
+         + счётчик вопросов. Исчезает, когда всё заполнено и вопросов нет. -->
+    <div class="glass-mini hidden" id="glassMini">
+      <div class="glass-mini__bar"><i id="glassMiniFill"></i></div>
+      <span class="glass-mini__text" id="glassMiniText" aria-live="polite"></span>
+      <button class="btn btn-ghost btn-sm hidden" id="glassMiniQ" type="button"></button>
+      <button class="btn btn-ghost btn-sm hidden" id="glassMiniRest" type="button"></button>
+    </div>
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
       <!-- К§6 — второй буфер двойной буферизации превью (скрыт, грузит следующий кадр) -->
@@ -98,6 +105,12 @@
          есть) рядом с формой — чтобы править поля, не теряя картину целиком. -->
     <div class="builder-ctx hidden" id="builderCtx"></div>
     <form class="builder-form" id="builderForm"></form>
+    <!-- Точечное улучшение: LLM-проверка вёрстки и вида ОДНОГО слайда.
+         Активна только после полного завершения сборки (решение спеки). -->
+    <div class="builder-improve hidden" id="improveWrap">
+      <button class="btn btn-ghost btn-sm" id="improveSlide" type="button">Улучшить этот слайд (~1–2 мин)</button>
+      <span class="improve-note" id="improveNote"></span>
+    </div>
     <div class="builder-empty" id="builderEmpty">
       Слайдов пока нет.
       <button class="btn btn-sm" id="builderAdd">+ Добавить слайд</button>
@@ -131,6 +144,33 @@
   </aside>
   </aside><!-- /.rpanel -->
   </div><!-- /.editor-main -->
+</div>
+
+<!-- Экран сборки (?glass=1) — полноэкранный этап поверх редактора (решение 1а).
+     Степпер этапов, честный прогресс, телеметрия с таймером, крупный последний
+     слайд, карточки вопросов, лента честных скелетов. -->
+<div class="glass-overlay hidden" id="glassOverlay">
+  <div class="glass-overlay__top">
+    <span class="glass-overlay__file" id="gloFile"></span>
+    <div class="glass-overlay__stepper" id="gloStepper"></div>
+    <span class="sp"></span>
+    <button class="btn" id="gloExit" type="button"
+            title="Сборка продолжится в фоне — слайды доедут сами">В редактор сейчас &rarr;</button>
+  </div>
+  <div class="glass-bar glass-overlay__bar"><i id="gloBarFill"></i></div>
+  <div class="glass-overlay__tele">
+    <span id="gloTele">Раскладываю документ…</span>
+    <span class="glass-overlay__scout" id="gloScout"></span>
+  </div>
+  <div class="glass-overlay__err hidden" id="gloErr" role="alert"></div>
+  <div class="glass-overlay__center">
+    <div class="glass-overlay__stagebox">
+      <iframe id="gloSlide" title="Последний собранный слайд" tabindex="-1" class="hidden"></iframe>
+      <div class="glass-overlay__cap" id="gloCap">Слайды появятся здесь по мере заполнения</div>
+    </div>
+    <div class="glass-overlay__cards" id="gloCards"></div>
+  </div>
+  <div class="glass-overlay__film" id="gloFilm"></div>
 </div>
 
 <!-- Отмена удаления слайда: Ctrl+Z есть, но о нём не догадаться — даём кнопку -->
