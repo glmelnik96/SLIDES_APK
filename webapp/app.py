@@ -867,17 +867,28 @@ async def glass_rest(session_id: str, request: Request,
 @app.post("/api/drafts/{session_id}/glass/step")
 async def glass_step(session_id: str, request: Request,
                      user=Depends(get_current_user)) -> JSONResponse:
-    """Один шаг: заполнить следующий слайд (needs_input пропускается)."""
+    """Один шаг конвейера: заполнить готовый слайд (или разметить следующий);
+    вопрос (needs_input) сборку не останавливает — слайд откладывается."""
     from webapp import glass
     await _draft_or_404(request, session_id, user, mutate=True)
     return JSONResponse(await run_in_threadpool(glass.step_fill, session_id))
 
 
+@app.post("/api/drafts/{session_id}/glass/score")
+async def glass_score(session_id: str, request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Разметить один неразмеченный слайд (кандидаты макета/вопрос) — клиентский
+    «разведчик» зовёт это параллельно шагам заполнения."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    return JSONResponse(await run_in_threadpool(glass.score_next, session_id))
+
+
 @app.post("/api/drafts/{session_id}/glass/answer")
 async def glass_answer(session_id: str, request: Request,
                        user=Depends(get_current_user)) -> JSONResponse:
-    """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или текст уточнения;
-    слайд доводится сразу."""
+    """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или текст уточнения.
+    Мгновенный: записывает выбор в план, слайд заполняет конвейер шагов."""
     from htmlslides.library import SlotValidationError
     from webapp import glass
     await _draft_or_404(request, session_id, user, mutate=True)

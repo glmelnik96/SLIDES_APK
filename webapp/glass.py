@@ -1,11 +1,16 @@
 """«Стеклянная сборка» — прозрачный конвейер черновика на глазах пользователя.
 
-Антитеза чёрному ящику: документ раскладывается в аутлайн (слайд на раздел) с
-top-3 кандидатами макета и уверенностью; слайды заполняются ПО ОДНОМУ
-клиент-управляемыми шагами (POST /glass/step — лента растёт без SSE), а там,
-где ИИ сомневается, он НЕ блокирует сборку — помечает слайд needs_input с
-вопросом и чипами-кандидатами, степпер его пропускает, ответить можно в любой
-момент (POST /glass/answer).
+Антитеза чёрному ящику. Старт (start_glass) — parse-only, БЕЗ единого вызова
+модели: документ мгновенно режется на слайды-заготовки (status="unscored",
+временный макет от эвристики планировщика), страница сразу уходит в редактор.
+Дальше конвейер ленивый: score_next размечает ОДИН слайд (кандидаты макета,
+уверенность, ленивый vision для слепых pptx-разделов), step_fill за вызов
+делает ОДНО действие — заполняет готовый слайд, а если готовых нет, сам
+размечает следующий. Там, где ИИ сомневается, он НЕ блокирует сборку: слайд
+помечается needs_input с вопросом и чипами-кандидатами, конвейер идёт дальше,
+ответить можно в любой момент (POST /glass/answer). Каждый шаг возвращает
+``action`` ("score"|"fill"|None) — клиент останавливает цикл на None; ``done``
+строго «всё заполнено и вопросов нет».
 
 Раннер/planner.plan_deck не трогаем: скоринг кандидатов — свой лёгкий вызов на
 раздел (меню шаблонов из planner.library_menu-логики), заполнение — тот же
@@ -18,7 +23,7 @@ import logging
 import re
 import shutil
 import threading
-from concurrent.futures import ThreadPoolExecutor
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -121,15 +126,68 @@ class SectionChoice(BaseModel):
     question: str = ""
 
 
+# Часы шага — подменяются в тестах, чтобы «медленный сбой» не ждать 5 минут.
+_now = time.monotonic
+
+# Быстрая осечка заполнения (< бюджета) получает один повтор: обрыв соединения
+# или битый JSON часто разовые. Медленный сбой — это таймаут; повтор удвоил бы
+# шаг до 2×280с и вылетел за клиентский GLASS_FETCH_MS=340с, поэтому не ретраим.
+_RETRY_BUDGET_S = 90.0
+
+# Один клиент на процесс, как у раннера: у KimiClient липкий автофолбэк на
+# резервную модель (_switch по преflight/полосе сбоев), и клиент-на-вызов
+# заново пробовал бы мёртвый примари на КАЖДОМ шаге — минус 280с на слайд.
+_CLIENT: Any = None
+_CLIENT_LOCK = threading.Lock()
+
+
 def _kimi():
-    from htmlslides.pipeline.client import KimiClient
-    return KimiClient(timeout=280.0, max_retries=1,
-                      extra_body={"thinking": {"type": "disabled"}})
+    global _CLIENT
+    with _CLIENT_LOCK:
+        if _CLIENT is None:
+            from htmlslides.pipeline.client import KimiClient
+            c = KimiClient(timeout=280.0, max_retries=1,
+                           extra_body={"thinking": {"type": "disabled"}})
+            try:
+                c.preflight()
+            except Exception:  # noqa: BLE001 — шаги деградируют честно сами
+                # Мёртвый преflight не повод остаться без клиента: сеть могла
+                # моргнуть на старте, а каждый шаг и так честно превращает свой
+                # сбой в заглушку с вопросом. Клиент кэшируем как есть.
+                _LOG.warning("glass: preflight не прошёл", exc_info=True)
+            _CLIENT = c
+    return _CLIENT
 
 
 def _menu(library) -> str:
     return "\n".join(f"- {t.id} ({t.type}): {t.intent}"
                      for t in library.templates if t.id not in _EXCLUDED)
+
+
+def _score_text(client: Any, library, text: str) -> SectionChoice | None:
+    """LLM-скоринг брифа: top-3 кандидата или None при сбое/пустом ответе.
+
+    Фолбэк решает вызывающий: у start-пути есть Section для эвристики, у
+    ленивого score-пути — временный макет, поставленный эвристикой на старте."""
+    known = {t.id for t in library.templates if t.id not in _EXCLUDED}
+    try:
+        choice = client.chat_json(
+            [{"role": "system", "content": _GLASS_SYSTEM.format(menu=_menu(library))},
+             {"role": "user", "content": f"Текст раздела:\n{text}"}],
+            SectionChoice, max_tokens=2048,
+            extra_body={"thinking": {"type": "disabled"}})
+        cands = _dedupe(
+            [c for c in choice.candidates if c.template_id in known])[:3]
+        if cands:
+            return SectionChoice(candidates=cands,
+                                 question=choice.question.strip())
+    except Exception:  # noqa: BLE001 — фолбэк вызывающего честно помечает сомнение
+        # Молча падать нельзя: снаружи сбой выглядел как «ИИ подумал и выбрал
+        # один вариант», и отличить сломанный скоринг от честного сомнения было
+        # невозможно ни автору, ни нам.
+        _LOG.warning("glass: scoring failed, falling back to heuristic",
+                     exc_info=True)
+    return None
 
 
 def plan_section_candidates(client: Any, library, section, *,
@@ -144,24 +202,9 @@ def plan_section_candidates(client: Any, library, section, *,
     from htmlslides.pipeline.planner import (_fallback_template,
                                              _section_to_text)
     text = _section_to_text(section) if text is None else text
-    known = {t.id for t in library.templates if t.id not in _EXCLUDED}
-    try:
-        choice = client.chat_json(
-            [{"role": "system", "content": _GLASS_SYSTEM.format(menu=_menu(library))},
-             {"role": "user", "content": f"Текст раздела:\n{text}"}],
-            SectionChoice, max_tokens=2048,
-            extra_body={"thinking": {"type": "disabled"}})
-        cands = _dedupe(
-            [c for c in choice.candidates if c.template_id in known])[:3]
-        if cands:
-            return SectionChoice(candidates=cands,
-                                 question=choice.question.strip())
-    except Exception:  # noqa: BLE001 — фолбэк ниже честно помечает сомнение
-        # Молча падать нельзя: снаружи сбой выглядел как «ИИ подумал и выбрал
-        # один вариант», и отличить сломанный скоринг от честного сомнения было
-        # невозможно ни автору, ни нам.
-        _LOG.warning("glass: scoring failed, falling back to heuristic",
-                     exc_info=True)
+    got = _score_text(client, library, text)
+    if got is not None:
+        return got
     return SectionChoice(
         candidates=[Candidate(template_id=_fallback_template(section, library),
                               confidence=0.0)],
@@ -193,14 +236,14 @@ _IMAGE_ONLY_QUESTION = (
     "по одному заголовку и додумает остальное.")
 
 
-def _image_only(section: Any, text: str) -> bool:
-    """В разделе есть картинки, а текста — меньше одной фразы.
+def _image_only(text: str) -> bool:
+    """В брифе есть пометки картинок, а текста — меньше одной фразы.
 
-    Меряем по тексту БЕЗ пометок «[картинка: …]»: сами пометки к содержанию
-    отношения не имеют, но длину брифа раздували, и раздел из шести картинок
-    выглядел насыщенным."""
-    from htmlslides.parsers.base import ImageBlock
-    if not any(isinstance(b, ImageBlock) for b in getattr(section, "blocks", [])):
+    Меряем по тексту БЕЗ пометок «[картинка: …]» (их эмитит planner._block_to_text
+    для ImageBlock): сами пометки к содержанию отношения не имеют, но длину брифа
+    раздували, и раздел из шести картинок выглядел насыщенным. Детекция по брифу,
+    а не по Section: при ленивом скоринге исходного разбора уже нет."""
+    if not _IMAGE_MARK.search(text or ""):
         return False
     body = _IMAGE_MARK.sub(" ", text or "")
     return len(" ".join(body.split())) < MIN_SECTION_CHARS
@@ -244,43 +287,42 @@ def _read_one(client: Any, png: Path) -> str:
         return ""
 
 
-def _read_blind_sections(source: Path, session_id: str, pairs: list,
-                         briefs: list[str], client: Any,
-                         workers: int) -> dict[int, str]:
-    """Дочитать «слепые» разделы pptx с картинок исходных слайдов.
+def _read_source_slide(session_id: str, src_index: int | None,
+                       client: Any) -> str:
+    """Дочитать «слепой» раздел pptx с картинки исходного слайда — ЛЕНИВО,
+    при скоринге именно этого раздела.
 
     Стеклянная сборка идёт мимо vision-ветки чёрного ящика (там скриншот
     исходного слайда прикладывается к планировщику), и раздел, где весь смысл
     лежит в картинке, приезжал в филлер пустым — а тот не «собирал хуже», он
-    ДОСОЧИНЯЛ тезисы и цифры. Рендерим ЛЕНИВО: только для pptx и только когда
-    слепые разделы вообще есть — LibreOffice на деку стоит десятки секунд, и
-    платить их за документ без картинок незачем. Отдаём {позиция: описание};
-    что не прочиталось, останется вопросом автору."""
+    ДОСОЧИНЯЛ тезисы и цифры. Рендерим только для pptx и только когда до
+    слепого раздела дошёл скоринг — LibreOffice на деку стоит десятки секунд,
+    и платить их на старте за все разделы разом означало «сайт лежит».
+    Пусто = не прочиталось, останется вопросом автору."""
     from htmlslides.parsers.render import RenderUnavailable, render_pptx_pngs
 
-    blind = [i for i, (_, s) in enumerate(pairs) if _image_only(s, briefs[i])]
-    if not blind or source.suffix.lower() != ".pptx":
-        return {}
-    try:
-        pngs = render_pptx_pngs(source, session_dir(session_id) / "source-slides")
-    except (RenderUnavailable, OSError, ValueError) as exc:
-        _LOG.warning("glass: source render unavailable (%s)", exc)
-        return {}
-    except Exception:  # noqa: BLE001 — споткнулись на файле, не роняем старт
-        _LOG.warning("glass: source render failed", exc_info=True)
-        return {}
-
-    # Картинки идут 1:1 с ИСХОДНЫМИ разделами документа, поэтому в pairs хранится
-    # исходный индекс: отфильтрованный пустой раздел иначе сдвинул бы весь ряд.
-    jobs = [(i, pngs[pairs[i][0]]) for i in blind if pairs[i][0] < len(pngs)]
-    if not jobs:
-        return {}
-    pool = ThreadPoolExecutor(max_workers=max(1, workers))
-    try:
-        texts = list(pool.map(lambda j: _read_one(client, j[1]), jobs))
-    finally:
-        pool.shutdown()
-    return {i: t for (i, _), t in zip(jobs, texts) if t}
+    source = _source_file(session_id)
+    if (source is None or source.suffix.lower() != ".pptx"
+            or src_index is None):
+        return ""
+    out_dir = session_dir(session_id) / "source-slides"
+    # Рендер один на сессию: первый слепой раздел платит за всех, остальные
+    # берут готовые png с диска.
+    pngs = sorted(out_dir.glob("*.png"))
+    if not pngs:
+        try:
+            pngs = render_pptx_pngs(source, out_dir)
+        except (RenderUnavailable, OSError, ValueError) as exc:
+            _LOG.warning("glass: source render unavailable (%s)", exc)
+            return ""
+        except Exception:  # noqa: BLE001 — споткнулись на файле, не роняем шаг
+            _LOG.warning("glass: source render failed", exc_info=True)
+            return ""
+    # Картинки идут 1:1 с ИСХОДНЫМИ разделами документа — на слайде хранится
+    # исходный индекс (src_index): выпавший раздел иначе сдвинул бы весь ряд.
+    if not 0 <= src_index < len(pngs):
+        return ""
+    return _read_one(client, pngs[src_index])
 
 
 def _doubtful(choice: SectionChoice) -> bool:
@@ -292,11 +334,11 @@ def _doubtful(choice: SectionChoice) -> bool:
     return False
 
 
-# Разделы скорятся ПАРАЛЛЕЛЬНО и независимо, поэтому однородный документ давал
-# однородную деку: на реальном прогоне семь разделов подряд получили cards-6 —
-# 45% деки одним макетом. Модель тут не ошибается (каждый раздел правда ложится
-# в карточки), ошибается процесс: соседа она не видит. Разводим повторы уже
-# ПОСЛЕ скоринга, вторым кандидатом самой модели.
+# Однородный документ давал однородную деку: на реальном прогоне семь разделов
+# подряд получили cards-6 — 45% деки одним макетом. Модель тут не ошибается
+# (каждый раздел правда ложится в карточки), ошибается процесс: соседа она не
+# видит. Разводим повторы уже ПОСЛЕ скоринга, вторым кандидатом самой модели;
+# скоринг ленивый и последовательный, так что предыдущие выборы уже в плане.
 REPEAT_RUN = 3          # столько одинаковых подряд — уже узор, а не выбор
 # Годность запасного макета меряем ПО НЕМУ САМОМУ, а не по отрыву от первого:
 # замер на живой модели (Партнёры, 28 разделов) дал разрыв топ-1/топ-2 в
@@ -307,32 +349,33 @@ REPEAT_RUN = 3          # столько одинаковых подряд — �
 SWAP_FLOOR = 0.45
 
 
-def _varied_templates(choices: list[SectionChoice]) -> list[str]:
-    """Макет на раздел, с разведением подряд идущих повторов.
+def _pick_varied(plan: draft.DraftPlan, index: int,
+                 choice: SectionChoice) -> str:
+    """Макет слайда с разведением подряд идущих повторов.
 
-    Меняем ТОЛЬКО применяемый макет, не трогая уверенность и чипы: `_doubtful`
-    считается по честному ответу модели, иначе разведение повторов начало бы
-    плодить вопросы на ровном месте. Запасной берём не любой, а от SWAP_FLOOR:
-    разнообразие не стоит макета, который разделу не подходит."""
-    picked: list[str] = []
+    Смотрим на уже выбранные макеты ПРЕДЫДУЩИХ слайдов плана (скоринг ленивый
+    и последовательный — соседи уже размечены). Меняем ТОЛЬКО применяемый
+    макет, не трогая уверенность и чипы: `_doubtful` считается по честному
+    ответу модели, иначе разведение повторов начало бы плодить вопросы на
+    ровном месте. Запасной берём не любой, а от SWAP_FLOOR: разнообразие не
+    стоит макета, который разделу не подходит."""
+    cands = choice.candidates
+    if not cands:
+        return ""
+    top = cands[0].template_id
     run = 0
-    for choice in choices:
-        cands = choice.candidates
-        if not cands:
-            picked.append("")
-            run = 0
-            continue
-        top = cands[0].template_id
-        prev = picked[-1] if picked else None
-        if top == prev and run >= REPEAT_RUN - 1:
-            alt = next((c for c in cands[1:]
-                        if c.template_id != prev and c.confidence >= SWAP_FLOOR),
-                       None)
-            if alt:
-                top = alt.template_id
-        run = run + 1 if top == prev else 1
-        picked.append(top)
-    return picked
+    for s in reversed(plan.slides[1:index - 1]):   # без обложки, до нас
+        if s.template_id == top:
+            run += 1
+        else:
+            break
+    if run >= REPEAT_RUN - 1:
+        alt = next((c for c in cands[1:]
+                    if c.template_id != top and c.confidence >= SWAP_FLOOR),
+                   None)
+        if alt:
+            return alt.template_id
+    return top
 
 
 def unfinished_outlines(session_ids: Iterable[str]) -> int:
@@ -398,13 +441,15 @@ def _deck_title(doc: Any, origin_name: str | None, sections: list) -> str:
     return "Презентация"
 
 
-def start_glass(session_id: str, source: Path, *, client: Any | None = None,
-                workers: int = 4, origin_name: str | None = None,
+def start_glass(session_id: str, source: Path, *,
+                origin_name: str | None = None,
                 offset: int = 0, title: str | None = None) -> draft.DraftPlan:
-    """Документ → прозрачный аутлайн: обложка + слайд на раздел с кандидатами.
+    """Документ → аутлайн-заготовка: обложка + слайд на раздел, БЕЗ модели.
 
-    Слайды НЕ заполняются здесь (это делают шаги /glass/step) — старт быстрый:
-    parse + параллельный скоринг кандидатов (лёгкий вызов на раздел).
+    Старт мгновенный (parse-only): раньше здесь скорились все разделы в одном
+    HTTP-запросе, и «сайт по факту лежал» до первого ответа. Теперь слайды
+    уходят в status="unscored" с временным макетом от эвристики планировщика,
+    а кандидаты/вопросы добирает ленивый score_next по ходу конвейера.
 
     ``offset`` — сколько подходящих разделов пропустить сверху: так вторая дека
     забирает хвост документа, не влезший в потолок (см. continue_glass).
@@ -412,14 +457,13 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     `input.pptx`, и выводить его заново означало бы получить другую обложку."""
     from htmlslides.library import TemplateLibrary
     from htmlslides.parsers import parse_file
-    from htmlslides.pipeline.planner import (_has_content, _is_part_title,
-                                             _section_to_text)
+    from htmlslides.pipeline.planner import (_fallback_template, _has_content,
+                                             _is_part_title, _section_to_text)
 
-    client = client or _kimi()
     library = TemplateLibrary.load()
     doc = parse_file(source)
-    # Исходный номер раздела едет рядом: по нему берётся картинка исходного
-    # слайда (см. _read_blind_sections) — выпавший раздел иначе сдвинул бы ряд.
+    # Исходный номер раздела едет на слайде (src_index): по нему ленивый vision
+    # берёт картинку исходного слайда — выпавший раздел иначе сдвинул бы ряд.
     pairs = [(i, s) for i, s in enumerate(doc.sections)
              if _has_content(s) and not _is_part_title(s)]
     offset = max(0, offset)
@@ -432,34 +476,14 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     title = " ".join((title or "").split()) or _deck_title(doc, origin_name,
                                                            sections)
 
-    briefs = [_section_to_text(s) for s in sections]
-    for pos, text in _read_blind_sections(source, session_id, pairs, briefs,
-                                          client, workers).items():
-        briefs[pos] = f"{briefs[pos]}\n\n{_IMAGE_READ_NOTE} {text}".strip()
-
-    pool = ThreadPoolExecutor(max_workers=max(1, workers))
-    try:
-        # Скорим по обогащённому брифу: раздел, прочитанный с картинки, для
-        # выбора макета ничем не хуже раздела с текстом в XML.
-        choices = list(pool.map(
-            lambda p: plan_section_candidates(client, library, p[0], text=p[1]),
-            list(zip(sections, briefs))))
-    finally:
-        pool.shutdown()
-
     slides = [draft.DraftSlide(template_id="cover",
                                content=_cover_content(title, library), filled=True)]
-    for section, brief, choice, tid in zip(sections, briefs, choices,
-                                           _varied_templates(choices)):
-        blind = _image_only(section, brief)
-        doubt = blind or _doubtful(choice)
+    for src_i, section in pairs:
         slides.append(draft.DraftSlide(
-            template_id=tid or choice.candidates[0].template_id,
-            brief=brief,
-            status="needs_input" if doubt else None,
-            question=(_IMAGE_ONLY_QUESTION if blind else _question_for(choice))
-            if doubt else None,
-            candidates=[c.template_id for c in choice.candidates],
+            template_id=_fallback_template(section, library),
+            brief=_section_to_text(section),
+            status="unscored",
+            src_index=src_i,
         ))
     plan = draft.DraftPlan(
         title=title, slides=slides,
@@ -475,9 +499,7 @@ def start_glass(session_id: str, source: Path, *, client: Any | None = None,
     return plan
 
 
-def continue_glass(prev_session_id: str, session_id: str, *,
-                   client: Any | None = None,
-                   workers: int = 4) -> draft.DraftPlan:
+def continue_glass(prev_session_id: str, session_id: str) -> draft.DraftPlan:
     """Вторая дека из хвоста документа, не влезшего в потолок первой.
 
     Потолок в 40 разделов поднимать некуда (сорок слайдов автор и так собирает
@@ -495,8 +517,7 @@ def continue_glass(prev_session_id: str, session_id: str, *,
     dest = session_dir(session_id) / src.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
-    out = start_glass(session_id, dest, client=client, workers=workers,
-                      offset=prev.rest_from, title=prev.title)
+    out = start_glass(session_id, dest, offset=prev.rest_from, title=prev.title)
     # Хвост забран — снимаем заявку с первой деки, иначе её панель предлагала бы
     # собрать то же самое ещё раз (предложение живёт в плане, а не во вкладке).
     with _plan_lock(prev_session_id):
@@ -533,33 +554,35 @@ def _plan_lock(session_id: str) -> threading.Lock:
 
 
 def _next_index(plan: draft.DraftPlan, busy: set[int] | None = None) -> int | None:
-    """1-based индекс следующего слайда для шага.
+    """1-based индекс следующего слайда для заполнения.
 
-    Пропускаем всё, что уже помечено (needs_input — ждёт автора, failed — не
-    крутим осечку по кругу за токены) и всё, что сейчас заполняет соседний шаг."""
+    Пропускаем всё, что помечено статусом (unscored — ещё не размечен,
+    needs_input — ждёт автора, failed — не крутим осечку по кругу за токены)
+    и всё, что сейчас заполняет соседний шаг."""
     for i, s in enumerate(plan.slides, start=1):
         if s.brief and not s.filled and not s.status and i not in (busy or ()):
             return i
     return None
 
 
-def _blocking_index(plan: draft.DraftPlan) -> int | None:
-    """Первый по порядку слайд, который ЖДЁТ ответа автора и стоит раньше всего,
-    что ещё предстоит заполнить.
-
-    Сборка на нём останавливается. Раньше степпер такие слайды просто обходил:
-    автор читал вопрос, а лента слева в это время продолжала расти — «непонятный
-    процесс, ИИ заполняет слайды, пока ты отвечаешь». Пауза делает порядок
-    честным: дошли до сомнительного места — стоим, ответили — идём дальше.
-    Осечки (failed) не блокируют: их чинят в редакторе, а не паузой."""
+def _next_unscored(plan: draft.DraftPlan,
+                   busy: set[int] | None = None) -> int | None:
+    """1-based индекс следующего неразмеченного слайда (для score_next)."""
     for i, s in enumerate(plan.slides, start=1):
-        if not s.brief or s.filled:
-            continue
-        if s.status == "needs_input":
+        if s.status == "unscored" and i not in (busy or ()):
             return i
-        if s.status is None:
-            return None            # раньше вопроса есть что заполнять
     return None
+
+
+def _done(plan: draft.DraftPlan, busy: set[int]) -> bool:
+    """done — только когда ни работы, ни вопросов, ни занятых соседями слайдов.
+
+    1-4 (аудит раунда 2, 2026-08-15): done считался по одному _next_index —
+    True при открытом вопросе и при идущем параллельном шаге. Слайд с вопросом
+    (needs_input) и неразмеченный (unscored) — тоже работа: у обоих brief без
+    filled."""
+    return (not busy
+            and not any(s.brief and not s.filled for s in plan.slides))
 
 
 def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
@@ -589,8 +612,20 @@ def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
                    content={"brief": brief})
     failed = False
     try:
-        sp = fill_slide(client, library, sp, deck_title=plan.title,
-                        diagram_kind=kind)
+        t0 = _now()
+        try:
+            sp = fill_slide(client, library, sp, deck_title=plan.title,
+                            diagram_kind=kind)
+        except Exception:  # noqa: BLE001 — быстрый сбой получает второй шанс
+            # Быстрая осечка (обрыв, битый JSON) часто разовая — пробуем ещё
+            # раз. Медленная — это таймаут: повтор удвоил бы шаг до 2×280с и
+            # вылетел за клиентский предел ожидания, поэтому сразу заглушка.
+            if _now() - t0 >= _RETRY_BUDGET_S:
+                raise
+            _LOG.warning("glass: fill слайда %s сорвался быстро — повтор",
+                         index, exc_info=True)
+            sp = fill_slide(client, library, sp, deck_title=plan.title,
+                            diagram_kind=kind)
         content, out_tid = sp.content, tid
     except Exception:  # noqa: BLE001 — честная заглушка вместо выдумки
         failed = True
@@ -643,58 +678,138 @@ def _marked(plan: draft.DraftPlan, status: str) -> list[int]:
     return [i for i, s in enumerate(plan.slides, start=1) if s.status == status]
 
 
-def _result(plan: draft.DraftPlan, index: int | None, done: bool) -> dict:
-    # blocked — слайд, на котором сборка встала в ожидании ответа автора.
-    # Клиент по нему останавливает цикл шагов (пауза), а не крутит его вхолостую.
-    return {"done": done, "index": index, "blocked": _blocking_index(plan),
+def _result(plan: draft.DraftPlan, index: int | None, done: bool, *,
+            action: str | None = None) -> dict:
+    # action — что сделал этот вызов: "score" (разметил слайд), "fill"
+    # (заполнил) или None (работы не нашлось). Клиент останавливает свой цикл
+    # на None; open_questions/unscored питают индикацию панели.
+    return {"done": done, "index": index, "action": action,
             "open_questions": _marked(plan, "needs_input"),
+            "unscored": _marked(plan, "unscored"),
             "failed": _marked(plan, "failed"),
             "plan": plan.model_dump()}
 
 
-def step_fill(session_id: str, *, client: Any | None = None) -> dict:
-    """Один шаг сборки: заполнить следующий незаполненный слайд (кроме
-    needs_input). Возвращает индекс шага и остаток — клиент крутит цикл."""
+def _score_one(session_id: str, plan: draft.DraftPlan, index: int,
+               client: Any) -> draft.DraftPlan:
+    """Разметить ОДИН слайд: кандидаты макета, сомнение → вопрос, слепой
+    pptx-раздел → ленивый vision. Вызов модели идёт без замка; в свежий план
+    вклеивается только свой слайд (splice-into-fresh, как _fill_one)."""
+    from htmlslides.library import TemplateLibrary
+
+    library = TemplateLibrary.load()
+    s = plan.slides[index - 1]
+    old_brief = s.brief
+    brief = old_brief
+    if _image_only(brief):
+        text = _read_source_slide(session_id, s.src_index, client)
+        if text:
+            brief = f"{brief}\n\n{_IMAGE_READ_NOTE} {text}".strip()
+    # Скорим по обогащённому брифу: раздел, прочитанный с картинки, для выбора
+    # макета ничем не хуже раздела с текстом в XML.
+    choice = _score_text(client, library, brief)
+    if choice is None:
+        # Сбой скоринга не маскируется под вопрос ИИ: честный текст про осечку.
+        # Временный макет эвристики (start_glass) остаётся единственным чипом.
+        choice = SectionChoice(
+            candidates=[Candidate(template_id=s.template_id or "blank",
+                                  confidence=0.0)],
+            question=_FALLBACK_QUESTION)
+    blind = _image_only(brief)               # после дочитки уже не слепой
+    doubt = blind or _doubtful(choice)
+    tid = _pick_varied(plan, index, choice)
+
+    with _plan_lock(session_id):
+        fresh = draft.load_plan(session_id)
+        if not 1 <= index <= len(fresh.slides):
+            return fresh                     # слайд удалили, пока мы работали
+        slide = fresh.slides[index - 1]
+        # Слайд уже не ждёт разметки (автор ответил/переделал) — не откатываем.
+        if slide.status != "unscored" or slide.brief != old_brief:
+            return fresh
+        slide.brief = brief
+        slide.template_id = tid or slide.template_id
+        slide.status = "needs_input" if doubt else None
+        slide.question = ((_IMAGE_ONLY_QUESTION if blind
+                           else _question_for(choice)) if doubt else None)
+        slide.candidates = [c.template_id for c in choice.candidates]
+        draft.save_plan(session_id, fresh)
+        draft_render.render_draft(session_id, fresh)
+    return fresh
+
+
+def score_next(session_id: str, *, client: Any | None = None) -> dict:
+    """Разметить следующий неразмеченный слайд (клиентский «разведчик» зовёт
+    его параллельно шагам заполнения). Нечего размечать → action=None."""
     lock = _plan_lock(session_id)
     with lock:
         plan = draft.load_plan(session_id)
         busy = _INFLIGHT.setdefault(session_id, set())
-        # Пауза сильнее шага: дошли до слайда с вопросом — дальше не идём, пока
-        # автор не ответит. Иначе он читает вопрос, а сборка убегает вперёд.
-        if _blocking_index(plan) is not None:
-            return _result(plan, None, False)
+        index = _next_unscored(plan, busy)
+        if index is None:
+            return _result(plan, None, _done(plan, busy), action=None)
+        busy.add(index)
+    try:
+        plan = _score_one(session_id, plan, index, client or _kimi())
+    finally:
+        with lock:
+            _INFLIGHT.get(session_id, set()).discard(index)
+    with lock:
+        done = _done(plan, _INFLIGHT.get(session_id, set()))
+    return _result(plan, index, done, action="score")
+
+
+def step_fill(session_id: str, *, client: Any | None = None) -> dict:
+    """Один шаг конвейера — ОДНО действие: заполнить готовый слайд, а если
+    готовых нет — разметить следующий unscored. Вопрос (needs_input) сборку
+    НЕ останавливает: слайд откладывается, ответ доводит его в любой момент.
+    Возвращает action ("fill"|"score"|None) — клиент крутит цикл до None."""
+    lock = _plan_lock(session_id)
+    with lock:
+        plan = draft.load_plan(session_id)
+        busy = _INFLIGHT.setdefault(session_id, set())
         index = _next_index(plan, busy)
+        action = "fill" if index is not None else None
+        if index is None:
+            index = _next_unscored(plan, busy)
+            action = "score" if index is not None else None
         if index is None:
             # 1-4 (аудит раунда 2, 2026-08-15): пока сосед заполняет последний
             # слайд, «работы нет» ≠ «сборка завершена» — вторая вкладка видела
             # done и сворачивала процесс на середине заполнения.
-            return _result(plan, None, not busy)
+            return _result(plan, None, _done(plan, busy), action=None)
         # Заявка на слайд: без неё второй шаг (вторая вкладка, F5 в середине
         # шага) брал тот же индекс и оплачивал вызов модели дважды.
         busy.add(index)
     try:
-        plan = _fill_one(session_id, plan, index, client or _kimi())
+        if action == "fill":
+            # Тип схемы, выбранный автором в ответе, доезжает до филлера данными.
+            plan = _fill_one(session_id, plan, index, client or _kimi(),
+                             kind=plan.slides[index - 1].diagram_kind or "")
+        else:
+            plan = _score_one(session_id, plan, index, client or _kimi())
     finally:
         with lock:
             _INFLIGHT.get(session_id, set()).discard(index)
-    # 1-4 (аудит раунда 2, 2026-08-15): done считался по одному _next_index —
-    # True при открытом вопросе (ветка паузы для того же состояния отвечает
-    # False) и при идущем параллельном шаге. done — только когда нет ни
-    # вопросов, ни работы, ни занятых соседями слайдов.
     with lock:
-        busy = _INFLIGHT.get(session_id, set())
-        done = (_blocking_index(plan) is None
-                and _next_index(plan, busy) is None and not busy)
-    return _result(plan, index, done)
+        done = _done(plan, _INFLIGHT.get(session_id, set()))
+    return _result(plan, index, done, action=action)
 
 
 def answer(session_id: str, index: int, *, template_id: str | None = None,
-           kind: str | None = None, message: str = "",
-           client: Any | None = None) -> dict:
+           kind: str | None = None, message: str = "") -> dict:
     """Ответ на вопрос ИИ (в любой момент): чип-кандидат и/или уточнение текстом.
 
-    Слайд доводится сразу же: выбранный макет (или текущий топ-1) + уточнение,
-    добавленное в brief, идут через обычный fill_slide.
+    Ответ МГНОВЕННЫЙ и модели не трогает: он лишь записывает выбор в план
+    (макет, уточнение в brief, тип схемы) и снимает вопрос. Заполняет слайд
+    обычный шаг конвейера (step_fill). Раньше ответ сам звал fill_slide и
+    держал HTTP всю дорогу до модели: на деградировавшем провайдере это
+    280-560с — клиент обрывал запрос на своём пределе ожидания, автор видел
+    ложное «проверьте интернет», а поздний результат панель уже не подбирала
+    (живой прогон 2026-08-20).
+
+    Осечку последующего заполнения карточка переживает: _fill_one на сбое
+    вернёт status="failed" с вопросом — отвечать снова будет на что.
 
     ``kind`` — тип схемы из мастера «Схема». Едет ДАННЫМИ до филлера диаграмм
     (жёсткое требование), а не строчкой в тексте уточнения: раньше выбор автора
@@ -725,13 +840,17 @@ def answer(session_id: str, index: int, *, template_id: str | None = None,
         if message.strip():
             slide.brief = (slide.brief + "\n\nУточнение автора: "
                            + message.strip()).strip()
-        # Вопрос и кандидатов гасит только успешное заполнение (_fill_one):
-        # раньше их стирали здесь, и сбой на следующей строке терял вопрос
-        # навсегда — отвечать было уже не на что.
-        slide.filled = False                      # перезаполняем с учётом ответа
+        # Вопрос гасим сразу: ответ уже ничего не заполняет, ронять здесь
+        # нечему. Сбой на заполнении шага вернёт свежий вопрос через failed.
+        slide.diagram_kind = kind or None
+        slide.status = None
+        slide.question = None
+        slide.candidates = None
+        slide.filled = False                      # шаг заполнит с учётом ответа
         draft.save_plan(session_id, plan)
-    plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind)
-    return _result(plan, index, _next_index(plan) is None)
+        draft_render.render_draft(session_id, plan)
+        done = _done(plan, _INFLIGHT.get(session_id, set()))
+    return _result(plan, index, done, action=None)
 
 
 _TAGS = re.compile(r"<[^>]+>")
@@ -805,4 +924,4 @@ def refill_slide(session_id: str, index: int, *, template_id: str | None = None,
         draft.save_plan(session_id, plan)
     plan = _fill_one(session_id, plan, index, client or _kimi(), kind=kind,
                      context=context)
-    return _result(plan, index, _next_index(plan) is None)
+    return _result(plan, index, _done(plan, _INFLIGHT.get(session_id, set())))

@@ -618,8 +618,15 @@ async function createGlass() {
     const { session_id } = await r.json();
     const fd = new FormData();
     fd.append("file", selectedFile);
-    const g = await fetch(U(`/api/drafts/${session_id}/glass/start`),
-                          { method: "POST", body: fd });
+    // Старт — parse-only (без LLM): обычно секунды даже на больших документах.
+    // Таймаут — от повисшего коннекта: без него кнопка «раскладывала» вечно.
+    const ctl = new AbortController();
+    const tmr = setTimeout(() => ctl.abort(), 180000);
+    let g;
+    try {
+      g = await fetch(U(`/api/drafts/${session_id}/glass/start`),
+                      { method: "POST", body: fd, signal: ctl.signal });
+    } finally { clearTimeout(tmr); }
     if (!g.ok) {
       let detail = "";
       try { detail = JSON.parse(await g.text()).detail; } catch (e) { detail = ""; }

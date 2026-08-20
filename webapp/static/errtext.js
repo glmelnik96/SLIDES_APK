@@ -278,7 +278,64 @@
     return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
   }
 
+  // ── «пошаговая сборка» (glass), переработка 2026-08-20 ────────────────────
+  // Решение по ответу /glass/step | /glass/score нового контракта:
+  // action = "fill" | "score" | null. Вопросы конвейер не блокируют, поэтому
+  // прежнего blocked/паузы нет: action null значит «работы сейчас нет» —
+  // цикл останавливается и ждёт ответа автора или разведчика-скоринга.
+  function glassStepDecision(out) {
+    var done = !!(out && out.done);
+    var stop = !out || done || out.action == null;
+    // «Работы нет», но незаполненные слайды БЕЗ вопроса в плане остались — их
+    // держит чужой шаг: другая вкладка или наш же запрос, оборванный клиентом
+    // по таймауту (живой прогон 2026-08-20: сервер доработал, панель застыла
+    // навсегда). Лечится перезапуском цикла по таймеру; слайды с вопросом
+    // (needs_input) ждут автора, а не таймер.
+    var stuck = !!(out && out.plan && (out.plan.slides || []).some(function (s) {
+      return s.brief && !s.filled && s.status !== "needs_input";
+    }));
+    return {
+      // На сцену — только что заполненный слайд; разметка сцену не дёргает,
+      // иначе фоновый разведчик таскал бы автора по деке во время чтения.
+      jump: out && out.action === "fill" && out.index ? out.index - 1 : null,
+      done: done,
+      stop: stop,
+      retryLater: stop && !done && stuck,
+    };
+  }
+
+  // Текст статуса панели сборки. Вопросы идут СЧЁТЧИКОМ в строке, а не паузой:
+  // сборка продолжается, и текст обязан говорить об этом прямо — иначе автор
+  // ждал остановки, которой больше нет. working = степпер или разведчик живы.
+  function glassStatusText(s) {
+    var open = s.open || 0;
+    var txt;
+    if (!s.total) txt = "Раскладываю документ…";
+    else if (s.loopDone) txt = "Все слайды заполнены.";
+    else if (open && !s.working)
+      // Вся остальная работа сделана: заполнение упирается только в ответы.
+      txt = "Готово " + s.filled + " из " + s.total +
+        ". Сборка ждёт вашего решения: " + open + " " +
+        plural(open, "вопрос", "вопроса", "вопросов") +
+        " ниже — ответьте, и слайды заполнятся.";
+    else {
+      txt = "Заполняю слайды по одному: готово " + s.filled + " из " +
+        s.total + "…";
+      if (open) txt += " " + open + " " +
+        plural(open, "вопрос ждёт", "вопроса ждут", "вопросов ждут") +
+        " вашего ответа — сборка не останавливается, ответить можно в любой момент.";
+    }
+    if (s.failed) txt += " " + s.failed + " " +
+      plural(s.failed, "слайд", "слайда", "слайдов") + " не " +
+      plural(s.failed, "заполнился", "заполнились", "заполнились") +
+      " — макет сменился на заглушку, карточки ниже дают переиграть.";
+    if (s.notice) txt += " " + s.notice;
+    return txt;
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
+  root.glassStepDecision = glassStepDecision;
+  root.glassStatusText = glassStatusText;
   root.histDur = histDur;
   root.briefDisplay = briefDisplay;
   root.REBUILD_LABEL = REBUILD_LABEL;
@@ -293,6 +350,7 @@
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
+      glassStepDecision: glassStepDecision, glassStatusText: glassStatusText,
       REBUILD_LABEL: REBUILD_LABEL,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       briefDisplay: briefDisplay,

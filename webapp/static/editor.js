@@ -243,6 +243,7 @@ function handleFrameLoad(loaded) {
   }
   suppressDeckNavOnEdit(doc);
   attachDiagramDrag(doc);
+  markGlassRibbons(doc);
   buildThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
@@ -288,6 +289,9 @@ async function syncDraftSlideHtml(i) {
     el.textContent = el.getAttribute("data-count-final");
     el.removeAttribute("data-count-final");
   });
+  // Лента «ждёт ответа» — редакторский оверлей, в план ей нельзя: freeform-слайд
+  // навсегда унёс бы её в контент.
+  clone.querySelectorAll(".glass-ribbon").forEach((el) => el.remove());
   draftHtmlSaving = true;
   try {
     // К§1: макет, из которого уходим, запоминает сервер (prev_layout на слайде) —
@@ -309,6 +313,38 @@ async function syncDraftSlideHtml(i) {
       await syncDraftSlideHtml(next.value);
     }
   }
+}
+
+// Переработка glass 2026-08-20 (жалоба №2): вопрос виден на САМОМ слайде, а не
+// только «?» на тамбе — авторы не замечали, что от них ждут ответа. Лента —
+// редакторский оверлей поверх кадра: деривативный deck.html чист (экспорт без
+// служебных плашек), а syncDraftSlideHtml вырезает её перед запеканием в план.
+// Стили инлайном: дека живёт в iframe со своим CSS, styles.css туда не достаёт.
+function markGlassRibbons(doc) {
+  if (!isDraft) return;
+  slides.forEach((sec, i) => {
+    const s = (draftPlan.slides || [])[i];
+    if (!s) return;
+    let text = "", bg = "";
+    if (s.status === "needs_input" && !s.filled) {
+      text = "ИИ ждёт вашего ответа — вопрос в панели «Пошаговая сборка»";
+      bg = "#b45309";
+    } else if (s.status === "failed") {
+      text = "Слайд не заполнился — карточка в панели даёт выбрать макет заново";
+      bg = "#b91c1c";
+    }
+    if (!text) return;
+    if (doc.defaultView.getComputedStyle(sec).position === "static")
+      sec.style.position = "relative";
+    const r = doc.createElement("div");
+    r.className = "glass-ribbon";
+    r.setAttribute("contenteditable", "false");
+    r.textContent = text;
+    r.style.cssText = "position:absolute;top:24px;right:24px;z-index:60;" +
+      "background:" + bg + ";color:#fff;padding:10px 20px;border-radius:10px;" +
+      "font:600 22px/1.35 system-ui,sans-serif;max-width:46%;pointer-events:none;";
+    sec.appendChild(r);
+  });
 }
 
 // The deck engine (deck.js) attaches document-level click/keydown handlers that
@@ -576,8 +612,12 @@ function goTo(i) {
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
   document.getElementById("chatTarget").textContent =
     mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
-  [...document.querySelectorAll(".thumb")].forEach((t, idx) =>
-    t.classList.toggle("active", idx === current));
+  [...document.querySelectorAll(".thumb")].forEach((t, idx) => {
+    t.classList.toggle("active", idx === current);
+    // Лента растёт по ходу пошаговой сборки — активный тамб держим в кадре,
+    // иначе свежезаполненные слайды уезжали за нижний край и рост «не был виден».
+    if (idx === current) t.scrollIntoView({ block: "nearest" });
+  });
   // Only rebuild the form when the shown slide changed — NOT on the preview
   // reloads that follow each save (those would wipe focus and in-progress rows).
   if (mode === "manual" && builtFormFor !== current) renderBuilderForm();
@@ -3530,21 +3570,23 @@ async function sendAgent() {
 }
 
 /* ===================== GLASS BUILD (?glass=1) ===================== */
-// Клиент-управляемый степпинг: POST /glass/step заполняет ОДИН слайд и
-// возвращает план — лента тамбов растёт без SSE. Слайды с вопросами ИИ
-// (needs_input) степпер пропускает; ответ (чип-кандидат и/или текст) уходит
-// через /glass/answer в любой момент. Все запросы сериализованы одной
-// очередью glassChain: step и answer оба пишут plan.json — параллель бы
-// теряла обновления.
+// Клиент-управляемый степпинг нового контракта 2026-08-20: /glass/start —
+// parse-only (вся лента тамбов с темами видна сразу), POST /glass/step делает
+// ОДНО действие (action: "fill" — заполнить слайд, "score" — разметить макет,
+// null — работы сейчас нет) и возвращает план. Параллельно степперу живёт
+// разведчик /glass/score: размечает следующие слайды, пока степпер заполняет
+// текущий — итого не больше двух LLM-вызовов на сессию. Вопросы ИИ
+// (needs_input) конвейер НЕ блокируют: слайд откладывается, ответ уходит через
+// /glass/answer в любой момент, а сборка продолжает соседние. step и answer
+// сериализованы очередью glassChain; score ходит мимо неё — сервер вклеивает
+// каждое изменение в свежий план под замком, параллель безопасна.
 let glassRunning = false;   // весь режим (гасит contenteditable на превью)
-let glassLoopDone = false;  // степпер дошёл до конца (вопросы могли остаться)
-// Сборка встала на слайде с вопросом (1-based) — пока автор не ответит, шагов
-// нет. Раньше степпер такие слайды обходил и продолжал заполнять соседние: автор
-// читал вопрос, а лента слева жила своей жизнью — «очень непонятный процесс».
-let glassPaused = null;
+let glassLoopDone = false;  // done от сервера: все слайды с темой заполнены
 let glassLooping = false;   // петля одна: ответ перезапускает её, а не дублирует
+let glassScouting = false;  // разведчик один
 let glassChain = Promise.resolve();
 const glassCards = {};      // 1-based index слайда → карточка вопроса
+const glassBaseTitle = document.title; // вернуть после сборки / без вопросов
 
 function glassEnqueue(fn) {
   const p = glassChain.then(fn);
@@ -3566,6 +3608,7 @@ function startGlassMode() {
     byId("glassRetry").classList.add("hidden");
     byId("glassDone").classList.add("hidden");
     glassLoop();
+    glassScout();
   });
   byId("glassAuto")?.addEventListener("click", glassAnswerAll);
   byId("glassRestBtn")?.addEventListener("click", startGlassRest);
@@ -3574,6 +3617,7 @@ function startGlassMode() {
   ensureCatalog().then(refreshGlassChipNames);
   renderGlassPanel(null);
   glassLoop();
+  glassScout();
 }
 
 // Короткое «что это» для чипа: первая фраза intent'а. По всей библиотеке intent
@@ -3626,15 +3670,41 @@ function glassSlowStop() {
   byId("glassSlow")?.classList.add("hidden");
 }
 
+// Один шаг на сервере — до ~минуты LLM-вызовов, при заторе у провайдера дольше.
+// Без таймаута повисший коннект (обрыв сети без RST, спящий ноутбук) держал бы
+// цикл вечно и сборка «замирала». 340 с заведомо больше серверных таймаутов
+// модели — обрыв по AbortController значит «ответа не будет», не «медленно».
+const GLASS_FETCH_MS = 340000;
+async function glassFetch(url, opts = {}) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), GLASS_FETCH_MS);
+  try { return await fetch(url, { ...opts, signal: ctl.signal }); }
+  finally { clearTimeout(t); }
+}
+
 async function glassLoop() {
   if (glassLooping) return;
   glassLooping = true;
-  try { await glassSteps(); } finally { glassLooping = false; }
+  // Перерисовка после выхода из петли: статус «ждёт ваших ответов» отличим от
+  // «заполняю» только когда glassLooping уже снят.
+  try { await glassSteps(); } finally { glassLooping = false; renderGlassPanel(null); }
+}
+
+// Самолечение застывшей панели (живой прогон 2026-08-20): наш шаг оборвался по
+// клиентскому таймауту, но сервер его доработал — незаполненный слайд остался
+// «занят», и петля остановилась навсегда. Один таймер перезапускает петлю: она
+// заберёт свежий план (поздний результат) или дозаполнит слайд сама.
+let glassRetryTimer = null;
+const GLASS_RETRY_MS = 45000;
+function glassRetryLater() {
+  if (glassRetryTimer) return;
+  glassRetryTimer = setTimeout(() => {
+    glassRetryTimer = null;
+    if (glassRunning && !glassLoopDone) glassLoop();
+  }, GLASS_RETRY_MS);
 }
 
 async function glassSteps() {
-  glassLoopDone = false;
-  glassPaused = null;
   let failures = 0;
   for (;;) {
     let out;
@@ -3642,8 +3712,8 @@ async function glassSteps() {
       out = await glassEnqueue(async () => {
         glassSlowStart();
         try {
-          const r = await fetch(U(`/api/drafts/${sessionId}/glass/step`),
-                                { method: "POST" });
+          const r = await glassFetch(U(`/api/drafts/${sessionId}/glass/step`),
+                                     { method: "POST" });
           if (!r.ok) throw new Error(await r.text());
           return r.json();
         } finally { glassSlowStop(); }
@@ -3655,19 +3725,17 @@ async function glassSteps() {
     }
     failures = 0;
     if (out.plan) draftPlan = out.plan;
-    if (out.index) pendingGoTo = out.index - 1; // показываем свежий слайд
-    // Пауза: дошли до слайда с вопросом. Дальше не идём — ответ (или «на
-    // усмотрение ИИ») продолжит сборку с этого же места. Спорный слайд ставим
-    // на сцену: вопрос в панели и слайд на экране должны быть про одно и то же.
-    else if (out.blocked) pendingGoTo = out.blocked - 1;
+    const d = glassStepDecision(out);
+    if (d.jump != null) pendingGoTo = d.jump; // показываем свежезаполненный слайд
     loadDeck();
-    if (out.done) { glassLoopDone = true; renderGlassPanel(out); break; }
-    if (out.blocked) {
-      glassPaused = out.blocked;
-      renderGlassPanel(out);
-      return;
-    }
     renderGlassPanel(out);
+    if (d.done) { glassLoopDone = true; break; }
+    // Работы сейчас нет (action null): либо остались только вопросы — ждём
+    // ответа автора (glassResume перезапустит петлю), либо разведчик ещё
+    // размечает следующий слайд — его финиш перезапустит петлю сам. Третий
+    // случай — слайд держит оборванный по таймауту шаг (сервер его доработает):
+    // retryLater перезапускает петлю таймером, иначе панель застывала навсегда.
+    if (d.stop) { if (d.retryLater) glassRetryLater(); return; }
   }
   // Всё заполнено, вопросов и осечек нет → сразу в обычный редактор. Осечка
   // держит панель наравне с вопросом: иначе карточку «макет сменился на
@@ -3677,6 +3745,43 @@ async function glassSteps() {
   // панели, и на гладкой сборке автор не увидел бы ни того, ни другого.
   if (!openGlassQuestions().length && !glassFailedSlides().length &&
       !(draftPlan.rest || 0)) exitGlassMode();
+}
+
+// Разведчик: размечает макеты СЛЕДУЮЩИХ слайдов, пока степпер заполняет
+// текущий — к моменту заполнения слайд уже размечен, и шаг не тратится на
+// скоринг. Ходит мимо glassChain (иначе не было бы параллели); сервер вклеивает
+// результат в свежий план под замком, а занятые слайды бронирует _INFLIGHT.
+async function glassScout() {
+  if (glassScouting) return;
+  glassScouting = true;
+  let failures = 0;
+  try {
+    for (;;) {
+      if (!glassRunning) return;
+      let out;
+      try {
+        const r = await glassFetch(U(`/api/drafts/${sessionId}/glass/score`),
+                                   { method: "POST" });
+        if (!r.ok) throw new Error(await r.text());
+        out = await r.json();
+      } catch (e) {
+        // Разведка — ускорение, а не необходимость: степпер разметит сам.
+        if (++failures >= 3) return;
+        await new Promise((res) => setTimeout(res, 4000));
+        continue;
+      }
+      failures = 0;
+      if (out.plan) draftPlan = out.plan;
+      loadDeck();               // разметка меняет макет тамба
+      renderGlassPanel(out);
+      // У степпера могла появиться работа (слайд размечен → можно заполнять).
+      if (out.action) glassLoop();
+      if (!out.action) return;  // неразмеченных не осталось
+    }
+  } finally {
+    glassScouting = false;
+    renderGlassPanel(null);
+  }
 }
 
 // Заполненный слайд вопросом больше не считается, даже если метку не сняли:
@@ -3705,48 +3810,37 @@ function renderGlassPanel(out) {
   const filled = targets.filter((s) => s.filled).length;
   const total = targets.length;
   const open = openGlassQuestions();
-  if (bar) bar.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
-  if (glassPaused && !glassLoopDone) {
-    // Пауза — главное состояние экрана: без неё автор не понимал, чего от него
-    // ждут и почему слайды продолжают появляться, пока он думает.
-    status.textContent =
-      `Пауза: слайд ${glassPaused} ждёт вашего решения. Готово ${filled} из ` +
-      `${total} — ответьте, и сборка пойдёт дальше по порядку.`;
-  } else if (!glassLoopDone) {
-    status.textContent = total
-      ? `Заполняю слайды по одному: готово ${filled} из ${total}…`
-      : "Раскладываю документ…";
-  } else if (open.length) {
-    status.textContent = `Готово ${filled} из ${total}. ` +
-      `Остал${open.length === 1 ? "ся" : "ось"} ${open.length} ` +
-      `${plural(open.length, "вопрос", "вопроса", "вопросов")} — ответьте ` +
-      `или переходите к редактированию.`;
-  } else {
-    status.textContent = "Все слайды заполнены.";
-  }
-  // Сорвавшийся шаг честно называем сорвавшимся: слайд стоит заглушкой с темой
-  // в заголовке, и автор должен знать, что дописать его придётся руками.
   const failed = glassFailedSlides();
-  if (failed.length && glassLoopDone) {
-    status.textContent += ` ${failed.length} ` +
-      `${plural(failed.length, "слайд", "слайда", "слайдов")} не ` +
-      `${plural(failed.length, "заполнился", "заполнились", "заполнились")} — ` +
-      "макет сменился на заглушку, карточки ниже дают переиграть.";
-  }
-  // Что сборка сделала за спиной автора (документ обрезан по потолку) — говорим
-  // сразу, а не оставляем гадать, куда делись разделы.
-  if (draftPlan.notice) status.textContent += " " + draftPlan.notice;
+  if (bar) bar.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
+  // Текст собирает glassStatusText (errtext.js, под node --test): вопросы идут
+  // счётчиком в строке, а не паузой — сборка их больше не ждёт. failed
+  // дописываем только на финише: до него степпер ещё может переиграть слайд.
+  // notice (документ обрезан по потолку) — сразу, а не оставляем гадать.
+  status.textContent = glassStatusText({
+    filled: filled, total: total, open: open.length,
+    working: glassLooping || glassScouting, loopDone: glassLoopDone,
+    failed: glassLoopDone ? failed.length : 0,
+    notice: draftPlan.notice || "",
+  });
   renderGlassRest();
   renderGlassQuestions(open, failed);
-  // «Решить всё на усмотрение ИИ» — выход из паузы одним движением, когда
-  // разбирать каждый вопрос не хочется. Без него единственной альтернативой
-  // ответу было бросить сборку.
+  // «Решить всё на усмотрение ИИ» — закрыть все вопросы одним движением, когда
+  // разбирать каждый не хочется. Без него единственной альтернативой ответу
+  // было бросить сборку.
   const auto = byId("glassAuto");
   if (auto) {
     auto.classList.toggle("hidden", open.length < 2);
     auto.textContent = `Решить все ${open.length} на усмотрение ИИ`;
   }
-  done?.classList.toggle("hidden", !glassLoopDone);
+  // Финишный футер («Перейти к редактированию») — и когда всё заполнено, и
+  // когда работа упёрлась в одни лишь вопросы: строгий done без ответов не
+  // наступит, а запирать автора в режиме сборки нельзя.
+  const stalled = !glassLooping && !glassScouting && open.length > 0;
+  done?.classList.toggle("hidden", !(glassLoopDone || stalled));
+  // Счётчик вопросов в заголовке вкладки: сборка идёт минуты, автор уходит в
+  // другую вкладку — «(2) …» возвращает его, когда ИИ ждёт решения.
+  document.title = open.length
+    ? `(${open.length}) ${glassBaseTitle}` : glassBaseTitle;
 }
 
 // Хвост документа сверх потолка. Раньше notice лишь сообщал о потере и советовал
@@ -3788,8 +3882,8 @@ async function startGlassRest() {
   glassRestBusy = true;
   renderGlassRest();
   try {
-    const r = await fetch(U(`/api/drafts/${sessionId}/glass/rest`),
-                          { method: "POST" });
+    const r = await glassFetch(U(`/api/drafts/${sessionId}/glass/rest`),
+                               { method: "POST" });
     if (!r.ok) {
       let detail = "";
       try { detail = JSON.parse(await r.text()).detail; } catch (e) { detail = ""; }
@@ -4034,14 +4128,12 @@ function makeGlassCard(idx) {
   skip.textContent = "На усмотрение ИИ";
   const send = (tid, kind, msg) => {
     apply.disabled = skip.disabled = true;
-    // Ответ встаёт в ту же очередь, что шаги сборки, и ждёт текущего шага
-    // (это до минуты). Без «в очереди» карточка выглядела зависшей, пока слева
-    // спокойно собирались соседние слайды.
-    apply.textContent = "Ответ в очереди…";
-    glassEnqueue(() => {
-      apply.textContent = "Заполняю…";
-      return glassAnswer(idx, tid, msg, kind);
-    }).catch(() => {
+    // Ответ мгновенный (сервер лишь записывает выбор в план — заполняет слайд
+    // конвейер шагов), поэтому идёт МИМО очереди шагов: раньше ответ ждал
+    // текущего шага и держал HTTP всю дорогу до модели — на деградировавшем
+    // провайдере карточка «висела» минуты и обрывалась ложной ошибкой сети.
+    apply.textContent = "Записываю ответ…";
+    glassAnswer(idx, tid, msg, kind).catch(() => {
       skip.disabled = false;
       syncPick();                 // вернуть подпись и доступность по выбору
       setSaveStatus("error");
@@ -4056,64 +4148,72 @@ function makeGlassCard(idx) {
   return card;
 }
 
-async function glassAnswer(idx, templateId, message, kind) {
+// Ответ мгновенный: сервер записывает выбор в план и снимает вопрос, слайд
+// заполняет конвейер шагов. resume=false — для glassAnswerAll: цепочка ответов
+// перезапускает петлю ОДИН раз в конце, иначе первый же перезапуск занимал бы
+// сервер шагом и следующие ответы ждали его.
+async function glassAnswer(idx, templateId, message, kind, resume = true) {
   const body = { index: idx };
   if (templateId) body.template_id = templateId;
   if (kind) body.kind = kind;
   if (message) body.message = message;
-  const r = await fetch(U(`/api/drafts/${sessionId}/glass/answer`), {
+  const r = await glassFetch(U(`/api/drafts/${sessionId}/glass/answer`), {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   // 409 — вопрос уже закрыт (ответили с другой вкладки, слайд заполнился сам):
   // карточка просто устарела, повторять ответ нечего. Подтягиваем план и
   // убираем её, вместо того чтобы показывать «ошибка».
-  if (r.status === 409) { await fetchPlan(); glassResume(); return; }
+  if (r.status === 409) { await fetchPlan(); if (resume) glassResume(); return; }
   if (!r.ok) throw new Error(await r.text());
   const out = await r.json();
   if (out.plan) draftPlan = out.plan;
-  pendingGoTo = idx - 1;
   loadDeck();
-  glassResume();
+  if (resume) {
+    pendingGoTo = idx - 1;      // показать слайд, который сейчас заполнится
+    glassResume();
+  }
 }
 
 // Выход из паузы одним движением: закрыть ВСЕ вопросы выбором ИИ. Ответы идут
-// по одному через ту же очередь — иначе параллельные записи в plan.json теряли
-// бы друг друга. Каждый ответ сразу заполняет свой слайд, как обычный шаг.
+// по одному (параллельные записи в plan.json теряли бы друг друга), они
+// мгновенные; заполняет слайды перезапущенная в конце петля шагов.
 async function glassAnswerAll() {
   const btn = byId("glassAuto");
-  if (btn) { btn.disabled = true; btn.textContent = "Заполняю…"; }
+  if (btn) { btn.disabled = true; btn.textContent = "Записываю ответы…"; }
   try {
     for (;;) {
       const open = openGlassQuestions();
       if (!open.length) break;
-      await glassEnqueue(() => glassAnswer(open[0], null, "", null));
+      await glassAnswer(open[0], null, "", null, false);
     }
   } catch (e) {
     setSaveStatus("error");
   } finally {
     if (btn) btn.disabled = false;
-    renderGlassPanel(null);
+    glassResume();
   }
 }
 
-// Ответ снял блокировку — продолжаем сборку с того же места. Петля одна
+// Ответ закрыл вопрос — у степпера могла появиться работа. Петля одна
 // (glassLooping), так что два ответа подряд не запустят две сборки.
 function glassResume() {
-  renderGlassPanel(null);
   if (glassLoopDone) {
+    renderGlassPanel(null);
     // степпер уже финишировал, вопросов и осечек больше нет → в редактор
     if (!openGlassQuestions().length && !glassFailedSlides().length) exitGlassMode();
     return;
   }
-  if (glassPaused && !openGlassQuestions().includes(glassPaused)) {
-    glassPaused = null;
-    glassLoop();
-  }
+  // Петлю — ДО перерисовки: glassLooping ставится до первого await, и статус
+  // сразу «заполняю», а не застывшее «ждёт вашего решения» на всё время шага
+  // (живой прогон 2026-08-20: после ответа панель минуту врала, что ждёт).
+  glassLoop();
+  renderGlassPanel(null);
 }
 
 function exitGlassMode() {
   glassRunning = false;
+  document.title = glassBaseTitle;
   byId("glassPanel")?.classList.add("hidden");
   byId("rebuild")?.classList.remove("hidden");
   const badge = byId("modeBadge");

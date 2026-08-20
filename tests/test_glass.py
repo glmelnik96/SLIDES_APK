@@ -4,6 +4,13 @@ Fake-клиент вместо LLM (паттерн test_diagram_filler.py) и fa
 вместо заполнения: проверяем обвязку — фильтрацию кандидатов, фолбэк как
 «место сомнения» (confidence 0.0), пропуск needs_input степпером, доводку
 слайда по ответу и API-контракты /glass/*.
+
+Контракт после переработки (2026-08-20, жалобы «сайт лежит на старте» и
+«вопросы не видны»): старт — parse-only без единого вызова модели (слайды
+уходят в status="unscored"), разметка ленивая — score_next/step_fill по одному
+слайду, вопрос НЕ блокирует конвейер (слайд откладывается, сборка идёт дальше),
+каждый шаг возвращает action: "score"|"fill"|None — клиент останавливает цикл
+на None, а done значит строго «всё заполнено и вопросов нет».
 """
 import os
 os.environ["SLIDES_APP_SKIP_SHIM"] = "1"
@@ -123,33 +130,31 @@ def test_doubtful_thresholds():
 
 
 # ── start_glass ──────────────────────────────────────────────────────────────
-def test_start_glass_builds_outline_without_filling(monkeypatch, tmp_path):
+def test_start_glass_is_parse_only_no_llm(monkeypatch, tmp_path):
+    """Старт мгновенный: разбор документа БЕЗ единого вызова модели.
+
+    Жалоба 2026-08-20: /glass/start скорил ВСЕ разделы в одном HTTP-запросе —
+    «сайт по факту лежит» 5-20 минут до первого ответа. Теперь старт только
+    режет документ на слайды-заготовки (status="unscored"), временный макет
+    ставит эвристика планировщика, а разметка уходит в ленивые score_next
+    по ходу конвейера."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
     src.write_text("# Отчёт\n\n## Уверенный раздел\n\nТекст про метрики.\n\n"
                    "## Спорный раздел\n\nМало контента.\n", encoding="utf-8")
-    fake = FakeClient([
-        SectionChoice(candidates=[Candidate(template_id="stats-row",
-                                            confidence=0.9)]),
-        SectionChoice(candidates=[Candidate(template_id="three-col",
-                                            confidence=0.4),
-                                  Candidate(template_id="timeline",
-                                            confidence=0.35)],
-                      question="Что показать?"),
-    ])
-    plan = glass.start_glass("s1", src, client=fake, workers=1)
+    monkeypatch.setattr(glass, "_kimi", lambda: (_ for _ in ()).throw(
+        AssertionError("старт не имеет права звать модель")))
+    plan = glass.start_glass("s1", src)
 
     assert plan.title == "Отчёт"
     cover = plan.slides[0]
     assert cover.template_id == "cover" and cover.filled
-    sure = plan.slides[1]
-    assert sure.template_id == "stats-row" and not sure.filled
-    assert sure.status is None and sure.question is None
-    assert sure.brief and sure.candidates == ["stats-row"]
-    doubt = plan.slides[2]
-    assert doubt.status == "needs_input"
-    assert doubt.question == "Что показать?"
-    assert doubt.candidates == ["three-col", "timeline"]
+    assert len(plan.slides) == 3
+    for s in plan.slides[1:]:
+        assert s.status == "unscored" and not s.filled
+        assert s.brief
+        assert s.candidates is None and s.question is None
+        assert s.template_id                       # временный макет эвристики
     # DeckPlan-as-truth: план сохранён, дека отрисована из него
     assert draft.load_plan("s1").model_dump() == plan.model_dump()
     from webapp.paths import session_dir
@@ -164,9 +169,7 @@ def test_cover_keeps_the_whole_document_title(monkeypatch, tmp_path):
     long_title = "Программа модернизации логистического оператора «Северный путь»"
     src.write_text(f"# {long_title}\n\n## Раздел\n\nТекст про метрики.\n",
                    encoding="utf-8")
-    plan = glass.start_glass("cov", src, client=FakeClient([
-        SectionChoice(candidates=[Candidate(template_id="stats-row",
-                                            confidence=0.9)])]), workers=1)
+    plan = glass.start_glass("cov", src)
 
     from htmlslides.library import TemplateLibrary
     cap = TemplateLibrary.load().get("cover").slots["title"].max_chars
@@ -183,9 +186,7 @@ def test_cover_short_title_ships_without_sample_subtitle(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
     src.write_text("# Итоги\n\n## Раздел\n\nТекст про метрики.\n", encoding="utf-8")
-    glass.start_glass("sub", src, client=FakeClient([
-        SectionChoice(candidates=[Candidate(template_id="stats-row",
-                                            confidence=0.9)])]), workers=1)
+    glass.start_glass("sub", src)
     from webapp.paths import session_dir
     html = (session_dir("sub") / "deck.html").read_text(encoding="utf-8")
     # Смотрим ТОЛЬКО обложку: у ещё не заполненных слайдов рыба в пустых слотах
@@ -201,19 +202,18 @@ def test_deck_title_falls_back_to_the_uploaded_file_name(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "input.md"
     src.write_text("## Раздел\n\nТекст про метрики.\n", encoding="utf-8")
-    one = [SectionChoice(candidates=[Candidate(template_id="stats-row",
-                                               confidence=0.9)])]
-    plan = glass.start_glass("t1", src, client=FakeClient(list(one)), workers=1,
+    plan = glass.start_glass("t1", src,
                              origin_name="Партнёры_Инфраструктура_для_ИИ.pptx")
     assert plan.title == "Партнёры Инфраструктура для ИИ"   # «_» — это пробелы
 
     # имени файла нет вовсе → заголовок первого раздела, но никогда не «input»
-    plan = glass.start_glass("t2", src, client=FakeClient(list(one)), workers=1)
+    plan = glass.start_glass("t2", src)
     assert plan.title == "Раздел"
 
 
 def test_image_only_section_asks_instead_of_inventing(monkeypatch, tmp_path):
-    """Раздел из одних картинок уходит в needs_input, даже если ИИ уверен.
+    """Раздел из одних картинок уходит в needs_input при скоринге, даже если
+    ИИ уверен в макете.
 
     Стеклянная сборка идёт мимо vision-ветки чёрного ящика: текста у такого
     раздела нет, и филлер не «собирал хуже» — он ДОСОЧИНЯЛ тезисы и цифры,
@@ -222,12 +222,14 @@ def test_image_only_section_asks_instead_of_inventing(monkeypatch, tmp_path):
     src = tmp_path / "doc.md"
     src.write_text("# Дека\n\n## Архитектура\n\n![](a.png)\n\n![](b.png)\n",
                    encoding="utf-8")
-    plan = glass.start_glass("img", src, client=FakeClient([
+    glass.start_glass("img", src)
+    out = glass.score_next("img", client=FakeClient([
         SectionChoice(candidates=[Candidate(template_id="stats-row",
                                             confidence=0.95),
                                   Candidate(template_id="three-col",
-                                            confidence=0.2)])]), workers=1)
-    s = plan.slides[1]
+                                            confidence=0.2)])]))
+    assert out["action"] == "score" and out["index"] == 2
+    s = draft.load_plan("img").slides[1]
     assert s.status == "needs_input"
     assert "только изображения" in (s.question or "")
     assert s.candidates == ["stats-row", "three-col"]   # чипы на месте
@@ -260,14 +262,26 @@ def _pptx_with_blind_slide(tmp_path):
     return out
 
 
+def _blind_session(monkeypatch, tmp_path, sid):
+    """pptx со слепым слайдом кладётся в сессию как input.pptx — так делает
+    /glass/start, и так ленивый vision находит исходник при скоринге."""
+    from webapp.paths import session_dir
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    dest = session_dir(sid) / "input.pptx"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(_pptx_with_blind_slide(tmp_path).read_bytes())
+    return dest
+
+
 def test_blind_pptx_section_is_read_from_the_source_slide(monkeypatch, tmp_path):
-    """Раздел без текста дочитывается с картинки исходного слайда.
+    """Раздел без текста дочитывается с картинки исходного слайда — ЛЕНИВО,
+    при скоринге именно этого раздела, а не на старте за все сразу.
 
     Спросить автора честнее, чем выдумать, — но ещё честнее прочитать: у pptx
     исходный слайд можно отрендерить и показать модели. Прочитанное едет в бриф
     С ПОМЕТКОЙ (автор видит в панели контекста, откуда текст), раздел перестаёт
     быть слепым, и вопрос на нём не поднимается."""
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    dest = _blind_session(monkeypatch, tmp_path, "blind")
     png = tmp_path / "slide-02.png"
     png.write_bytes(_PNG)
     shots = tmp_path / "shot-01.png"
@@ -275,29 +289,33 @@ def test_blind_pptx_section_is_read_from_the_source_slide(monkeypatch, tmp_path)
     monkeypatch.setattr("htmlslides.parsers.render.render_pptx_pngs",
                         lambda src, out, **kw: [shots, png])
 
+    glass.start_glass("blind", dest)
     read = glass._SlideRead(text="Схема потоков данных: источники, шина Kafka, "
                                  "витрины. Внизу подпись «до 40 ТБ в сутки».")
     ok = SectionChoice(candidates=[Candidate(template_id="diagram",
                                              confidence=0.9),
                                    Candidate(template_id="three-col",
                                              confidence=0.4)])
-    client = FakeClient([read, ok, ok])
-    plan = glass.start_glass("blind", _pptx_with_blind_slide(tmp_path),
-                             client=client, workers=1)
+    text_client = FakeClient([ok])
+    glass.score_next("blind", client=text_client)       # текстовый раздел
+    blind_client = FakeClient([read, ok])
+    glass.score_next("blind", client=blind_client)      # слепой: сперва читаем
 
-    blind = plan.slides[2]
+    blind = draft.load_plan("blind").slides[2]
     assert blind.status is None                     # больше не слепой
     assert "Kafka" in blind.brief
     assert glass._IMAGE_READ_NOTE in blind.brief    # источник текста назван
     # читаем ТОЛЬКО слепой раздел: текстовый слайд рендерить и смотреть незачем
-    assert sum(1 for c in client.calls
+    assert sum(1 for c in text_client.calls
+               if isinstance(c["messages"][-1]["content"], list)) == 0
+    assert sum(1 for c in blind_client.calls
                if isinstance(c["messages"][-1]["content"], list)) == 1
 
 
 def test_unreadable_source_still_asks_the_author(monkeypatch, tmp_path):
     """Нет LibreOffice (или картинка не прочиталась) — возвращаемся к вопросу,
     а не к выдумке: гард слепого раздела остаётся последней линией."""
-    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    dest = _blind_session(monkeypatch, tmp_path, "blind2")
     from htmlslides.parsers.render import RenderUnavailable
 
     def boom(src, out, **kw):
@@ -306,10 +324,12 @@ def test_unreadable_source_still_asks_the_author(monkeypatch, tmp_path):
     monkeypatch.setattr("htmlslides.parsers.render.render_pptx_pngs", boom)
     ok = SectionChoice(candidates=[Candidate(template_id="three-col",
                                              confidence=0.9)])
-    plan = glass.start_glass("blind2", _pptx_with_blind_slide(tmp_path),
-                             client=FakeClient([ok, ok]), workers=1)
-    assert plan.slides[2].status == "needs_input"
-    assert "только изображения" in (plan.slides[2].question or "")
+    glass.start_glass("blind2", dest)
+    glass.score_next("blind2", client=FakeClient([ok]))
+    glass.score_next("blind2", client=FakeClient([ok]))
+    s = draft.load_plan("blind2").slides[2]
+    assert s.status == "needs_input"
+    assert "только изображения" in (s.question or "")
 
 
 def test_image_section_with_text_goes_through(monkeypatch, tmp_path):
@@ -320,30 +340,35 @@ def test_image_section_with_text_goes_through(monkeypatch, tmp_path):
     src.write_text("# Дека\n\n## Архитектура\n\n![](a.png)\n\nПлатформа собрана "
                    "из трёх слоёв: хранение, вычисления и оркестрация задач.\n",
                    encoding="utf-8")
-    plan = glass.start_glass("img2", src, client=FakeClient([
+    glass.start_glass("img2", src)
+    glass.score_next("img2", client=FakeClient([
         SectionChoice(candidates=[Candidate(template_id="stats-row",
                                             confidence=0.95),
                                   Candidate(template_id="three-col",
-                                            confidence=0.2)])]), workers=1)
-    assert plan.slides[1].status is None
+                                            confidence=0.2)])]))
+    assert draft.load_plan("img2").slides[1].status is None
 
 
 def test_same_layout_never_runs_three_in_a_row(monkeypatch, tmp_path):
     """Однородный документ не превращается в деку из одного макета.
 
-    Разделы скорятся параллельно и независимо: на реальном прогоне СЕМЬ разделов
-    подряд получили cards-6 — 45% деки одной сеткой. Разводим повторы вторым
-    кандидатом самой модели, но только когда он почти так же хорош."""
+    На реальном прогоне СЕМЬ разделов подряд получили cards-6 — 45% деки одной
+    сеткой. Разводим повторы вторым кандидатом самой модели, но только когда он
+    почти так же хорош. Скоринг теперь ленивый и последовательный — каждый
+    score_next видит уже выбранные макеты соседей."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
     src.write_text("# Дека\n\n" + "".join(
         f"## Раздел {i}\n\nТри направления работы: люди, процессы и данные.\n\n"
         for i in range(1, 8)), encoding="utf-8")
-    same = [SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.9),
-                                      Candidate(template_id="three-col", confidence=0.8)])
-            for _ in range(7)]
-    plan = glass.start_glass("mono", src, client=FakeClient(same), workers=1)
-    used = [s.template_id for s in plan.slides[1:]]
+    fake = FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.9),
+                                  Candidate(template_id="three-col", confidence=0.8)])
+        for _ in range(7)])
+    glass.start_glass("mono", src)
+    for _ in range(7):
+        glass.score_next("mono", client=fake)
+    used = [s.template_id for s in draft.load_plan("mono").slides[1:]]
     assert len(used) == 7
     assert "three-col" in used
     run = max_run = 1
@@ -361,25 +386,40 @@ def test_variety_never_costs_a_much_worse_layout(monkeypatch, tmp_path):
     src.write_text("# Дека\n\n" + "".join(
         f"## Раздел {i}\n\nТри направления работы: люди, процессы и данные.\n\n"
         for i in range(1, 5)), encoding="utf-8")
-    same = [SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.95),
-                                      Candidate(template_id="quote", confidence=0.1)])
-            for _ in range(4)]
-    plan = glass.start_glass("mono2", src, client=FakeClient(same), workers=1)
-    assert [s.template_id for s in plan.slides[1:]] == ["cards-6"] * 4
+    fake = FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="cards-6", confidence=0.95),
+                                  Candidate(template_id="quote", confidence=0.1)])
+        for _ in range(4)])
+    glass.start_glass("mono2", src)
+    for _ in range(4):
+        glass.score_next("mono2", client=fake)
+    used = [s.template_id for s in draft.load_plan("mono2").slides[1:]]
+    assert used == ["cards-6"] * 4
 
 
-def test_start_glass_names_the_scoring_failure(monkeypatch, tmp_path):
+def test_score_names_the_scoring_failure(monkeypatch, tmp_path):
     """Сбой скоринга не маскируется под вопрос ИИ: у слайда честный текст про
     осечку модели, а не «раздел ложится в несколько макетов» при одном чипе."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
     src.write_text("# Т\n\n## Раздел\n\nТекст.\n", encoding="utf-8")
-    plan = glass.start_glass("s2", src, client=FakeClient([RuntimeError("boom")]),
-                             workers=1)
-    s = plan.slides[1]
+    glass.start_glass("s2", src)
+    out = glass.score_next("s2", client=FakeClient([RuntimeError("boom")]))
+    assert out["action"] == "score" and out["index"] == 2
+    s = draft.load_plan("s2").slides[1]
     assert s.status == "needs_input"
     assert s.question == glass._FALLBACK_QUESTION
     assert len(s.candidates) == 1
+
+
+def test_score_next_without_unscored_slides_is_a_noop(monkeypatch, tmp_path):
+    """Скоринг на размеченном плане отвечает action=None — клиентский разведчик
+    останавливает свой цикл, а не молотит модель по кругу."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    draft.save_plan("s2b", _outline_plan(question=False))
+    out = glass.score_next("s2b", client=FakeClient([]))
+    assert out["action"] is None and out["index"] is None
+    assert out["unscored"] == [] and out["done"] is False
 
 
 def test_question_text_matches_the_number_of_options():
@@ -396,10 +436,11 @@ def test_question_text_matches_the_number_of_options():
 
 # ── step_fill ────────────────────────────────────────────────────────────────
 def _outline_plan(*, question=True, at=2):
-    """question=False — аутлайн без вопроса: сборка не встаёт на паузу.
+    """Размеченный аутлайн (все слайды прошли скоринг): готов к заполнению.
 
-    at — номер слайда с вопросом. Пауза стоит на ПЕРВОМ спорном слайде, поэтому
-    вопрос в хвосте оставляет шагам работу перед собой (нужно для гонок)."""
+    question=False — без вопроса; at — номер слайда с вопросом. Вопрос сборку
+    не останавливает — спорный слайд просто откладывается, а вопрос в хвосте
+    оставляет шагам работу перед собой (нужно для гонок)."""
     plan = draft.DraftPlan(title="Т", slides=[
         draft.DraftSlide(template_id="cover", content={"title": "Т"}, filled=True),
         draft.DraftSlide(template_id="three-col", brief="спорный"),
@@ -413,29 +454,75 @@ def _outline_plan(*, question=True, at=2):
     return plan
 
 
-def test_step_fill_pauses_on_needs_input(monkeypatch, tmp_path):
-    """Дойдя до вопроса, сборка ВСТАЁТ и ждёт ответа.
+def test_question_does_not_block_the_conveyor(monkeypatch, tmp_path):
+    """Вопрос НЕ останавливает сборку: спорный слайд откладывается, остальная
+    лента заполняется, ответить можно в любой момент.
 
-    Раньше степпер такой слайд пропускал и уходил вперёд: автор читал вопрос,
-    а лента под ним продолжала заполняться — процесс выглядел неуправляемым."""
+    Жалоба 2026-08-20: степпер вставал на первом needs_input и молча ждал —
+    автор не видел вопроса, «сборка зависла», хвост деки так и оставался
+    рыбой. Теперь конвейер обходит вопрос, а done наступает только когда
+    ни работы, ни открытых вопросов не осталось."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
     monkeypatch.setattr(filler, "fill_slide", _fake_fill)
-    draft.save_plan("s3", _outline_plan())
+    draft.save_plan("s3", _outline_plan())        # вопрос на слайде 2
 
     out1 = glass.step_fill("s3", client=FakeClient([]))
-    assert out1["index"] is None and out1["done"] is False
-    assert out1["blocked"] == 2 and out1["open_questions"] == [2]
-    assert draft.load_plan("s3").slides[2].filled is False   # вперёд не убежали
-
-    glass.answer("s3", 2, template_id="timeline", client=FakeClient([]))
+    assert out1["action"] == "fill" and out1["index"] == 3
     out2 = glass.step_fill("s3", client=FakeClient([]))
-    assert out2["index"] == 3 and out2["blocked"] is None
+    assert out2["action"] == "fill" and out2["index"] == 4
     out3 = glass.step_fill("s3", client=FakeClient([]))
-    assert out3["index"] == 4 and out3["done"] is True
+    assert out3["action"] is None and out3["index"] is None
+    assert out3["done"] is False and out3["open_questions"] == [2]
+    assert draft.load_plan("s3").slides[1].filled is False   # ждёт автора
+
+    glass.answer("s3", 2, template_id="timeline")
+    out4 = glass.step_fill("s3", client=FakeClient([]))
+    assert out4["action"] == "fill" and out4["index"] == 2
+    out5 = glass.step_fill("s3", client=FakeClient([]))
+    assert out5["action"] is None and out5["done"] is True
     plan = draft.load_plan("s3")
-    assert plan.slides[2].content["title"] == "Слайд 3"
     assert all(s.filled for s in plan.slides)
+
+
+def test_step_scores_when_nothing_is_ready_to_fill(monkeypatch, tmp_path):
+    """Шаг без готовых слайдов не простаивает: сам размечает следующий
+    unscored — конвейер жив, даже если клиентский разведчик отстал."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    draft.save_plan("sc1", draft.DraftPlan(title="Т", slides=[
+        draft.DraftSlide(template_id="cover", content={"title": "Т"}, filled=True),
+        draft.DraftSlide(template_id="three-col", brief="тема", status="unscored"),
+    ]))
+
+    out1 = glass.step_fill("sc1", client=FakeClient([
+        SectionChoice(candidates=[Candidate(template_id="stats-row",
+                                            confidence=0.9)])]))
+    assert out1["action"] == "score" and out1["index"] == 2
+    assert out1["unscored"] == [] and out1["done"] is False
+    s = draft.load_plan("sc1").slides[1]
+    assert s.status is None and s.template_id == "stats-row"
+
+    out2 = glass.step_fill("sc1", client=FakeClient([]))
+    assert out2["action"] == "fill" and out2["index"] == 2
+    assert out2["done"] is True
+
+
+def test_step_prefers_filling_over_scoring(monkeypatch, tmp_path):
+    """Готовый слайд важнее разметки следующего: автор видит контент раньше,
+    а разведку добирает параллельный /glass/score."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    plan = _outline_plan(question=False)
+    plan.slides.append(draft.DraftSlide(template_id="three-col", brief="хвост",
+                                        status="unscored"))
+    draft.save_plan("sc2", plan)
+
+    out = glass.step_fill("sc2", client=FakeClient([]))
+    assert out["action"] == "fill" and out["index"] == 2
+    assert out["unscored"] == [5]
 
 
 def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
@@ -454,7 +541,7 @@ def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
     draft.save_plan("s4", _outline_plan(question=False))
 
     out = glass.step_fill("s4", client=FakeClient([]))
-    assert out["index"] == 2
+    assert out["action"] == "fill" and out["index"] == 2
     assert out["failed"] == [2]
     s = draft.load_plan("s4").slides[1]
     assert s.filled and s.status == "failed"
@@ -466,7 +553,33 @@ def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
 
 
 def test_failed_slide_does_not_pause_the_build(monkeypatch, tmp_path):
-    """Осечка — не вопрос: её чинят в редакторе, а сборка идёт дальше."""
+    """Осечка — не вопрос: её чинят в редакторе, а сборка идёт дальше.
+
+    Этап 3 переработки 2026-08-20: перед заглушкой у заполнения есть один
+    ретрай, поэтому «настоящая» осечка — это ДВА сбоя подряд на одном слайде."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    calls = []
+
+    def _boom_twice(client, library, sp, **kw):
+        calls.append(sp.index)
+        if len(calls) <= 2:
+            raise filler.FillError("сеть упала")
+        return _fake_fill(client, library, sp, **kw)
+    monkeypatch.setattr(filler, "fill_slide", _boom_twice)
+    draft.save_plan("s4b", _outline_plan(question=False))
+
+    out1 = glass.step_fill("s4b", client=FakeClient([]))
+    assert calls == [2, 2]               # осечка + ретрай на том же слайде
+    assert out1["failed"] == [2] and out1["action"] == "fill"
+    out2 = glass.step_fill("s4b", client=FakeClient([]))
+    assert out2["index"] == 3 and out2["action"] == "fill"
+
+
+def test_fill_retries_once_before_degrading(monkeypatch, tmp_path):
+    """Этап 3 переработки 2026-08-20: минутный блип модели — не повод для
+    заглушки. Первый сбой заполнения тихо ретраится, и только вторая осечка
+    подряд деградирует слайд на blank (жалоба №3 — «пайплайн всё ещё ошибается»)."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
     calls = []
@@ -474,19 +587,91 @@ def test_failed_slide_does_not_pause_the_build(monkeypatch, tmp_path):
     def _boom_once(client, library, sp, **kw):
         calls.append(sp.index)
         if len(calls) == 1:
-            raise filler.FillError("сеть упала")
+            raise filler.FillError("минутный блип")
         return _fake_fill(client, library, sp, **kw)
     monkeypatch.setattr(filler, "fill_slide", _boom_once)
-    draft.save_plan("s4b", _outline_plan(question=False))
+    draft.save_plan("s4c", _outline_plan(question=False))
 
-    out1 = glass.step_fill("s4b", client=FakeClient([]))
-    assert out1["failed"] == [2] and out1["blocked"] is None
-    out2 = glass.step_fill("s4b", client=FakeClient([]))
-    assert out2["index"] == 3 and out2["blocked"] is None
+    out = glass.step_fill("s4c", client=FakeClient([]))
+    assert calls == [2, 2]
+    assert out["failed"] == [] and out["action"] == "fill"
+    s = draft.load_plan("s4c").slides[1]
+    assert s.filled and s.status is None and s.template_id == "three-col"
+
+
+def test_fill_does_not_retry_after_a_slow_failure(monkeypatch, tmp_path):
+    """Медленная осечка = таймаут провайдера: второй заход удвоил бы шаг до
+    ~10 минут и вылетел бы за клиентские таймауты. Ретраим только быстрые сбои
+    (битый JSON, 5xx), медленные деградируют сразу."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    calls = []
+    ticks = iter([0.0, 300.0])            # первая попытка «шла» 300 секунд
+    monkeypatch.setattr(glass, "_now", lambda: next(ticks))
+
+    def _boom(client, library, sp, **kw):
+        calls.append(sp.index)
+        raise filler.FillError("таймаут")
+    monkeypatch.setattr(filler, "fill_slide", _boom)
+    draft.save_plan("s4d", _outline_plan(question=False))
+
+    out = glass.step_fill("s4d", client=FakeClient([]))
+    assert calls == [2]                   # без второго захода
+    assert out["failed"] == [2]
+
+
+# ── общий клиент шага: липкий резерв переживает шаги ─────────────────────────
+def test_glass_client_is_shared_and_preflighted(monkeypatch):
+    """Этап 3 переработки 2026-08-20: один клиент на процесс.
+
+    Раньше _kimi() создавал нового клиента на КАЖДЫЙ шаг: липкое переключение
+    на резерв (инцидент 2026-08-04) сбрасывалось, и каждый шаг заново платил
+    полным таймаутом по мёртвой основной модели. Preflight — один раз при
+    создании: мёртвая модель обнаруживается до первого шага, а не внутри него."""
+    import htmlslides.pipeline.client as clientmod
+    made = []
+
+    class _FakeKimi:
+        def __init__(self, **kw):
+            made.append(kw)
+            self.preflights = 0
+
+        def preflight(self, notice=None):
+            self.preflights += 1
+    monkeypatch.setattr(clientmod, "KimiClient", _FakeKimi)
+    monkeypatch.setattr(glass, "_CLIENT", None)
+
+    a = glass._kimi()
+    b = glass._kimi()
+    assert a is b and len(made) == 1
+    assert a.preflights == 1
+
+
+def test_glass_client_survives_dead_preflight(monkeypatch):
+    """Молчат обе модели — клиент всё равно создаётся: каждый шаг деградирует
+    честно сам (failed-слайд, эвристика скоринга), а не 500 на весь конвейер."""
+    import htmlslides.pipeline.client as clientmod
+
+    class _DeadKimi:
+        def __init__(self, **kw):
+            pass
+
+        def preflight(self, notice=None):
+            raise RuntimeError("обе модели молчат")
+    monkeypatch.setattr(clientmod, "KimiClient", _DeadKimi)
+    monkeypatch.setattr(glass, "_CLIENT", None)
+
+    assert glass._kimi() is not None
+    assert glass._kimi() is glass._kimi()  # и он остаётся общим
 
 
 # ── answer ───────────────────────────────────────────────────────────────────
-def test_answer_chip_and_message_refill(monkeypatch, tmp_path):
+def test_answer_is_instant_and_the_step_fills_the_slide(monkeypatch, tmp_path):
+    """Ответ мгновенно записывает выбор в план БЕЗ вызова модели: заполняет
+    слайд обычный шаг конвейера. Держать HTTP-ответ на всё время fill_slide
+    нельзя — при деградации провайдера (сотни секунд на вызов) клиент обрывал
+    ожидание по своему таймауту, врал «проверьте интернет», а поздний
+    серверный результат панель уже не подхватывала (живой прогон 2026-08-20)."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
     seen = {}
@@ -498,14 +683,39 @@ def test_answer_chip_and_message_refill(monkeypatch, tmp_path):
     monkeypatch.setattr(filler, "fill_slide", _spy)
     draft.save_plan("s5", _outline_plan())
 
-    out = glass.answer("s5", 2, template_id="timeline",
-                       message="покажи даты", client=FakeClient([]))
+    out = glass.answer("s5", 2, template_id="timeline", message="покажи даты")
     assert out["open_questions"] == []
+    assert seen == {}                       # ответ не тратит ни вызова модели
     s = draft.load_plan("s5").slides[1]
-    assert s.template_id == "timeline" and s.filled
-    assert s.status is None and s.question is None
+    assert s.template_id == "timeline" and not s.filled
+    assert s.status is None and s.question is None and s.candidates is None
+
+    out2 = glass.step_fill("s5", client=FakeClient([]))
+    assert out2["action"] == "fill" and out2["index"] == 2
+    assert draft.load_plan("s5").slides[1].filled
     assert "Уточнение автора: покажи даты" in seen["brief"]
     assert seen["template_id"] == "timeline"
+
+
+def test_answer_kind_rides_the_plan_to_the_fill(monkeypatch, tmp_path):
+    """Тип схемы из мастера «Схема» доезжает до филлера через план: ответ
+    мгновенный, заполняет уже следующий шаг — и он обязан знать выбранную
+    автором «воронку», а не угадывать её заново."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    seen = {}
+
+    def _spy(client, library, sp, *, deck_title="", extra="", diagram_kind=""):
+        seen["kind"] = diagram_kind
+        return _fake_fill(client, library, sp, deck_title=deck_title)
+    monkeypatch.setattr(filler, "fill_slide", _spy)
+    draft.save_plan("s5k", _outline_plan())
+
+    glass.answer("s5k", 2, template_id="diagram", kind="funnel")
+    assert draft.load_plan("s5k").slides[1].diagram_kind == "funnel"
+    out = glass.step_fill("s5k", client=FakeClient([]))
+    assert out["action"] == "fill" and out["index"] == 2
+    assert seen["kind"] == "funnel"
 
 
 def _diagram_fields():
@@ -532,7 +742,8 @@ def test_answer_away_from_a_diagram_drops_its_typed_fields(monkeypatch, tmp_path
         "fields": _diagram_fields(), "candidates": ["diagram", "stats-row"]})
     draft.save_plan("s5d", plan)
 
-    glass.answer("s5d", 2, template_id="stats-row", client=FakeClient([]))
+    glass.answer("s5d", 2, template_id="stats-row")
+    glass.step_fill("s5d", client=FakeClient([]))    # заполняет ответивший слайд
     s = draft.load_plan("s5d").slides[1]
     assert s.template_id == "stats-row"
     assert s.slide_type is None and s.fields is None
@@ -557,7 +768,8 @@ def test_failed_fill_hides_the_diagram_it_replaced(monkeypatch, tmp_path):
         "fields": _diagram_fields()})
     draft.save_plan("s5e", plan)
 
-    glass.answer("s5e", 2, message="перезаполни", client=FakeClient([]))
+    glass.answer("s5e", 2, message="перезаполни")
+    glass.step_fill("s5e", client=FakeClient([]))
     s = draft.load_plan("s5e").slides[1]
     assert s.template_id == "blank" and s.status == "failed"
     assert s.slide_type is None and s.fields is None
@@ -567,9 +779,9 @@ def test_answer_rejects_bad_index_and_unknown_template(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     draft.save_plan("s6", _outline_plan())
     with pytest.raises(IndexError):
-        glass.answer("s6", 99, client=FakeClient([]))
+        glass.answer("s6", 99)
     with pytest.raises(SlotValidationError):
-        glass.answer("s6", 2, template_id="ghost", client=FakeClient([]))
+        glass.answer("s6", 2, template_id="ghost")
     # план не испорчен отказом
     assert draft.load_plan("s6").slides[1].status == "needs_input"
 
@@ -740,9 +952,19 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
     with _client_app(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
         monkeypatch.setattr(glass, "step_fill", lambda session_id: {
-            "done": True, "index": None, "open_questions": [], "plan": {}})
+            "done": True, "index": None, "action": None,
+            "open_questions": [], "plan": {}})
         r = c.post(f"/api/drafts/{sid}/glass/step", headers=H())
         assert r.status_code == 200 and r.json()["done"] is True
+
+        # /glass/score — параллельный разведчик клиентского цикла
+        monkeypatch.setattr(glass, "score_next", lambda session_id: {
+            "done": False, "index": 2, "action": "score",
+            "open_questions": [], "unscored": [3], "plan": {}})
+        r = c.post(f"/api/drafts/{sid}/glass/score", headers=H())
+        assert r.status_code == 200 and r.json()["action"] == "score"
+        assert c.post(f"/api/drafts/{sid}/glass/score", headers=H("intruder")
+                      ).status_code == 404
 
         seen = {}
 
@@ -809,14 +1031,18 @@ def test_step_does_not_clobber_answer_written_during_llm_call(monkeypatch, tmp_p
     step.start()
     assert entered.wait(5)                      # шаг взял слайд 2 и завис в LLM
     monkeypatch.setattr(filler, "fill_slide", _fake_fill)
-    glass.answer("c1", 4, template_id="timeline", message="покажи этапы",
-                 client=FakeClient([]))         # автор ответил на вопрос слайда 4
+    glass.answer("c1", 4, template_id="timeline",
+                 message="покажи этапы")        # автор ответил на вопрос слайда 4
     gate.set()
     step.join(5)
 
     s4 = draft.load_plan("c1").slides[3]
-    assert s4.template_id == "timeline" and s4.filled and s4.status is None
+    assert s4.template_id == "timeline" and s4.status is None and not s4.filled
     assert "Уточнение автора: покажи этапы" in s4.brief
+    # Ответ мгновенный, заполняет слайд конвейер шагов: 3 (метрики), затем 4.
+    glass.step_fill("c1", client=FakeClient([]))
+    glass.step_fill("c1", client=FakeClient([]))
+    assert draft.load_plan("c1").slides[3].filled
 
 
 def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
@@ -858,26 +1084,30 @@ def test_answer_refuses_a_slide_that_is_not_waiting(monkeypatch, tmp_path):
     draft.save_plan("c3", _outline_plan())
 
     with pytest.raises(glass.AnswerNotExpected):
-        glass.answer("c3", 1, message="перезаполни", client=FakeClient([]))
+        glass.answer("c3", 1, message="перезаполни")
     assert draft.load_plan("c3").slides[0].content == {"title": "Т"}
 
 
-def test_answer_keeps_the_question_when_filling_blows_up(monkeypatch, tmp_path):
-    """Сбой на заполнении не стирает вопрос: отвечать по-прежнему есть на что."""
+def test_failed_fill_after_answer_still_leaves_a_card(monkeypatch, tmp_path):
+    """Ответ мгновенный и без модели; сбой на заполнении шага оставляет карточку."""
     import htmlslides.pipeline.filler as filler
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     draft.save_plan("c4", _outline_plan())
 
-    def _boom(*a, **kw):
-        raise RuntimeError("провайдер недоступен")
-    monkeypatch.setattr(glass, "_kimi", _boom)
+    def _boom_kimi(*a, **kw):
+        raise AssertionError("ответ не должен трогать модель")
+    monkeypatch.setattr(glass, "_kimi", _boom_kimi)
 
-    with pytest.raises(RuntimeError):
-        glass.answer("c4", 2, template_id="timeline", message="этапы")
+    glass.answer("c4", 2, template_id="timeline", message="этапы")
     s2 = draft.load_plan("c4").slides[1]
-    assert s2.status == "needs_input" and s2.question == "Какой макет?"
-    assert s2.candidates == ["three-col", "timeline"]
-    assert s2.template_id == "timeline"          # выбор чипа сохранён
+    assert s2.status is None and s2.template_id == "timeline"
+
+    def _boom(*a, **kw):
+        raise filler.FillError("провайдер недоступен")
+    monkeypatch.setattr(filler, "fill_slide", _boom)
+    glass.step_fill("c4", client=FakeClient([]))
+    s2 = draft.load_plan("c4").slides[1]
+    assert s2.status == "failed" and "Не удалось заполнить" in s2.question
 
 
 def test_answer_over_api_reports_conflict_not_bad_request(monkeypatch, tmp_path):
@@ -968,13 +1198,10 @@ def test_start_glass_caps_sections_and_says_so(monkeypatch, tmp_path):
     src.write_text("# Док\n\n" + "".join(
         f"## Раздел {i}\n\nТекст раздела {i} про метрики.\n\n" for i in range(5)),
         encoding="utf-8")
-    fake = FakeClient([SectionChoice(candidates=[
-        Candidate(template_id="stats-row", confidence=0.9)]) for _ in range(5)])
 
-    plan = glass.start_glass("cap1", src, client=fake, workers=1)
+    plan = glass.start_glass("cap1", src)
 
     assert len(plan.slides) == 4              # обложка + 3 раздела
-    assert len(fake.calls) == 3               # лишние разделы даже не скорим
     assert "3" in plan.notice and "2" in plan.notice
     # Хвост назван числом и адресом: с него продолжит вторая дека.
     assert plan.rest == 2 and plan.rest_from == 3
@@ -991,10 +1218,7 @@ def _capped_deck(monkeypatch, tmp_path, sections=5, cap=3):
     src.write_text("# Док\n\n" + "".join(
         f"## Раздел {i}\n\nТекст раздела {i} про метрики.\n\n"
         for i in range(sections)), encoding="utf-8")
-    fake = FakeClient([SectionChoice(candidates=[
-        Candidate(template_id="stats-row", confidence=0.9)])
-        for _ in range(sections)])
-    return glass.start_glass("cap1", src, client=fake, workers=1)
+    return glass.start_glass("cap1", src)
 
 
 def test_continue_glass_takes_the_tail_into_a_second_deck(monkeypatch, tmp_path):
@@ -1005,14 +1229,13 @@ def test_continue_glass_takes_the_tail_into_a_second_deck(monkeypatch, tmp_path)
     в сессии, номер первого невзятого раздела — в плане."""
     from webapp.paths import session_dir
     first = _capped_deck(monkeypatch, tmp_path)
-    fake = FakeClient([SectionChoice(candidates=[
-        Candidate(template_id="stats-row", confidence=0.9)]) for _ in range(2)])
 
-    second = glass.continue_glass("cap1", "cap2", client=fake, workers=1)
+    second = glass.continue_glass("cap1", "cap2")
 
     assert len(second.slides) == 3            # обложка + ровно хвост (3 и 4)
     assert "Раздел 3" in second.slides[1].brief
     assert "Раздел 4" in second.slides[2].brief
+    assert all(s.status == "unscored" for s in second.slides[1:])   # тоже лениво
     assert second.rest == 0 and second.rest_from == 0   # хвоста больше нет
     assert second.title == first.title        # титул наследуем: на диске «input»
     assert (session_dir("cap2") / "input.md").is_file()  # исходник свой
@@ -1026,15 +1249,12 @@ def test_continue_glass_refuses_when_nothing_is_left(monkeypatch, tmp_path):
     """Продолжать нечего — говорим об этом, а не заводим пустую вторую деку."""
     _capped_deck(monkeypatch, tmp_path, sections=2, cap=3)
     with pytest.raises(ValueError):
-        glass.continue_glass("cap1", "cap2", client=FakeClient([]), workers=1)
+        glass.continue_glass("cap1", "cap2")
 
 
 def test_glass_rest_endpoint_returns_a_new_draft(monkeypatch, tmp_path):
     """API-контракт кнопки: новая сессия-черновик с хвостом, старая не тронута."""
     monkeypatch.setattr(glass, "MAX_GLASS_SLIDES", 3)
-    monkeypatch.setattr(glass, "_kimi", lambda: FakeClient([SectionChoice(
-        candidates=[Candidate(template_id="stats-row", confidence=0.9)])
-        for _ in range(9)]))
     doc = ("# Док\n\n" + "".join(f"## Раздел {i}\n\nТекст раздела {i}.\n\n"
                                  for i in range(5))).encode()
     with _client_app(monkeypatch, tmp_path) as c:
@@ -1063,9 +1283,8 @@ def test_glass_rest_endpoint_returns_a_new_draft(monkeypatch, tmp_path):
 
 def test_step_done_stays_false_while_tail_question_open(monkeypatch, tmp_path):
     """1-4 (аудит раунда 2, agent1): шаг, заполнивший последний «обычный» слайд,
-    отвечал done=true при открытом вопросе в хвосте — а ветка паузы для того же
-    состояния отвечает done=false. Семантика: done только когда ни вопросов,
-    ни работы не осталось."""
+    отвечал done=true при открытом вопросе в хвосте. Семантика: done только
+    когда ни вопросов, ни работы не осталось."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     import htmlslides.pipeline.filler as filler
     monkeypatch.setattr(filler, "fill_slide", _fake_fill)
@@ -1075,8 +1294,10 @@ def test_step_done_stays_false_while_tail_question_open(monkeypatch, tmp_path):
     assert out2["index"] == 2 and out2["done"] is False
     out3 = glass.step_fill("s14", client=FakeClient([]))
     assert out3["index"] == 3
-    assert out3["blocked"] == 4 and out3["open_questions"] == [4]
     assert out3["done"] is False   # вопрос открыт — сборка не «завершена»
+    out4 = glass.step_fill("s14", client=FakeClient([]))
+    assert out4["action"] is None and out4["open_questions"] == [4]
+    assert out4["done"] is False
 
 
 def test_step_done_stays_false_while_parallel_step_inflight(monkeypatch, tmp_path):
@@ -1094,7 +1315,7 @@ def test_step_done_stays_false_while_parallel_step_inflight(monkeypatch, tmp_pat
     glass._INFLIGHT["s15"] = {4}
     try:
         out = glass.step_fill("s15", client=FakeClient([]))
-        assert out["index"] is None
+        assert out["index"] is None and out["action"] is None
         assert out["done"] is False   # сосед ещё работает
     finally:
         glass._INFLIGHT.pop("s15", None)
