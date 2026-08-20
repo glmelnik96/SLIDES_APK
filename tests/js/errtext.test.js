@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const { errText, SAVE_STATUS, REBUILD_LABEL, plural, estimateLine, rebuildEstimate,
+const { errText, SAVE_STATUS, plural, estimateLine,
   healthLine, checkedAgo, diagramClaims, gist } = require("../../webapp/static/errtext.js");
 
 test("gist: точка внутри сокращения не режет фразу", () => {
@@ -199,11 +199,6 @@ test("histDur: мм:сс, суб-секундное не превращаетс�
   assert.strictEqual(histDur(0), "0:00");
 });
 
-test("REBUILD_LABEL — одно имя кнопки в двух состояниях", () => {
-  assert.strictEqual(REBUILD_LABEL.idle, "Проверить и улучшить слайды");
-  assert.strictEqual(REBUILD_LABEL.busy, "Запускаю…");
-});
-
 test("plural — русская форма слайдов", () => {
   const f = (n) => plural(n, "слайд", "слайда", "слайдов");
   assert.strictEqual(f(1), "слайд");
@@ -227,18 +222,6 @@ test("estimateLine: мелкий док — нейтрально, минимум
     { text: "1 раздел · примерно 2 мин", warn: false });
   assert.deepStrictEqual(estimateLine(10, "d.docx"),
     { text: "10 разделов · примерно 5 мин", warn: false });
-});
-
-test("rebuildEstimate: улучшение не дольше сборки того же с нуля", () => {
-  // Улучшение — только хвост сборки (без разбора/планирования/заполнения),
-  // поэтому обещать за него больше, чем за полную сборку, нельзя. Диалог когда-то
-  // просил «n–2n мин» — вчетверо больше замера (8 слайдов ≈ 2,5 мин).
-  for (const n of [1, 3, 8, 20, 40]) {
-    const full = parseInt(estimateLine(n, "d.md").text.match(/(\d+) мин/)[1], 10);
-    assert.ok(rebuildEstimate(n) <= full, `n=${n}`);
-  }
-  assert.strictEqual(rebuildEstimate(1), 1);   // не «0 минут»
-  assert.strictEqual(rebuildEstimate(8), 4);
 });
 
 test("estimateLine: .pptx считает слайдами", () => {

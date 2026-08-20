@@ -4,7 +4,9 @@
 // вынесена в errtext.js, чтобы гоняться через `node --test`.
 const test = require("node:test");
 const assert = require("node:assert");
-const { glassStepDecision, glassStatusText } =
+const { glassStepDecision, glassStatusText, glassSlideLabel, glassCurrentTarget,
+  glassScoutTarget, glassFillLine, glassScoutLine, glassStages,
+  glassAutoExitReady, glassMiniText } =
   require("../../webapp/static/errtext.js");
 
 // ── glassStepDecision: что делать с ответом /glass/step | /glass/score ──────
@@ -123,4 +125,85 @@ test("status: notice плана дописывается последним", ()
   const t = glassStatusText({ filled: 1, total: 4, open: 0, working: true,
                               loopDone: false, notice: "Документ обрезан." });
   assert.ok(t.endsWith("Документ обрезан."), t);
+});
+
+// ── экран сборки (переработка UX 2026-08-20) ────────────────────────────────
+const P = (slides) => ({ slides });
+const S = (over) => Object.assign(
+  { brief: "Тема\nтекст", filled: false, status: null }, over);
+
+test("glassCurrentTarget: первый brief&&!filled&&без статуса, зеркало _next_index", () => {
+  const plan = P([S({ filled: true }), S({ status: "needs_input" }),
+                  S({ brief: "Как устроен процесс\nдетали" }), S({})]);
+  const t = glassCurrentTarget(plan);
+  assert.strictEqual(t.index, 3);
+  assert.strictEqual(t.label, "Как устроен процесс");
+});
+
+test("glassCurrentTarget: работы нет → null", () => {
+  assert.strictEqual(glassCurrentTarget(P([S({ filled: true })])), null);
+  assert.strictEqual(glassCurrentTarget(null), null);
+});
+
+test("glassSlideLabel: заголовок > бриф > номер; длинное режется", () => {
+  assert.strictEqual(glassSlideLabel({ fields: { title: "Итоги" } }, 5), "Итоги");
+  assert.strictEqual(glassSlideLabel({ content: { title: "Планы" } }, 5), "Планы");
+  assert.strictEqual(glassSlideLabel({ brief: "Тема раздела\nтело" }, 5), "Тема раздела");
+  assert.strictEqual(glassSlideLabel({}, 5), "Слайд 5");
+  assert.ok(glassSlideLabel({ brief: "х".repeat(80) }, 1).length <= 48);
+});
+
+test("glassScoutTarget: первый unscored", () => {
+  assert.strictEqual(glassScoutTarget(P([S({ filled: true }), S({ status: "unscored" })])), 2);
+  assert.strictEqual(glassScoutTarget(P([S({})])), null);
+});
+
+test("glassFillLine/glassScoutLine — телеметрия с тикающим таймером", () => {
+  assert.strictEqual(glassFillLine({ index: 4, label: "Процесс" }, 23),
+    "Заполняю слайд 4 — «Процесс»… 23 с");
+  assert.strictEqual(glassFillLine({ index: 4, label: "Процесс" }, null),
+    "Заполняю слайд 4 — «Процесс»…");
+  assert.strictEqual(glassFillLine(null, 5), "");
+  assert.strictEqual(glassScoutLine(6), "параллельно подбираю макет для слайда 6");
+  assert.strictEqual(glassScoutLine(null), "");
+});
+
+test("glassStages: степпер этапов Документ→Раскладка→Заполнение→Редактор", () => {
+  // раскладка идёт (есть unscored)
+  let st = glassStages({ total: 8, unscored: 3, filled: 2, loopDone: false });
+  assert.deepStrictEqual(st.map((s) => s.state), ["done", "active", "active", "todo"]);
+  assert.strictEqual(st[2].label, "Заполнение 2/8");
+  // раскладка кончилась, заполнение идёт
+  st = glassStages({ total: 8, unscored: 0, filled: 5, loopDone: false });
+  assert.deepStrictEqual(st.map((s) => s.state), ["done", "done", "active", "todo"]);
+  // всё заполнено
+  st = glassStages({ total: 8, unscored: 0, filled: 8, loopDone: true });
+  assert.deepStrictEqual(st.map((s) => s.state), ["done", "done", "done", "active"]);
+  // самое начало: план ещё пуст
+  st = glassStages({ total: 0, unscored: 0, filled: 0, loopDone: false });
+  assert.deepStrictEqual(st.map((s) => s.state), ["done", "active", "todo", "todo"]);
+});
+
+test("glassAutoExitReady: авто-переход когда автозаполнение исчерпано", () => {
+  // остались только слайды-вопросы → выходим
+  assert.ok(glassAutoExitReady(P([S({ filled: true }), S({ status: "needs_input" })])));
+  // всё заполнено (осечка = filled заглушкой) → выходим
+  assert.ok(glassAutoExitReady(P([S({ filled: true }), S({ filled: true, status: "failed" })])));
+  // есть незаполненный без вопроса (в очереди/unscored) → рано
+  assert.ok(!glassAutoExitReady(P([S({ filled: true }), S({})])));
+  assert.ok(!glassAutoExitReady(P([S({ status: "unscored" })])));
+  // пустой план → рано
+  assert.ok(!glassAutoExitReady(P([])));
+  assert.ok(!glassAutoExitReady(null));
+});
+
+test("glassMiniText: компакт-индикатор досборки", () => {
+  assert.strictEqual(
+    glassMiniText({ working: true, filled: 5, total: 8, line: "заполняю «Итоги»… 12 с" }),
+    "Досборка: 5 из 8 · заполняю «Итоги»… 12 с");
+  assert.strictEqual(glassMiniText({ working: true, filled: 5, total: 8, line: "" }),
+    "Досборка: 5 из 8");
+  assert.strictEqual(glassMiniText({ working: false, open: 2 }),
+    "2 вопроса ждут ответа");
+  assert.strictEqual(glassMiniText({ working: false, open: 0 }), "");
 });

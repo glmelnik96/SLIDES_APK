@@ -16,9 +16,6 @@
     invalid: "Не сохранено — схема не сходится",
   };
 
-  // Ч§3: единое имя rebuild-кнопки во всех состояниях (без «движка»).
-  var REBUILD_LABEL = { idle: "Проверить и улучшить слайды", busy: "Запускаю…" };
-
   // Ч§6: примеры пустого чата в режиме СБОРКИ (не точечных правок).
   var CHAT_BUILD_EMPTY =
     "Например: «сделай презентацию о нашем продукте для инвесторов на 8 слайдов», " +
@@ -197,17 +194,6 @@
     return { text: text, warn: warn };
   }
 
-  // Минуты на «Проверить и улучшить слайды». Это ХВОСТ сборки (сборка HTML →
-  // линтер → вычитка внешнего вида → круг автоправок): ни разбора документа, ни
-  // планирования, ни заполнения. Значит, он заведомо не дольше полной сборки
-  // такого же числа слайдов, — берём ту же ставку 30 с/слайд, что и estimateLine.
-  // Раньше здесь стояло «примерно n–2n мин», то есть в 2–4 раза БОЛЬШЕ, чем
-  // страница обещает за сборку с нуля; замер: 1 слайд ≈ 50 с, 8 слайдов ≈ 2,5 мин
-  // (вычитка идёт волнами по QA_WORKERS=8 параллельно).
-  function rebuildEstimate(count) {
-    return Math.max(1, Math.round(count * 0.5));
-  }
-
   // Доступность сервиса ИИ (GET /api/models/health) → тон индикатора и текст.
   // Роли, а не имена моделей: имя — деталь реализации, менялось уже дважды.
   // При "down" кнопку сборки НЕ блокируем — состояние могло измениться за секунды,
@@ -333,29 +319,127 @@
     return txt;
   }
 
+  // ── экран сборки (переработка UX 2026-08-20) ──────────────────────────────
+  // Подпись слайда для телеметрии и скелетов ленты: заголовок заполненного,
+  // иначе первая строка брифа (тема раздела из плана). Никакого фейка: нет
+  // темы — честное «Слайд N».
+  function glassSlideLabel(s, n) {
+    var t = (s && s.fields && s.fields.title) ||
+            (s && s.content && s.content.title) || "";
+    if (!t && s && s.brief) t = String(s.brief).split("\n")[0];
+    t = String(t || "").trim();
+    if (t.length > 48) t = t.slice(0, 47).replace(/\s+$/, "") + "…";
+    return t || ("Слайд " + n);
+  }
+
+  // Кого степпер возьмёт следующим — зеркало серверного _next_index: первый
+  // слайд с темой, не заполненный и без статуса (unscored/needs_input/failed
+  // пропускаются, как на сервере). По нему телеметрия знает, что заполняется
+  // ПРЯМО СЕЙЧАС: пока шаг в полёте, слайд в плане ещё не filled.
+  function glassCurrentTarget(plan) {
+    var slides = (plan && plan.slides) || [];
+    for (var i = 0; i < slides.length; i++) {
+      var s = slides[i];
+      if (s && s.brief && !s.filled && !s.status)
+        return { index: i + 1, label: glassSlideLabel(s, i + 1) };
+    }
+    return null;
+  }
+
+  function glassScoutTarget(plan) {
+    var slides = (plan && plan.slides) || [];
+    for (var i = 0; i < slides.length; i++)
+      if (slides[i] && slides[i].status === "unscored") return i + 1;
+    return null;
+  }
+
+  // Таймер тикает с первой секунды — это и есть замена плашки «дольше обычного».
+  function glassFillLine(target, seconds) {
+    if (!target) return "";
+    var t = "Заполняю слайд " + target.index + " — «" + target.label + "»…";
+    if (seconds != null) t += " " + Math.max(0, Math.round(seconds)) + " с";
+    return t;
+  }
+
+  function glassScoutLine(index) {
+    return index ? "параллельно подбираю макет для слайда " + index : "";
+  }
+
+  // Степпер этапов: Документ → Раскладка → Заполнение N/M → Редактор.
+  // Документ done всегда: экран существует только после удачного /glass/start.
+  function glassStages(s) {
+    var layoutDone = s.total > 0 && !s.unscored;
+    var fillDone = s.total > 0 && s.filled >= s.total;
+    return [
+      { label: "Документ", state: "done" },
+      { label: "Раскладка", state: layoutDone ? "done" : "active" },
+      { label: s.total ? "Заполнение " + s.filled + "/" + s.total : "Заполнение",
+        state: fillDone ? "done"
+          : (s.total && (layoutDone || s.filled)) ? "active" : "todo" },
+      { label: "Редактор", state: fillDone ? "active" : "todo" },
+    ];
+  }
+
+  // Авто-переход в редактор (решение B): автозаполнение исчерпано — все слайды
+  // заполнены либо остались только слайды-вопросы (needs_input дозаполняются из
+  // редактора через карточки). Осечка (failed) заполнена заглушкой — не держит.
+  function glassAutoExitReady(plan) {
+    var slides = (plan && plan.slides) || [];
+    var hasWork = false, total = 0;
+    for (var i = 0; i < slides.length; i++) {
+      var s = slides[i];
+      if (!s || !s.brief) continue;
+      total++;
+      if (!s.filled && s.status !== "needs_input") hasWork = true;
+    }
+    return total > 0 && !hasWork;
+  }
+
+  // Текст компакт-индикатора досборки над сценой. Пустая строка = индикатору
+  // нечего сказать (всё заполнено и вопросов нет) — он исчезает.
+  function glassMiniText(s) {
+    if (s.working) {
+      var t = "Досборка: " + s.filled + " из " + s.total;
+      if (s.line) t += " · " + s.line;
+      return t;
+    }
+    var open = s.open || 0;
+    if (open) return open + " " +
+      plural(open, "вопрос ждёт", "вопроса ждут", "вопросов ждут") + " ответа";
+    return "";
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
   root.glassStepDecision = glassStepDecision;
   root.glassStatusText = glassStatusText;
+  root.glassSlideLabel = glassSlideLabel;
+  root.glassCurrentTarget = glassCurrentTarget;
+  root.glassScoutTarget = glassScoutTarget;
+  root.glassFillLine = glassFillLine;
+  root.glassScoutLine = glassScoutLine;
+  root.glassStages = glassStages;
+  root.glassAutoExitReady = glassAutoExitReady;
+  root.glassMiniText = glassMiniText;
   root.histDur = histDur;
   root.briefDisplay = briefDisplay;
-  root.REBUILD_LABEL = REBUILD_LABEL;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
   root.plural = plural;
   root.errText = errText;
   root.diagramClaims = diagramClaims;
   root.gist = gist;
   root.estimateLine = estimateLine;
-  root.rebuildEstimate = rebuildEstimate;
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
       glassStepDecision: glassStepDecision, glassStatusText: glassStatusText,
-      REBUILD_LABEL: REBUILD_LABEL,
+      glassSlideLabel: glassSlideLabel, glassCurrentTarget: glassCurrentTarget,
+      glassScoutTarget: glassScoutTarget, glassFillLine: glassFillLine,
+      glassScoutLine: glassScoutLine, glassStages: glassStages,
+      glassAutoExitReady: glassAutoExitReady, glassMiniText: glassMiniText,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
-      rebuildEstimate: rebuildEstimate,
       healthLine: healthLine, checkedAgo: checkedAgo };
   }
 })(typeof window !== "undefined" ? window : globalThis);
