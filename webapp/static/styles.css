@@ -1152,9 +1152,6 @@ a { color: var(--accent); }
 .glass-bar { height: 6px; border-radius: 999px; background: var(--surface-inset); overflow: hidden; }
 .glass-bar i { display: block; height: 100%; width: 0; background: var(--accent);
   border-radius: 999px; transition: width var(--dur-med) var(--ease-productive); }
-/* Затянувшийся шаг: под нагрузкой на модель один слайд занимал минуты вместо
-   секунд, а полоса прогресса молча стояла — сборка выглядела зависшей. */
-.glass-slow { margin: 8px 0 0; font-size: var(--fs-cap); color: var(--muted); line-height: 1.4; }
 /* Что вообще происходит в этом режиме: без объяснения панель читалась как
    очередь непонятных вопросов, а не как сборка на глазах. */
 .glass-hint { margin: 0 0 10px; font-size: var(--fs-cap); color: var(--muted); line-height: 1.45; }

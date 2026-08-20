@@ -3683,6 +3683,19 @@ let glassScouting = false;  // разведчик один
 let glassChain = Promise.resolve();
 const glassCards = {};      // 1-based index слайда → карточка вопроса
 const glassBaseTitle = document.title; // вернуть после сборки / без вопросов
+let glassOverlayOn = false;   // полноэкранный этап сборки поверх редактора
+let glassStepT0 = 0;          // старт текущего шага — таймер телеметрии
+let glassTickTimer = null;    // секундный тик телеметрии и ленты
+const gloFilmFilled = {};     // 1-based index → ячейка уже живой мини-рендер
+let gloShown = 0;             // какой слайд крупно показан в центре
+
+function glassTickStart() {
+  if (!glassTickTimer) glassTickTimer = setInterval(renderGlassTele, 1000);
+}
+function glassTickStop() {
+  clearInterval(glassTickTimer);
+  glassTickTimer = null;
+}
 
 function glassEnqueue(fn) {
   const p = glassChain.then(fn);
@@ -3697,8 +3710,6 @@ function startGlassMode() {
   byId("rpanelTabs")?.classList.add("hidden");
   byId("builder")?.classList.add("hidden");
   document.querySelector(".chat")?.classList.add("hidden");
-  byId("rebuild")?.classList.add("hidden"); // улучшение — после сборки
-  byId("glassPanel")?.classList.remove("hidden");
   byId("glassFinish")?.addEventListener("click", exitGlassMode);
   byId("glassRetry")?.addEventListener("click", () => {
     byId("glassRetry").classList.add("hidden");
@@ -3711,9 +3722,51 @@ function startGlassMode() {
   // Каталог макетов грузится лениво, а карточки вопросов появляются на первых же
   // шагах — без этого чип-кандидат подписывался сырым id («cards-6»).
   ensureCatalog().then(refreshGlassChipNames);
+  byId("gloExit")?.addEventListener("click", leaveGlassOverlay);
+  byId("glassMiniQ")?.addEventListener("click", toggleGlassQuestionsPanel);
+  byId("glassMiniRest")?.addEventListener("click", () => {
+    toggleGlassQuestionsPanel(true);   // хвост живёт в панели сборки
+  });
+  enterGlassOverlay();
   renderGlassPanel(null);
   glassLoop();
   glassScout();
+}
+
+// Полноэкранный этап сборки (решение 1а): с первой секунды после загрузки
+// документа и до исчерпания автозаполнения (авто-переход, решение B).
+function enterGlassOverlay() {
+  glassOverlayOn = true;
+  byId("glassOverlay")?.classList.remove("hidden");
+  const f = byId("gloFile");
+  if (f) f.textContent = draftPlan.title || "";
+  glassTickStart();
+  renderGlassOverlay();
+}
+
+// «В редактор сейчас» и авто-переход: оверлей уходит, сборка продолжается в
+// фоне под компакт-индикатором. glassRunning остаётся true — inline-правка на
+// сцене по-прежнему выключена, а формы/перестановка/смена макета доступны.
+function leaveGlassOverlay() {
+  if (!glassOverlayOn) return;
+  glassOverlayOn = false;
+  byId("glassOverlay")?.classList.add("hidden");
+  setupPanelTabs();               // обычная правая панель — поля слайда
+  builtFormFor = -1;
+  renderBuilderForm();
+  renderGlassPanel(null);         // перевесит карточки в панель, покажет mini
+  loadDeck();
+}
+
+// «? N вопросов» в индикаторе: правая панель переключается между полями и
+// карточками вопросов сборки. force=true — только показать.
+function toggleGlassQuestionsPanel(force) {
+  const panel = byId("glassPanel");
+  if (!panel) return;
+  const show = force === true || panel.classList.contains("hidden");
+  panel.classList.toggle("hidden", !show);
+  byId("builder")?.classList.toggle("hidden", show);
+  byId("rpanelTabs")?.classList.toggle("hidden", show);
 }
 
 // Короткое «что это» для чипа: первая фраза intent'а. По всей библиотеке intent
@@ -3739,31 +3792,6 @@ function refreshGlassChipNames() {
   document.querySelectorAll(".glass-chip__gist[data-tid]").forEach((el) => {
     el.textContent = tplGist(el.dataset.tid);
   });
-}
-
-// Шаг обычно 5-15 с, но под нагрузкой на модель доходил до 3 минут: без этой
-// строки полоса прогресса просто стояла и сборка выглядела зависшей.
-const GLASS_SLOW_MS = 25000;
-let glassSlowTimer = null;
-function glassSlowStart() {
-  glassSlowStop();
-  const el = byId("glassSlow");
-  if (!el) return;
-  const t0 = Date.now();
-  const tick = () => {
-    el.textContent = `Шаг идёт дольше обычного (${Math.round((Date.now() - t0) / 1000)} с) — ` +
-      "модель под нагрузкой. Сборка продолжается, закрывать вкладку не нужно.";
-    el.classList.remove("hidden");
-  };
-  glassSlowTimer = setTimeout(() => {
-    tick();
-    glassSlowTimer = setInterval(tick, 5000);
-  }, GLASS_SLOW_MS);
-}
-function glassSlowStop() {
-  if (glassSlowTimer) { clearTimeout(glassSlowTimer); clearInterval(glassSlowTimer); }
-  glassSlowTimer = null;
-  byId("glassSlow")?.classList.add("hidden");
 }
 
 // Один шаг на сервере — до ~минуты LLM-вызовов, при заторе у провайдера дольше.
@@ -3806,13 +3834,13 @@ async function glassSteps() {
     let out;
     try {
       out = await glassEnqueue(async () => {
-        glassSlowStart();
+        glassStepT0 = Date.now();
         try {
           const r = await glassFetch(U(`/api/drafts/${sessionId}/glass/step`),
                                      { method: "POST" });
           if (!r.ok) throw new Error(await r.text());
           return r.json();
-        } finally { glassSlowStop(); }
+        } finally { glassStepT0 = 0; }
       });
     } catch (e) {
       if (++failures >= 3) { glassFail(); return; }
@@ -3820,11 +3848,16 @@ async function glassSteps() {
       continue;
     }
     failures = 0;
+    byId("gloErr")?.classList.add("hidden"); // успешный шаг гасит ошибку
     if (out.plan) draftPlan = out.plan;
     const d = glassStepDecision(out);
-    if (d.jump != null) pendingGoTo = d.jump; // показываем свежезаполненный слайд
+    // показываем свежезаполненный слайд — на сцене и крупно в оверлее
+    if (d.jump != null) { pendingGoTo = d.jump; gloShowSlide(d.jump + 1); }
     loadDeck();
     renderGlassPanel(out);
+    // Решение B: автозаполнение исчерпано (все filled либо остались только
+    // слайды-вопросы) → авто-переход в редактор без промежуточного экрана.
+    if (glassOverlayOn && glassAutoExitReady(draftPlan)) leaveGlassOverlay();
     if (d.done) { glassLoopDone = true; break; }
     // Работы сейчас нет (action null): либо остались только вопросы — ждём
     // ответа автора (glassResume перезапустит петлю), либо разведчик ещё
@@ -3933,10 +3966,124 @@ function renderGlassPanel(out) {
   // наступит, а запирать автора в режиме сборки нельзя.
   const stalled = !glassLooping && !glassScouting && open.length > 0;
   done?.classList.toggle("hidden", !(glassLoopDone || stalled));
+  renderGlassOverlay();
   // Счётчик вопросов в заголовке вкладки: сборка идёт минуты, автор уходит в
   // другую вкладку — «(2) …» возвращает его, когда ИИ ждёт решения.
   document.title = open.length
     ? `(${open.length}) ${glassBaseTitle}` : glassBaseTitle;
+}
+
+function renderGlassOverlay() {
+  if (!glassOverlayOn) return;
+  const targets = (draftPlan.slides || []).filter((s) => s && s.brief);
+  const filled = targets.filter((s) => s.filled).length;
+  const total = targets.length;
+  const unscored = (draftPlan.slides || [])
+    .filter((s) => s && s.status === "unscored").length;
+  const st = byId("gloStepper");
+  if (st) {
+    st.innerHTML = "";
+    glassStages({ total, unscored, filled, loopDone: glassLoopDone })
+      .forEach((g) => {
+        const el = document.createElement("span");
+        el.className = "glo-stage glo-stage--" + g.state;
+        el.textContent =
+          (g.state === "done" ? "✓ " : g.state === "active" ? "⟳ " : "") + g.label;
+        st.appendChild(el);
+      });
+  }
+  const bar = byId("gloBarFill");
+  if (bar) bar.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
+  renderGlassTele();
+  renderGloFilm();
+}
+
+// Телеметрия: тикает каждую секунду — видно, что работа ИДЁТ, с первой секунды.
+function renderGlassTele() {
+  const secs = glassStepT0 ? (Date.now() - glassStepT0) / 1000 : null;
+  const target = glassCurrentTarget(draftPlan);
+  const scout = glassScoutTarget(draftPlan);
+  let line = "";
+  if (glassLooping && target) line = glassFillLine(target, secs);
+  else if (glassLooping || glassScouting) line = "Подбираю макеты слайдов…";
+  else if (glassLoopDone) line = "Все слайды заполнены.";
+  else if (openGlassQuestions().length) line = "Сборка ждёт вашего ответа на вопросы справа.";
+  if (glassOverlayOn) {
+    const t = byId("gloTele");
+    if (t) t.textContent = line || "Раскладываю документ…";
+    const sc = byId("gloScout");
+    if (sc) sc.textContent = [glassScoutLine(glassScouting ? scout : null),
+                              draftPlan.notice || ""].filter(Boolean).join(" · ");
+    // Ячейка заполняемого слайда: таймер тикает прямо в ленте.
+    const cell = target &&
+      byId("gloFilm")?.querySelector(`[data-index="${target.index}"] .glo-cell__mark`);
+    if (cell && glassLooping && secs != null)
+      cell.textContent = `⟳ ${Math.round(secs)} с`;
+  }
+  renderGlassMini(line);
+}
+
+// Крупный центр — последний собранный слайд (обновляет glassSteps через jump).
+function gloShowSlide(n) {
+  const ifr = byId("gloSlide");
+  if (!ifr || !n) return;
+  gloShown = n;
+  ifr.classList.remove("hidden");
+  ifr.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}&editor=1&slide=${n}`);
+  const cap = byId("gloCap");
+  if (cap) {
+    const s = (draftPlan.slides || [])[n - 1];
+    cap.textContent = `${n}. ${glassSlideLabel(s || {}, n)} — только что заполнен`;
+  }
+}
+
+// Лента слайдов: ✓ живой мини-рендер, ⟳ + таймер, ? вопрос, честный скелет с
+// темой раздела из плана. Никакого фейкового контента в заглушках.
+function renderGloFilm() {
+  const film = byId("gloFilm");
+  if (!film) return;
+  const sl = draftPlan.slides || [];
+  if (film.childElementCount !== sl.length) {
+    film.innerHTML = "";
+    Object.keys(gloFilmFilled).forEach((k) => delete gloFilmFilled[k]);
+    for (let i = 0; i < sl.length; i++) {
+      const c = document.createElement("div");
+      c.dataset.index = i + 1;
+      film.appendChild(c);
+    }
+  }
+  const filling = glassLooping ? (glassCurrentTarget(draftPlan) || {}).index : null;
+  [...film.children].forEach((c, i) => {
+    const s = sl[i], n = i + 1;
+    const state = !s ? "queued"
+      : s.filled && s.status !== "failed" ? "ready"
+      : s.status === "failed" ? "failed"
+      : s.status === "needs_input" ? "quest"
+      : filling === n ? "filling" : "queued";
+    if (state === "ready") {
+      if (gloFilmFilled[n]) return;          // уже живой рендер — не дёргаем
+      gloFilmFilled[n] = true;
+      c.className = "glo-cell glo-cell--ready";
+      c.innerHTML = "";
+      const f = document.createElement("iframe");
+      f.loading = "lazy"; f.tabIndex = -1; f.setAttribute("aria-hidden", "true");
+      f.title = `Слайд ${n}`;
+      f.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${n}`);
+      c.appendChild(f);
+      return;
+    }
+    delete gloFilmFilled[n];
+    c.className = "glo-cell glo-cell--" + state;
+    c.innerHTML = "";
+    const mark = document.createElement("span");
+    mark.className = "glo-cell__mark";
+    mark.textContent = state === "filling" ? "⟳"
+      : state === "quest" ? "?" : state === "failed" ? "!" : "";
+    const lbl = document.createElement("span");
+    lbl.className = "glo-cell__label";
+    lbl.textContent = glassSlideLabel(s || {}, n);
+    c.append(mark, lbl);
+  });
 }
 
 // Хвост документа сверх потолка. Раньше notice лишь сообщал о потере и советовал
@@ -4006,12 +4153,25 @@ function glassFail() {
     "Сборка прервалась — проверьте соединение и продолжите.";
   byId("glassRetry")?.classList.remove("hidden");
   byId("glassDone")?.classList.remove("hidden");
+  // 3 осечки подряд на оверлее: русская ошибка + «Повторить» (спека, секция 3).
+  const err = byId("gloErr");
+  if (err && glassOverlayOn) {
+    err.classList.remove("hidden");
+    err.textContent = "Сборка прервалась: три шага подряд не удались — " +
+      "проверьте соединение. ";
+    const b = document.createElement("button");
+    b.className = "btn btn-sm"; b.type = "button"; b.textContent = "Повторить";
+    b.onclick = () => { err.classList.add("hidden"); glassLoop(); glassScout(); };
+    err.appendChild(b);
+  }
 }
 
 // Карточки вопросов живут между перерисовками (в textarea печатают!):
 // добавляем новые, убираем отвеченные, остальные не трогаем.
 function renderGlassQuestions(open, failed) {
-  const box = byId("glassQuestions");
+  // Оверлей активен — карточки живут справа от крупного слайда; после выхода
+  // в редактор те же DOM-узлы переезжают в правую панель (insertBefore переносит).
+  const box = glassOverlayOn ? byId("gloCards") : byId("glassQuestions");
   if (!box) return;
   const shown = open.concat(failed || []).sort((a, b) => a - b);
   Object.keys(glassCards).forEach((k) => {
@@ -4024,7 +4184,15 @@ function renderGlassQuestions(open, failed) {
     if (stale) { glassCards[k].remove(); delete glassCards[k]; }
   });
   shown.forEach((idx) => {
-    if (glassCards[idx]) return;
+    // Уже созданную карточку не перерисовываем (в textarea печатают!), но при
+    // смене бокса (оверлей ↔ панель) переносим её узел целиком.
+    if (glassCards[idx]) {
+      if (glassCards[idx].parentNode !== box) {
+        const at = shown.filter((i) => i < idx).length;
+        box.insertBefore(glassCards[idx], box.children[at] || null);
+      }
+      return;
+    }
     const card = makeGlassCard(idx);
     // Порядок карточек = порядок слайдов: панель читается вместе с лентой.
     const after = shown.filter((i) => i < idx).length;
@@ -4309,9 +4477,12 @@ function glassResume() {
 
 function exitGlassMode() {
   glassRunning = false;
+  glassOverlayOn = false;
+  glassTickStop();
   document.title = glassBaseTitle;
+  byId("glassOverlay")?.classList.add("hidden");
+  byId("glassMini")?.classList.add("hidden");
   byId("glassPanel")?.classList.add("hidden");
-  byId("rebuild")?.classList.remove("hidden");
   const badge = byId("modeBadge");
   if (badge) badge.textContent = "Конструктор";
   setupPanelTabs();      // вернуть обычную правую панель («Поля» по умолчанию)
