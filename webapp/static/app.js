@@ -82,10 +82,9 @@ let selectedFile = null;
 const drop = $("#drop");
 const fileInput = $("#file");
 
-// Стартов два и они равнозначны — гасим и включаем их только парой: файл нужен
-// обоим, и «одна кнопка живая, вторая нет» читалось бы как разница между ними.
+// Старт один — стеклянная сборка (точный перенос уходит в createJob по галочке).
 function setStartEnabled(on) {
-  ["#create", "#createGlass"].forEach((sel) => {
+  ["#createGlass"].forEach((sel) => {
     const b = $(sel);
     if (b) b.disabled = !on;
   });
@@ -594,8 +593,10 @@ async function createJob(opts) {
   resetFile();                            // дропзона свободна — можно готовить следующую
 }
 // Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
-$("#create").onclick = () => createJob();
-$("#createGlass").onclick = () => createGlass();
+// «Точный перенос» — единственный веб-путь чёрного ящика: дословный перенос
+// не задаёт вопросов про макеты, стеклянный степпер ему нечем помочь.
+$("#createGlass").onclick = () =>
+  ($("#exactTransfer")?.checked ? createJob() : createGlass());
 
 /* ---- пошаговая сборка: черновик + /glass/start → редактор со степпером ---- */
 let glassStarting = false;

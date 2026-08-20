@@ -87,16 +87,13 @@
               <div class="mhealth-note" id="mhNote"></div>
               <div class="mhealth-age" id="mhAge"></div>
             </div>
-            <!-- Два равнозначных пути, а не галочка при кнопке: раньше пошаговая
-                 сборка пряталась опцией у «Создать презентацию» и читалась как
-                 второстепенная настройка, хотя это другой процесс целиком. -->
+            <!-- Один путь: стеклянная сборка — дефолт веба. Чёрный ящик остаётся
+                 у API/бота и точного переноса (галочка переключает на createJob).
+                 Выбор из двух карточек убран: «быстрая» была тем же процессом,
+                 только с мёртвым экраном на 2,5 минуты. -->
             <div class="mode-cards">
-              <button id="create" class="btn mode-card" aria-describedby="createHint" disabled>
-                <span class="mode-card__name">Быстрая сборка</span>
-                <span class="mode-card__desc">ИИ сам решит, что и на каком макете разместить. Вы получаете готовую презентацию и правите её в редакторе.</span>
-              </button>
               <button id="createGlass" class="btn mode-card" aria-describedby="createHint" disabled>
-                <span class="mode-card__name">Пошаговая сборка</span>
+                <span class="mode-card__name">Собрать презентацию</span>
                 <span class="mode-card__desc">Слайды заполняются по одному у вас на глазах. Там, где макет неочевиден, ИИ остановится и спросит &mdash; и править можно прямо по ходу.</span>
               </button>
             </div>
