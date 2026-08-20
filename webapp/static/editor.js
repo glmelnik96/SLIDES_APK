@@ -244,7 +244,7 @@ function handleFrameLoad(loaded) {
   suppressDeckNavOnEdit(doc);
   attachDiagramDrag(doc);
   markGlassRibbons(doc);
-  buildThumbs();
+  syncThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
   syncThemeToggle();  // ярлык перекраса — по теме только что загруженного кадра
@@ -467,8 +467,9 @@ function buildThumbs() {
     ifr.loading = "lazy";
     ifr.tabIndex = -1;
     ifr.setAttribute("aria-hidden", "true");
-    // Единый cache-bust deckT (К§6) — превью синхронны с канвой; #n — нужный слайд; &editor=1 — покой.
-    ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1#${i + 1}`);
+    // Единый cache-bust deckT (К§6) — превью синхронны с канвой; &editor=1 — покой.
+    // 2а: один слайд на iframe — миниатюра грузит лёгкий документ, а не всю деку.
+    ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${i + 1}`);
     prev.appendChild(ifr);
     const cap = document.createElement("div");
     cap.className = "thumb-cap";
@@ -485,28 +486,9 @@ function buildThumbs() {
     }
     t.appendChild(prev);
     t.appendChild(cap);
-    // Стеклянная сборка: слайд ждёт ответа автора — метка «?» на миниатюре.
-    // Условие ровно то же, что у карточек вопросов (openGlassQuestions):
-    // иначе собранный слайд оставался помеченным, а вопроса к нему уже нет.
-    const ds = isDraft ? draftPlan.slides[i] : null;
-    if (ds && ds.status === "needs_input" && !ds.filled) {
-      const qm = document.createElement("span");
-      qm.className = "thumb-quest";
-      qm.title = "ИИ ждёт вашего ответа по этому слайду";
-      qm.textContent = "?";
-      t.appendChild(qm);
-    // Условие ровно то же, что у карточек осечек (glassFailedSlides): слайд
-    // ЗАПОЛНЕН заглушкой, поэтому проверять !filled нельзя — метка бы не вышла.
-    } else if (ds && ds.status === "failed") {
-      // Осечка заполнения: макет подменён заглушкой. Без метки автор видел в
-      // ленте пустой слайд и считал, что «применился другой макет».
-      const em = document.createElement("span");
-      em.className = "thumb-quest thumb-quest--failed";
-      em.title = "Слайд не заполнился — можно выбрать макет ещё раз";
-      em.textContent = "!";
-      t.appendChild(em);
-    }
-    t.onclick = () => goTo(i);
+    // После DOM-перестановки (moveThumbDom) захваченный i «плывёт» — живой
+    // индекс читаем из dataset в момент клика.
+    t.onclick = () => goTo(Number(t.dataset.index));
     if (editable) {
       // Крестик удаления — виден по наведению (CSS .thumb:hover .thumb-del)
       const del = document.createElement("button");
@@ -514,7 +496,9 @@ function buildThumbs() {
       del.className = "thumb-del";
       del.title = "Удалить слайд";
       del.innerHTML = "&#10005;";
-      del.addEventListener("click", (e) => { e.stopPropagation(); deleteSlideAt(i); });
+      del.addEventListener("click", (e) => {
+        e.stopPropagation(); deleteSlideAt(Number(t.dataset.index));
+      });
       t.appendChild(del);
     }
     if (reorderable) {
@@ -542,6 +526,7 @@ function buildThumbs() {
       "Порядок меняется перетаскиванием за рукоятку в углу миниатюры"));
     box.appendChild(tip);
   }
+  syncThumbBadges();
 }
 
 function hintVariant(cls, text) {
@@ -549,6 +534,72 @@ function hintVariant(cls, text) {
   s.className = cls;
   s.textContent = text;
   return s;
+}
+
+// Полная пересборка ленты — только при реальной смене состава. Обычный сейв
+// поля или glass-шаг перерисовывает точечно: текущий слайд и свежезаполненный.
+let thumbsDirty = true;                    // первый рендер — полная сборка
+function syncThumbs() {
+  const box = document.getElementById("thumbs");
+  const have = box ? box.querySelectorAll(".thumb").length : 0;
+  if (thumbsDirty || have !== slides.length) {
+    thumbsDirty = false;
+    buildThumbs();
+    return;
+  }
+  refreshThumb(current);
+  if (pendingGoTo !== current) refreshThumb(pendingGoTo);
+  syncThumbBadges();
+}
+
+function refreshThumb(i) {
+  const box = document.getElementById("thumbs");
+  const t = box && box.querySelectorAll(".thumb")[i];
+  if (!t) return;
+  const ifr = t.querySelector("iframe");
+  if (ifr) ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${i + 1}`);
+  const s = slides[i];
+  const titleText = s
+    ? (s.querySelector("h1,h2,h3,[data-slot=title]")?.textContent || "").trim() : "";
+  let ttl = t.querySelector(".thumb-title");
+  if (titleText && !ttl) {
+    ttl = document.createElement("span");
+    ttl.className = "thumb-title";
+    t.querySelector(".thumb-cap")?.appendChild(ttl);
+  }
+  if (ttl) ttl.textContent = titleText;
+}
+
+// Метки «?» / «!» / «⟳» без пересборки: статусы в glass-режиме меняются на
+// каждом шаге, а раньше их доносила только полная пересборка ленты.
+// Условия меток — ровно те же, что у карточек вопросов (openGlassQuestions)
+// и осечек (glassFailedSlides): failed-слайд ЗАПОЛНЕН заглушкой, поэтому
+// проверять !filled нельзя — метка бы не вышла.
+function syncThumbBadges() {
+  const box = document.getElementById("thumbs");
+  if (!box || !isDraft) return;
+  const filling = glassRunning && glassLooping
+    ? (glassCurrentTarget(draftPlan) || {}).index : null;
+  [...box.querySelectorAll(".thumb")].forEach((t, i) => {
+    t.querySelector(".thumb-quest")?.remove();
+    const ds = draftPlan.slides[i];
+    if (!ds) return;
+    let cls = "", title = "", mark = "";
+    if (ds.status === "needs_input" && !ds.filled) {
+      cls = "thumb-quest"; mark = "?";
+      title = "ИИ ждёт вашего ответа по этому слайду";
+    } else if (ds.status === "failed") {
+      cls = "thumb-quest thumb-quest--failed"; mark = "!";
+      title = "Слайд не заполнился — можно выбрать макет ещё раз";
+    } else if (filling === i + 1) {
+      cls = "thumb-quest thumb-quest--filling"; mark = "⟳";
+      title = "Слайд сейчас заполняется — подождите";
+    }
+    if (!cls) return;
+    const m = document.createElement("span");
+    m.className = cls; m.title = title; m.textContent = mark;
+    t.appendChild(m);
+  });
 }
 
 /* Рукоятка перестановки для пальца. HTML5-перетаскивание касанием не работает,
@@ -1176,6 +1227,7 @@ async function fetchPlan() {
 }
 
 async function reloadDraft(goToIndex) {
+  thumbsDirty = true;  // структурная правка — лента пересобирается честно
   await fetchPlan();
   dgmUnsaved = null;   // индексы уехали — черновик схемы больше не привязать к слайду
   if (goToIndex != null) pendingGoTo = goToIndex;
@@ -2803,13 +2855,19 @@ function dropAfter(thumb, e) {
     : (e.clientY - r.top) > r.height / 2;
 }
 
+let dragRaf = 0;
 function onThumbDragOver(e) {
   if (dragFromIndex === null) return;
   e.preventDefault(); // разрешаем drop
   e.dataTransfer.dropEffect = "move";
-  const after = dropAfter(this, e);
-  this.classList.toggle("drop-after", after);
-  this.classList.toggle("drop-before", !after);
+  if (dragRaf) return;                 // геометрия — не чаще раза на кадр
+  const self = this, cx = e.clientX, cy = e.clientY;
+  dragRaf = requestAnimationFrame(() => {
+    dragRaf = 0;
+    const after = dropAfter(self, { clientX: cx, clientY: cy });
+    self.classList.toggle("drop-after", after);
+    self.classList.toggle("drop-before", !after);
+  });
 }
 
 function onThumbDragLeave() {
@@ -2851,20 +2909,27 @@ function onGripDown(e) {
   try { this.setPointerCapture(e.pointerId); } catch (_) {}
 }
 
+let gripRaf = 0;
 function onGripMove(e) {
   if (!gripDrag) return;
   e.preventDefault();
-  clearDropMarks();
-  gripDrag.over = null;
-  // Захват указателя увёл события на рукоятку — цель ищем по координате.
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  const over = el && el.closest && el.closest(".thumb");
-  if (!over || over === gripDrag.thumb) return;
-  const after = dropAfter(over, e);
-  over.classList.toggle("drop-after", after);
-  over.classList.toggle("drop-before", !after);
-  gripDrag.over = Number(over.dataset.index);
-  gripDrag.after = after;
+  if (gripRaf) return;                 // elementFromPoint — не чаще раза на кадр
+  const cx = e.clientX, cy = e.clientY;
+  gripRaf = requestAnimationFrame(() => {
+    gripRaf = 0;
+    if (!gripDrag) return;
+    clearDropMarks();
+    gripDrag.over = null;
+    // Захват указателя увёл события на рукоятку — цель ищем по координате.
+    const el = document.elementFromPoint(cx, cy);
+    const over = el && el.closest && el.closest(".thumb");
+    if (!over || over === gripDrag.thumb) return;
+    const after = dropAfter(over, { clientX: cx, clientY: cy });
+    over.classList.toggle("drop-after", after);
+    over.classList.toggle("drop-before", !after);
+    gripDrag.over = Number(over.dataset.index);
+    gripDrag.after = after;
+  });
 }
 
 async function onGripUp() {
@@ -2920,7 +2985,38 @@ async function moveSlide(idx, to1) {
   // «прыгнул обратно», и тянул его второй раз. Говорим об ошибке и не двигаем.
   if (!r || !r.ok) { setSaveStatus("error"); return; }
   pushUndo();
-  await reloadDraft(to1 - 1);
+  // 2а: сервер уже переставил слайд в plan.json — повторяем то же локально и
+  // в DOM ленты. Полной пересборки (reloadDraft) нет: она перегружала полные
+  // деки во все iframe на каждый move и лента «мигала».
+  const [moved] = draftPlan.slides.splice(idx, 1);
+  draftPlan.slides.splice(to1 - 1, 0, moved);
+  dgmUnsaved = null;
+  builtFormFor = -1;
+  pendingGoTo = to1 - 1;
+  loadDeck();                    // сцена перерисуется; deckT обновился для src
+  moveThumbDom(idx, to1 - 1);
+}
+
+function moveThumbDom(from, to0) {
+  const box = document.getElementById("thumbs");
+  const thumbs = box ? [...box.querySelectorAll(".thumb")] : [];
+  const moving = thumbs[from];
+  if (!moving) { thumbsDirty = true; return; }
+  const rest = thumbs.filter((_, i) => i !== from);
+  const ref = rest[to0] || box.querySelector(".thumbs-hint");
+  box.insertBefore(moving, ref);
+  // Подписи — у всех; iframe-адреса — только у сдвинувшегося диапазона
+  // (контент узлов переехал вместе с ними, догрузка ленивая и фоновая).
+  const lo = Math.min(from, to0), hi = Math.max(from, to0);
+  [...box.querySelectorAll(".thumb")].forEach((t, i) => {
+    t.dataset.index = i;
+    const num = t.querySelector(".thumb-num");
+    if (num) num.textContent = i + 1;
+    if (i >= lo && i <= hi) {
+      const ifr = t.querySelector("iframe");
+      if (ifr) ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${i + 1}`);
+    }
+  });
 }
 
 /* ---- отмена/повтор структурных действий (Cmd/Ctrl+Z, Shift+Z / Ctrl+Y) ----
