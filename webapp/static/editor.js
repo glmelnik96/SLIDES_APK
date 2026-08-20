@@ -3322,6 +3322,11 @@ async function initDraftBuilder() {
 
 /* ---- точечное «Улучшить этот слайд» (замена общедековой rebuild-кнопки) ---- */
 let improving = false;
+// Итог последней проверки: живёт в состоянии, а не в DOM — syncImproveButton
+// дёргается из renderBuilderForm (в т.ч. после onload деки) и переписывает
+// note; текст «в лоб» стирался раньше, чем пользователь его видел.
+let improveResult = "";
+let improveResultFor = -1;
 function syncImproveButton() {
   const wrap = byId("improveWrap");
   const btn = byId("improveSlide");
@@ -3334,18 +3339,21 @@ function syncImproveButton() {
   btn.disabled = improving || building || !!s.freeform;
   if (note) note.textContent = improving ? "Проверяю и улучшаю…"
     : building ? "Доступно после завершения сборки"
-    : s.freeform ? "Свободный слайд правится в чате" : "";
+    : s.freeform ? "Свободный слайд правится в чате"
+    : (current === improveResultFor ? improveResult : "");
 }
 
 byId("improveSlide")?.addEventListener("click", async () => {
   if (improving) return;
   improving = true;
+  const at = current;
+  improveResult = "";
+  improveResultFor = -1;
   syncImproveButton();
-  const note = byId("improveNote");
   try {
     await flushPendingSave();
     const r = await glassFetch(
-      U(`/api/drafts/${sessionId}/slides/${current + 1}/improve`),
+      U(`/api/drafts/${sessionId}/slides/${at + 1}/improve`),
       { method: "POST" });
     if (!r.ok) {
       let detail = "";
@@ -3355,19 +3363,17 @@ byId("improveSlide")?.addEventListener("click", async () => {
     const out = await r.json();
     if (out.plan) draftPlan = out.plan;
     builtFormFor = -1;
-    loadDeck();
-    // Панель чата в manual скрыта табом — итог пишем в note рядом с кнопкой.
-    if (note) note.textContent = out.improved
+    // Панель чата в manual скрыта табом — итог показывает note рядом с кнопкой.
+    improveResult = out.improved
       ? "Слайд проверен и улучшен."
       : "Слайд проверен — замечаний нет, менять нечего.";
+    improveResultFor = at;
+    loadDeck();
   } catch (e) {
     alertDialog("Не удалось улучшить слайд: " + (e && e.message ? e.message : e));
-    if (note) note.textContent = "";
   } finally {
     improving = false;
-    const keep = note ? note.textContent : "";
     syncImproveButton();
-    if (note && keep) note.textContent = keep;   // syncImproveButton чистит текст
   }
 });
 
