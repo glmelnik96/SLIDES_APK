@@ -5,8 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { glassStepDecision, glassStatusText, glassSlideLabel, glassCurrentTarget,
-  glassScoutTarget, glassFillLine, glassScoutLine, glassStages,
-  glassAutoExitReady, glassMiniText } =
+  glassFillLine, glassStages, glassAutoExitReady, glassQuestNote } =
   require("../../webapp/static/errtext.js");
 
 // ── glassStepDecision: что делать с ответом /glass/step | /glass/score ──────
@@ -153,35 +152,56 @@ test("glassSlideLabel: заголовок > бриф > номер; длинно�
   assert.ok(glassSlideLabel({ brief: "х".repeat(80) }, 1).length <= 48);
 });
 
-test("glassScoutTarget: первый unscored", () => {
-  assert.strictEqual(glassScoutTarget(P([S({ filled: true }), S({ status: "unscored" })])), 2);
-  assert.strictEqual(glassScoutTarget(P([S({})])), null);
-});
-
-test("glassFillLine/glassScoutLine — телеметрия с тикающим таймером", () => {
+test("glassFillLine — телеметрия с тикающим таймером", () => {
   assert.strictEqual(glassFillLine({ index: 4, label: "Процесс" }, 23),
     "Заполняю слайд 4 — «Процесс»… 23 с");
   assert.strictEqual(glassFillLine({ index: 4, label: "Процесс" }, null),
     "Заполняю слайд 4 — «Процесс»…");
   assert.strictEqual(glassFillLine(null, 5), "");
-  assert.strictEqual(glassScoutLine(6), "параллельно подбираю макет для слайда 6");
-  assert.strictEqual(glassScoutLine(null), "");
 });
 
 test("glassStages: степпер этапов Документ→Раскладка→Заполнение→Редактор", () => {
   // раскладка идёт (есть unscored)
-  let st = glassStages({ total: 8, unscored: 3, filled: 2, loopDone: false });
+  let st = glassStages({ total: 8, unscored: 3, filled: 2, open: 0, quest: false });
   assert.deepStrictEqual(st.map((s) => s.state), ["done", "active", "active", "todo"]);
   assert.strictEqual(st[2].label, "Заполнение 2/8");
   // раскладка кончилась, заполнение идёт
-  st = glassStages({ total: 8, unscored: 0, filled: 5, loopDone: false });
+  st = glassStages({ total: 8, unscored: 0, filled: 5, open: 0, quest: false });
   assert.deepStrictEqual(st.map((s) => s.state), ["done", "done", "active", "todo"]);
-  // всё заполнено
-  st = glassStages({ total: 8, unscored: 0, filled: 8, loopDone: true });
+  // всё заполнено, вопросов нет — активен «Редактор»
+  st = glassStages({ total: 8, unscored: 0, filled: 8, open: 0, quest: false });
   assert.deepStrictEqual(st.map((s) => s.state), ["done", "done", "done", "active"]);
   // самое начало: план ещё пуст
-  st = glassStages({ total: 0, unscored: 0, filled: 0, loopDone: false });
+  st = glassStages({ total: 0, unscored: 0, filled: 0, open: 0, quest: false });
   assert.deepStrictEqual(st.map((s) => s.state), ["done", "active", "todo", "todo"]);
+});
+
+test("glassStages: этап «Вопросы» появляется, только когда они есть", () => {
+  // вопросы копятся молча во время заполнения: этап впереди (todo)
+  let st = glassStages({ total: 8, unscored: 0, filled: 5, open: 2, quest: false });
+  assert.deepStrictEqual(st.map((s) => s.label),
+    ["Документ", "Раскладка", "Заполнение 5/8", "Вопросы (2)", "Редактор"]);
+  assert.deepStrictEqual(st.map((s) => s.state),
+    ["done", "done", "active", "todo", "todo"]);
+  // экран перешёл к карточкам (quest=true): акцент на «Вопросы»,
+  // заполнение упирается в ответы и активным не выглядит
+  st = glassStages({ total: 8, unscored: 0, filled: 6, open: 2, quest: true });
+  assert.deepStrictEqual(st.map((s) => s.state),
+    ["done", "done", "todo", "active", "todo"]);
+  // все filled, но вопросы остались: «Редактор» ещё не активен
+  st = glassStages({ total: 8, unscored: 0, filled: 8, open: 1, quest: true });
+  assert.deepStrictEqual(st.map((s) => s.state),
+    ["done", "done", "done", "active", "todo"]);
+});
+
+test("glassQuestNote: тихий счётчик вопросов у степпера", () => {
+  assert.strictEqual(glassQuestNote(1),
+    "? 1 вопрос — разберём после заполнения");
+  assert.strictEqual(glassQuestNote(2),
+    "? 2 вопроса — разберём после заполнения");
+  assert.strictEqual(glassQuestNote(5),
+    "? 5 вопросов — разберём после заполнения");
+  assert.strictEqual(glassQuestNote(0), "");
 });
 
 test("glassAutoExitReady: авто-переход когда автозаполнение исчерпано", () => {
@@ -195,15 +215,4 @@ test("glassAutoExitReady: авто-переход когда автозапол�
   // пустой план → рано
   assert.ok(!glassAutoExitReady(P([])));
   assert.ok(!glassAutoExitReady(null));
-});
-
-test("glassMiniText: компакт-индикатор досборки", () => {
-  assert.strictEqual(
-    glassMiniText({ working: true, filled: 5, total: 8, line: "заполняю «Итоги»… 12 с" }),
-    "Досборка: 5 из 8 · заполняю «Итоги»… 12 с");
-  assert.strictEqual(glassMiniText({ working: true, filled: 5, total: 8, line: "" }),
-    "Досборка: 5 из 8");
-  assert.strictEqual(glassMiniText({ working: false, open: 2 }),
-    "2 вопроса ждут ответа");
-  assert.strictEqual(glassMiniText({ working: false, open: 0 }), "");
 });

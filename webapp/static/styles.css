@@ -871,7 +871,10 @@ a { color: var(--accent); }
 .undo-toast.hidden { display: none; }
 
 /* ===== Пикер макетов ===== */
-.picker { position: fixed; inset: 0; background: rgba(10,10,10,.82); z-index: 20;
+/* z-index 70 > 60 (.glass-overlay): «Выбрать из всех макетов…» открывает пикер
+   и во время стеклянной сборки — иначе он всплывал ПОД оверлеем и казался
+   мёртвой кнопкой (баг живого прогона 2026-08-20). */
+.picker { position: fixed; inset: 0; background: rgba(10,10,10,.82); z-index: 70;
   display: grid; place-items: center; padding: 24px;
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1); }
 @starting-style { .picker { opacity: 0; } }
@@ -980,7 +983,8 @@ a { color: var(--accent); }
 .dgm-claims--error { background: rgba(255, 107, 107, .10); color: var(--danger-soft); }
 
 /* ===== К§17 — бренд-диалог (замена нативных alert/confirm), стиль .picker ===== */
-.dialog { position: fixed; inset: 0; background: var(--overlay); z-index: 30;
+/* z-index 80: диалоги должны перекрывать и пикер (70), и glass-оверлей (60) */
+.dialog { position: fixed; inset: 0; background: var(--overlay); z-index: 80;
   display: grid; place-items: center; padding: 24px;
   transition: opacity var(--dur-slow) cubic-bezier(0.23, 1, 0.32, 1); }
 @starting-style { .dialog { opacity: 0; } }
@@ -1141,25 +1145,14 @@ a { color: var(--accent); }
   }
 }
 
-/* ===== Пошаговая сборка (?glass=1): статус степпера + вопросы ИИ ===== */
-/* Панель живёт в .rpanel вместо табов «Поля | Чат»; канон v5 — поверхности без
-   рамок: карточка вопроса --surface, чипы и поле уточнения --surface-inset. */
-.glass { flex: 1; min-height: 0; display: flex; flex-direction: column;
-  background: var(--bg-soft); overflow-y: auto; }
-.glass-head { flex: 0 0 auto; padding: 16px; border-bottom: 1px solid var(--line-soft); }
-.glass-head h3 { margin: 0 0 6px; font-size: var(--fs-btn); font-weight: 600; }
-.glass-status { margin: 0 0 10px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; }
+/* ===== Пошаговая сборка (?glass=1): вопросы ИИ на этапе «Вопросы» ===== */
+/* Карточки живут в оверлее (#gloResolve); канон v5 — поверхности без рамок:
+   карточка вопроса --surface, чипы и поле уточнения --surface-inset. */
 .glass-bar { height: 6px; border-radius: 999px; background: var(--surface-inset); overflow: hidden; }
 .glass-bar i { display: block; height: 100%; width: 0; background: var(--accent);
   border-radius: 999px; transition: width var(--dur-med) var(--ease-productive); }
-/* Что вообще происходит в этом режиме: без объяснения панель читалась как
-   очередь непонятных вопросов, а не как сборка на глазах. */
-.glass-hint { margin: 0 0 10px; font-size: var(--fs-cap); color: var(--muted); line-height: 1.45; }
-.glass-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
-#glassQuestions { display: flex; flex-direction: column; gap: 12px; }
-.glass-empty { margin: 0; font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; }
-/* Выход одним движением: когда вопросов несколько, отвечать на каждый — работа,
-   а сборка стоит на паузе. Кнопка второстепенная — решение всё же ИИ. */
+/* Выход одним движением: когда вопросов несколько, отвечать на каждый — работа.
+   Кнопка второстепенная — решение всё же ИИ. */
 .glass-auto { align-self: flex-start; }
 /* Хвост документа сверх потолка: кнопка второстепенная — это не часть текущей
    сборки, а заявка на вторую деку. */
@@ -1173,11 +1166,6 @@ a { color: var(--accent); }
 .glass-q__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .glass-q__num { font-size: var(--fs-cap); color: var(--accent);
   letter-spacing: .04em; text-transform: uppercase; }
-/* Вопрос всегда про конкретный слайд, а на сцене может стоять другой */
-.glass-q__goto { background: none; border: 0; padding: 0; cursor: pointer;
-  font: inherit; font-size: var(--fs-cap); color: var(--muted);
-  text-decoration: underline; text-underline-offset: 2px; }
-.glass-q__goto:hover { color: var(--text); }
 .glass-q__topic { margin-top: 2px; font-size: var(--fs-sm); font-weight: 600; line-height: 1.35; }
 /* Фрагмент исходного документа: без него автор не знает, что именно ИИ кладёт
    на слайд, и выбирать макет ему не из чего. */
@@ -1230,8 +1218,7 @@ a { color: var(--accent); }
   color: var(--text); font: inherit; font-size: var(--fs-sm); padding: 8px 10px;
   margin-bottom: 10px; }
 .glass-q__actions { display: flex; gap: 8px; }
-.glass-foot { flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft);
-  display: flex; gap: 8px; }
+.glass-foot { flex: 0 0 auto; padding-top: 4px; display: flex; gap: 8px; }
 /* Метка «слайд ждёт ответа» на миниатюре ленты */
 .thumb { position: relative; }
 .thumb-quest { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px;
@@ -1250,17 +1237,23 @@ a { color: var(--accent); }
   display: flex; flex-direction: column; gap: 12px;
   padding: 20px 28px; background: var(--bg);
 }
-.glass-overlay__top { display: flex; align-items: center; gap: 16px; }
-.glass-overlay__file { font-weight: 600; color: var(--text); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; max-width: 32ch; }
-.glass-overlay__stepper { display: flex; gap: 14px; font-size: var(--fs-sm); }
+/* Шапка (фидбек Глеба 2026-08-21): степпер — главный ориентир этапа, поэтому
+   по центру и крупнее; боковые колонки 1fr симметричны, центр не съезжает. */
+.glass-overlay__top { display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 16px; }
+.glass-overlay__side { display: flex; align-items: center; gap: 8px; }
+.glass-overlay__side--right { justify-content: flex-end; }
+.glass-overlay__stepper { display: flex; gap: 20px; font-size: var(--fs-btn);
+  justify-content: center; }
+/* Тихий счётчик вопросов у степпера: копятся молча, не отвлекая от заполнения */
+.glass-overlay__quest { font-size: var(--fs-sm); color: var(--accent); white-space: nowrap; }
 .glo-stage--done { color: var(--accent); }
 .glo-stage--active { color: var(--text); }
 .glo-stage--todo { color: var(--muted); opacity: .6; }
 .glass-overlay__bar { height: 10px; }
-.glass-overlay__tele { display: flex; justify-content: space-between; gap: 16px;
-  font-size: var(--fs-sm); color: var(--muted); min-height: 1.2em; }
-.glass-overlay__scout { opacity: .8; }
+/* Телеметрия — вторая строка ориентира: тоже по центру, читаемым размером */
+.glass-overlay__tele { display: flex; justify-content: center; gap: 16px;
+  font-size: var(--fs-base); color: var(--muted); min-height: 1.2em; }
 .glass-overlay__err { font-size: var(--fs-sm); color: var(--danger-soft);
   display: flex; gap: 10px; align-items: center; }
 .glass-overlay__center { display: flex; gap: 14px; flex: 1; min-height: 0; }
@@ -1270,8 +1263,19 @@ a { color: var(--accent); }
   border-radius: var(--radius-card); background: var(--surface); }
 .glass-overlay__cap { font-size: var(--fs-cap); color: var(--muted);
   text-align: center; }
-.glass-overlay__cards { flex: 1; min-width: 260px; max-width: 380px;
-  overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+/* Скелет текущего слайда — единственный фокус во время заполнения */
+.glo-skel { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; border: 1px dashed var(--line);
+  border-radius: var(--radius-card); background: var(--surface); }
+.glo-skel__mark { font-size: 26px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.glo-skel__label { font-size: var(--fs-sm); color: var(--muted);
+  max-width: 60ch; text-align: center; padding: 0 16px; line-height: 1.45; }
+/* Этап «Вопросы»: карточки занимают центр оверлея одной колонкой */
+.glass-overlay__resolve { flex: 1; min-width: 0; width: 100%; max-width: 720px;
+  margin: 0 auto; overflow-y: auto; display: flex; flex-direction: column;
+  gap: 12px; }
+#gloCards { display: flex; flex-direction: column; gap: 12px; }
 .glass-overlay__film { display: flex; gap: 8px; overflow-x: auto;
   padding-bottom: 4px; }
 .glo-cell { flex: 1 0 110px; max-width: 150px; aspect-ratio: 16/9;
@@ -1284,21 +1288,13 @@ a { color: var(--accent); }
 .glo-cell--quest { border: 1px dashed var(--accent-line); }
 .glo-cell--quest .glo-cell__mark { color: var(--accent); }
 .glo-cell--failed { border: 1px dashed var(--danger-line); }
+/* Готовую ячейку можно кликнуть — слайд откроется в центре (подглядывание);
+   pointer-events:none на iframe, чтобы клик ловила сама ячейка. */
+.glo-cell--ready { cursor: pointer; }
 .glo-cell--ready iframe { width: 100%; height: 100%; border: 0;
   pointer-events: none; }
 .glo-cell__label { padding: 0 6px; text-align: center; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-
-/* ── Компакт-индикатор досборки над сценой ─────────────────────────────── */
-.glass-mini { display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px; border-radius: var(--radius-ctl);
-  background: var(--surface); font-size: var(--fs-cap); margin-bottom: 8px; }
-.glass-mini__bar { width: 120px; height: 6px; border-radius: 999px;
-  overflow: hidden; background: var(--surface-inset); flex: none; }
-.glass-mini__bar i { display: block; height: 100%; width: 0;
-  background: var(--accent); transition: width var(--dur-med) var(--ease-productive); }
-.glass-mini__text { color: var(--muted); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
 
 /* Слайд заполняется прямо сейчас: нейтральная «⟳» на миниатюре, слайд залочен */
 .thumb-quest--filling { background: var(--neutral-dim); color: var(--muted); }

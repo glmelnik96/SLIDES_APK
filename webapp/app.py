@@ -905,6 +905,28 @@ async def glass_score(session_id: str, request: Request,
     return JSONResponse(await run_in_threadpool(glass.score_next, session_id))
 
 
+@app.post("/api/drafts/{session_id}/glass/stop")
+async def glass_stop(session_id: str, request: Request,
+                     user=Depends(get_current_user)) -> JSONResponse:
+    """«Остановить сборку»: paused в плане. Новые шаги (step/score) с этого
+    момента отвечают action=None и модель не трогают; уже улетевший в модель
+    шаг доработает и доклеит результат — он оплачен."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    plan = await run_in_threadpool(glass.set_paused, session_id, True)
+    return JSONResponse({"paused": plan.paused})
+
+
+@app.post("/api/drafts/{session_id}/glass/resume")
+async def glass_resume(session_id: str, request: Request,
+                       user=Depends(get_current_user)) -> JSONResponse:
+    """«Продолжить сборку»: снять paused — клиент заново запускает цикл шагов."""
+    from webapp import glass
+    await _draft_or_404(request, session_id, user, mutate=True)
+    plan = await run_in_threadpool(glass.set_paused, session_id, False)
+    return JSONResponse({"paused": plan.paused})
+
+
 @app.post("/api/drafts/{session_id}/glass/answer")
 async def glass_answer(session_id: str, request: Request,
                        user=Depends(get_current_user)) -> JSONResponse:

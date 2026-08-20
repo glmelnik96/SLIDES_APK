@@ -525,6 +525,40 @@ def test_step_prefers_filling_over_scoring(monkeypatch, tmp_path):
     assert out["unscored"] == [5]
 
 
+def test_paused_plan_stops_the_conveyor(monkeypatch, tmp_path):
+    """«Остановить сборку» (запрос 2026-08-21): paused в плане — серверный гард.
+
+    Клиентский abort глушит только свою вкладку; paused обязан останавливать
+    ЛЮБОЙ шаг (вторая вкладка, F5, поздний таймер) ещё до похода к модели —
+    полная остановка процесса и запросов в LLM. Снятие паузы возвращает
+    конвейер ровно к недозаполненным слайдам."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+
+    def _no_llm(*a, **kw):
+        raise AssertionError("пауза не должна пускать шаг к модели")
+    monkeypatch.setattr(filler, "fill_slide", _no_llm)
+    plan = _outline_plan(question=False)
+    plan.slides[3] = plan.slides[3].model_copy(update={"status": "unscored"})
+    plan.paused = True
+    draft.save_plan("sp1", plan)
+
+    out = glass.step_fill("sp1", client=FakeClient([]))
+    assert out["action"] is None and out["index"] is None
+    assert out["done"] is False          # работа осталась, просто стоит
+    assert out["plan"]["paused"] is True # клиент видит паузу в каждом ответе
+    # разведчик тоже стоит: скоринг — такой же запрос к модели
+    out = glass.score_next("sp1", client=FakeClient([]))
+    assert out["action"] is None
+    assert draft.load_plan("sp1").slides[3].status == "unscored"
+
+    # «Продолжить сборку»: флаг снят — шаг снова заполняет
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    assert glass.set_paused("sp1", False).paused is False
+    out = glass.step_fill("sp1", client=FakeClient([]))
+    assert out["action"] == "fill" and out["index"] == 2
+
+
 def test_step_fill_survives_fill_failure(monkeypatch, tmp_path):
     """Осечка модели не роняет шаг, но и не выдаёт себя за успех.
 
@@ -999,6 +1033,27 @@ def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
                       json={"index": 99}).status_code == 400
         assert c.post(f"/api/drafts/{sid}/glass/answer", headers=H(),
                       json={"index": 2, "template_id": "ghost"}).status_code == 400
+
+
+def test_glass_stop_resume_endpoints(monkeypatch, tmp_path):
+    """stop/resume: paused пишется в план и виден в ответе; чужая сессия — 404."""
+    with _client_app(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        draft.save_plan(sid, draft.DraftPlan(title="Т", slides=[
+            draft.DraftSlide(template_id="three-col", brief="тема")]))
+
+        r = c.post(f"/api/drafts/{sid}/glass/stop", headers=H())
+        assert r.status_code == 200 and r.json()["paused"] is True
+        assert draft.load_plan(sid).paused is True
+
+        r = c.post(f"/api/drafts/{sid}/glass/resume", headers=H())
+        assert r.status_code == 200 and r.json()["paused"] is False
+        assert draft.load_plan(sid).paused is False
+
+        assert c.post(f"/api/drafts/{sid}/glass/stop",
+                      headers=H("intruder")).status_code == 404
+        assert c.post(f"/api/drafts/{sid}/glass/resume",
+                      headers=H("intruder")).status_code == 404
 
 
 # ── конкурентность: два писателя plan.json вокруг долгого вызова LLM ─────────

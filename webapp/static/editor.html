@@ -13,6 +13,10 @@
     <a class="home" href="/">&larr; На главную</a>
     <span class="mode-badge" id="modeBadge"></span>
     <span class="sp"></span>
+    <!-- Возврат к остановленной автором сборке: виден, только когда план
+         на паузе и в нём остались незаполненные слайды. -->
+    <button class="btn hidden" id="glassResume" type="button"
+            title="Возобновить заполнение слайдов с того места, где сборка была остановлена.">Продолжить сборку</button>
     <button class="btn btn-ghost hidden" id="themeToggle" title="Перекрасить все слайды в другую тему. Содержание не меняется.">Светлая тема</button>
     <button class="btn btn-accent" id="save">Сохранить</button>
     <details class="toolbar-menu" id="exportMenu">
@@ -36,14 +40,6 @@
 
   <!-- Stage: one big slide -->
   <div class="stage-col">
-    <!-- Компакт-индикатор фоновой досборки (glass): мини-прогресс + телеметрия
-         + счётчик вопросов. Исчезает, когда всё заполнено и вопросов нет. -->
-    <div class="glass-mini hidden" id="glassMini">
-      <div class="glass-mini__bar"><i id="glassMiniFill"></i></div>
-      <span class="glass-mini__text" id="glassMiniText" aria-live="polite"></span>
-      <button class="btn btn-ghost btn-sm hidden" id="glassMiniQ" type="button"></button>
-      <button class="btn btn-ghost btn-sm hidden" id="glassMiniRest" type="button"></button>
-    </div>
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
       <!-- К§6 — второй буфер двойной буферизации превью (скрыт, грузит следующий кадр) -->
@@ -65,35 +61,6 @@
       <button class="rpanel-tab" id="tabFields" type="button">Содержание</button>
       <button class="rpanel-tab" id="tabChat" type="button">Правки в чате</button>
     </div>
-  <!-- Пошаговая сборка (?glass=1): статус степпера + вопросы ИИ с чипами-кандидатами -->
-  <aside class="glass hidden" id="glassPanel">
-    <div class="glass-head">
-      <h3>Пошаговая сборка</h3>
-      <p class="glass-hint">ИИ заполняет слайды по одному — вы видите каждый сразу.
-        Дойдя до слайда, где выбор макета неочевиден, он останавливается и
-        спрашивает: ответьте — и сборка пойдёт дальше.</p>
-      <p class="glass-status" id="glassStatus">Начинаю…</p>
-      <div class="glass-bar"><i id="glassBarFill"></i></div>
-    </div>
-    <div class="glass-body">
-      <p class="glass-empty hidden" id="glassEmpty">Вопросов пока нет — ИИ уверен
-        в макетах. Слайды с вопросом помечены «?» в ленте слева.</p>
-      <button class="btn btn-ghost btn-sm glass-auto hidden" id="glassAuto"
-              type="button">Решить все на усмотрение ИИ</button>
-      <!-- Хвост документа, не влезший в потолок: потолок не поднимаем (сорок
-           слайдов автор и так проходит по одному больше получаса), но потерю
-           делаем обратимой — вторая дека с первого невзятого раздела. -->
-      <div class="glass-rest hidden" id="glassRest">
-        <button class="btn btn-ghost btn-sm" id="glassRestBtn" type="button"></button>
-        <p class="glass-rest-note hidden" id="glassRestNote"></p>
-      </div>
-      <div id="glassQuestions"></div>
-    </div>
-    <div class="glass-foot hidden" id="glassDone">
-      <button class="btn hidden" id="glassRetry" type="button">Продолжить сборку</button>
-      <button class="btn btn-accent" id="glassFinish" type="button">Перейти к редактированию</button>
-    </div>
-  </aside>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
     <div class="builder-head">
@@ -145,29 +112,57 @@
   </div><!-- /.editor-main -->
 </div>
 
-<!-- Экран сборки (?glass=1) — полноэкранный этап поверх редактора (решение 1а).
-     Степпер этапов, честный прогресс, телеметрия с таймером, крупный последний
-     слайд, карточки вопросов, лента честных скелетов. -->
+<!-- Экран сборки (?glass=1) — полноэкранный этап от загрузки документа до
+     редактора, без раннего выхода (тезис: показываем только нужное сейчас).
+     Во время заполнения весь экран — один фокус: слайд, который заполняется
+     прямо сейчас; вопросы копятся молча («?» в ленте + тихий счётчик).
+     Этап «Вопросы» наступает после заполнения: карточки занимают центр. -->
 <div class="glass-overlay hidden" id="glassOverlay">
+  <!-- Шапка: степпер и телеметрия по центру (главный ориентир этапа), слева —
+       выход на главную и стоп, справа — тихий счётчик вопросов. -->
   <div class="glass-overlay__top">
-    <span class="glass-overlay__file" id="gloFile"></span>
+    <div class="glass-overlay__side">
+      <a class="btn btn-ghost btn-sm" id="gloHome" href="/">&larr; На главную</a>
+      <button class="btn btn-ghost btn-sm" id="glassStop" type="button"
+              title="Полностью остановить заполнение: новых запросов к ИИ не будет. Продолжить можно в любой момент.">Остановить сборку</button>
+    </div>
     <div class="glass-overlay__stepper" id="gloStepper"></div>
-    <span class="sp"></span>
-    <button class="btn" id="gloExit" type="button"
-            title="Сборка продолжится в фоне — слайды доедут сами">В редактор сейчас &rarr;</button>
+    <div class="glass-overlay__side glass-overlay__side--right">
+      <span class="glass-overlay__quest hidden" id="gloQuest"></span>
+    </div>
   </div>
   <div class="glass-bar glass-overlay__bar"><i id="gloBarFill"></i></div>
   <div class="glass-overlay__tele">
     <span id="gloTele">Раскладываю документ…</span>
-    <span class="glass-overlay__scout" id="gloScout"></span>
   </div>
   <div class="glass-overlay__err hidden" id="gloErr" role="alert"></div>
   <div class="glass-overlay__center">
-    <div class="glass-overlay__stagebox">
+    <!-- Фокус заполнения: скелет текущего слайда с таймером, после — его рендер -->
+    <div class="glass-overlay__stagebox" id="gloStage">
       <iframe id="gloSlide" title="Последний собранный слайд" tabindex="-1" class="hidden"></iframe>
+      <div class="glo-skel hidden" id="gloSkel">
+        <span class="glo-skel__mark" id="gloSkelMark">⟳</span>
+        <span class="glo-skel__label" id="gloSkelLabel"></span>
+      </div>
       <div class="glass-overlay__cap" id="gloCap">Слайды появятся здесь по мере заполнения</div>
     </div>
-    <div class="glass-overlay__cards" id="gloCards"></div>
+    <!-- Этап «Вопросы»: карточки, «Решить все», хвост документа, выход в редактор -->
+    <div class="glass-overlay__resolve hidden" id="gloResolve">
+      <button class="btn btn-ghost btn-sm glass-auto hidden" id="glassAuto"
+              type="button">Решить все на усмотрение ИИ</button>
+      <div id="gloCards"></div>
+      <!-- Хвост документа, не влезший в потолок: потолок не поднимаем (сорок
+           слайдов автор и так проходит по одному больше получаса), но потерю
+           делаем обратимой — вторая дека с первого невзятого раздела. -->
+      <div class="glass-rest hidden" id="glassRest">
+        <button class="btn btn-ghost btn-sm" id="glassRestBtn" type="button"></button>
+        <p class="glass-rest-note hidden" id="glassRestNote"></p>
+      </div>
+      <div class="glass-foot hidden" id="glassDone">
+        <button class="btn hidden" id="glassRetry" type="button">Продолжить сборку</button>
+        <button class="btn btn-accent" id="glassFinish" type="button">Перейти к редактированию</button>
+      </div>
+    </div>
   </div>
   <div class="glass-overlay__film" id="gloFilm"></div>
 </div>

@@ -67,6 +67,10 @@ class DraftPlan(BaseModel):
     # вторую деку ровно с rest_from (glass.continue_glass). 0 = хвоста нет.
     rest: int = 0
     rest_from: int = 0
+    # Сборка остановлена автором («Остановить сборку»). Флаг живёт в плане,
+    # а не в памяти вкладки: F5 и «Продолжить» из истории возобновляют сборку
+    # по состоянию плана — без флага остановка молча отменялась бы.
+    paused: bool = False
 
 
 def plan_path(session_id: str) -> Path:

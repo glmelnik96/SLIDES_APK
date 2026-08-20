@@ -745,6 +745,9 @@ def score_next(session_id: str, *, client: Any | None = None) -> dict:
     with lock:
         plan = draft.load_plan(session_id)
         busy = _INFLIGHT.setdefault(session_id, set())
+        # Пауза: автор остановил сборку — новых запросов к модели не делаем.
+        if plan.paused:
+            return _result(plan, None, _done(plan, busy), action=None)
         index = _next_unscored(plan, busy)
         if index is None:
             return _result(plan, None, _done(plan, busy), action=None)
@@ -768,6 +771,11 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
     with lock:
         plan = draft.load_plan(session_id)
         busy = _INFLIGHT.setdefault(session_id, set())
+        # Пауза: автор остановил сборку. Гард на сервере, а не только на
+        # клиенте: вторая вкладка или уже запущенный цикл не должны продолжать
+        # жечь запросы к модели после «Остановить сборку».
+        if plan.paused:
+            return _result(plan, None, _done(plan, busy), action=None)
         index = _next_index(plan, busy)
         action = "fill" if index is not None else None
         if index is None:
@@ -794,6 +802,21 @@ def step_fill(session_id: str, *, client: Any | None = None) -> dict:
     with lock:
         done = _done(plan, _INFLIGHT.get(session_id, set()))
     return _result(plan, index, done, action=action)
+
+
+def set_paused(session_id: str, paused: bool) -> draft.DraftPlan:
+    """«Остановить сборку» / «Продолжить сборку»: флаг в плане под замком.
+
+    Стоп не убивает шаг, который уже ушёл в модель (HTTP до провайдера не
+    отзывается), но paused-гарды в step_fill/score_next гарантируют, что НОВЫХ
+    запросов не будет — ни из этой вкладки, ни из соседней. Поздний результат
+    оборванного шага доклеится в план (splice-into-fresh) — он уже оплачен."""
+    with _plan_lock(session_id):
+        plan = draft.load_plan(session_id)
+        if plan.paused != paused:
+            plan.paused = paused
+            draft.save_plan(session_id, plan)
+    return plan
 
 
 def answer(session_id: str, index: int, *, template_id: str | None = None,

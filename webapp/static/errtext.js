@@ -308,8 +308,8 @@
       txt = "Заполняю слайды по одному: готово " + s.filled + " из " +
         s.total + "…";
       if (open) txt += " " + open + " " +
-        plural(open, "вопрос ждёт", "вопроса ждут", "вопросов ждут") +
-        " вашего ответа — сборка не останавливается, ответить можно в любой момент.";
+        plural(open, "вопрос", "вопроса", "вопросов") +
+        " — разберём после заполнения, сборка не останавливается.";
     }
     if (s.failed) txt += " " + s.failed + " " +
       plural(s.failed, "слайд", "слайда", "слайдов") + " не " +
@@ -346,13 +346,6 @@
     return null;
   }
 
-  function glassScoutTarget(plan) {
-    var slides = (plan && plan.slides) || [];
-    for (var i = 0; i < slides.length; i++)
-      if (slides[i] && slides[i].status === "unscored") return i + 1;
-    return null;
-  }
-
   // Таймер тикает с первой секунды — это и есть замена плашки «дольше обычного».
   function glassFillLine(target, seconds) {
     if (!target) return "";
@@ -361,23 +354,38 @@
     return t;
   }
 
-  function glassScoutLine(index) {
-    return index ? "параллельно подбираю макет для слайда " + index : "";
-  }
-
-  // Степпер этапов: Документ → Раскладка → Заполнение N/M → Редактор.
+  // Степпер этапов: Документ → Раскладка → Заполнение N/M → [Вопросы] → Редактор.
   // Документ done всегда: экран существует только после удачного /glass/start.
+  // «Вопросы» — этап по требованию: появляется, только когда ИИ реально что-то
+  // спросил (open > 0). Пока идёт заполнение, он «впереди» (todo) — вопросы
+  // разбираются ПОСЛЕ заполнения, а не параллельно; quest=true переносит акцент
+  // на него (автозаполнение исчерпано, экран показывает карточки).
   function glassStages(s) {
     var layoutDone = s.total > 0 && !s.unscored;
     var fillDone = s.total > 0 && s.filled >= s.total;
-    return [
+    var st = [
       { label: "Документ", state: "done" },
       { label: "Раскладка", state: layoutDone ? "done" : "active" },
       { label: s.total ? "Заполнение " + s.filled + "/" + s.total : "Заполнение",
         state: fillDone ? "done"
+          : s.quest ? "todo"
           : (s.total && (layoutDone || s.filled)) ? "active" : "todo" },
-      { label: "Редактор", state: fillDone ? "active" : "todo" },
     ];
+    if (s.open) st.push({
+      label: "Вопросы (" + s.open + ")",
+      state: s.quest ? "active" : "todo",
+    });
+    st.push({ label: "Редактор",
+              state: fillDone && !s.open ? "active" : "todo" });
+    return st;
+  }
+
+  // Тихий счётчик у степпера: вопросы копятся молча и не дёргают автора,
+  // пока идёт заполнение. Пустая строка — счётчику нечего сказать.
+  function glassQuestNote(n) {
+    if (!n) return "";
+    return "? " + n + " " + plural(n, "вопрос", "вопроса", "вопросов") +
+      " — разберём после заполнения";
   }
 
   // Авто-переход в редактор (решение B): автозаполнение исчерпано — все слайды
@@ -395,31 +403,15 @@
     return total > 0 && !hasWork;
   }
 
-  // Текст компакт-индикатора досборки над сценой. Пустая строка = индикатору
-  // нечего сказать (всё заполнено и вопросов нет) — он исчезает.
-  function glassMiniText(s) {
-    if (s.working) {
-      var t = "Досборка: " + s.filled + " из " + s.total;
-      if (s.line) t += " · " + s.line;
-      return t;
-    }
-    var open = s.open || 0;
-    if (open) return open + " " +
-      plural(open, "вопрос ждёт", "вопроса ждут", "вопросов ждут") + " ответа";
-    return "";
-  }
-
   root.SAVE_STATUS = SAVE_STATUS;
   root.glassStepDecision = glassStepDecision;
   root.glassStatusText = glassStatusText;
   root.glassSlideLabel = glassSlideLabel;
   root.glassCurrentTarget = glassCurrentTarget;
-  root.glassScoutTarget = glassScoutTarget;
   root.glassFillLine = glassFillLine;
-  root.glassScoutLine = glassScoutLine;
   root.glassStages = glassStages;
+  root.glassQuestNote = glassQuestNote;
   root.glassAutoExitReady = glassAutoExitReady;
-  root.glassMiniText = glassMiniText;
   root.histDur = histDur;
   root.briefDisplay = briefDisplay;
   root.CHAT_BUILD_EMPTY = CHAT_BUILD_EMPTY;
@@ -434,9 +426,9 @@
     module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
       glassStepDecision: glassStepDecision, glassStatusText: glassStatusText,
       glassSlideLabel: glassSlideLabel, glassCurrentTarget: glassCurrentTarget,
-      glassScoutTarget: glassScoutTarget, glassFillLine: glassFillLine,
-      glassScoutLine: glassScoutLine, glassStages: glassStages,
-      glassAutoExitReady: glassAutoExitReady, glassMiniText: glassMiniText,
+      glassFillLine: glassFillLine,
+      glassStages: glassStages, glassQuestNote: glassQuestNote,
+      glassAutoExitReady: glassAutoExitReady,
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
