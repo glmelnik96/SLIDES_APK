@@ -55,8 +55,10 @@ def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
 def test_index_has_three_entry_cards(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
-        # three entry zones: upload (hero) + chat + template
-        assert 'id="uploadFlow"' in html and 'id="create"' in html and 'id="drop"' in html
+        # three entry zones: upload (hero) + chat + template; upload's single
+        # start button is glass («стеклянная сборка» — дефолт веба)
+        assert 'id="uploadFlow"' in html and 'id="createGlass"' in html and 'id="drop"' in html
+        assert 'id="create"' not in html
         assert 'id="openChat"' in html
         assert 'id="openManual"' in html
 
