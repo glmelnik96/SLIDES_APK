@@ -1131,6 +1131,52 @@ def test_two_steps_never_take_the_same_slide(monkeypatch, tmp_path):
     assert plan.slides[1].filled and plan.slides[2].filled
 
 
+def test_editor_edit_during_step_does_not_lose_the_spliced_fill(monkeypatch, tmp_path):
+    """Правка редактора и сплайс фонового шага сериализованы замком плана.
+
+    Сценарий фоновой досборки: автор правит слайд в редакторе, пока шаг
+    заполняет соседний. До фикса PUT шёл без замка: load до сплайса, persist
+    после — устаревший снимок молча откатывал только что заполненный слайд в
+    «сырое» состояние (а после done его уже никто не перезаполнял)."""
+    import threading
+    import time
+
+    import htmlslides.pipeline.filler as filler
+
+    with _client_app(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        draft.save_plan(sid, _outline_plan(question=False))
+        gate, entered = threading.Event(), threading.Event()
+        monkeypatch.setattr(filler, "fill_slide", _gated_fill(gate, entered))
+        step = threading.Thread(target=glass.step_fill,
+                                kwargs={"session_id": sid, "client": FakeClient([])})
+        step.start()
+        assert entered.wait(5)          # шаг взял слайд 2 и «ушёл в модель»
+
+        persist = appmod._persist_draft
+
+        def _racy_persist(session_id, plan):
+            # Снимок правки уже загружен — отпускаем шаг и даём ему дойти до
+            # сплайса. Под замком плана сплайс обязан дождаться нашего persist;
+            # без замка он закоммитил бы заполнение, которое persist устаревшего
+            # снимка тут же откатил бы.
+            gate.set()
+            time.sleep(0.3)
+            persist(session_id, plan)
+
+        monkeypatch.setattr(appmod, "_persist_draft", _racy_persist)
+        r = c.put(f"/api/drafts/{sid}/slides/3", headers=H(),
+                  json={"content": {"title": "Правка автора"}})
+        assert r.status_code == 200
+        monkeypatch.setattr(appmod, "_persist_draft", persist)
+        step.join(5)
+        assert not step.is_alive()
+
+        plan = draft.load_plan(sid)
+        assert plan.slides[1].filled                      # сплайс шага уцелел
+        assert plan.slides[2].content == {"title": "Правка автора"}
+
+
 def test_answer_refuses_a_slide_that_is_not_waiting(monkeypatch, tmp_path):
     """Устаревшая вкладка не перезаполняет обложку и готовые слайды."""
     import htmlslides.pipeline.filler as filler

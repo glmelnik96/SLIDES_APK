@@ -1174,6 +1174,9 @@ a { color: var(--accent); }
 .glass-q__excerpt { margin-top: 6px; padding: 8px 10px; background: var(--surface-inset);
   border-radius: var(--radius-ctl); font-size: var(--fs-cap); color: var(--muted);
   line-height: 1.45; white-space: pre-line; overflow: hidden;
+  /* clip по content-box: hidden режет по padding-box, и в нижнем padding
+     проглядывал обрезанный посередине кусок шестой строки. */
+  overflow: clip; overflow-clip-margin: content-box;
   display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
 .glass-q__excerpt.is-open { display: block; max-height: 220px; overflow-y: auto; }
 .glass-q__more, .glass-q__other { background: none; border: 0; padding: 0; cursor: pointer;

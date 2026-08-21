@@ -6,6 +6,7 @@ import datetime as _dt
 import json as _json
 import logging
 import os
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
@@ -519,6 +520,21 @@ def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
     deck_edit.save_deck(session_id, html)
 
 
+@contextmanager
+def _plan_txn(session_id: str):
+    """Замок плана на всё read-modify-write редакторской мутации.
+
+    Фоновая досборка (glass) вклеивает результат шага в план атомарно под
+    glass._plan_lock, а редакторские мутации ходили без замка: между их load
+    и persist сплайс шага успевал закоммитить заполненный слайд — и persist
+    устаревшего снимка молча откатывал его в «сырое» состояние (после done —
+    навсегда, конвейер уже не перезаполнит). Поэтому каждая мутация читает
+    СВЕЖИЙ план под тем же замком и пишет, не отпуская его."""
+    from webapp import glass
+    with glass._plan_lock(session_id):  # noqa: SLF001 — общий замок плана
+        yield draft.load_plan(session_id)
+
+
 @app.put("/api/drafts/{session_id}")
 async def replace_draft(session_id: str, request: Request,
                         user=Depends(get_current_user)) -> JSONResponse:
@@ -556,7 +572,8 @@ async def replace_draft(session_id: str, request: Request,
         except SlotValidationError:
             raise HTTPException(400, f"слайд {i}: неизвестный макет «{tid}»")
     try:
-        _persist_draft(session_id, plan)
+        with _plan_txn(session_id):
+            _persist_draft(session_id, plan)
     except SlotValidationError as exc:
         # Страховка: что бы рендер ни отверг сверх пред-проверки — это претензия
         # к плану, а не сбой сервера (план на диске цел: рендер идёт до записи).
@@ -568,7 +585,7 @@ async def replace_draft(session_id: str, request: Request,
 async def add_draft_slide(session_id: str, request: Request,
                           user=Depends(get_current_user)) -> JSONResponse:
     from webapp import templates_api
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     template_id = data.get("template_id")
     # B-11: скрытый макет (есть в библиотеке, но не в пикере) и неизвестный id —
@@ -588,26 +605,28 @@ async def add_draft_slide(session_id: str, request: Request,
     # filler ("рыба-текст") is supplied at render time by draft_render, so a fresh
     # master shows example text in the slide while its input stays empty. A layout
     # swap still carries over the caller's overlapping slots.
-    plan = draft.add_slide(plan, draft.DraftSlide(
-        template_id=template_id, content=data.get("content") or {}), at=at)
-    _persist_draft(session_id, plan)
+    with _plan_txn(session_id) as plan:
+        plan = draft.add_slide(plan, draft.DraftSlide(
+            template_id=template_id, content=data.get("content") or {}), at=at)
+        _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
 
 @app.put("/api/drafts/{session_id}/slides/{index}")
 async def update_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     content = data.get("content")
     if not isinstance(content, dict):
         raise HTTPException(400, "не передано содержимое слайда (content)")
-    try:
-        target = plan.slides[index - 1]
-        plan = draft.update_slide(plan, index, content=content)
-    except IndexError:
-        raise HTTPException(404, "такого слайда нет")
-    _persist_draft(session_id, plan)
+    with _plan_txn(session_id) as plan:
+        try:
+            target = plan.slides[index - 1]
+            plan = draft.update_slide(plan, index, content=content)
+        except IndexError:
+            raise HTTPException(404, "такого слайда нет")
+        _persist_draft(session_id, plan)
     # Soft validation: the deck still renders (clamped), but report any contract
     # issues so the UI can flag fields without blocking the edit.
     errors = (_validation_errors(target.template_id, content)
@@ -621,16 +640,17 @@ async def update_draft_slide_html(session_id: str, index: int, request: Request,
     """Persist an in-place (contenteditable) edit of a draft slide. The edited
     slide becomes freeform (its <section> HTML is the content), mirroring how a
     chat-rewrite is stored — so a later form/agent edit doesn't clobber it."""
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     html = (data.get("html") or "").strip()
     if not html:
         raise HTTPException(400, "не передан HTML слайда")
     section = chat_edit.nth_section(html, 1) or html  # accept a bare <section>
-    if not (1 <= index <= len(plan.slides)):
-        raise HTTPException(404, "такого слайда нет")
-    plan = _to_freeform(plan, index, section)
-    _persist_draft(session_id, plan)
+    with _plan_txn(session_id) as plan:
+        if not (1 <= index <= len(plan.slides)):
+            raise HTTPException(404, "такого слайда нет")
+        plan = _to_freeform(plan, index, section)
+        _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
 
@@ -644,7 +664,7 @@ async def update_draft_slide_fields(session_id: str, index: int, request: Reques
     400 left the diagram panel with a silent «error» — правку отвергли, а что
     именно сломано (узел без связей, одна дорожка вместо двух) не сказали."""
     from webapp import slide_types
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     slide_type = data.get("slide_type")
     norm, claims = slide_types.validate_fields_verbose(slide_type,
@@ -652,39 +672,43 @@ async def update_draft_slide_fields(session_id: str, index: int, request: Reques
     if norm is None:
         raise HTTPException(400, {"error": "поля не проходят контракт типа",
                                   "errors": claims})
-    if not 1 <= index <= len(plan.slides):
-        raise HTTPException(404, "такого слайда нет")
-    plan.slides[index - 1] = plan.slides[index - 1].model_copy(
-        update={"slide_type": slide_type, "fields": norm, "filled": False})
-    _persist_draft(session_id, plan)
+    with _plan_txn(session_id) as plan:
+        if not 1 <= index <= len(plan.slides):
+            raise HTTPException(404, "такого слайда нет")
+        plan.slides[index - 1] = plan.slides[index - 1].model_copy(
+            update={"slide_type": slide_type, "fields": norm, "filled": False})
+        _persist_draft(session_id, plan)
     return JSONResponse({"plan": plan.model_dump(), "errors": []})
 
 
 @app.delete("/api/drafts/{session_id}/slides/{index}")
 async def delete_draft_slide(session_id: str, index: int, request: Request,
                              user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
-    try:
-        plan = draft.delete_slide(plan, index)
-    except IndexError:
-        raise HTTPException(404, "такого слайда нет")
-    _persist_draft(session_id, plan)
+    await _draft_or_404(request, session_id, user, mutate=True)
+    with _plan_txn(session_id) as plan:
+        try:
+            plan = draft.delete_slide(plan, index)
+        except IndexError:
+            raise HTTPException(404, "такого слайда нет")
+        _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
 
 @app.post("/api/drafts/{session_id}/slides/{index}/move")
 async def move_draft_slide(session_id: str, index: int, request: Request,
                            user=Depends(get_current_user)) -> JSONResponse:
-    plan = await _draft_or_404(request, session_id, user, mutate=True)
+    await _draft_or_404(request, session_id, user, mutate=True)
     data = await _json_body(request)
     try:
         to = int(data["to"])
-        plan = draft.reorder(plan, index, to)
     except (KeyError, TypeError, ValueError):
         raise HTTPException(400, "не передана позиция назначения (to)")
-    except IndexError:
-        raise HTTPException(404, "такого слайда нет")
-    _persist_draft(session_id, plan)
+    with _plan_txn(session_id) as plan:
+        try:
+            plan = draft.reorder(plan, index, to)
+        except IndexError:
+            raise HTTPException(404, "такого слайда нет")
+        _persist_draft(session_id, plan)
     return JSONResponse(plan.model_dump())
 
 
@@ -758,7 +782,8 @@ async def draft_agent(session_id: str, request: Request,
             "Ассистент не смог обработать запрос — попробуйте переформулировать",
         ) from exc
     if res.changed:
-        _persist_draft(session_id, draft.load_plan(session_id))
+        with _plan_txn(session_id) as plan:
+            _persist_draft(session_id, plan)
     return JSONResponse(res.model_dump())
 
 
@@ -1185,8 +1210,9 @@ async def post_theme(session_id: str, request: Request,
         # Drafts re-derive deck.html from plan.json on every form edit, which
         # would silently revert the flip — persist the choice in the plan too.
         if draft.plan_path(session_id).is_file():
-            plan = draft.load_plan(session_id)
-            draft.save_plan(session_id, plan.model_copy(update={"theme": theme}))
+            with _plan_txn(session_id) as plan:
+                draft.save_plan(session_id,
+                                plan.model_copy(update={"theme": theme}))
     # Freeform slides (chat-edit/autofix) may carry literal colors authored
     # against the old background — surface them so the UI can suggest a check.
     check = deck_edit.slides_with_hardcoded_colors(html)
@@ -1242,10 +1268,10 @@ async def post_chat(session_id: str, request: Request,
     # freeform slide, so a later form edit / re-render doesn't clobber it.
     if draft.plan_path(session_id).is_file():
         if section:
-            plan = draft.load_plan(session_id)
-            if 1 <= slide_index <= len(plan.slides):
-                plan = _to_freeform(plan, slide_index, section)
-                draft.save_plan(session_id, plan)
+            with _plan_txn(session_id) as plan:
+                if 1 <= slide_index <= len(plan.slides):
+                    plan = _to_freeform(plan, slide_index, section)
+                    draft.save_plan(session_id, plan)
     return JSONResponse({"ok": True})
 
 

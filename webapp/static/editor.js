@@ -3978,6 +3978,9 @@ function renderGlassPanel(out) {
   const stalled = !working && open.length > 0;
   byId("glassDone")?.classList.toggle("hidden", !(glassLoopDone || stalled));
   renderGlassOverlay();
+  // Перемер обрезки фрагментов ПОСЛЕ renderGlassOverlay: именно он впервые
+  // показывает панель «Вопросы», а замер честен только в видимом контейнере.
+  Object.values(glassCards).forEach((c) => c._syncExcerpt?.());
   // Счётчик вопросов в заголовке вкладки: сборка идёт минуты, автор уходит в
   // другую вкладку — «(2) …» возвращает его, когда ИИ ждёт решения.
   document.title = open.length
@@ -4119,7 +4122,9 @@ function gloPeek(n) {
   gloHoldUntil = Date.now() + GLO_PEEK_MS;
   ifr.classList.remove("hidden");
   byId("gloSkel")?.classList.add("hidden");
-  ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${n}`);
+  // Свежий t, как в gloShowSlide: повторный peek того же слайда со старым deckT
+  // отдавал бы кадр из кэша браузера — рендер до последних заполнений.
+  ifr.src = U(`/api/jobs/${sessionId}/deck?t=${Date.now()}&editor=1&slide=${n}`);
   const cap = byId("gloCap");
   if (cap) cap.textContent =
     `${n}. ${glassSlideLabel(s, n)} — уже собран, заполнение продолжается`;
@@ -4325,10 +4330,15 @@ function makeGlassCard(idx) {
     };
     card.appendChild(more);
     // Обрезку меряем, а не угадываем по длине строки: панель узкая, и один и
-    // тот же фрагмент то влезает в пять строк, то нет. Меряется только в DOM —
-    // отсюда хук, который дёргает renderGlassQuestions после вставки.
-    card._syncExcerpt = () =>
+    // тот же фрагмент то влезает в пять строк, то нет. Меряется только в
+    // ВИДИМОМ свёрнутом DOM: карточки создаются, пока панель «Вопросы» ещё
+    // скрыта (display:none → высоты нулевые), и разовый замер при вставке
+    // навсегда прятал кнопку — перемер идёт из renderGlassPanel после показа.
+    card._syncExcerpt = () => {
+      if (ex.classList.contains("is-open")) return; // раскрыт — кнопка «Свернуть» нужна
+      if (!ex.clientHeight) return;                 // панель скрыта — мерить нечего
       more.classList.toggle("hidden", ex.scrollHeight <= ex.clientHeight + 2);
+    };
   }
   const q = document.createElement("p");
   q.className = "glass-q__text";
@@ -4532,8 +4542,11 @@ async function glassAnswerAll() {
 function glassResume() {
   if (glassLoopDone) {
     renderGlassPanel(null);
-    // степпер уже финишировал, вопросов и осечек больше нет → в редактор
-    if (!openGlassQuestions().length && !glassFailedSlides().length) exitGlassMode();
+    // Степпер уже финишировал, вопросов и осечек больше нет → в редактор.
+    // Незабранный хвост держит панель, как и в glassSteps: уведомление о
+    // потере и кнопка «собрать остальное» живут только здесь.
+    if (!openGlassQuestions().length && !glassFailedSlides().length &&
+        !(draftPlan.rest || 0)) exitGlassMode();
     return;
   }
   // Петлю — ДО перерисовки: glassLooping ставится до первого await, и статус
@@ -4556,6 +4569,11 @@ function exitGlassMode() {
   renderBuilderForm();
   syncImproveButton();   // сборка кончилась — точечное улучшение доступно
   syncGlassResumeBtn();  // сборка остановлена автором → в тулбаре «Продолжить»
+  // Точечный refresh во время сборки идёт через pendingGoTo (jump), но слайд,
+  // заполненный без jump (поздний сплайс оборванного шага, ответ, разведчик),
+  // оставался в ленте скелетом «Заголовок слайда» до F5 — на выходе пересобираем
+  // ленту целиком: src и подписи всех миниатюр становятся честными разом.
+  thumbsDirty = true;
   loadDeck();            // перерисовать превью уже с contenteditable
   // F5 после выхода — обычный конструктор, а не перезапуск степпера
   const url = new URL(location.href);
