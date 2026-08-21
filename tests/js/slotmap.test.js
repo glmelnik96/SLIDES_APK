@@ -3,7 +3,8 @@
    и слайд показывал вместо него пример-рыбу. */
 const test = require("node:test");
 const assert = require("node:assert");
-const { remapLists, remapItem } = require("../../webapp/static/slotmap.js");
+const { remapLists, remapItem, applySlotEdit } =
+  require("../../webapp/static/slotmap.js");
 
 const CARDS = {
   id: "two-col-cards",
@@ -102,4 +103,61 @@ test("remapItem: одноимённый слот важнее роли", () => {
   const out = remapItem({ text: "тело", heading: "шапка" },
                         { heading: { kind: "text" }, text: { kind: "text" } });
   assert.deepStrictEqual(out, { heading: "шапка", text: "тело" });
+});
+
+/* applySlotEdit: правка текста прямо на слайде уезжает в поля плана, а не в
+   свободный режим — ручная сборка двусторонняя (форма справа + сам слайд). */
+const LIST = { kind: "list",
+               item_slots: { heading: { kind: "text" }, body: { kind: "text" } } };
+
+test("applySlotEdit: text-слот — правка ложится целиком", () => {
+  assert.strictEqual(
+    applySlotEdit({ kind: "text" }, "Старый заголовок", "Старый заголовок", "Новый"),
+    "Новый");
+});
+
+test("applySlotEdit: text-слот с рыбой — правка перекрывает пустое значение", () => {
+  assert.strictEqual(
+    applySlotEdit({ kind: "text" }, "", "Пример-рыба на слайде", "Свой текст"),
+    "Свой текст");
+});
+
+test("applySlotEdit: text-слот опустошили — пустая строка (не null)", () => {
+  assert.strictEqual(applySlotEdit({ kind: "text" }, "Было", "Было", "  "), "");
+});
+
+test("applySlotEdit: list — правится единственный совпавший пункт", () => {
+  const items = [{ heading: "Своя", body: "Контроль" },
+                 { heading: "Коробка", body: "Запуск" }];
+  const out = applySlotEdit(LIST, items, "Запуск", "Запуск за 5 месяцев");
+  assert.deepStrictEqual(out[1], { heading: "Коробка", body: "Запуск за 5 месяцев" });
+  assert.deepStrictEqual(out[0], items[0]);
+  assert.deepStrictEqual(items[1], { heading: "Коробка", body: "Запуск" }); // вход цел
+});
+
+test("applySlotEdit: list — два одинаковых текста = неоднозначно, null", () => {
+  const items = [{ heading: "Итог" }, { heading: "Итог" }];
+  assert.strictEqual(applySlotEdit(LIST, items, "Итог", "Другое"), null);
+});
+
+test("applySlotEdit: list — текст не найден (рыба пустого слота) → null", () => {
+  assert.strictEqual(applySlotEdit(LIST, [], "Пример-рыба", "Своё"), null);
+  assert.strictEqual(applySlotEdit(LIST, undefined, "Пример-рыба", "Своё"), null);
+});
+
+test("applySlotEdit: сравнение терпимо к обрамляющим пробелам", () => {
+  const out = applySlotEdit(LIST, [{ body: "Текст" }], "  Текст\n", " Новый ");
+  assert.deepStrictEqual(out, [{ body: "Новый" }]);
+});
+
+test("applySlotEdit: group — правится поле объекта", () => {
+  const spec = { kind: "group",
+                 item_slots: { name: { kind: "text" }, phone: { kind: "text" } } };
+  const out = applySlotEdit(spec, { name: "Иван", phone: "111" }, "111", "222");
+  assert.deepStrictEqual(out, { name: "Иван", phone: "222" });
+});
+
+test("applySlotEdit: image и неизвестный kind не мапятся", () => {
+  assert.strictEqual(applySlotEdit({ kind: "image" }, "data:...", "x", "y"), null);
+  assert.strictEqual(applySlotEdit(null, "x", "x", "y"), null);
 });

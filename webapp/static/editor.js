@@ -202,11 +202,21 @@ function handleFrameLoad(loaded) {
           const changed = orig !== undefined && el.innerHTML !== orig;
           el.__origHtml = undefined;
           if (!changed) return;
+          // Ручная сборка — двусторонняя: правка, попавшая в [data-slot]
+          // макетного слайда, уезжает В ПОЛЯ плана (форма справа остаётся
+          // живой), а не конвертирует слайд в freeform. Свободный режим —
+          // только фолбэк для правок, которые в поля не ложатся.
+          if (!draftPlan.slides[i]?.freeform && await syncDraftSlotEdit(i, el, orig)) {
+            if (el.hasAttribute("data-count-final")) {
+              el.setAttribute("data-count-final", el.textContent);
+            }
+            return;
+          }
           // К§1: перед ПЕРВОЙ конвертацией не-freeform слайда в свободный режим —
           // подтверждение. Отказ восстанавливает исходный HTML и НЕ синкает.
           if (!draftPlan.slides[i]?.freeform && !freeformConfirmed) {
             const ok = await confirmDialog(
-              "Правка прямо на слайде переведёт его в свободный режим: поля формы станут недоступны. Продолжить?",
+              "Эта правка не ложится в поля макета, слайд перейдёт в свободный режим: поля формы станут недоступны. Продолжить?",
               "Продолжить", "Отмена");
             if (!ok) { el.innerHTML = orig; return; }
             freeformConfirmed = true;
@@ -313,6 +323,66 @@ async function syncDraftSlideHtml(i) {
       await syncDraftSlideHtml(next.value);
     }
   }
+}
+
+// Правка прямо на слайде БЕЗ ухода в свободный режим: если редактируемый узел
+// лежит внутри [data-slot] макетного слайда и правку можно однозначно отразить
+// в content (applySlotEdit, slotmap.js) — сохраняем её как обычную правку полей
+// (PUT content). Слайд остаётся макетным, форма справа продолжает работать.
+// Возвращает true, если правка учтена этим путём (успешно или с честным
+// error-статусом); false — пусть вызывающий решает про freeform-фолбэк.
+async function syncDraftSlotEdit(i, el, origHtml) {
+  const slide = draftPlan.slides[i];
+  if (!slide || slide.freeform || slide.slide_type || !slide.template_id) return false;
+  const tpl = tplOf(slide.template_id);
+  if (!tpl) return false;
+  const holder = el.closest && el.closest("[data-slot]");
+  if (!holder) return false;
+  const name = holder.getAttribute("data-slot");
+  const spec = tpl.slots[name];
+  if (!spec) return false;
+  // Текст-слот рендерится «слот = один узел» (data-slot на самом листе); чужая
+  // вложенность — не наш случай, надёжнее фолбэк.
+  if (spec.kind === "text" && el !== holder) return false;
+  const t = document.createElement("div");
+  t.innerHTML = origHtml == null ? "" : origHtml;
+  const content = slide.content || {};
+  const newVal = applySlotEdit(spec, content[name], t.textContent, el.textContent);
+  if (newVal == null) return false;
+  const patched = Object.assign({}, content);
+  patched[name] = newVal;
+  setSaveStatus("saving");
+  let r = null;
+  try {
+    r = await fetch(U(`/api/drafts/${sessionId}/slides/${i + 1}`), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: patched }),
+    });
+  } catch (_) { /* сеть упала — ниже честный error-статус */ }
+  // 409 — дека уже собрана/пересобирается, серверное состояние главнее.
+  if (r && r.status === 409) {
+    try { await reloadDraft(i); } catch (_) {}
+    setSaveStatus("error");
+    return true;
+  }
+  if (!r || !r.ok) {
+    // План НЕ мутируем (правка не принята) — но и в freeform не уводим:
+    // текст остался на слайде, статус честно говорит «не сохранено».
+    setSaveStatus("error");
+    return true;
+  }
+  const { errors } = await r.json();
+  slide.content = patched;
+  setSaveStatus("saved");
+  markExportsStale();
+  if (spec.kind === "text") el.classList.remove("is-placeholder"); // слот заполнен
+  if (i === current && mode === "manual") {
+    renderBuilderForm();               // форма подхватывает новое значение
+    markFieldErrors(errors || []);
+  }
+  // Опустевший слот сервер рисует рыбой/прячет — DOM надо перерисовать целиком.
+  if (spec.kind === "text" && String(newVal).trim() === "") loadDeck();
+  return true;
 }
 
 // Переработка glass 2026-08-20 (жалоба №2): вопрос виден на САМОМ слайде, а не

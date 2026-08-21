@@ -81,8 +81,48 @@
     return out;
   }
 
+  // Правка текста прямо на слайде → патч значения слота (ручной режим должен
+  // принимать правки с обеих сторон: и в форме, и на слайде, без ухода слайда
+  // в свободный режим). Возвращает новое значение слота или null, если правку
+  // нельзя однозначно положить в поля:
+  //   text  — всегда мапится (весь слот = один текст);
+  //   list  — ищем ЕДИНСТВЕННЫЙ пункт-подполе с исходным текстом; 0 или 2+
+  //           совпадений → неоднозначно (например, два одинаковых заголовка);
+  //   group — то же по полям одного объекта;
+  //   image и прочее — не текст, не мапится.
+  function applySlotEdit(spec, value, origText, newText) {
+    if (!spec) return null;
+    var was = String(origText === null || origText === undefined ? "" : origText).trim();
+    var now = String(newText === null || newText === undefined ? "" : newText).trim();
+    if (spec.kind === "text") return now;
+    if (spec.kind !== "list" && spec.kind !== "group") return null;
+    var items = spec.kind === "group"
+      ? [value] : Array.isArray(value) ? value : [];
+    var hitItem = -1, hitSub = null, hits = 0;
+    items.forEach(function (item, i) {
+      if (!item || typeof item !== "object") return;
+      Object.keys(item).forEach(function (sub) {
+        var v = item[sub];
+        if (String(v === null || v === undefined ? "" : v).trim() === was && was !== "") {
+          hits += 1; hitItem = i; hitSub = sub;
+        }
+      });
+    });
+    if (hits !== 1) return null;
+    var patched = items.map(function (item, i) {
+      if (i !== hitItem) return item;
+      var copy = {};
+      Object.keys(item).forEach(function (k) { copy[k] = item[k]; });
+      copy[hitSub] = now;
+      return copy;
+    });
+    return spec.kind === "group" ? patched[0] : patched;
+  }
+
   root.remapLists = remapLists;
   root.remapItem = remapItem;
+  root.applySlotEdit = applySlotEdit;
   if (typeof module !== "undefined" && module.exports)
-    module.exports = { remapLists: remapLists, remapItem: remapItem, roleOf: roleOf };
+    module.exports = { remapLists: remapLists, remapItem: remapItem, roleOf: roleOf,
+                       applySlotEdit: applySlotEdit };
 })(typeof window !== "undefined" ? window : globalThis);
