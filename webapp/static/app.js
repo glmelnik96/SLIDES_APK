@@ -855,7 +855,9 @@ async function startDraft(mode, btn) {
   try {
     const r = await fetch(U("/api/drafts"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify(mode === "manual"
+        ? { mode, skeleton: true }   // старт со структурой (спека, §1) — флаг
+        : { mode }),                 // шлёт ТОЛЬКО эта кнопка, glass не задет
     });
     if (!r.ok) throw new Error("draft create failed");
     const { session_id } = await r.json();
