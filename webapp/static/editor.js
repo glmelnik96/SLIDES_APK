@@ -3121,6 +3121,25 @@ function curBadge() {
   return b;
 }
 
+// Плитка превью: статичный PNG (лёгкий — 22 live-iframe тормозили пикер) с
+// фолбэком на live-iframe (прежнее поведение) — сервер отдаёт 404, когда
+// Chromium недоступен, и на любом сбое картинки пикер работает как раньше.
+function thumbPreview(prev, thumbUrl, iframeUrl) {
+  const img = document.createElement("img");
+  img.className = "picker-thumb";
+  img.loading = "lazy";
+  img.alt = "";
+  img.onerror = () => {
+    const ifr = document.createElement("iframe");
+    ifr.loading = "lazy";
+    ifr.tabIndex = -1;
+    ifr.src = iframeUrl;
+    img.replaceWith(ifr);
+  };
+  img.src = thumbUrl;
+  prev.appendChild(img);
+}
+
 // cur = {id, kind} текущего слайда (для «Сменить макет»); при добавлении — пусто.
 // Без пометки «сейчас» пикер не отвечал на вопрос «а что стоит сейчас?»: список
 // одинаковых карточек, среди которых уже выбранная ничем не выделена.
@@ -3144,63 +3163,67 @@ async function openPicker(onPick, cur) {
       "проверьте соединение и откройте список ещё раз.</p>";
     return;
   }
-  pickable.forEach((t, i) => {
-    const isCur = !!curId && t.id === curId;
-    // Мастер, а не макет: за карточкой — второй шаг со списком типов схем.
-    const wizard = t.id === "diagram" && kinds.length > 1;
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "picker-item" + (isCur ? " picker-item--current" : "");
-    // visual preview: a scaled iframe of the real one-slide render (lazy src)
-    const prev = document.createElement("div");
-    prev.className = "picker-prev";
-    const ifr = document.createElement("iframe");
-    ifr.loading = "lazy";
-    ifr.tabIndex = -1;
-    ifr.src = U(`/api/templates/${t.id}/preview?static=1`);  // К§16: покойные превью, без лупов
-    prev.appendChild(ifr);
-    if (isCur) prev.appendChild(curBadge());
-    if (wizard) {
-      // Превью показывает ОДНУ схему — без пометки карточка врёт, что тип один.
-      const b = document.createElement("span");
-      b.className = "picker-wizard";
-      b.textContent = `${kinds.length} ${plural(kinds.length, "тип", "типа",
-        "типов")} на выбор`;
-      prev.appendChild(b);
-    }
-    const num = document.createElement("span");
-    num.className = "picker-num";
-    num.textContent = String(i + 1).padStart(2, "0");
-    prev.appendChild(num);
-    const meta = document.createElement("div");
-    meta.className = "picker-meta";
-    // К§2: человекочитаемое имя макета крупно; сырой id — приглушённой третьей строкой (фолбэк на id).
-    meta.innerHTML = `<span class="picker-id">${t.display_name || t.id}</span>` +
-      `<span class="picker-intent">${t.intent || ""}</span>` +
-      (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
-    if (wizard) {
-      // Перечисляем несколько имён: «много» абстрактно, а «блок-схема, воронка,
-      // цикл…» сразу говорит, что именно откроется.
-      const more = document.createElement("span");
-      more.className = "picker-more";
-      const names = kinds.slice(0, 3).map((k) => k.display_name || k.kind);
-      more.textContent = "Откроется выбор: " + names.join(", ")
-        + (kinds.length > names.length ? " и другие" : "");
-      meta.appendChild(more);
-    }
-    card.appendChild(prev);
-    card.appendChild(meta);
-    card.onclick = () => {
-      picker.classList.add("hidden");
-      // Мастер «Схема» — двухшаговый выбор: сначала макет, затем тип диаграммы.
-      // onPick получает вторым аргументом kind — вызывающий материализует пример.
-      if (t.id === "diagram") openDiagramPicker((kind) => onPick(t.id, kind),
-                                                cur && cur.kind);
-      // Пересадка «в тот же макет» — это delete+add: у диаграммного слайда она
-      // сбрасывала схему к примеру. Уже выбранная карточка просто закрывает пикер.
-      else if (!isCur) onPick(t.id);
-    };
-    grid.appendChild(card);
+  // Тема миниатюр = тема черновика: пикер показывает то, что реально встанет.
+  const th = draftPlan && draftPlan.theme === "light" ? "light" : "dark";
+  let num = 0;
+  PickerGroups.groupTemplates(pickable).forEach((group) => {
+    const head = document.createElement("div");
+    head.className = "picker-group";
+    head.textContent = group.label;
+    grid.appendChild(head);
+    group.items.forEach((t) => {
+      num += 1;
+      const isCur = !!curId && t.id === curId;
+      // Мастер, а не макет: за карточкой — второй шаг со списком типов схем.
+      const wizard = t.id === "diagram" && kinds.length > 1;
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "picker-item" + (isCur ? " picker-item--current" : "");
+      // visual preview: static PNG thumb, live-iframe as the 404 fallback
+      const prev = document.createElement("div");
+      prev.className = "picker-prev";
+      thumbPreview(prev, U(`/api/templates/${t.id}/thumb?theme=${th}`),
+                   U(`/api/templates/${t.id}/preview?static=1`));  // К§16: покойные превью, без лупов
+      if (isCur) prev.appendChild(curBadge());
+      const n = document.createElement("span");
+      n.className = "picker-num";
+      n.textContent = String(num).padStart(2, "0");
+      prev.appendChild(n);
+      const meta = document.createElement("div");
+      meta.className = "picker-meta";
+      // К§2: имя крупно; сырой id — приглушённой строкой (фолбэк на id). Бейдж
+      // «N типов» — обычный чип в строке имени (раньше — плашка поверх превью,
+      // вклеенная в вёрстку криво; без пометки карточка врёт, что тип один).
+      meta.innerHTML = `<span class="picker-id">${t.display_name || t.id}` +
+        (wizard ? ` <span class="picker-badge">${kinds.length} ` +
+          `${plural(kinds.length, "тип", "типа", "типов")}</span>` : "") +
+        `</span>` +
+        `<span class="picker-intent">${t.intent || ""}</span>` +
+        (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
+      if (wizard) {
+        // Перечисляем несколько имён: «много» абстрактно, а «блок-схема, воронка,
+        // цикл…» сразу говорит, что именно откроется.
+        const more = document.createElement("span");
+        more.className = "picker-more";
+        const names = kinds.slice(0, 3).map((k) => k.display_name || k.kind);
+        more.textContent = "Откроется выбор: " + names.join(", ")
+          + (kinds.length > names.length ? " и другие" : "");
+        meta.appendChild(more);
+      }
+      card.appendChild(prev);
+      card.appendChild(meta);
+      card.onclick = () => {
+        picker.classList.add("hidden");
+        // Мастер «Схема» — двухшаговый выбор: сначала макет, затем тип диаграммы.
+        // onPick получает вторым аргументом kind — вызывающий материализует пример.
+        if (t.id === "diagram") openDiagramPicker((kind) => onPick(t.id, kind),
+                                                  cur && cur.kind);
+        // Пересадка «в тот же макет» — это delete+add: у диаграммного слайда она
+        // сбрасывала схему к примеру. Уже выбранная карточка просто закрывает пикер.
+        else if (!isCur) onPick(t.id);
+      };
+      grid.appendChild(card);
+    });
   });
 }
 byId("pickerClose")?.addEventListener("click", () =>
@@ -3245,6 +3268,8 @@ async function openDiagramPicker(onKind, curKind) {
       "проверьте соединение и откройте список ещё раз.</p>";
     return;
   }
+  // Тема миниатюр = тема черновика (как в пикере макетов).
+  const th = draftPlan && draftPlan.theme === "light" ? "light" : "dark";
   cat.forEach((t) => {
     const isCur = !!curKind && t.kind === curKind;
     const card = document.createElement("button");
@@ -3254,11 +3279,8 @@ async function openDiagramPicker(onKind, curKind) {
     const prev = document.createElement("div");
     prev.className = "picker-prev";
     if (t.available) {
-      const ifr = document.createElement("iframe");
-      ifr.loading = "lazy";
-      ifr.tabIndex = -1;
-      ifr.src = U(`/api/diagrams/${t.kind}/preview?static=1`);
-      prev.appendChild(ifr);
+      thumbPreview(prev, U(`/api/diagrams/${t.kind}/thumb?theme=${th}`),
+                   U(`/api/diagrams/${t.kind}/preview?static=1`));
       if (isCur) prev.appendChild(curBadge());
     } else {
       const soon = document.createElement("span");

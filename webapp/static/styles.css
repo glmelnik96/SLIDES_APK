@@ -886,6 +886,11 @@ a { color: var(--accent); }
 .picker-grid { overflow-y: auto; padding: 16px; display: grid;
   grid-template-columns: repeat(auto-fill, 320px); gap: 16px 12px;
   justify-content: center; align-content: start; }
+/* Заголовки групп каталога — вся строка грида, тихая капитель (канон v5). */
+.picker-group { grid-column: 1 / -1; margin: 6px 0 -6px; padding: 0 2px;
+  font-size: var(--fs-cap); font-weight: 600; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted-2); }
+.picker-group:first-child { margin-top: 0; }
 /* No overflow:hidden here on purpose. A non-visible overflow zeroes the item's
    automatic min-content size, which lets the grid distribute its (flex-capped)
    definite height across the rows (~82px each) instead of holding each row at its
@@ -911,6 +916,10 @@ a { color: var(--accent); }
   border-radius: calc(var(--radius-card) - 1px) calc(var(--radius-card) - 1px) 0 0; }
 .picker-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
   border: 0; transform: scale(0.165625); transform-origin: top left; }  /* 318/1920 */
+/* PNG-миниатюра (лёгкий путь): рендер 480×270 растягивается на плитку 318×179.
+   Фолбэк-iframe при 404 использует правило выше — масштаб живого рендера. */
+.picker-thumb { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; }
 /* Master index badge — a flush top-right tab (catalog order), revealed on hover only.
    Solid brand-green plate with black number. */
 .picker-num { position: absolute; right: 0; top: 0; z-index: 2; padding: 4px 7px;
@@ -928,12 +937,13 @@ a { color: var(--accent); }
 .picker-id { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-base); }
 .picker-intent { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
 .picker-code { font-size: var(--fs-cap); color: var(--muted-2); }  /* К§2 — сырой id макета, приглушённо */
-/* «Схема» — не макет, а вход в каталог типов: превью показывает ОДНУ схему, и без
-   этой пометки карточка читалась как «один макет на выбор». Плашка внизу слева —
-   углы заняты «сейчас» (слева вверху) и номером (справа вверху). */
-.picker-wizard { position: absolute; left: 0; bottom: 0; z-index: 2; padding: 4px 8px;
-  font-size: var(--fs-cap); font-weight: 600; letter-spacing: .04em;
-  color: #000; background: var(--accent); }
+/* «Схема» — мастер, а не макет: без пометки карточка врёт, что тип один. Чип
+   «15 типов» живёт в строке имени (раньше — плашка поверх превью, вклеенная
+   в вёрстку криво). */
+.picker-badge { display: inline-block; vertical-align: 2px; margin-left: 6px;
+  padding: 2px 8px; border-radius: 999px; font-size: var(--fs-cap);
+  font-weight: 600; letter-spacing: .03em; color: var(--muted);
+  border: 1px solid var(--line); }
 .picker-more { font-size: var(--fs-cap); color: var(--muted-2); line-height: 1.4; }
 
 /* Каталог не приехал: окно уже открыто, поэтому пустоту объясняем словами —
