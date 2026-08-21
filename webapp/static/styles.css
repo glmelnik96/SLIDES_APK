@@ -216,26 +216,25 @@ a { color: var(--accent); }
   transition: color var(--dur-fast) var(--ease-productive); }
 .intro-link:hover { color: var(--accent-2); }
 
-/* ===== Три точки входа: карточки выбора способа старта ===== */
+/* ===== Две точки входа: равноправные карточки способа старта ===== */
 .entry { margin-bottom: 40px; }  /* Г§12 — 4px-шкала (было 36) */
 .entry .eyebrow { margin-bottom: 12px; }
-/* Точки входа: 3 АЛЬТЕРНАТИВЫ (не шаги). Основной — загрузка; ниже — два способа
-   вручную колонками с 1px-дивайдерами. */
+/* Точки входа: 2 РАВНОПРАВНЫЕ АЛЬТЕРНАТИВЫ (не шаги) бок о бок — сборка из
+   документа и ручной конструктор. Акцентной рамки нет ни у одной: v5 читает
+   1px --accent как «выбранное», а дефолтного способа больше не существует. */
 .entry-lead { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0 0 16px; }
-.entry-stack { display: flex; flex-direction: column; gap: 12px; }
+.entry-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
 
-/* Основной блок — загрузка: единственный носитель акцентной рамки на странице
-   (v5: 1px --accent = «выбранное»; здесь это выбранный по умолчанию способ). */
-.entry-zone--primary { background: var(--surface); border: 1px solid var(--accent);
+/* Карточка способа: тихая поверхность (v5), структура воздухом, а не линиями */
+.entry-zone { background: var(--surface); border: 1px solid transparent;
   border-radius: var(--radius-card); }
-/* Дивайдеры внутри карточки сняты: v5 держит структуру воздухом, а не линиями */
 .entry-zone__head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
   padding: 18px 20px 0; }
 .entry-zone__title { font-family: var(--font-display); font-size: var(--fs-h3); font-weight: 600; margin: 0; }
 .entry-when { color: var(--muted-2); font-size: var(--fs-sm); margin-left: auto; }
-.upload-grid { display: grid; grid-template-columns: 1.5fr 1fr; align-items: stretch;
-  gap: 20px; padding: 16px 20px 20px; }
-.upload-grid .drop { height: 100%; display: grid; place-items: center; }
+/* Внутренности загрузки колонной: карточка в полширины, двум колонкам тесно */
+.upload-grid { display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; }
+.upload-grid .drop { display: grid; place-items: center; min-height: 140px; }
 .upload-side { display: flex; flex-direction: column; justify-content: flex-start; gap: 14px; }
 .upload-side .btn { align-self: stretch; }
 
@@ -256,45 +255,26 @@ a { color: var(--accent); }
 .mhealth[data-state="down"] .mhealth-note { color: var(--danger-soft); }
 .mhealth-age { font-size: var(--fs-cap); color: var(--muted-2); font-variant-numeric: tabular-nums; }
 
-/* Два способа вручную — вся строка кликабельна. v5: каждая альтернатива стала
-   самостоятельной карточкой-подложкой (было — общая рамка с дивайдерами внутри),
-   сетка 1.5fr 1fr сохранена, поэтому колонки совпадают с блоком загрузки. */
-.entry-alts { display: flex; flex-direction: column; gap: 12px; }
-.entry-alt { display: grid; grid-template-columns: 1.5fr 1fr; align-items: start; gap: 20px;
-  padding: 16px 20px; cursor: pointer;
-  background: var(--surface); border: 1px solid transparent; border-radius: var(--radius-card);
+/* Карточка конструктора: кликабельна целиком (обработчик в app.js), кнопка
+   ссылки-подсказки прижата к низу — карточки в ряду одной высоты. */
+.entry-zone--manual { cursor: pointer; display: flex; flex-direction: column;
   transition: background var(--dur-fast) var(--ease-productive), border-color var(--dur-fast) var(--ease-productive); }
-.entry-alt:hover { background: var(--surface-active); border-color: var(--accent); }
-.entry-alt:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.alt-main { display: flex; flex-direction: column; gap: 6px; }
-.alt-name { font-family: var(--font-display); font-size: var(--fs-base); font-weight: 600; }
-.alt-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; margin: 0; }
-.alt-aside { display: flex; flex-direction: column; gap: 8px; }
-.alt-when { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4; }
+.entry-zone--manual:hover { background: var(--surface-active); border-color: var(--accent); }
+.entry-zone--manual:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.manual-body { flex: 1; display: flex; flex-direction: column; gap: 12px;
+  padding: 12px 20px 20px; }
+.manual-desc { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
 
 /* Сдержанная подсказка-действие: клик ловит вся рамка, поэтому ссылка pointer-events:none */
-.entry-open { align-self: start; background: none; border: 0; padding: 0; pointer-events: none;
+.entry-open { margin-top: auto; align-self: start; background: none; border: 0; padding: 0;
+  pointer-events: none;
   color: var(--accent); font-size: var(--fs-sm); white-space: nowrap;
   transition: color var(--dur-fast) var(--ease-productive); }
-.entry-alt:hover .entry-open { color: var(--accent-2); }
+.entry-zone--manual:hover .entry-open { color: var(--accent-2); }
 .entry-open.is-error { color: var(--danger-soft); }
 
-/* Отключённые точки входа (фича в разработке): серые, некликабельные, с курсором-стопом.
-   Прозрачность вешаем на ВНУТРЕННИЙ контент, а не на всю карточку — иначе opacity
-   создаёт stacking context и приглушает саму подсказку [data-tip]::after. */
-.entry-alt.is-disabled { cursor: not-allowed; }
-.entry-alt.is-disabled:hover { background: var(--surface); border-color: transparent; }
-.entry-alt.is-disabled .alt-main,
-.entry-alt.is-disabled .alt-aside { opacity: .5; }
-.entry-alt.is-disabled .entry-open { color: var(--muted-2); }
-/* Бейдж «в разработке» — статус-лейбл: без обводки, полупрозрачная нейтральная заливка */
-.soon-badge { display: inline-block; margin-left: 8px; vertical-align: middle;
-  font-size: var(--fs-cap); letter-spacing: var(--track-caps);
-  font-weight: 600; padding: 2px 8px; background: var(--neutral-dim);
-  color: var(--muted-2); border-radius: var(--radius-pill); }
-
-/* Дружелюбная подсказка при наведении на отключённую фичу: не только курсор-стоп,
-   но и текст «фича ещё не готова». Чистый CSS-тултип через [data-tip] + ::after. */
+/* Дружелюбная подсказка при наведении на отключённую фичу (чат-таб редактора):
+   не только курсор-стоп, но и текст. Чистый CSS-тултип через [data-tip] + ::after. */
 [data-tip] { position: relative; }
 [data-tip]:hover::after {
   content: attr(data-tip);
@@ -320,8 +300,7 @@ a { color: var(--accent); }
 .hist-sub { color: var(--muted-2); font-size: var(--fs-sm); line-height: 1.4; margin: 0 0 12px; }
 
 @media (max-width: 760px) {
-  .upload-grid { grid-template-columns: 1fr; }
-  .entry-alt { grid-template-columns: 1fr; gap: 10px; }
+  .entry-duo { grid-template-columns: 1fr; }
   .history-grid.two-col { grid-template-columns: 1fr; }
   .history-grid.two-col > .history:first-child { padding-right: 0; }
   .history-grid.two-col > .history + .history { border-left: 0; padding-left: 0;

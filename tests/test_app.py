@@ -52,15 +52,15 @@ def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
         assert ">Cloud.ru <span>Design</span>" in html
 
 
-def test_index_has_three_entry_cards(monkeypatch, tmp_path):
+def test_index_has_two_entry_cards(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
-        # three entry zones: upload (hero) + chat + template; upload's single
-        # start button is glass («стеклянная сборка» — дефолт веба)
+        # two equal entry zones: upload (glass build) + manual constructor;
+        # the chat teaser card is gone from the page entirely (2026-08-21)
         assert 'id="uploadFlow"' in html and 'id="createGlass"' in html and 'id="drop"' in html
         assert 'id="create"' not in html
-        assert 'id="openChat"' in html
         assert 'id="openManual"' in html
+        assert 'id="openChat"' not in html
 
 
 def test_index_has_prep_cards(monkeypatch, tmp_path):

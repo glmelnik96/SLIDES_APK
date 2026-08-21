@@ -47,19 +47,21 @@
     </div>
   </section>
 
-  <!-- ENTRY: зоны по приоритету — загрузка-герой слева, чат/шаблон справа -->
+  <!-- ENTRY: два равноправных способа старта — сборка из документа и ручной конструктор.
+       Карточка «Собрать в чате» убрана целиком (2026-08-21): держать на витрине
+       заглушку «в разработке» дольше месяца — хуже, чем не обещать вовсе. -->
   <section class="entry">
     <div class="eyebrow">С чего начать</div>
-    <p class="entry-lead">Три способа сделать презентацию — выберите один, смотря что у вас уже есть.</p>
-    <div class="entry-stack">
+    <p class="entry-lead">Два способа сделать презентацию — смотря что у вас уже есть.</p>
+    <div class="entry-duo">
 
-      <!-- Основной способ: загрузить документ -->
-      <div class="entry-zone entry-zone--primary">
+      <!-- Способ 1: загрузить документ — стеклянная сборка -->
+      <div class="entry-zone">
         <div class="entry-zone__head">
           <h2 class="entry-zone__title">Загрузить документ</h2>
           <span class="entry-when">когда есть готовый текст или документ</span>
         </div>
-        <!-- dropzone слева, опции справа, дивайдер между -->
+        <!-- dropzone сверху, опции под ней: карточка теперь в полширины -->
         <div id="uploadFlow" class="upload-grid">
           <label class="drop" id="drop">
             <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
@@ -102,28 +104,15 @@
         </div>
       </div>
 
-      <!-- Или соберите вручную — вся строка кликабельна; дивайдер на 60% под дивайдером загрузки -->
-      <div class="entry-alts">
-        <div class="entry-alt is-disabled" data-mode="chat" aria-disabled="true"
-             data-tip="Ассистент ещё учится собирать презентации">
-          <div class="alt-main">
-            <div class="alt-name">Собрать в чате <span class="soon-badge">в разработке</span></div>
-            <p class="alt-desc">Опишите презентацию — ассистент спланирует структуру и создаст слайды.</p>
-          </div>
-          <div class="alt-aside">
-            <div class="alt-when">когда нет готового материала</div>
-            <span class="entry-open" id="openChat">В разработке</span>
-          </div>
+      <!-- Способ 2: конструктор — вся карточка кликабельна (клик/Enter/Space в app.js) -->
+      <div class="entry-zone entry-zone--manual" data-mode="manual" tabindex="0" role="button">
+        <div class="entry-zone__head">
+          <h2 class="entry-zone__title">Заполнить шаблон</h2>
+          <span class="entry-when">когда нужен полный контроль</span>
         </div>
-        <div class="entry-alt" data-mode="manual" tabindex="0" role="button">
-          <div class="alt-main">
-            <div class="alt-name">Заполнить шаблон</div>
-            <p class="alt-desc">Соберите презентацию по слайду из готовых макетов, заполняя поля вручную.</p>
-          </div>
-          <div class="alt-aside">
-            <div class="alt-when">когда нужен полный контроль</div>
-            <span class="entry-open" id="openManual">Открыть конструктор →</span>
-          </div>
+        <div class="manual-body">
+          <p class="manual-desc">Соберите презентацию по слайду из готовых макетов, заполняя поля вручную. Начнёте со структуры из трёх слайдов &mdash; обложка, контент, контакты.</p>
+          <span class="entry-open" id="openManual">Открыть конструктор →</span>
         </div>
       </div>
 

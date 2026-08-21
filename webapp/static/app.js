@@ -847,7 +847,7 @@ function streamProgress(sessionId, kind, initial) {
   };
 }
 
-/* entry cards: choose how to start (upload | manual draft | chat draft) */
+/* entry cards: choose how to start (upload | manual draft) */
 async function startDraft(mode, btn) {
   const prev = btn.textContent;
   btn.disabled = true;
@@ -870,10 +870,9 @@ async function startDraft(mode, btn) {
   }
 }
 
-// Зоны точек входа: кликабельна вся рамка .entry-alt (не только ссылка). Черновик
+// Карточка конструктора: кликабельна вся рамка (не только ссылка). Черновик
 // создаётся при клике/Enter/Space; ссылка внутри — лишь визуальная подсказка.
-document.querySelectorAll(".entry-alt").forEach((card) => {
-  if (card.classList.contains("is-disabled")) return;  // фича в разработке — не вешаем обработчики
+document.querySelectorAll(".entry-zone[data-mode]").forEach((card) => {
   const mode = card.dataset.mode;
   const label = card.querySelector(".entry-open");
   if (!mode || !label) return;
@@ -889,12 +888,11 @@ document.querySelectorAll(".entry-alt").forEach((card) => {
 });
 
 // Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
-const _OPEN_LABEL = { openChat: "Открыть чат →", openManual: "Открыть конструктор →" };
+const _OPEN_LABEL = { openManual: "Открыть конструктор →" };
 window.addEventListener("pageshow", () => {
   Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
     const b = $("#" + id);
-    // Отключённые точки входа (фича в разработке) не воскрешаем — оставляем «Скоро».
-    if (!b || b.closest(".entry-alt.is-disabled")) return;
+    if (!b) return;
     b.disabled = false; b.classList.remove("is-error"); b.textContent = label;
   });
   loadFeed();  // возврат по Back мог создать/удалить сборку или черновик — обновляем
