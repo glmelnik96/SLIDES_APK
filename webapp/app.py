@@ -360,13 +360,7 @@ _PREVIEW_QUIET_STYLE = (
 )
 
 
-@app.get("/api/templates/{template_id}/preview", response_class=HTMLResponse)
-def template_preview(template_id: str, static: bool = False,
-                     user=Depends(get_current_user)):
-    """A one-slide deck with representative sample content — the visual preview
-    shown in the template picker. Reuses the real engine so the preview matches
-    the actual output. ``static=1`` injects quiet motion rules so the picker
-    shows still final frames instead of ~20 looping decks."""
+def _template_preview_html(template_id: str, theme: str = "dark") -> str:
     from htmlslides.assembler import assemble
     from htmlslides.library import TemplateLibrary
     from htmlslides.models import DeckPlan, SlidePlan
@@ -378,10 +372,43 @@ def template_preview(template_id: str, static: bool = False,
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type=spec.type, template_id=template_id,
         content=templates_api.sample_content(template_id))])
-    html = assemble(plan)
+    return assemble(plan, theme=theme)
+
+
+@app.get("/api/templates/{template_id}/preview", response_class=HTMLResponse)
+def template_preview(template_id: str, static: bool = False,
+                     user=Depends(get_current_user)):
+    """A one-slide deck with representative sample content — the visual preview
+    shown in the template picker. Reuses the real engine so the preview matches
+    the actual output. ``static=1`` injects quiet motion rules so the picker
+    shows still final frames instead of ~20 looping decks."""
+    html = _template_preview_html(template_id)
     if static:
         html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
     return HTMLResponse(html)
+
+
+def _thumb_response(key: str, theme: str, html: str):
+    from webapp import tpl_thumbs
+    try:
+        png = tpl_thumbs.get_thumb(key, theme, lambda: html)
+    except tpl_thumbs.ThumbUnavailable:
+        # 404 → клиент падает обратно на live-iframe (мягкая деградация)
+        raise HTTPException(404, "миниатюра недоступна")
+    return FileResponse(png, media_type="image/png")
+
+
+@app.get("/api/templates/{template_id}/thumb")
+def template_thumb(template_id: str, theme: str = "dark",
+                   user=Depends(get_current_user)):
+    """Статичная PNG-миниатюра макета для пикера: кэш на диске, ленивая
+    генерация Playwright'ом. 404 и при неизвестном макете, и при недоступном
+    Chromium — клиент в обоих случаях показывает live-iframe превью."""
+    if theme not in ("dark", "light"):
+        theme = "dark"
+    html = _template_preview_html(template_id, theme).replace(
+        "</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return _thumb_response(f"tpl-{template_id}", theme, html)
 
 
 @app.get("/api/diagrams/catalog")
@@ -392,11 +419,7 @@ def diagrams_catalog(user=Depends(get_current_user)) -> JSONResponse:
     return JSONResponse(diagrams_api.catalog())
 
 
-@app.get("/api/diagrams/{kind}/preview", response_class=HTMLResponse)
-def diagram_kind_preview(kind: str, static: bool = False,
-                         user=Depends(get_current_user)):
-    """Однослайдовая дека-превью конкретного ТИПА диаграммы (пикер типов).
-    Тот же движок, что и боевой рендер, — превью совпадает с результатом 1:1."""
+def _diagram_preview_html(kind: str, theme: str = "dark") -> str:
     from htmlslides.assembler import assemble
     from htmlslides.models import DeckPlan, SlidePlan
     from webapp import diagrams_api
@@ -406,10 +429,30 @@ def diagram_kind_preview(kind: str, static: bool = False,
         raise HTTPException(404, "неизвестный или недоступный тип схемы")
     plan = DeckPlan(title="", slides=[SlidePlan(
         index=1, type="content", template_id="diagram", content=content)])
-    html = assemble(plan)
+    return assemble(plan, theme=theme)
+
+
+@app.get("/api/diagrams/{kind}/preview", response_class=HTMLResponse)
+def diagram_kind_preview(kind: str, static: bool = False,
+                         user=Depends(get_current_user)):
+    """Однослайдовая дека-превью конкретного ТИПА диаграммы (пикер типов).
+    Тот же движок, что и боевой рендер, — превью совпадает с результатом 1:1."""
+    html = _diagram_preview_html(kind)
     if static:
         html = html.replace("</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
     return HTMLResponse(html)
+
+
+@app.get("/api/diagrams/{kind}/thumb")
+def diagram_thumb(kind: str, theme: str = "dark",
+                  user=Depends(get_current_user)):
+    """PNG-миниатюра типа схемы (второй шаг мастера «Схема») — тем же способом,
+    что миниатюры макетов: дисковый кэш, 404-фолбэк на live-iframe."""
+    if theme not in ("dark", "light"):
+        theme = "dark"
+    html = _diagram_preview_html(kind, theme).replace(
+        "</head>", _PREVIEW_QUIET_STYLE + "</head>", 1)
+    return _thumb_response(f"dgm-{kind}", theme, html)
 
 
 def _validation_errors(template_id: str, content: dict) -> list[dict]:
