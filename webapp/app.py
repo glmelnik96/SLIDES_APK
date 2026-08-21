@@ -299,6 +299,13 @@ async def create_draft(request: Request, user=Depends(get_current_user)
         raise HTTPException(400, f"неизвестный режим черновика: {mode}")
     session_id = uuid4().hex[:16]
     plan = draft.DraftPlan(title=str(data.get("title") or ""))
+    # Скелет «обложка → пустой → контакты» — opt-in ТОЛЬКО для кнопки
+    # «Заполнить шаблон» на главной: старт со структурой вместо чистого листа.
+    # Glass и существующие вызовы флаг не шлют — их путь не меняется (риск
+    # «скелет просочился в glass» закрыт явным opt-in).
+    if mode == "manual" and bool(data.get("skeleton")):
+        plan.slides = [draft.DraftSlide(template_id=tid)
+                       for tid in ("cover", "blank", "contacts")]
     draft.save_plan(session_id, plan)
     draft_render.render_draft(session_id, plan)   # seed an (empty-state) deck.html
     # Ownership row; status "draft" keeps it out of the runner queue, retention

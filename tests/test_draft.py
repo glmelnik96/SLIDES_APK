@@ -184,6 +184,32 @@ def test_create_draft_rejects_bad_mode(monkeypatch, tmp_path):
                       headers=H()).status_code == 400
 
 
+def test_create_draft_skeleton_flag(monkeypatch, tmp_path):
+    """skeleton:true → план сразу с тремя пустыми слайдами cover→blank→contacts.
+
+    Флаг шлёт ТОЛЬКО кнопка «Заполнить шаблон» на главной — лечит паралич
+    чистого листа. Контент пуст: превью-коэрсия показывает плейсхолдеры."""
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/drafts", json={"mode": "manual", "skeleton": True},
+                   headers=H())
+        assert r.status_code == 200
+        sid = r.json()["session_id"]
+        plan = draft.load_plan(sid)
+        assert [s.template_id for s in plan.slides] == ["cover", "blank", "contacts"]
+        assert all(not s.filled and not s.content for s in plan.slides)
+        # deck.html отрендерен сразу с тремя секциями (DeckPlan-as-truth)
+        deck = c.get(f"/api/jobs/{sid}/deck", headers=H())
+        assert deck.text.count("<section") == 3
+
+
+def test_create_draft_without_skeleton_stays_empty(monkeypatch, tmp_path):
+    """Без флага (glass, старые вызовы) — пустой план, как раньше."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = c.post("/api/drafts", json={"mode": "manual"},
+                     headers=H()).json()["session_id"]
+        assert draft.load_plan(sid).slides == []
+
+
 def test_draft_excluded_from_history(monkeypatch, tmp_path):
     """A draft (status='draft') is not a finished build → absent from history."""
     with _client(monkeypatch, tmp_path) as c:
