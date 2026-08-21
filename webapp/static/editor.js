@@ -3183,8 +3183,9 @@ async function openPicker(onPick, cur) {
       "проверьте соединение и откройте список ещё раз.</p>";
     return;
   }
-  // Тема миниатюр = тема черновика: пикер показывает то, что реально встанет.
-  const th = draftPlan && draftPlan.theme === "light" ? "light" : "dark";
+  // Тема миниатюр = тема загруженного кадра (как у ярлыка themeToggle):
+  // draftPlan.theme после флипа не обновляется, а у собранных дек его нет вовсе.
+  const th = deckTheme();
   let num = 0;
   PickerGroups.groupTemplates(pickable).forEach((group) => {
     const head = document.createElement("div");
@@ -3288,8 +3289,8 @@ async function openDiagramPicker(onKind, curKind) {
       "проверьте соединение и откройте список ещё раз.</p>";
     return;
   }
-  // Тема миниатюр = тема черновика (как в пикере макетов).
-  const th = draftPlan && draftPlan.theme === "light" ? "light" : "dark";
+  // Тема миниатюр = тема загруженного кадра (как в пикере макетов).
+  const th = deckTheme();
   cat.forEach((t) => {
     const isCur = !!curKind && t.kind === curKind;
     const card = document.createElement("button");
