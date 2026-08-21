@@ -2781,6 +2781,26 @@ function addSlideViaPicker() {
 }
 byId("addSlide")?.addEventListener("click", addSlideViaPicker);
 byId("builderAdd")?.addEventListener("click", addSlideViaPicker);
+// Пустой конструктор: «Начать со структуры» ставит три слайда разом (обложка →
+// пустой → контакты) теми же POST, что одиночное добавление, — undo и
+// перерисовка работают штатно. Тот же скелет сервер даёт при входе с главной
+// (skeleton:true); эта кнопка — для «всё удалил, начну заново».
+byId("emptySkeleton")?.addEventListener("click", async () => {
+  const btn = byId("emptySkeleton");
+  btn.disabled = true;
+  try {
+    for (const tid of ["cover", "blank", "contacts"]) {
+      const r = await fetch(U(`/api/drafts/${sessionId}/slides`), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template_id: tid }),
+      }).catch(() => null);
+      // Неуспех молча — «нажал и ничего»: показываем статус и не продолжаем.
+      if (!r || !r.ok) { setSaveStatus("error"); return; }
+    }
+    pushUndo();
+    await reloadDraft(0);
+  } finally { btn.disabled = false; }
+});
 
 // Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
 // дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора

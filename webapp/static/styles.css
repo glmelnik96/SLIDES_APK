@@ -820,6 +820,12 @@ a { color: var(--accent); }
 .builder-form { padding: 14px 16px; display: flex; flex-direction: column; gap: 16px; }
 .builder-note { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin: 0; }
 .builder-empty { padding: 18px 16px; color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; }
+/* Пустой конструктор: не голая строка с мелкой кнопкой, а подсказка + два
+   крупных действия — лекарство от паралича чистого листа (спека, §2). */
+.builder-empty__hint { margin: 0 0 12px; font-size: var(--fs-sm);
+  color: var(--muted); line-height: 1.5; }
+.builder-empty__actions { display: flex; flex-direction: column; gap: 8px; }
+.builder-empty__actions .btn { width: 100%; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 /* К§12 — форм-лейблы: рабочий текст, не декор → нижний регистр, 12px, muted */
 .field > label { font-size: var(--fs-xs); text-transform: none; letter-spacing: 0; color: var(--muted); }
