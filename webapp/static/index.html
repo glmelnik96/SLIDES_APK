@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cloud.ru Design — Слайды</title>
+<title>Cloud.ru Design — Презентации</title>
 <!-- v11.css — канон платформы, взят из Brand_Image_site как есть.
      slides.css — только то, что специфично для /slides, и только поверх канона. -->
 <link rel="stylesheet" href="/static/v11.css">
@@ -16,13 +16,21 @@
 <!-- КАНОНИЧЕСКАЯ ШАПКА ПЛАТФОРМЫ: копия gateway/templates/base.html.
      Менять здесь нельзя ничего, кроме подстановки почты: шторка должна быть
      побайтово той же, что в /images и /creatives. Бренд остаётся в разметке
-     (канон прячет его через display:none) — иначе теряется корень навигации. -->
+     (канон прячет его через display:none) — иначе теряется корень навигации.
+
+     ⚠️ РАСХОЖДЕНИЕ С ЭТАЛОНОМ (2026-08-23): по заданию владельца разделы
+     переименованы — «Слайды» → «Презентации», «Креативы» → «Промо-баннеры».
+     Адреса (/slides, /creatives) НЕ трогали: переименовано только то, что
+     читает человек. Пока App1 не внесёт те же имена в gateway/templates/
+     base.html, шторка на /images и /creatives называет разделы по-старому,
+     и пользователь увидит два разных имени одного раздела. Запрос App1
+     отправлен во «Входящие» координационного документа. -->
 <header class="topbar">
   <a class="brand" href="/">Cloud.ru <span>Design</span></a>
   <nav class="topnav">
     <a href="/images"    class="topnav__link" data-t="Картинки">Картинки</a>
-    <a href="/slides"    class="topnav__link is-active" data-t="Слайды">Слайды</a>
-    <a href="/creatives" class="topnav__link" data-t="Креативы">Креативы</a>
+    <a href="/slides"    class="topnav__link is-active" data-t="Презентации">Презентации</a>
+    <a href="/creatives" class="topnav__link" data-t="Промо-баннеры">Промо-баннеры</a>
     <a href="/present"   class="topnav__link" data-t="Трансляции">Трансляции</a>
     <a href="/creatives/webinar" class="topnav__link" data-t="Вебинары">Вебинары</a>
   </nav>
