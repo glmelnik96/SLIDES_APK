@@ -34,40 +34,45 @@
 </header>
 
 <main>
-<!-- Композиция страницы: одна колонка по центру. Сверху служебная строка
-     подготовки исходника, под ней ДВЕ равновесные точки старта, ещё ниже —
-     лента презентаций во всю ширину колонки. Рельса нет намеренно: у /slides
-     не «форма и результаты», а развилка из двух дверей, и обе должны стоять
-     на витрине одинаково крупно. -->
+<!-- Композиция страницы — та же, что на стартовой портала: стопка строк во всю
+     ширину, без единой карточки и без единой рамки. Карточки убраны намеренно:
+     повторяющиеся одинаковые плитки читались «мобильным приложением» и сливали
+     страницу в кашу. Иерархию держит не рамка, а рост строки: двери — 96px и
+     крупное имя, работы — 48px служебным регистром.
+
+     Страница поделена по горизонтали на два этажа во всю ширину окна: светлый
+     камень наверху — где начинают, чернила внизу — где смотрят сделанное.
+     Граница этажей идёт от края до края и заменяет собой любую рамку. -->
 <section class="tool">
-  <div class="tool__col">
-    <h1>Презентации в бренде Cloud.ru</h1>
+  <h1>Презентации в бренде Cloud.ru</h1>
 
-    <!-- Служебная строка, а не карточка: подготовка исходника — подсобное
-         действие перед стартом, и место ей ровно в одну ячейку высотой. -->
-    <div class="prep">
-      <span class="prep__label">Подготовка документа</span>
-      <div class="seg">
-        <button id="copyPrompt" class="seg__btn" type="button">Копировать промпт</button>
-        <button id="promptOpen" class="seg__btn" type="button">Показать</button>
-      </div>
-      <a id="skillDownload" class="prep__link" href="/downloads/cloud-ru-slides.skill"
-         download>Скилл для Claude&nbsp;Code</a>
-    </div>
+  <!-- ===== Этаж 1 (свет): две двери ===== -->
+  <div class="band band--light">
+  <div class="rows" id="startRows">
 
-    <!-- ===== Две точки старта ===== -->
-    <div class="start">
+    <!-- Дверь 1: документ → стеклянная сборка. Форма нужна ради семантики и
+         стилей канона; отправку гасит app.js, работу запускает #createGlass. -->
+    <form class="row gen-form" id="startForm" data-door="upload">
+      <h2 class="row__h">
+        <button type="button" class="row__hit" aria-expanded="false" aria-controls="panelUpload">
+          <span class="row__body">
+            <span class="row__slot"><span class="row__name">Презентация из документа</span></span>
+            <span class="row__desc">Слайды заполняются на глазах</span>
+          </span>
+        </button>
+      </h2>
+      <div class="row__panel" id="panelUpload">
+        <!-- Подготовка исходника живёт здесь, а не отдельным этажом наверху:
+             это подсобное действие ПЕРЕД загрузкой, а не третья точка входа. -->
+        <p class="prep">
+          <span class="prep__label">Подготовить документ</span>
+          <button id="copyPrompt" class="t-btn" type="button">Копировать промпт</button>
+          <button id="promptOpen" class="t-btn" type="button">Показать</button>
+          <a id="skillDownload" class="prep__link" href="/downloads/cloud-ru-slides.skill"
+             download>Скилл для Claude&nbsp;Code</a>
+        </p>
 
-      <!-- Дверь 1: документ → стеклянная сборка. Форма нужна ради семантики и
-           стилей канона; отправку гасит app.js, работу запускает #createGlass. -->
-      <form class="start__card gen-form" id="startForm">
-        <div class="start__head">
-          <span class="start__tag">Есть текст</span>
-          <h2 class="start__title">Загрузить документ</h2>
-        </div>
-        <p class="start__desc">Слайды заполняются на глазах.</p>
-
-        <div class="gen-form__tail" id="uploadFlow">
+        <div class="flow" id="uploadFlow">
           <label class="dropzone" id="drop">
             <input type="file" id="file" hidden accept=".md,.txt,.docx,.pptx">
             <b id="dropText">Перетащите файл или выберите</b>
@@ -90,53 +95,64 @@
             <div class="mhealth__age" id="mhAge"></div>
           </div>
 
-          <button type="submit" id="createGlass" aria-describedby="createHint"
-                  disabled>Собрать презентацию</button>
-          <p class="start__hint" id="createHint">Сначала выберите файл</p>
+          <div class="flow__go">
+            <button type="submit" id="createGlass" aria-describedby="createHint"
+                    disabled>Собрать презентацию</button>
+            <p class="flow__hint" id="createHint">Сначала выберите файл</p>
+          </div>
         </div>
-      </form>
+      </div>
+    </form>
 
-      <!-- Дверь 2: конструктор. Действие прижато к низу карточки, чтобы обе
-           двери заканчивались одной строкой. -->
-      <section class="start__card">
-        <div class="start__head">
-          <span class="start__tag">Вручную</span>
-          <h2 class="start__title">Заполнить шаблон</h2>
+    <!-- Дверь 2: конструктор. -->
+    <section class="row" data-door="manual">
+      <h2 class="row__h">
+        <button type="button" class="row__hit" aria-expanded="false" aria-controls="panelManual">
+          <span class="row__body">
+            <span class="row__slot"><span class="row__name">Презентация вручную</span></span>
+            <span class="row__desc">Выбор макетов и полей</span>
+          </span>
+        </button>
+      </h2>
+      <div class="row__panel" id="panelManual">
+        <div class="flow">
+          <!-- Стартовая структура показана, а не описана: три строки вместо
+               фразы «начнёте с обложки, контента и контактов». -->
+          <ol class="skel">
+            <li>Обложка</li>
+            <li>Контент</li>
+            <li>Контакты</li>
+          </ol>
+          <div class="flow__go">
+            <button type="button" id="openManual">Открыть конструктор</button>
+            <p class="flow__hint">Черновик появится в списке</p>
+          </div>
         </div>
-        <p class="start__desc">Макеты и поля вручную.</p>
-        <!-- Стартовая структура показана, а не описана: три строки вместо
-             фразы «начнёте с обложки, контента и контактов». -->
-        <ol class="skel">
-          <li>Обложка</li>
-          <li>Контент</li>
-          <li>Контакты</li>
-        </ol>
-
-        <div class="start__foot">
-          <button type="button" class="start__go" id="openManual">Открыть конструктор</button>
-          <p class="start__hint">Черновик появится в списке</p>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- Ошибки запуска и баннеры. Красного в v11 нет: ошибку метит обводка. -->
-    <div id="result" class="status" hidden></div>
-
-    <!-- ===== Лента: единственная рама на странице и единственный чертёж ===== -->
-    <section class="feed" id="feedWrap">
-      <div class="lp-grid lp-grid--page"><canvas class="lp-grid__canvas"></canvas></div>
-      <header class="feed__head">
-        <p class="feed__title">Презентации · <span id="feedCount">0</span></p>
-        <div class="chip-row" id="feedChips"></div>
-        <button type="button" class="t-btn" id="clear">Очистить историю</button>
-      </header>
-      <div class="feed__grid" id="feed"></div>
-      <p class="feed__empty" id="feedEmpty">Презентаций пока нет</p>
-      <p class="feed__foot" id="feedFoot">Хранятся <span id="retentionCap">24 часа</span></p>
+      </div>
     </section>
 
-  </div><!-- /.tool__col -->
+  </div>
+
+  <!-- Ошибки запуска и баннеры. Красного в v11 нет: ошибку метит обводка. -->
+  <div id="result" class="status" hidden></div>
+  </div>
+
+  <!-- ===== Этаж 2 (чернила): работы, тем же строем, но служебным регистром.
+       Живой чертёж заперт в этом этаже: его линии рисуются светом по чернилам
+       (grid.js, LIGHT = 242,245,244) и на камне верхнего этажа их не видно. -->
+  <div class="band band--dark">
+  <div class="lp-grid lp-grid--page"><canvas class="lp-grid__canvas"></canvas></div>
+  <section class="feed" id="feedWrap">
+    <div class="feed__head">
+      <p class="feed__title">Работы <span id="feedCount">0</span></p>
+      <div class="chip-row" id="feedChips"></div>
+      <button type="button" class="t-btn" id="clear">Очистить историю</button>
+    </div>
+    <div class="feed__list" id="feed"></div>
+    <p class="feed__empty" id="feedEmpty">Пока пусто</p>
+    <p class="feed__foot" id="feedFoot">Хранятся <span id="retentionCap">24 часа</span></p>
+  </section>
+  </div>
 
   <!-- Промпт — длинный документ, и в строку он не помещается: открывается
        лайтбоксом канона. Кнопка копирования при этом осталась в строке:

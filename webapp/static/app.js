@@ -234,10 +234,11 @@ function estSegment(it) {
   if (!e) return "";
   return e.warn ? `<span class="est-warn">${esc(e.text)}</span>` : esc(e.text);
 }
-// Инструмент здесь НЕ повторяем: он уже стоит меткой в углу плитки
-// (.work__tool), и вторым упоминанием строка только длиннела.
+// Инструмент вернулся первым сегментом меты: марки в углу плитки больше нет —
+// плитки больше нет вообще, работа теперь строка, и назвать инструмент негде.
 function cardMeta(it) {
   const SEP = `<span class="sep">·</span>`;
+  const tool = esc(toolTitle(it.mode));
   const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
@@ -254,7 +255,7 @@ function cardMeta(it) {
     return seg.join(SEP);
   }
   if (it.state === "done") {
-    const seg = [];
+    const seg = [tool];
     if (when) seg.push(esc(when));
     // v5 запретил emoji: пиктограммы ⏱/↓ заменены словами-подписями
     if (it.duration_ms != null) seg.push(`за ${histDur(it.duration_ms)}`);
@@ -262,7 +263,7 @@ function cardMeta(it) {
     if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
     return seg.join(SEP);
   }
-  if (it.state === "draft") return when ? `изменён ${esc(when)}` : "";
+  if (it.state === "draft") return [tool, when ? `изменён ${esc(when)}` : ""].filter(Boolean).join(SEP);
   if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, when ? esc(when) : ""].filter(Boolean).join(SEP);
   if (it.state === "cancelled") return ["Остановлено вручную", when ? esc(when) : ""].filter(Boolean).join(SEP);
   return "";
@@ -297,21 +298,22 @@ function updateCard(card, it) {
   card.classList.toggle("work--failed", it.state === "failed" || it.state === "cancelled");
   const np = nameParts(it);
   const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
-  card.querySelector(".work__body").innerHTML =
-    `<span class="work__tool">${esc(toolTitle(it.mode))}</span>` +
+  card.querySelector(".work__cap").innerHTML =
+    `${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}`;
+  card.querySelector(".work__state").textContent = stateLine(it);
+  card.querySelector(".work__meta").innerHTML = cardMeta(it);
+  // Крестик и полоска живут в хвосте строки вместе с действием: угла, в который
+  // их вешала плитка, у строки нет.
+  card.querySelector(".work__acts").innerHTML =
+    cardActions(it) +
     (isDraftLike(it)
       ? `<button type="button" class="work__del" data-del="${it.id}" title="Удалить черновик" aria-label="Удалить черновик">✕</button>`
       : "") +
-    `<p class="work__meta">${cardMeta(it)}</p>` +
-    `<p class="work__state">${esc(stateLine(it))}</p>` +
-    `<div class="work__acts">${cardActions(it)}</div>` +
     // Полоска работы — единственное бесконечное движение системы. В очереди
     // процента ещё нет, поэтому она идёт бегунком (is-idle), а не заливкой.
     (expandable
       ? `<div class="work__bar${it.state === "queued" ? " is-idle" : ""}"><i style="width:${pct}%"></i></div>`
       : "");
-  card.querySelector(".work__cap").innerHTML =
-    `${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}`;
   if (!expandable) {                      // терминальная плитка — лог не нужен, свернуть
     const lines = card.querySelector(".work__loglines");
     if (lines) lines.innerHTML = "";
@@ -339,8 +341,10 @@ function renderFeed(items) {
       card.className = "work";
       card.dataset.id = it.id;
       card.innerHTML =
-        `<div class="work__body"></div>` +
         `<p class="work__cap"></p>` +
+        `<p class="work__state"></p>` +
+        `<p class="work__meta"></p>` +
+        `<div class="work__acts"></div>` +
         `<div class="work__log">` +
           `<div class="work__logstage"></div>` +
           `<div class="work__hb"></div>` +
@@ -874,10 +878,32 @@ async function startDraft(mode, btn) {
   }
 }
 
-// Обе двери открыты одновременно и ничего не переключают: выбор способа старта
-// — это выбор карточки, а не тумблер над общим хвостом формы. Черновик
-// появляется только по явному нажатию «Открыть конструктор»: когда кликабельной
-// была вся карточка, черновики плодились от случайного клика по её тексту.
+// Двери — раскрывающиеся строки, и открыта всегда одна. Два выдвинутых ящика
+// разом вернули бы на страницу два равных блока — ровно то, ради ухода от чего
+// карточки и убирались. Обе строки при этом остаются равновесными: открытость —
+// состояние, а не ранг, размер и кегль у них одинаковые.
+// Раскрытие анимировано, и делает это ОДИН класс is-open: высота ящика едет
+// от 0fr к 1fr в CSS. Атрибут hidden здесь ставить нельзя — display: none
+// обрывает переход, и первое раскрытие происходило бы скачком. Запрет канона
+// «высоту под курсором не менять» не нарушен: ящик ездит по клику.
+// Черновик конструктора появляется только по явному нажатию кнопки в панели:
+// когда кликабельной была вся карточка, черновики плодились от случайного клика.
+const _rows = $("#startRows");
+function setDoor(row, open) {
+  const hit = row.querySelector(".row__hit");
+  const panel = row.querySelector(".row__panel");
+  if (!hit || !panel) return;
+  row.classList.toggle("is-open", open);
+  hit.setAttribute("aria-expanded", open ? "true" : "false");
+}
+if (_rows) _rows.addEventListener("click", (e) => {
+  const hit = e.target.closest(".row__hit");
+  if (!hit) return;
+  const row = hit.closest(".row");
+  const willOpen = !row.classList.contains("is-open");
+  _rows.querySelectorAll(".row").forEach((r) => setDoor(r, false));
+  if (willOpen) setDoor(row, true);
+});
 
 // Форму отправляет только наш обработчик: без этого Enter в поле перезагружал
 // бы страницу и терял выбранный файл.
@@ -935,7 +961,7 @@ if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
   catch { ok = false; }  // clipboard API требует secure context — фолбэк: показать текст
   _copyPrompt.textContent = ok ? "Скопировано" : "Не вышло";
   if (!ok) setPromptBox(true);   // фолбэк: показываем текст, копируйте руками
-  setTimeout(() => { _copyPrompt.textContent = "Копировать"; }, 2000);
+  setTimeout(() => { _copyPrompt.textContent = "Копировать промпт"; }, 2000);
 });
 
 /* init */

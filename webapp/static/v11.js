@@ -31,13 +31,15 @@
 
   var grid = document.querySelector('.lp-grid--page');
   if (grid && window.lpGrid) {
-    // Рама на /slides — лента, в редакторе — сцена с кадром. Якорь фазы тоже
-    // разный: сетка карточек или сам кадр деки.
-    var stage = grid.closest('.feed, .stage') || grid.parentElement;
+    // Сцена на витрине — вся страница (рам на ней больше нет, чертёж лежит под
+    // всеми строками), в редакторе — сцена с кадром. Якорь фазы тоже разный:
+    // первая строка старта или сам кадр деки. closest берёт БЛИЖАЙШЕГО предка,
+    // поэтому в редакторе .stage выигрывает у объемлющего .tool.
+    var stage = grid.closest('.stage, .feed, .tool') || grid.parentElement;
     window.lpGrid({
       grid: grid,
       stage: stage,
-      alignTo: stage ? stage.querySelector('.feed__grid, #frameWrap') : null,
+      alignTo: stage ? stage.querySelector('.rows, .feed__grid, #frameWrap') : null,
     });
   }
 })();
