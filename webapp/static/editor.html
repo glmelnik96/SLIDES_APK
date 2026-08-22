@@ -8,7 +8,6 @@
      рабочего стола редактора, и только поверх канона. -->
 <link rel="stylesheet" href="/static/v11.css">
 <link rel="stylesheet" href="/static/editor.css">
-<script src="/static/grid.js" defer></script>
 <script src="/static/v11.js" defer></script>
 </head>
 <!-- is-editor меняет ровно одно: страница перестаёт прокручиваться и колонки
@@ -46,9 +45,8 @@
     <div id="thumbs"></div>
   </aside>
 
-  <!-- ===== Сцена: единственная рама редактора и единственный чертёж ===== -->
+  <!-- ===== Сцена: единственная рама редактора ===== -->
   <section class="stage" id="stageWrap">
-    <div class="lp-grid lp-grid--page"><canvas class="lp-grid__canvas"></canvas></div>
     <!-- Шапка сцены собрана по рецепту шапки ленты (§8.7): строка служебного
          текста, хайрлайн через ячейку. Прежнее overflow-меню «Скачать» снято —
          три формата встают в строку кирпичей и без него. -->

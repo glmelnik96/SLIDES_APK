@@ -8,7 +8,6 @@
      slides.css — только то, что специфично для /slides, и только поверх канона. -->
 <link rel="stylesheet" href="/static/v11.css">
 <link rel="stylesheet" href="/static/slides.css">
-<script src="/static/grid.js" defer></script>
 <script src="/static/v11.js" defer></script>
 </head>
 <!-- is-auth проставлен жёстко: за шлюз без входа не пускают, а без класса
@@ -138,10 +137,10 @@
   </div>
 
   <!-- ===== Этаж 2 (чернила): работы, тем же строем, но служебным регистром.
-       Живой чертёж заперт в этом этаже: его линии рисуются светом по чернилам
-       (grid.js, LIGHT = 242,245,244) и на камне верхнего этажа их не видно. -->
+       Живого чертежа здесь нет намеренно: он подсвечивал курсор на пустом фоне,
+       а под лентой работ фон не пустой — сетка спорила со строками и добавляла
+       движение туда, где смотрят готовое. Чернила держат этаж сами. -->
   <div class="band band--dark">
-  <div class="lp-grid lp-grid--page"><canvas class="lp-grid__canvas"></canvas></div>
   <section class="feed" id="feedWrap">
     <div class="feed__head">
       <p class="feed__title">Работы <span id="feedCount">0</span></p>
