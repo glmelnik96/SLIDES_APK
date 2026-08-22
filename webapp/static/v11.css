@@ -1,0 +1,546 @@
+/* ============================================================================
+   КАНОН v11 «ПОРТАЛ» — фундамент платформы Cloud.ru Design.
+   Источник: Brand_Image_site/gateway/static/app.css. Блоки взяты КАК ЕСТЬ:
+   токены, шторка, живой чертёж, каркас инструмента (рельс 264 + рама ленты),
+   кирпич .t-btn, плитка работы, лайтбокс, тогл-строка сценария, поля формы,
+   дропзона, служебные строки, подвал и оба медиазапроса.
+
+   Единственные отступления от исходника:
+   • пути к шрифтам относительные («fonts/…»), а не «/static/fonts/…»: под-
+     приложение живёт за шлюзом на /slides, и абсолютный путь увёл бы за него;
+   • выброшена раскладка ЛЕНДИНГА (.lp-stage/.lp-rows/.lp-row и хореография
+     появления) — её место здесь заняла бы работа;
+   • выброшена админка и «базовая карточка» v5 — в /slides их нет.
+
+   Правь этот файл только вслед за каноном. Всё, что специфично для /slides,
+   живёт в styles.css и НАСЛЕДУЕТ отсюда — обратного направления нет.
+   Канон целиком — docs/DESIGN_CANON_v11.md в репозитории Brand_Image_site.
+   ============================================================================ */
+@font-face { font-family: "SB Sans Text"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-text-400.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Text"; font-weight: 500 700; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-text-600.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Display"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-display-400.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Display"; font-weight: 500 700; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-display-600.woff2") format("woff2"); }
+/* Узкий моноширинный — служебный слой: нумерация, микролейблы, подписи полей.
+   Только капсом и только на мелком кегле; тело текста остаётся SB Sans Text.
+   Без этих двух файлов весь служебный слой падает в Verdana. */
+@font-face { font-family: "SB Sans Cond Mono"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-cond-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Cond Mono"; font-weight: 500 700; font-style: normal; font-display: swap;
+  src: url("fonts/sb-sans-cond-mono-700.woff2") format("woff2"); }
+
+:root {
+  --font-display: "SB Sans Display", Verdana, sans-serif;
+  --font-text: "SB Sans Text", Verdana, sans-serif;
+  --font-mono: "SB Sans Cond Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-text); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
+[hidden] { display: none !important; }
+
+/* ===== Токены v11 ============================================================
+   Чернила + свет и ОДИН акцент. Зелёный потрачен ровно на две вещи: шторку и
+   отметку выбранного. Всё остальное — нейтральная лестница серых.
+   ========================================================================== */
+body.v11 {
+  --lp-ink: #0A0C0B;          /* чернила */
+  --lp-text: #F2F5F4;         /* свет */
+  --lp-soft: #C6CECB;         /* описания: свет − 15%, всё ещё контраст */
+  --lp-muted: #97A29E;        /* служебный слой; 6.8:1 к --lp-ink — AA с запасом */
+  --lp-line: #0F1312;         /* чертёж: чернила + свет ~2.5% */
+  --lp-line-2: #1E2523;       /* хайрлайн рамок и подчёркиваний */
+  --lp-hi: #B7BFBC;           /* инверсия под курсором: серая, не белая */
+  /* Обводка «тоньше хайрлайна». Тоньше 1px линию не сделать, поэтому «тоньше»
+     здесь — прозрачнее: тот же ключ, приглушённый. Ею же метятся ошибки:
+     красного в палитре v11 нет. */
+  --lp-edge: rgba(63, 182, 124, .2);
+  /* Ключ приглушён на 30% по насыщенности от брендового #26D07C: тёмная
+     страница поднимает воспринимаемую яркость, и на чистом бренде шторка
+     читалась подсветкой, а не плашкой. */
+  --lp-key: #3FB67C;
+  --lp-key-ink: #222222;      /* текст на акценте */
+  --lp-cell: 24px;            /* шаг сетки — модуль всей системы */
+  --lp-row: 96px;             /* четыре ячейки */
+  --lp-ease: cubic-bezier(.645,.045,.355,1);   /* sui.io, easeInOutCubic */
+  --lp-ease-bar: cubic-bezier(.77,0,.175,1);   /* Heimdall, easeInOutQuart */
+  background: var(--lp-ink);
+  color: var(--lp-text);
+}
+
+/* ===== Шторка ================================================================
+   Шапка — не полоса во всю ширину, а плавающая плашка по центру. Отступы:
+   рамка ровно 4px по кругу, всё вложенное высотой 27px (8+11+8). Плашка
+   получается 35px. По горизонтали отступ пункта 12px, поэтому соседние пункты
+   разделены ровно 24px = шаг сетки.
+
+   ЛОВУШКА. Никогда не писать `body.is-tool .topbar { … }` — та же
+   специфичность, что у `body.v11 .topbar { position: fixed }`. Правило ниже по
+   файлу молча превратит шторку в обычную планку в потоке и сдвинет страницу.
+   ========================================================================== */
+.topbar { display: flex; align-items: center; gap: 0; }
+.topbar .brand { display: none; }
+.topnav { display: flex; gap: 0; }
+.topbar__auth { display: flex; align-items: center; }
+.logout-form { margin: 0; }
+
+body.v11 .topbar {
+  position: fixed; z-index: 60; top: 18px; left: 0; right: 0;
+  width: max-content; max-width: calc(100% - 24px); margin: 0 auto;
+  display: flex; align-items: center; gap: 0;
+  height: auto; padding: 4px; border-bottom: 0;
+  background: var(--lp-key); color: var(--lp-key-ink);
+  clip-path: inset(0);
+  transition: top .4s var(--lp-ease-bar), clip-path .7s var(--lp-ease-bar);
+}
+body.v11.lp-tuck .topbar { top: -88px; }
+body.v11 .topbar .brand { display: none; }
+body.v11:not(.is-auth) .topnav { display: none; }
+
+body.v11 .topnav { min-width: 0; gap: 0; padding-left: 0; }
+body.v11 .topnav__link { position: relative; border-radius: 0;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
+  letter-spacing: .09em; text-transform: uppercase; white-space: nowrap;
+  color: rgba(34, 34, 34, .82); padding: 8px 12px; text-decoration: none;
+  transition: color .2s var(--lp-ease); }
+body.v11 .topnav__link:hover,
+body.v11 .topnav__link.is-active { background: transparent; color: var(--lp-key-ink); }
+
+/* Ролл подписи: две копии текста, вторая — псевдоэлемент, поэтому в разметке
+   хватило data-t. Правило включается только при наличии атрибута: пункт без
+   него остаётся обычной ссылкой и не может оказаться прозрачным. */
+body.v11 .topnav__link[data-t] { overflow: hidden; color: transparent; }
+body.v11 .topnav__link[data-t]::before,
+body.v11 .topnav__link[data-t]::after {
+  content: attr(data-t); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(34, 34, 34, .82);
+  transition: transform .34s var(--lp-ease-bar), color .2s var(--lp-ease); }
+body.v11 .topnav__link[data-t]::after { transform: translateY(101%); }
+body.v11 .topnav__link[data-t]:hover::before { transform: translateY(-101%); }
+body.v11 .topnav__link[data-t]:hover::after { transform: none; color: var(--lp-key-ink); }
+body.v11 .topnav__link[data-t].is-active::before,
+body.v11 .topnav__link[data-t].is-active::after { color: var(--lp-key-ink); }
+body.v11 .topnav__link[data-t].is-active { box-shadow: inset 0 -1px 0 var(--lp-key-ink); }
+
+/* 12px здесь + 12px внутреннего отступа кнопки = те же 24px, что между
+   пунктами меню. */
+body.v11 .topbar__auth { margin-left: 0; gap: 12px; padding-left: 12px; }
+body.v11:not(.is-auth) .topbar__auth { padding-left: 0; }
+body.v11 .topbar__user { font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: .05em; color: rgba(34, 34, 34, .82); }
+body.v11 .topbar .login,
+body.v11 .logout-form button { border: 0; border-radius: 0; padding: 8px 16px;
+  cursor: pointer; text-decoration: none;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
+  letter-spacing: .09em; text-transform: uppercase;
+  background: var(--lp-key-ink); color: var(--lp-key);
+  transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
+body.v11 .topbar .login:hover,
+body.v11 .logout-form button:hover { background: var(--lp-text); color: var(--lp-key-ink); }
+
+/* ===== Живой чертёж ==========================================================
+   Два исполнения одного чертежа. Базовое — фоновые градиенты: они есть всегда,
+   и этого достаточно для тач-экранов и для режима «меньше движения». Живое —
+   canvas: grid.js вешает на .lp-grid класс is-live, градиенты гаснут, линии
+   рисуются вручную со смещением вокруг курсора.
+   ========================================================================== */
+.lp-grid { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  --lp-gy: 0px; --lp-gx: 0px; }
+.lp-grid::before { content: ""; position: absolute; inset: 0;
+  background-position: var(--lp-gx) var(--lp-gy);
+  background-image:
+    repeating-linear-gradient(to right, var(--lp-line) 0 1px, transparent 1px var(--lp-cell)),
+    repeating-linear-gradient(to bottom, var(--lp-line) 0 1px, transparent 1px var(--lp-cell)); }
+.lp-grid.is-live::before { display: none; }
+.lp-grid__canvas { position: absolute; inset: 0; display: none;
+  width: 100%; height: 100%; }
+.lp-grid.is-live .lp-grid__canvas { display: block; }
+/* z-index обязателен отрицательный: сетка — позиционированный элемент, а
+   плитки — обычные блоки в потоке. При z-index: 0 сетка рисовалась бы поверх
+   них, и линии проступали бы сквозь подложку. Родителю нужна isolation. */
+.lp-grid--page { z-index: -1; }
+
+/* ===== Подвал: служебная строка вместо отдельной секции ===== */
+.lp-foot { display: flex; flex-wrap: wrap; justify-content: center;
+  align-items: baseline; gap: 8px 18px; margin: 0; padding: 0 32px 32px;
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.lp-foot a { color: var(--lp-text); text-decoration: none; border-bottom: 1px solid var(--lp-line-2); }
+.lp-foot a:hover { border-bottom-color: var(--lp-text); }
+
+/* ============================================================================
+   ИНСТРУМЕНТ (v11)
+   Тот же чертёж, что на лендинге, но заперт в раму ленты и без хореографии
+   появления: в инструменте курсор занят делом.
+   ============================================================================ */
+/* Страница — колонка на всю высоту окна: подвал стоит строго внизу даже при
+   пустой ленте. Боковой отступ — две ячейки: одна отделяла бы рельс от края
+   окна впритык, и колонка читалась бы приклеенной. */
+body.is-tool { --rail-w: 264px; --page-pad: 48px;
+  display: flex; flex-direction: column; min-height: 100vh;
+  background: var(--lp-ink); color: var(--lp-text); }
+/* margin обнуляем намеренно: базовое `margin: 0 auto` во флекс-колонке гасит
+   растяжку по ширине, и main съёжился бы до содержимого. */
+body.is-tool main { position: relative; flex: 1 0 auto; display: flex;
+  flex-direction: column; max-width: none; margin: 0;
+  padding: 96px var(--page-pad) 0; }
+
+/* ===== Каркас: рельс формы и поток работ ===== */
+.tool { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }
+/* stretch, а не start: рама ленты должна доходить до низа страницы даже с
+   пустой лентой, иначе чертёж обрывался бы на высоте формы. */
+.tool__grid { flex: 1 0 auto; display: grid;
+  grid-template-columns: var(--rail-w) 1fr; gap: 24px; align-items: stretch; }
+/* Липкий рельс. Верх совпадает с padding-top у main, поэтому при нулевой
+   прокрутке колонка стоит там же, где стояла бы обычная. align-self перебивает
+   stretch у сетки: растянутому рельсу прилипать некуда. Ограничение по высоте —
+   на случай низкого окна: без него хвост формы уходил бы за экран навсегда. */
+.rail { min-width: 0; align-self: start;
+  position: sticky; top: 96px;
+  max-height: calc(100vh - 144px); overflow: hidden auto;
+  scrollbar-width: thin; }
+/* Заголовок страницы дублировал пункт меню и с экрана снят. В разметке
+   остаётся: без h1 страница теряет корень структуры для скринридера. */
+body.is-tool h1 { position: absolute; width: 1px; height: 1px; margin: -1px;
+  padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ===== §8.1 Кирпич: прямоугольник, хайрлайн, моно-капс ===== */
+body.is-tool .t-btn { display: inline-block; height: 24px; cursor: pointer;
+  border: 0; border-radius: 0; padding: 6px 12px;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  text-decoration: none; white-space: nowrap;
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
+              box-shadow .2s var(--lp-ease); }
+body.is-tool .t-btn:hover { background: var(--lp-hi); color: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-hi); }
+body.is-tool .t-btn--key { background: var(--lp-key); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-key); }
+body.is-tool .t-btn--key:hover { background: var(--lp-text); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-text); }
+body.is-tool .t-btn--on { color: var(--lp-text); box-shadow: inset 0 0 0 1px var(--lp-edge); }
+body.is-tool .t-btn:disabled { opacity: .4; cursor: default; }
+
+/* ===== §8.7 Рама ленты =====
+   Лента — единственная рама на странице, и внутри неё единственный чертёж.
+   isolation: isolate обязательна: чертёж лежит на z-index: -1 и без своего
+   контекста наложения ушёл бы под фон страницы. Отступ 24 — ячейка: первая
+   линия чертежа совпадает с первой линией плиток. */
+.feed { position: relative; isolation: isolate; overflow: hidden; min-width: 0;
+  padding: 24px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+/* Шапка ленты — ровно ячейка текста плюс ячейка отступа до линии: 12 + 12. */
+.feed__head { display: flex; align-items: baseline; gap: 24px; margin: 0 0 24px;
+  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
+.feed__title { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-soft); }
+/* Своей линии у поиска нет: строку уже подчёркивает шапка. Линия появляется на
+   фокусе — и тогда она ключевого цвета. */
+.feed__search { margin-left: auto; width: 192px; border: 0; border-radius: 0; padding: 0;
+  background: var(--lp-ink); box-shadow: none;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.feed__search::placeholder { color: var(--lp-muted); }
+.feed__search:focus { outline: none; box-shadow: inset 0 -1px 0 var(--lp-key); }
+.feed__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
+  gap: 24px; }
+/* Пустая лента — ОДНА строка на месте первого ряда плиток, а не текст,
+   висящий посреди пустого прямоугольника. Свободную площадь держит чертёж. */
+.feed__empty, .feed__foot { margin: 0; font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); }
+.feed__foot { margin-top: 24px; }
+
+/* ===== §8.8 Плитка работы: одно место жизни задачи ===== */
+.work { position: relative; min-width: 0; }
+.work__body { position: relative; aspect-ratio: 1; overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); background: var(--lp-ink);
+  display: flex; flex-direction: column; align-items: flex-start;
+  justify-content: flex-end; gap: 12px; padding: 12px; }
+.work--done .work__body { padding: 0; }
+.work__open { display: block; width: 100%; height: 100%; padding: 0; border: 0;
+  background: none; cursor: pointer; }
+.work__open img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.work__del { position: absolute; top: 0; right: 0; width: 24px; height: 24px; padding: 0;
+  border: 0; background: var(--lp-ink); color: var(--lp-muted); cursor: pointer;
+  font-size: 11px; line-height: 24px; opacity: 0;
+  transition: opacity .2s var(--lp-ease), background .2s var(--lp-ease), color .2s var(--lp-ease); }
+.work:hover .work__del, .work__del:focus-visible { opacity: 1; }
+.work__del:hover { background: var(--lp-key); color: var(--lp-key-ink); }
+.work__state { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); line-height: 24px; }
+.work--failed .work__state { color: var(--lp-text); }
+.work__acts { display: flex; flex-wrap: wrap; gap: 12px; }
+/* Единственное бесконечное движение системы: оно означает работу, а не
+   украшает её. Поэтому его не гасит даже prefers-reduced-motion. */
+.work__bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--lp-line-2); overflow: hidden; }
+.work__bar i { display: block; height: 100%; width: 0; background: var(--lp-key);
+  transition: width .35s var(--lp-ease); }
+.work__bar.is-idle i { width: 35%; animation: work-slide 1.1s ease-in-out infinite; }
+@keyframes work-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.work__cap { margin-top: 12px; font-size: 12px; line-height: 24px; color: var(--lp-muted);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* ===== §8.9 Лайтбокс — рабочий стол работы =====
+   Действия стоят колонкой СПРАВА, а не под содержимым: иначе высота содержимого
+   зависела бы от числа действий. Ширина колонки та же, что у рельса, —
+   страница читается одной системой. */
+body.is-tool .lightbox { position: fixed; inset: 0; z-index: 70; display: flex;
+  align-items: center; justify-content: center; padding: 24px; }
+body.is-tool .lightbox__backdrop { position: absolute; inset: 0;
+  background: rgba(10, 12, 11, .93); }
+body.is-tool .lightbox__panel { position: relative; display: grid;
+  grid-template-columns: 1fr 264px; gap: 24px; align-items: start;
+  width: min(1176px, 100%); padding: 24px; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+body.is-tool .lightbox__panel img { display: block; width: 100%;
+  max-height: calc(100vh - 96px); object-fit: contain; border-radius: 0; }
+body.is-tool .lightbox__side { display: flex; flex-direction: column; gap: 24px;
+  max-height: calc(100vh - 96px); overflow: auto; }
+.lb-bar { display: flex; gap: 12px; }
+.lb-bar .t-btn { padding: 6px 12px; }
+.lb-bar .lightbox__close { margin-left: auto; }
+.lb-counter { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.lb-caption { font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.lb-actions { display: flex; flex-direction: column; gap: 24px; }
+.lb-group { display: flex; flex-direction: column; gap: 12px; }
+.lb-group__label { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.lb-group__row { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* ===== §8.6 Тогл-строка: строка лендинга, повёрнутая в вертикаль =============
+   Высота строки ФИКСИРОВАНА, а под курсором двигаются только transform и
+   opacity. Ничего не перекладывается, поэтому всё, что ниже по рельсу, стоит
+   намертво само собой. В покое читаются только названия; описание приходит к
+   той строке, на которую смотрят.
+   __head обязателен у КАЖДОЙ строки, даже когда метки справа нет: он и есть
+   тот слой, который двигается под курсором.
+   ========================================================================== */
+.scen-grid { display: block; margin: 0 0 24px; }
+body.is-tool .scen-card { position: relative; overflow: hidden; display: block;
+  width: 100%; height: 48px; text-align: left;
+  font: inherit; cursor: pointer; border: 0; border-radius: 0; padding: 0 12px;
+  background: var(--lp-ink); color: var(--lp-text);
+  box-shadow: inset 0 1px 0 var(--lp-edge);
+  transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
+body.is-tool .scen-card:last-child { box-shadow: inset 0 1px 0 var(--lp-edge),
+  inset 0 -1px 0 var(--lp-edge); }
+body.is-tool .scen-card:hover { background: var(--lp-hi); color: var(--lp-ink); }
+/* Выбранное метим планкой, а не инверсией: инверсия занята ховером, и если
+   красить ею же выбранное, при наведении на соседнюю строку подсвечены две. */
+body.is-tool .scen-card.is-active::before { content: ""; position: absolute;
+  left: 0; top: 0; bottom: 0; width: 6px; background: var(--lp-key); }
+
+/* Оба слоя абсолютные и центрированы: высота строки не зависит от того,
+   сколько текста внутри. Интерлиньяж слоёв 18, а не 24, и разъезжаются они на
+   ±9: две строки по 24 замостили бы 48 без остатка, и текст упирался бы в обе
+   кромки. 18 + 18 = 36 оставляют по 6 сверху и снизу — это поля, а не единицы
+   шкалы. (Закрытое исключение канона.) */
+body.is-tool .scen-card__head,
+body.is-tool .scen-card__desc { position: absolute; left: 12px; right: 12px;
+  top: 50%; transform: translateY(-50%);
+  transition: transform .3s var(--lp-ease); }
+/* space-between: метка встаёт по правому краю карточки, а не вплотную за
+   названием. Иначе строка читалась как обрывок с провалом справа. */
+body.is-tool .scen-card__head { display: flex; align-items: baseline; gap: 12px;
+  justify-content: space-between; }
+body.is-tool .scen-card__title { min-width: 0; font-size: 13px; font-weight: 600;
+  line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.is-tool .scen-card__tag { flex: none; font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 18px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-key);
+  transition: color .25s var(--lp-ease); }
+body.is-tool .scen-card:hover .scen-card__tag { color: var(--lp-ink); }
+body.is-tool .scen-card__desc { opacity: 0; font-size: 12px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: transform .3s var(--lp-ease), opacity .2s var(--lp-ease); }
+body.is-tool .scen-card:hover .scen-card__head,
+body.is-tool .scen-card:focus-visible .scen-card__head {
+  transform: translateY(calc(-50% - 9px)); }
+body.is-tool .scen-card:hover .scen-card__desc,
+body.is-tool .scen-card:focus-visible .scen-card__desc { opacity: 1;
+  transform: translateY(calc(-50% + 9px));
+  transition: transform .3s var(--lp-ease), opacity .2s var(--lp-ease) .1s; }
+
+/* ===== §8.3 Форма ============================================================
+   Фиксированной высоты рельса не бывает, поэтому её и не назначаем. Вместо
+   этого каждый блок кратен ячейке (подпись 12 + зазор 12 + контрол 24/48/96 =
+   48/72/120) и зазор между блоками равен ячейке. Тогда ЛЮБАЯ комбинация блоков
+   садится на модуль сама.
+   ========================================================================== */
+.gen-form { display: flex; flex-direction: column; gap: 24px; }
+body.is-tool .gen-form__tail { display: flex; flex-direction: column; gap: 24px; }
+body.is-tool .gen-form label { display: flex; flex-direction: column; gap: 12px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+body.is-tool .gen-form .field-group { display: flex; flex-direction: column; gap: 12px; }
+/* Боковой отступ подписи равен отступу текста в тогл-строках и в полях:
+   контролы упираются в края рельса, текст — никогда. */
+body.is-tool .gen-form .field-label { padding: 0 12px; font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 12px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-muted); }
+body.is-tool .gen-form select,
+body.is-tool .gen-form input[type="text"],
+body.is-tool .gen-form textarea { font: inherit; font-size: 13px; line-height: 24px;
+  padding: 12px; border: 0; border-radius: 0; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); color: var(--lp-text);
+  transition: box-shadow .2s var(--lp-ease); }
+/* 48 = 24 + 12 + 12 у селекта; 96 = три строки по 24 плюс те же 12 и 12. */
+body.is-tool .gen-form select,
+body.is-tool .gen-form input[type="text"] { height: 48px; }
+body.is-tool .gen-form textarea { height: 96px; resize: none; }
+body.is-tool .gen-form select:focus,
+body.is-tool .gen-form input[type="text"]:focus,
+body.is-tool .gen-form textarea:focus { outline: none;
+  box-shadow: inset 0 0 0 1px var(--lp-edge); }
+body.is-tool .gen-form select { appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397A29E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+body.is-tool .gen-form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+body.is-tool .gen-form__grid > label + label { margin-left: -1px; }
+body.is-tool .gen-form button[type="submit"] { height: 48px; cursor: pointer;
+  border: 0; border-radius: 0;
+  padding: 12px; background: var(--lp-key); color: var(--lp-key-ink);
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase;
+  transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
+body.is-tool .gen-form button[type="submit"]:hover { background: var(--lp-text); }
+body.is-tool .gen-form button[type="submit"]:disabled { opacity: .4; cursor: default; }
+
+/* ===== §8.2 Чипы и сегменты встык ============================================
+   Те же кирпичики, что кнопки действий, но стоят встык: это один
+   переключатель, а не несколько независимых кнопок. Стык держим на -1px,
+   иначе соседние рамки сложились бы в двойную линию. */
+.chip-row { display: flex; flex-wrap: nowrap; gap: 0; }
+.seg { display: flex; gap: 0; }
+body.is-tool .chip, body.is-tool .seg__btn { flex: 1 1 0; min-width: 0;
+  position: relative; height: 24px; cursor: pointer; border: 0;
+  border-radius: 0; padding: 6px; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
+              box-shadow .2s var(--lp-ease); }
+body.is-tool .chip + .chip, body.is-tool .seg__btn + .seg__btn { margin-left: -1px; }
+/* Выбранное — ключевой цвет заливкой. Обводка --lp-edge в ряду встык не
+   читается вовсе. С ховером не спорит — тот светлый. */
+body.is-tool .chip.is-active, body.is-tool .seg__btn.is-active { z-index: 1;
+  background: var(--lp-key); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-key); }
+body.is-tool .chip:hover, body.is-tool .seg__btn:hover { z-index: 2; background: var(--lp-hi);
+  color: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-hi); }
+
+/* ===== §8.4 Галочка — тот же кирпич 24px, что чипы =====
+   align-items: flex-start, потому что пояснение стоит отдельной строкой под
+   подписью: при центрировании квадрат уплывал бы на середину двухстрочного
+   блока и терял связь с первой строкой. */
+body.is-tool .check-row { display: flex; flex-direction: row; align-items: flex-start;
+  gap: 12px; padding: 0 12px; min-height: 24px; cursor: pointer;
+  font-family: var(--font-text); font-size: 13px;
+  font-weight: 400; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-soft); }
+body.is-tool .check-row .muted { display: block; font-size: 12px; }
+body.is-tool .check-row input[type="checkbox"] { appearance: none; -webkit-appearance: none;
+  width: 24px; height: 24px; margin: 0; flex: none; cursor: pointer; border-radius: 0;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  transition: background .2s var(--lp-ease); }
+body.is-tool .check-row input[type="checkbox"]:checked { background: var(--lp-key);
+  box-shadow: inset 0 0 0 1px var(--lp-key);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8'%3E%3Cpath d='M1 4l3 3 5-6' stroke='%23222222' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center; }
+body.is-tool .muted { color: var(--lp-muted); font-size: 13px; }
+
+/* ===== §8.5 Дропзона 96 и превью 48 ===== */
+.dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0; height: 96px; padding: 12px; text-align: center; cursor: pointer;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted);
+  transition: box-shadow .2s var(--lp-ease), color .2s var(--lp-ease); }
+.dropzone:hover, .dropzone.is-drag { box-shadow: inset 0 0 0 1px var(--lp-edge);
+  color: var(--lp-soft); }
+.dropzone b { color: var(--lp-text); font-weight: 700; }
+.dropzone__hint { color: var(--lp-muted); }
+.previews { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+
+/* ===== §8.10 Сноски рельса и служебная строка статуса ===== */
+body.is-tool .status { margin-top: 24px; padding: 12px;
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-soft); }
+/* Ошибка метится обводкой --lp-edge и более светлым текстом. Красного в
+   палитре v11 нет — и заводить его нельзя. */
+body.is-tool .status--error { box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+/* Подвал инструмента упирается в раму ленты, поэтому отступ сверху обязателен:
+   две ячейки над строкой и две под ней. */
+body.is-tool .lp-foot { gap: 12px 24px; padding: 48px var(--page-pad); }
+body.is-tool .session-banner { display: flex; flex-direction: column; align-items: flex-start;
+  gap: 12px; margin: 0 0 24px; padding: 12px; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-edge); font-size: 12px; line-height: 24px;
+  color: var(--lp-text); }
+
+/* ===== Доступность: видимый фокус при навигации с клавиатуры ===== */
+:focus-visible { outline: 2px solid var(--lp-key); outline-offset: 2px; }
+
+/* ===== Инструмент: узкий экран и режим без движения =========================
+   Стоят В КОНЦЕ секции, а не рядом с другими медиазапросами: специфичность у
+   них та же, что у базовых правил выше, и, окажись они раньше, базовое правило
+   перебивало бы их — запрос молча не работал бы.
+   ========================================================================== */
+@media (max-width: 860px) {
+  /* Рельс разворачивается на всю ширину над лентой, плитки тилятся сами.
+     Отступ сверху больше — шторка переносит навигацию на вторую строку и
+     становится выше. Боковой отступ обратно в ячейку. */
+  body.is-tool { --page-pad: 24px; }
+  body.is-tool main { padding-top: 120px; }
+  .tool__grid { grid-template-columns: 1fr; }
+  /* В одну колонку липнуть нечему: рельс стоит НАД лентой, и прилипший он
+     закрыл бы собой работы, ради которых прокрутка и затевалась. */
+  .rail { position: static; max-height: none; overflow: visible; }
+  body.is-tool .lightbox__panel { grid-template-columns: 1fr;
+    max-height: calc(100vh - 48px); overflow: auto; }
+
+  /* Пять пунктов в строку не помещаются: шторка растягивается на всю ширину
+     поля, навигация переносится на вторую строку и прокручивается внутри
+     себя. Ширину body она при этом не задаёт. */
+  body.v11 .topbar { top: 12px; left: 12px; right: 12px; width: auto;
+    max-width: none; margin: 0; flex-wrap: wrap; padding: 6px; gap: 4px 8px; }
+  body.v11:not(.is-auth) .topbar { justify-content: center; }
+  body.v11 .topbar__auth { margin-left: auto; padding-left: 0; }
+  body.v11 .topnav { order: 3; width: 100%; flex-wrap: nowrap; padding-left: 0;
+    overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  body.v11 .topnav::-webkit-scrollbar { display: none; }
+  body.v11 .topnav__link { flex: 0 0 auto; }
+}
+
+/* Без курсора раскрывать нечем: описание видно всегда, оба слоя сразу стоят
+   на своих местах, строке нужен третий ряд. */
+@media (hover: none) {
+  body.is-tool .scen-card { height: 72px; }
+  body.is-tool .scen-card__head { transform: translateY(calc(-50% - 12px)); }
+  body.is-tool .scen-card__desc { opacity: 1;
+    transform: translateY(calc(-50% + 12px)); }
+}
+
+/* То же по системной настройке «меньше движения». Индикатор работы .work__bar
+   не гасим — он сообщает о состоянии задачи, а не украшает. */
+@media (prefers-reduced-motion: reduce) {
+  body.v11 .topbar, body.v11 .topnav__link,
+  body.v11 .topnav__link[data-t]::before,
+  body.v11 .topnav__link[data-t]::after,
+  body.v11 .topbar .login, body.v11 .logout-form button { transition: none; }
+  body.is-tool .scen-card, body.is-tool .scen-card__head,
+  body.is-tool .scen-card__desc, body.is-tool .scen-card__tag { transition: none; }
+  body.is-tool .scen-card { height: 72px; }
+  body.is-tool .scen-card__head { transform: translateY(calc(-50% - 12px)); }
+  body.is-tool .scen-card__desc { opacity: 1;
+    transform: translateY(calc(-50% + 12px)); }
+}

@@ -4,42 +4,67 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Редактор HTML-деки</title>
-<link rel="stylesheet" href="/static/styles.css">
+<!-- v11.css — канон платформы; editor.css — только то, что специфично для
+     рабочего стола редактора, и только поверх канона. -->
+<link rel="stylesheet" href="/static/v11.css">
+<link rel="stylesheet" href="/static/editor.css">
+<script src="/static/grid.js" defer></script>
+<script src="/static/v11.js" defer></script>
 </head>
-<body>
-<div class="editor">
-  <!-- К§ — тулбар на всю ширину экрана (общая шапка редактора) -->
-  <div class="toolbar">
-    <a class="home" href="/">&larr; На главную</a>
-    <span class="mode-badge" id="modeBadge"></span>
-    <span class="sp"></span>
-    <!-- Возврат к остановленной автором сборке: виден, только когда план
-         на паузе и в нём остались незаполненные слайды. -->
-    <button class="btn hidden" id="glassResume" type="button"
-            title="Возобновить заполнение слайдов с того места, где сборка была остановлена.">Продолжить сборку</button>
-    <button class="btn btn-ghost hidden" id="themeToggle" title="Перекрасить все слайды в другую тему. Содержание не меняется.">Светлая тема</button>
-    <button class="btn btn-accent" id="save">Сохранить</button>
-    <details class="toolbar-menu" id="exportMenu">
-      <summary class="btn btn-ghost">Скачать &#9662;</summary>
-      <div class="toolbar-menu__list">
-        <button class="btn btn-ghost" id="exportPptx" data-fmt="pptx">Экспорт в PPTX</button>
-        <button class="btn btn-ghost" id="exportPng" data-fmt="png">Экспорт в PNG (ZIP)</button>
-        <a class="btn btn-ghost" id="html">Скачать HTML</a>
-      </div>
-    </details>
+<!-- is-editor меняет ровно одно: страница перестаёт прокручиваться и колонки
+     занимают высоту окна. Ни один канонический селектор при этом не
+     переопределяется — специфичность `body.is-tool …` трогать нельзя. -->
+<body class="v11 is-tool is-auth is-editor">
+<!-- КАНОНИЧЕСКАЯ ШАПКА ПЛАТФОРМЫ: та же разметка, что на /slides. Она же
+     заменила прежний тулбар редактора — отдельная строка «← На главную»
+     дублировала корень навигации, который в канон уже встроен. -->
+<header class="topbar">
+  <a class="brand" href="/">Cloud.ru <span>Design</span></a>
+  <nav class="topnav">
+    <a href="/images"    class="topnav__link" data-t="Картинки">Картинки</a>
+    <a href="/slides"    class="topnav__link is-active" data-t="Слайды">Слайды</a>
+    <a href="/creatives" class="topnav__link" data-t="Креативы">Креативы</a>
+    <a href="/present"   class="topnav__link" data-t="Трансляции">Трансляции</a>
+    <a href="/creatives/webinar" class="topnav__link" data-t="Вебинары">Вебинары</a>
+  </nav>
+  <div class="topbar__auth">
+    <form action="/logout" method="post" class="logout-form"><button type="submit">Выйти</button></form>
   </div>
+</header>
 
-  <div class="editor-main">
-  <!-- Thumbnail rail -->
-  <aside class="thumbs">
-    <div class="thumbs-title">Слайды</div>
-    <button class="btn btn-ghost addslide hidden" id="addSlide"
-            title="Новый слайд встанет сразу после текущего">+ Добавить слайд</button>
+<main>
+<section class="tool">
+  <!-- Три колонки на том же модуле, что главная: 264 | сцена | 264.
+       На 1440: 48 + 264 + 24 + 768 + 24 + 264 + 48. -->
+  <div class="tool__grid tool__grid--edit">
+
+  <!-- ===== Левый рельс: лента слайдов ===== -->
+  <aside class="rail rail--edit" id="thumbsRail">
+    <p class="field-label">Слайды</p>
+    <button class="btn addslide hidden" id="addSlide"
+            title="Новый слайд встанет сразу после текущего">Добавить слайд</button>
     <div id="thumbs"></div>
   </aside>
 
-  <!-- Stage: one big slide -->
-  <div class="stage-col">
+  <!-- ===== Сцена: единственная рама редактора и единственный чертёж ===== -->
+  <section class="stage" id="stageWrap">
+    <div class="lp-grid lp-grid--page"><canvas class="lp-grid__canvas"></canvas></div>
+    <!-- Шапка сцены собрана по рецепту шапки ленты (§8.7): строка служебного
+         текста, хайрлайн через ячейку. Прежнее overflow-меню «Скачать» снято —
+         три формата встают в строку кирпичей и без него. -->
+    <header class="feed__head stage__head">
+      <p class="feed__title" id="modeBadge"></p>
+      <div class="stage__acts">
+        <button class="btn hidden" id="glassResume" type="button"
+                title="Возобновить заполнение слайдов с того места, где сборка была остановлена.">Продолжить сборку</button>
+        <button class="btn hidden" id="themeToggle"
+                title="Перекрасить все слайды в другую тему. Содержание не меняется.">Светлая тема</button>
+        <button class="btn" id="exportPptx" data-fmt="pptx">PPTX</button>
+        <button class="btn" id="exportPng" data-fmt="png">PNG</button>
+        <a class="btn" id="html">HTML</a>
+        <button class="btn btn-accent" id="save">Сохранить</button>
+      </div>
+    </header>
     <div id="frameWrap">
       <iframe id="deck" title="Презентация"></iframe>
       <!-- К§6 — второй буфер двойной буферизации превью (скрыт, грузит следующий кадр) -->
@@ -53,13 +78,15 @@
         </div>
       </div>
     </div>
-  </div>
+  </section>
 
+  <!-- ===== Правый рельс: содержание слайда ===== -->
   <!-- К§8 — одна правая панель с табами «Поля | Чат» (id панелей #builder/.chat неизменны) -->
-  <aside class="rpanel" id="rpanel">
-    <div class="rpanel-tabs hidden" id="rpanelTabs">
-      <button class="rpanel-tab" id="tabFields" type="button">Содержание</button>
-      <button class="rpanel-tab" id="tabChat" type="button">Правки в чате</button>
+  <aside class="rail rail--edit rpanel" id="rpanel">
+    <!-- Табы — сегмент канона встык: это один переключатель, а не две кнопки. -->
+    <div class="seg rpanel-tabs hidden" id="rpanelTabs">
+      <button class="seg__btn rpanel-tab" id="tabFields" type="button">Содержание</button>
+      <button class="seg__btn rpanel-tab" id="tabChat" type="button">Правки в чате</button>
     </div>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
@@ -74,15 +101,15 @@
     <!-- Точечное улучшение: LLM-проверка вёрстки и вида ОДНОГО слайда.
          Активна только после полного завершения сборки (решение спеки). -->
     <div class="builder-improve hidden" id="improveWrap">
-      <button class="btn btn-ghost btn-sm" id="improveSlide" type="button">Улучшить этот слайд (~1–2 мин)</button>
+      <button class="btn" id="improveSlide" type="button">Улучшить этот слайд (~1–2 мин)</button>
       <span class="improve-note" id="improveNote"></span>
     </div>
     <div class="builder-empty" id="builderEmpty">
       <p class="builder-empty__hint">Слайдов нет. Начните со структуры из трёх
         слайдов — или выберите первый макет сами.</p>
       <div class="builder-empty__actions">
-        <button class="btn" id="emptySkeleton" type="button">Начать со структуры</button>
-        <button class="btn btn-ghost" id="builderAdd" type="button">Выбрать макет</button>
+        <button class="btn btn-accent" id="emptySkeleton" type="button">Начать со структуры</button>
+        <button class="btn" id="builderAdd" type="button">Выбрать макет</button>
       </div>
     </div>
   </aside>
@@ -113,8 +140,10 @@
     </div>
   </aside>
   </aside><!-- /.rpanel -->
-  </div><!-- /.editor-main -->
-</div>
+
+  </div><!-- /.tool__grid -->
+</section>
+</main>
 
 <!-- Экран сборки (?glass=1) — полноэкранный этап от загрузки документа до
      редактора, без раннего выхода (тезис: показываем только нужное сейчас).
@@ -126,8 +155,8 @@
        выход на главную и стоп, справа — тихий счётчик вопросов. -->
   <div class="glass-overlay__top">
     <div class="glass-overlay__side">
-      <a class="btn btn-ghost btn-sm" id="gloHome" href="/">&larr; На главную</a>
-      <button class="btn btn-ghost btn-sm" id="glassStop" type="button"
+      <a class="btn" id="gloHome" href="/">На главную</a>
+      <button class="btn" id="glassStop" type="button"
               title="Полностью остановить заполнение: новых запросов к ИИ не будет. Продолжить можно в любой момент.">Остановить сборку</button>
     </div>
     <div class="glass-overlay__stepper" id="gloStepper"></div>
@@ -152,14 +181,14 @@
     </div>
     <!-- Этап «Вопросы»: карточки, «Решить все», хвост документа, выход в редактор -->
     <div class="glass-overlay__resolve hidden" id="gloResolve">
-      <button class="btn btn-ghost btn-sm glass-auto hidden" id="glassAuto"
+      <button class="btn glass-auto hidden" id="glassAuto"
               type="button">Решить все на усмотрение ИИ</button>
       <div id="gloCards"></div>
       <!-- Хвост документа, не влезший в потолок: потолок не поднимаем (сорок
            слайдов автор и так проходит по одному больше получаса), но потерю
            делаем обратимой — вторая дека с первого невзятого раздела. -->
       <div class="glass-rest hidden" id="glassRest">
-        <button class="btn btn-ghost btn-sm" id="glassRestBtn" type="button"></button>
+        <button class="btn" id="glassRestBtn" type="button"></button>
         <p class="glass-rest-note hidden" id="glassRestNote"></p>
       </div>
       <div class="glass-foot hidden" id="glassDone">
@@ -168,32 +197,41 @@
       </div>
     </div>
   </div>
+  <!-- Лента честных ячеек: очередь, заполняемый слайд, вопросы, готовые.
+       Готовую можно кликнуть — она открывается в центре («подглядывание»). -->
   <div class="glass-overlay__film" id="gloFilm"></div>
 </div>
 
 <!-- Отмена удаления слайда: Ctrl+Z есть, но о нём не догадаться — даём кнопку -->
 <div class="undo-toast hidden" id="undoToast" role="status" aria-live="polite">
   <span class="undo-toast__text"></span>
-  <button class="btn btn-ghost btn-sm" type="button" id="undoToastBtn">Вернуть</button>
+  <button class="btn" type="button" id="undoToastBtn">Вернуть</button>
 </div>
 
-<!-- Template picker (manual mode) -->
-<div class="picker hidden" id="picker">
-  <div class="picker-card">
-    <div class="picker-head">
-      <h3 id="pickerTitle">Выберите макет слайда</h3>
-      <button class="btn btn-ghost btn-sm" id="pickerClose" title="Закрыть" aria-label="Закрыть выбор макета">&#10005;</button>
+<!-- Пикеры — лайтбоксы канона в одну колонку: выбор макета сам себе рабочий
+     стол, боковая колонка действий здесь пустовала бы. -->
+<div class="picker lightbox hidden" id="picker">
+  <div class="lightbox__backdrop" data-picker-close></div>
+  <div class="lightbox__panel lightbox__panel--solo picker-card" role="dialog" aria-modal="true"
+       aria-label="Выбор макета слайда">
+    <div class="lb-bar picker-head">
+      <span class="lb-counter" id="pickerTitle">Выберите макет слайда</span>
+      <button class="btn lightbox__close" id="pickerClose"
+              aria-label="Закрыть выбор макета">Закрыть</button>
     </div>
     <div class="picker-grid" id="pickerGrid"></div>
   </div>
 </div>
 
 <!-- Пикер типов схем (второй шаг после мастера «Схема») -->
-<div class="picker hidden" id="dgmPicker">
-  <div class="picker-card">
-    <div class="picker-head">
-      <h3>Выберите тип схемы</h3>
-      <button class="btn btn-ghost btn-sm" id="dgmPickerClose" title="Закрыть" aria-label="Закрыть выбор типа схемы">&#10005;</button>
+<div class="picker lightbox hidden" id="dgmPicker">
+  <div class="lightbox__backdrop" data-picker-close></div>
+  <div class="lightbox__panel lightbox__panel--solo picker-card" role="dialog" aria-modal="true"
+       aria-label="Выбор типа схемы">
+    <div class="lb-bar picker-head">
+      <span class="lb-counter">Выберите тип схемы</span>
+      <button class="btn lightbox__close" id="dgmPickerClose"
+              aria-label="Закрыть выбор типа схемы">Закрыть</button>
     </div>
     <div class="picker-grid" id="dgmPickerGrid"></div>
   </div>

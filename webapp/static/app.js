@@ -13,12 +13,6 @@ const U = (p) => PREFIX + p;
 
 // App2 is HTML-only: uploads always build with the single engine mode.
 const MODE = "htmlnew";
-// Job rows carry the entry-point mode: htmlnew (upload) / manual / chat.
-const MODE_LABEL = {
-  htmlnew: "HTML-презентация",
-  manual: "Конструктор",
-  chat: "Чат-ассистент",
-};
 const STAGE_LABEL = {
   queued: "В очереди",
   parsing: "Разбор документа",
@@ -94,7 +88,7 @@ function resetFile() {
   selectedFile = null;
   fileInput.value = "";
   drop.classList.remove("has-file");
-  $("#dropText").textContent = "Перетащите файл или нажмите, чтобы выбрать";
+  $("#dropText").textContent = "Перетащите файл или выберите";
   setStartEnabled(false);
   const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
   if (hint) hint.hidden = false;
@@ -113,32 +107,23 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) setFile(fileInput.files[0]);
 });
 ["dragenter", "dragover"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("dragover"); }));
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("is-drag"); }));
 ["dragleave", "drop"].forEach((ev) =>
-  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("dragover"); }));
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("is-drag"); }));
 drop.addEventListener("drop", (e) => {
   const f = e.dataTransfer.files[0];
   if (f) setFile(f);
 });
 
-/* ---- icons + расход формата ---- */
-// Иконка инструмента сборки (из файла / конструктор / чат) — острые контуры 24×24.
-const HIST_ICON_STROKE = `fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="butt" stroke-linejoin="miter"`;
+/* ---- подписи инструментов + расход формата ---- */
+// v11 не знает иконок: служебный слой — это моно-капс, а не пиктограмма.
+// Прежние контурные SVG инструментов и галочка «Готово» сняты вместе с ними.
 const HIST_TOOL = {
-  htmlnew: { title: "Из файла",
-    paths: `<path d="M6 4H14L18 8V20H6Z"/><path d="M14 4V8H18"/><path d="M9 12.5H15"/><path d="M9 15.5H15"/>` },
-  manual: { title: "Конструктор",
-    paths: `<path d="M4.5 19.5L5.5 15.5L15.7 5.3L18.7 8.3L8.5 18.5Z"/><path d="M5.5 15.5L8.5 18.5"/><path d="M14.4 6.6L17.4 9.6"/>` },
-  chat: { title: "Чат-ассистент",
-    paths: `<path d="M4 5H20V15H11L7 19V15H4Z"/><path d="M8 9H16"/><path d="M8 11.5H13"/>` },
+  htmlnew: "Из файла",
+  manual: "Конструктор",
+  chat: "Чат-ассистент",
 };
-function toolSvg(mode) {
-  const t = HIST_TOOL[mode] || HIST_TOOL.htmlnew;
-  return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g ${HIST_ICON_STROKE}>${t.paths}</g></svg>`;
-}
-function toolTitle(mode) { return (HIST_TOOL[mode] || HIST_TOOL.htmlnew).title; }
-// Галочка «Готово» — тот же острый контур 24×24, что и у иконок инструментов.
-const CHECK_SVG = `<svg class="st-ico" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M5 12L10 17L19 6.5" ${HIST_ICON_STROKE}/></svg>`;
+function toolTitle(mode) { return HIST_TOOL[mode] || HIST_TOOL.htmlnew; }
 // Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
 const histInt = (n) => Number(n).toLocaleString("ru-RU");
 const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
@@ -176,7 +161,9 @@ function baseExt(raw) {
 function nameParts(it) {
   if (it.display_name) return { base: it.display_name, ext: "" };
   if (it.source_filename) return baseExt(it.source_filename);
-  return { base: MODE_LABEL[it.mode] || it.mode || "Без названия", ext: "" };
+  // Инструментом подпись не подменяем: он уже стоит маркой в углу плитки, и
+  // безымянный черновик получал бы «Конструктор» дважды подряд.
+  return { base: "Без названия", ext: "" };
 }
 function normActive(a) {
   const running = a.stage && a.stage !== "queued";
@@ -222,16 +209,22 @@ function feedSort(a, b) {
   return (b.ts || 0) - (a.ts || 0);
 }
 
-function statusPill(state) {
-  switch (state) {
-    case "running": return `<span class="st st-run"><span class="dot"></span>В работе</span>`;
-    case "queued": return `<span class="st st-queue">В очереди</span>`;
-    case "done": return `<span class="st st-done">${CHECK_SVG}Готово</span>`;
-    case "draft": return `<span class="st st-draft">Черновик</span>`;
-    case "failed": return `<span class="st st-fail">Ошибка</span>`;
-    case "cancelled": return `<span class="st st-cancel">Отменено</span>`;
-    default: return "";
+// Состояние — строка служебного слоя, а не цветная пилюля: цвет в v11 один,
+// и он потрачен на акцент. Отличает состояния текст, а прогресс — полоска 2px.
+const STATE_LABEL = {
+  running: "В работе",
+  queued: "В очереди",
+  done: "Готово",
+  draft: "Черновик",
+  failed: "Ошибка",
+  cancelled: "Отменено",
+};
+function stateLine(it) {
+  if (it.state === "running") {
+    const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
+    return `В работе · ${pct}%`;
   }
+  return STATE_LABEL[it.state] || "";
 }
 // Сегмент «N разделов · примерно X мин» для активной карточки. estimateLine —
 // из errtext.js (window); guard на случай, если модуль не загрузился.
@@ -241,19 +234,21 @@ function estSegment(it) {
   if (!e) return "";
   return e.warn ? `<span class="est-warn">${esc(e.text)}</span>` : esc(e.text);
 }
+// Инструмент здесь НЕ повторяем: он уже стоит меткой в углу плитки
+// (.work__tool), и вторым упоминанием строка только длиннела.
 function cardMeta(it) {
   const SEP = `<span class="sep">·</span>`;
   const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
     const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идёт сборка";
-    const seg = [toolTitle(it.mode), esc(detail), pct + "%"];
+    const seg = [esc(detail), pct + "%"];
     const est = estSegment(it);
     if (est) seg.push(est);
     return seg.join(SEP);
   }
   if (it.state === "queued") {
-    const seg = [toolTitle(it.mode), "скоро начнётся"];
+    const seg = ["скоро начнётся"];
     const est = estSegment(it);
     if (est) seg.push(est);
     return seg.join(SEP);
@@ -267,7 +262,7 @@ function cardMeta(it) {
     if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
     return seg.join(SEP);
   }
-  if (it.state === "draft") return [toolTitle(it.mode), when ? `изменён ${esc(when)}` : ""].filter(Boolean).join(SEP);
+  if (it.state === "draft") return when ? `изменён ${esc(when)}` : "";
   if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, when ? esc(when) : ""].filter(Boolean).join(SEP);
   if (it.state === "cancelled") return ["Остановлено вручную", when ? esc(when) : ""].filter(Boolean).join(SEP);
   return "";
@@ -278,51 +273,55 @@ function cardMeta(it) {
 // активная → «Остановить».
 function cardActions(it) {
   if (it.state === "running" || it.state === "queued")
-    return `<button class="btn btn-stop btn-sm" data-stop="${it.id}">Остановить</button>`;
+    return `<button type="button" class="t-btn" data-stop="${it.id}">Остановить</button>`;
   if (it.state === "done")
-    return `<a class="btn btn-ghost btn-sm" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
-  if (it.state === "draft" || ((it.state === "failed" || it.state === "cancelled") && it.kind === "draft"))
-    return `<a class="btn btn-ghost btn-sm" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>` +
-      `<button class="btn-link" data-del="${it.id}">Удалить</button>`;
+    return `<a class="t-btn t-btn--key" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
+  // Удаление черновика живёт в углу плитки (.work__del), поэтому текстовой
+  // кнопки «Удалить» здесь больше нет — иначе одно действие стояло бы дважды.
+  if (isDraftLike(it))
+    return `<a class="t-btn t-btn--key" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>`;
   if (it.state === "failed" || it.state === "cancelled")
-    return `<button class="btn btn-ghost btn-sm" data-retry="${it.id}">Повторить</button>`;
+    return `<button type="button" class="t-btn" data-retry="${it.id}">Повторить</button>`;
   return "";
+}
+function isDraftLike(it) {
+  return it.state === "draft" ||
+    ((it.state === "failed" || it.state === "cancelled") && it.kind === "draft");
 }
 
 function updateCard(card, it) {
   card.dataset.state = it.state;
   card.dataset.mode = it.mode || "";
   const expandable = it.state === "running" || it.state === "queued";
-  card.classList.toggle("expandable", expandable);
+  card.classList.toggle("is-expandable", expandable);
+  card.classList.toggle("work--failed", it.state === "failed" || it.state === "cancelled");
   const np = nameParts(it);
   const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
-  card.querySelector(".pcard-head").innerHTML =
-    `<div class="pcard-tool">${toolSvg(it.mode)}</div>` +
-    `<div class="pcard-main">` +
-      `<div class="pcard-trow">` +
-        `<span class="pcard-title">${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}</span>` +
-        statusPill(it.state) +
-      `</div>` +
-      `<div class="pcard-meta">${cardMeta(it)}</div>` +
-    `</div>` +
-    `<div class="pcard-actions">${cardActions(it)}</div>`;
-  const bar = card.querySelector(".pcard-bar");
-  if (it.state === "running") {          // бар — только у идущей сборки (не у очереди)
-    bar.classList.remove("hidden");
-    bar.querySelector("i").style.width = pct + "%";
-  } else {
-    bar.classList.add("hidden");
-  }
-  if (!expandable) {                      // терминальная карточка — лог не нужен, свернуть
-    const lines = card.querySelector(".pcard-loglines");
+  card.querySelector(".work__body").innerHTML =
+    `<span class="work__tool">${esc(toolTitle(it.mode))}</span>` +
+    (isDraftLike(it)
+      ? `<button type="button" class="work__del" data-del="${it.id}" title="Удалить черновик" aria-label="Удалить черновик">✕</button>`
+      : "") +
+    `<p class="work__meta">${cardMeta(it)}</p>` +
+    `<p class="work__state">${esc(stateLine(it))}</p>` +
+    `<div class="work__acts">${cardActions(it)}</div>` +
+    // Полоска работы — единственное бесконечное движение системы. В очереди
+    // процента ещё нет, поэтому она идёт бегунком (is-idle), а не заливкой.
+    (expandable
+      ? `<div class="work__bar${it.state === "queued" ? " is-idle" : ""}"><i style="width:${pct}%"></i></div>`
+      : "");
+  card.querySelector(".work__cap").innerHTML =
+    `${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}`;
+  if (!expandable) {                      // терминальная плитка — лог не нужен, свернуть
+    const lines = card.querySelector(".work__loglines");
     if (lines) lines.innerHTML = "";
-    card.classList.remove("open");
+    card.classList.remove("is-open");
   }
 }
 
 function renderChips(counts) {
   $("#feedChips").innerHTML = CHIPS.map((c) =>
-    `<button class="chip${activeFilter === c.key ? " on" : ""}" data-filter="${c.key}">` +
+    `<button type="button" class="chip${activeFilter === c.key ? " is-active" : ""}" data-filter="${c.key}">` +
     `${c.label} <span class="n">${counts[c.key] || 0}</span></button>`).join("");
 }
 
@@ -336,16 +335,16 @@ function renderFeed(items) {
     feedItemById.set(it.id, it);
     let card = feedCards.get(it.id);
     if (!card) {
-      card = document.createElement("div");
-      card.className = "pcard";
+      card = document.createElement("article");
+      card.className = "work";
       card.dataset.id = it.id;
       card.innerHTML =
-        `<div class="pcard-head"></div>` +
-        `<div class="pcard-bar hidden"><i></i></div>` +
-        `<div class="pcard-log">` +
-          `<div class="pcard-stage"></div>` +
-          `<div class="pcard-hb"></div>` +
-          `<div class="pcard-loglines"></div>` +
+        `<div class="work__body"></div>` +
+        `<p class="work__cap"></p>` +
+        `<div class="work__log">` +
+          `<div class="work__logstage"></div>` +
+          `<div class="work__hb"></div>` +
+          `<div class="work__loglines"></div>` +
         `</div>`;
       feedCards.set(it.id, card);
     }
@@ -360,7 +359,7 @@ function renderFeed(items) {
   // Раскрытие держим только на активной карточке; терминальная/исчезнувшая — закрыть.
   const ex = expandedId ? feedCards.get(expandedId) : null;
   if (!ex || !(ex.dataset.state === "running" || ex.dataset.state === "queued")) expandedId = null;
-  for (const [id, el] of feedCards) el.classList.toggle("open", id === expandedId);
+  for (const [id, el] of feedCards) el.classList.toggle("is-open", id === expandedId);
 }
 
 async function loadFeed() {
@@ -388,13 +387,19 @@ async function loadFeed() {
   updateEmptyState();
 }
 
+// Рама ленты не прячется никогда: она и есть поверхность страницы, а пустоту
+// внутри неё держит живой чертёж. Меняются только счётчик и одна служебная
+// строка на месте первого ряда плиток.
 function updateEmptyState() {
   const shown = $("#feed").children.length;
-  const resultVisible = !$("#result").classList.contains("hidden");
-  $("#feedWrap").hidden = feedTotal === 0;
-  $("#feedEmpty").classList.toggle("hidden", !(feedTotal > 0 && shown === 0));
-  const empty = $("#workspaceEmpty");
-  if (empty) empty.hidden = feedTotal > 0 || resultVisible;
+  const cnt = $("#feedCount");
+  if (cnt) cnt.textContent = feedTotal;
+  const empty = $("#feedEmpty");
+  empty.hidden = shown > 0;
+  empty.textContent = feedTotal === 0
+    ? "Презентаций пока нет"
+    : "В этой категории пока пусто";
+  $("#feedFoot").hidden = feedTotal === 0;
 }
 
 /* ---- действия над карточками (делегирование на #feed) ---- */
@@ -417,12 +422,13 @@ async function deleteDraft(id, btn) {
     if (btn) btn.disabled = false;
   }
 }
-// Отказ запуска — в панель #result (своя визуальная система, не alert).
+// Отказ запуска — в служебную строку #result под формой. Красного в v11 нет:
+// ошибку метит обводка --lp-edge и более светлый текст (status--error).
 function launchError(title, bodyHtml) {
   const box = $("#result");
-  box.classList.remove("hidden");
-  box.classList.add("error");
-  box.innerHTML = `<h3>${esc(title)}</h3>${bodyHtml}`;
+  box.hidden = false;
+  box.classList.add("status--error");
+  box.innerHTML = `<b class="status__title">${esc(title)}</b>${bodyHtml}`;
   updateEmptyState();
 }
 
@@ -456,16 +462,16 @@ async function retryBuild(id, btn) {
     return;
   }
   const { session_id, kind } = await r.json();
-  $("#result").classList.add("hidden");
+  $("#result").hidden = true;
   streamProgress(session_id, kind);
 }
 function toggleCard(id) {
   const card = feedCards.get(id);
   if (!card) return;
-  if (expandedId === id) { expandedId = null; card.classList.remove("open"); return; }
-  if (expandedId) { const p = feedCards.get(expandedId); if (p) p.classList.remove("open"); }
+  if (expandedId === id) { expandedId = null; card.classList.remove("is-open"); return; }
+  if (expandedId) { const p = feedCards.get(expandedId); if (p) p.classList.remove("is-open"); }
   expandedId = id;
-  card.classList.add("open");
+  card.classList.add("is-open");
   // Раскрыли активную сборку, за которой ещё не следим, — переводим поток на неё.
   const st = card.dataset.state;
   if ((st === "running" || st === "queued") && currentSession !== id)
@@ -480,7 +486,7 @@ $("#feed").addEventListener("click", (e) => {
   const retryEl = e.target.closest("[data-retry]");
   if (retryEl) { e.stopPropagation(); retryBuild(retryEl.dataset.retry, retryEl); return; }
   if (e.target.closest("a, button")) return;          // ссылки/кнопки работают сами
-  const card = e.target.closest(".pcard.expandable");
+  const card = e.target.closest(".work.is-expandable");
   if (card) toggleCard(card.dataset.id);
 });
 $("#feedChips").addEventListener("click", (e) => {
@@ -536,7 +542,7 @@ async function createJob(opts) {
     launchError("Сервис ИИ сейчас недоступен",
       `<p>Не отвечают ни основная, ни резервная модель${age ? ` (проверено ${esc(age)})` : ""} — ` +
       `сборка, скорее всего, оборвётся. Можно подождать пару минут или запустить сейчас.</p>` +
-      `<p><button class="btn btn-ghost btn-sm" id="forceCreate">Всё равно запустить</button></p>`);
+      `<p><button type="button" class="t-btn" id="forceCreate">Всё равно запустить</button></p>`);
     const f = $("#forceCreate");
     if (f) f.onclick = () => createJob({ force: true });
     loadModelHealth();          // заодно перепроверяем — данные явно устарели
@@ -588,7 +594,7 @@ async function createJob(opts) {
     return;
   }
   const { session_id, kind } = await res.json();
-  $("#result").classList.add("hidden");   // прошлая ошибка запуска больше не актуальна
+  $("#result").hidden = true;              // прошлая ошибка запуска больше не актуальна
   streamProgress(session_id, kind);
   resetFile();                            // дропзона свободна — можно готовить следующую
 }
@@ -604,12 +610,10 @@ async function createGlass() {
   if (!selectedFile || glassStarting) return;
   glassStarting = true;
   const btn = $("#createGlass");
-  // Кнопка — карточка из названия и описания: подменяем описание, а не весь
-  // textContent, иначе разметка схлопнется в строку и вернуть её будет нечем.
-  const desc = btn.querySelector(".mode-card__desc");
-  const prevDesc = desc ? desc.textContent : "";
+  // Кнопка снова обычная — одна строка подписи, поэтому и подменяем её целиком.
+  const prevLabel = btn.textContent;
   setStartEnabled(false);
-  if (desc) desc.textContent = "Раскладываю документ на слайды…";
+  btn.textContent = "Раскладываю на слайды…";
   try {
     const r = await fetch(U("/api/drafts"), {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -639,7 +643,7 @@ async function createGlass() {
     launchError("Не удалось начать пошаговую сборку",
       `<p>${esc(e && e.message ? e.message : String(e))}</p>`);
     setStartEnabled(true);
-    if (desc) desc.textContent = prevDesc;
+    btn.textContent = prevLabel;
   } finally {
     glassStarting = false;
   }
@@ -714,12 +718,12 @@ let currentES = null;
 // re-invocation used to re-attach after a transient drop.
 let reconnects = 0;
 
-// Живой лог пишем в аккордеон конкретной карточки (.pcard-loglines). Поллинг
+// Живой лог пишем в аккордеон конкретной плитки (.work__loglines). Поллинг
 // эту область не трогает, поэтому строки не мигают и не пропадают.
 function logLineCard(id, stage, detail) {
   const card = feedCards.get(id);
   if (!card) return;
-  const log = card.querySelector(".pcard-loglines");
+  const log = card.querySelector(".work__loglines");
   if (!log) return;
   const time = new Date().toLocaleTimeString("ru-RU");
   const text = friendlyDetail(detail) || STAGE_LABEL[stage] || stage || "";
@@ -747,7 +751,7 @@ function tickHeartbeat() {
   if (!currentSession || !lastEventAt) return;
   const card = feedCards.get(currentSession);
   if (!card) return;
-  const hb = card.querySelector(".pcard-hb");
+  const hb = card.querySelector(".work__hb");
   if (!hb) return;
   const clock = elapsedClock();
   // «Тишина» (нет SSE-событий) считается отдельно от общего времени — по ней
@@ -773,7 +777,7 @@ function paintCard(id) {
   if (!card) return;
   const it = feedItemById.get(id);
   if (it) updateCard(card, it);
-  const stageEl = card.querySelector(".pcard-stage");
+  const stageEl = card.querySelector(".work__logstage");
   if (stageEl) stageEl.textContent = STAGE_LABEL[currentStage] || currentStage || "Идёт сборка";
 }
 
@@ -870,25 +874,26 @@ async function startDraft(mode, btn) {
   }
 }
 
-// Карточка конструктора: кликабельна вся рамка (не только ссылка). Черновик
-// создаётся при клике/Enter/Space; ссылка внутри — лишь визуальная подсказка.
-document.querySelectorAll(".entry-zone[data-mode]").forEach((card) => {
-  const mode = card.dataset.mode;
-  const label = card.querySelector(".entry-open");
-  if (!mode || !label) return;
-  const go = () => {
-    if (card.dataset.busy) return;  // не плодим черновики по дабл-клику
-    card.dataset.busy = "1";
-    Promise.resolve(startDraft(mode, label)).finally(() => { delete card.dataset.busy; });
-  };
-  card.addEventListener("click", go);
-  card.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
-  });
+// Обе двери открыты одновременно и ничего не переключают: выбор способа старта
+// — это выбор карточки, а не тумблер над общим хвостом формы. Черновик
+// появляется только по явному нажатию «Открыть конструктор»: когда кликабельной
+// была вся карточка, черновики плодились от случайного клика по её тексту.
+
+// Форму отправляет только наш обработчик: без этого Enter в поле перезагружал
+// бы страницу и терял выбранный файл.
+const _startForm = $("#startForm");
+if (_startForm) _startForm.addEventListener("submit", (e) => e.preventDefault());
+
+const _openManual = $("#openManual");
+if (_openManual) _openManual.addEventListener("click", () => {
+  if (_openManual.dataset.busy) return;   // не плодим черновики по дабл-клику
+  _openManual.dataset.busy = "1";
+  Promise.resolve(startDraft("manual", _openManual))
+    .finally(() => { delete _openManual.dataset.busy; });
 });
 
 // Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
-const _OPEN_LABEL = { openManual: "Открыть конструктор →" };
+const _OPEN_LABEL = { openManual: "Открыть конструктор" };
 window.addEventListener("pageshow", () => {
   Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
     const b = $("#" + id);
@@ -904,35 +909,37 @@ window.addEventListener("pageshow", () => {
 const _skillLink = $("#skillDownload");
 if (_skillLink) _skillLink.href = U("/downloads/cloud-ru-slides.skill");
 
-function syncPromptToggle() {
-  const pre = $("#promptText"), t = $("#togglePrompt");
-  if (!pre || !t) return;
-  t.textContent = pre.hidden ? "Показать текст" : "Скрыть текст";
-  t.setAttribute("aria-expanded", String(!pre.hidden));
+// Промпт — длинный документ, и в служебной строке ему не место: он открывается
+// лайтбоксом. Копирование при этом осталось прямо в строке — чаще промпт
+// копируют не читая.
+const _promptBox = $("#promptBox");
+function setPromptBox(open) {
+  if (!_promptBox) return;
+  _promptBox.hidden = !open;
+  if (open) { const c = $("#promptClose"); if (c) c.focus(); }
 }
-const _togglePrompt = $("#togglePrompt");
-if (_togglePrompt) _togglePrompt.addEventListener("click", () => {
-  const pre = $("#promptText");
-  pre.hidden = !pre.hidden;
-  syncPromptToggle();
+const _promptOpen = $("#promptOpen");
+if (_promptOpen) _promptOpen.addEventListener("click", () => setPromptBox(true));
+if (_promptBox) _promptBox.addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) setPromptBox(false);
 });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && _promptBox && !_promptBox.hidden) setPromptBox(false);
+});
+
 const _copyPrompt = $("#copyPrompt");
 if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
   const text = $("#promptText").textContent.trim();
   let ok = true;
   try { await navigator.clipboard.writeText(text); }
-  catch { ok = false; }  // clipboard API требует secure context — фолбэк: раскрыть текст
-  _copyPrompt.textContent = ok ? "Скопировано ✓" : "Скопируйте вручную ↓";
-  if (!ok) { $("#promptText").hidden = false; syncPromptToggle(); }
-  setTimeout(() => { _copyPrompt.textContent = "Скопировать промпт"; }, 2000);
+  catch { ok = false; }  // clipboard API требует secure context — фолбэк: показать текст
+  _copyPrompt.textContent = ok ? "Скопировано" : "Не вышло";
+  if (!ok) setPromptBox(true);   // фолбэк: показываем текст, копируйте руками
+  setTimeout(() => { _copyPrompt.textContent = "Копировать"; }, 2000);
 });
 
 /* init */
-// Г§4 — empty-state превью настоящего слайда: src через U() (несёт gateway-префикс);
-// lazy + скрытый родитель → грузится только когда empty-state показан.
-const _emptyPrev = $("#emptyPrev");
-if (_emptyPrev) _emptyPrev.src = U("/api/templates/cover/preview");
-// Г§9 — объявляем окно ретеншена (истории и черновиков) прямо под заголовком.
+// Окно ретеншена (истории и черновиков) объявляем подвалом ленты.
 const _retHours = window.__RETENTION_HOURS__ || 24;
 const _retCap = $("#retentionCap");
 if (_retCap) _retCap.textContent = _retHours + " часа";

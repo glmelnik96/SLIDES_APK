@@ -1,0 +1,634 @@
+/* ============================================================================
+   Рабочий стол редактора поверх канона v11. Здесь только то, чего в каноне нет:
+   трёхколонный стол, лента миниатюр, форма слотов, пикеры и экран стеклянной
+   сборки. Токены, шторка, чертёж, кирпич, чипы, лайтбокс, поля — из v11.css,
+   и дублировать их здесь нельзя.
+
+   Словарь классов достался от v5 (.btn, .field, .thumb, .picker-*, .glass-*):
+   их выдаёт editor.js в четырёх с лишним тысячах строк, и переименование дало
+   бы риск без единой видимой пользы. Поэтому имена оставлены как есть, а
+   геометрия и цвет переведены на канон.
+
+   Правила, которые файл соблюдает:
+   • ни border, ни border-radius — только хайрлайн 1px и прямые углы;
+   • всё кратно 6, блоки и зазоры — 12/24/48/96;
+   • два регистра не смешиваются: служебный слой — моно-капс 11/700/.09em,
+     содержательный — обычный SB Sans Text с интерлиньяжем 24;
+   • красного и жёлтого нет вовсе: и ошибка, и предупреждение метятся
+     --lp-edge и более светлым текстом;
+   • под курсором меняются только transform/opacity, высота — никогда.
+   ============================================================================ */
+
+/* Класс-близнец атрибута [hidden] из канона: editor.js прячет узлы именно им. */
+.hidden { display: none !important; }
+
+/* ===== Правка палитры под инструмент ========================================
+   ОСОЗНАННОЕ ОТСТУПЛЕНИЕ ОТ КАНОНА, повторённое из slides.css дословно.
+   Дублирование намеренное: редактор не подключает slides.css, а обе страницы
+   обязаны говорить на одном языке — иначе переход с витрины в редактор читался
+   бы сменой продукта. Разъяснение, почему хайрлайн канона поднят, — в шапке
+   соответствующего блока slides.css; менять значения нужно в обоих файлах. */
+body.v11 { --lp-line-2: #2C3532; --sl-surface: #141917; }
+
+/* ===== Стол: три колонки, страница не прокручивается ========================
+   Редактор — не документ, а рабочее место: прокручиваются колонки, а не окно.
+   Модификатор на body, а не переопределение канонических селекторов: правило
+   вида `body.is-tool .topbar` имело бы ту же специфичность, что канонное, и
+   молча превратило бы плавающую шторку в обычную строку. */
+body.is-editor { overflow: hidden; }
+body.is-editor main { min-height: 0; height: 100dvh; padding-bottom: 48px; }
+body.is-editor .tool { min-height: 0; flex: 1 1 auto; }
+/* На 1440: 48 + 264 + 24 + 768 + 24 + 264 + 48. Сцена забирает остаток. */
+.tool__grid--edit { grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--rail-w);
+  min-height: 0; height: 100%; }
+
+/* Липкость канонного рельса тут не нужна и вредна: колонка и так стоит на
+   месте, а её собственная прокрутка должна доходить до низа стола. */
+.rail--edit { position: static; max-height: none; align-self: stretch;
+  min-height: 0; overflow: hidden auto; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: 12px; }
+.rail--edit > .field-label { flex: none; padding: 0 12px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+
+/* ===== Кирпич: тот же орган, что .t-btn канона ==============================
+   editor.js раздаёт .btn/.btn-ghost/.btn-sm/.btn-accent/.btn-stop. Модификаторы
+   размера в каноне смысла не имеют — кирпич один, 24px, и «маленького» кирпича
+   не бывает; они остаются пустыми именами, чтобы разметку не переписывать. */
+body.is-tool .btn { display: inline-flex; align-items: center; justify-content: center;
+  height: 24px; cursor: pointer; border: 0; border-radius: 0; padding: 6px 12px;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  text-decoration: none; white-space: nowrap;
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
+              box-shadow .2s var(--lp-ease); }
+body.is-tool .btn:hover { background: var(--lp-hi); color: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-hi); }
+body.is-tool .btn:disabled { opacity: .4; cursor: default; }
+body.is-tool .btn:disabled:hover { background: var(--lp-ink); color: var(--lp-soft);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+body.is-tool .btn-accent { background: var(--lp-key); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-key); }
+body.is-tool .btn-accent:hover { background: var(--lp-text); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-text); }
+/* «Остановить» и «идёт экспорт» — не беда и не тревога, поэтому не цвет, а
+   обводка --lp-edge: кирпич заметнее соседей, но ничего не сигналит. */
+body.is-tool .btn-stop, body.is-tool .btn.is-busy {
+  box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+body.is-tool .btn.is-busy { cursor: default; }
+body.is-tool .btn.is-ready { background: var(--lp-key); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-key); }
+/* Текстовая ссылка внутри служебной строки: единственное подчёркивание в UI. */
+body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--lp-text); text-decoration: underline;
+  text-underline-offset: 2px; }
+
+/* ===== Лента миниатюр ======================================================
+   Строка 96 = поле 12 + кадр 72 + поле 12. Кадр 128×72 — те же 16:9, что у
+   деки; подпись рядом, а не под кадром: в колонке 264 ряд читается короче
+   столбика и вдвое экономит прокрутку. */
+#thumbs { display: flex; flex-direction: column; gap: 12px; }
+.thumb { position: relative; display: flex; align-items: center; gap: 12px;
+  height: 96px; padding: 12px; cursor: pointer; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  transition: box-shadow .2s var(--lp-ease); }
+.thumb:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
+/* Текущий слайд метим планкой ключевого цвета — тем же приёмом, что канон
+   метит выбранную тогл-строку. Заливкой красить нельзя: она занята ховером. */
+.thumb.active { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.thumb.active::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 6px; background: var(--lp-key); }
+.thumb-prev { position: relative; flex: none; width: 128px; height: 72px;
+  overflow: hidden; pointer-events: none; background: var(--lp-line); }
+.thumb-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+  border: 0; transform: scale(0.0667); transform-origin: top left; }
+.thumb-cap { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  justify-content: center; }
+.thumb-num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; color: var(--lp-muted); }
+.thumb.active .thumb-num { color: var(--lp-key); }
+.thumb-title { font-size: 12px; line-height: 24px; color: var(--lp-soft);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* Крестик и рукоятка — те же 24×24, что крестик плитки в ленте главной. */
+.thumb-del, .thumb-grip { position: absolute; top: 0; width: 24px; height: 24px;
+  z-index: 2; display: grid; place-items: center; padding: 0; border: 0;
+  background: var(--lp-ink); color: var(--lp-muted); cursor: pointer;
+  font-family: var(--font-mono); font-size: 11px; line-height: 24px; opacity: 0;
+  transition: opacity .2s var(--lp-ease), background .2s var(--lp-ease),
+              color .2s var(--lp-ease); }
+.thumb-del { right: 0; }
+.thumb-grip { left: 0; display: none; cursor: grab; touch-action: none; }
+.thumb:hover .thumb-del, .thumb-del:focus-visible { opacity: 1; }
+.thumb-del:hover { background: var(--lp-key); color: var(--lp-key-ink); }
+.thumb[draggable="true"] { cursor: grab; }
+.thumb.dragging { opacity: .5; }
+/* Место вставки — планка ключевого цвета по кромке, к которой встанет слайд. */
+.thumb.drop-before { box-shadow: inset 0 0 0 1px var(--lp-line-2), inset 0 2px 0 var(--lp-key); }
+.thumb.drop-after { box-shadow: inset 0 0 0 1px var(--lp-line-2), inset 0 -2px 0 var(--lp-key); }
+.thumbs-hint { padding: 0 12px; font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+.thumbs-hint .only-coarse { display: none; }
+@media (pointer: coarse) {
+  .thumb-grip { display: grid; opacity: 1; }
+  .thumbs-hint .only-fine { display: none; }
+  .thumbs-hint .only-coarse { display: inline; }
+}
+/* Метка «слайд ждёт ответа» — квадрат 24×24 у верхней кромки кадра. Круга нет:
+   углы в системе прямые. Осечка метится тем же квадратом, но обводкой. */
+.thumb-quest { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px;
+  display: grid; place-items: center; background: var(--lp-key);
+  color: var(--lp-key-ink); font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; pointer-events: none; }
+.thumb-quest--failed, .thumb-quest--filling { background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+.addslide { width: 100%; }
+
+/* ===== Сцена: единственная рама редактора и единственный чертёж =============
+   Тот же рецепт, что рама ленты на главной (§8.7): поле 24, хайрлайн по
+   периметру, isolation обязательна — чертёж лежит на z-index: -1. */
+.stage { position: relative; isolation: isolate; overflow: hidden; min-width: 0;
+  min-height: 0; display: flex; flex-direction: column; padding: 24px;
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.stage__head { flex: none; }
+.stage__acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 12px; }
+#frameWrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex;
+  align-items: center; justify-content: center; container-type: size; }
+/* Слайд держим строго 16:9 и вписываем в сцену. Хайрлайн у iframe внешний, а не
+   inset: собственное содержимое кадра закрыло бы внутреннюю тень. Размер он,
+   в отличие от border, не меняет — модуль цел. */
+#frameWrap iframe { aspect-ratio: 16 / 9; width: min(100%, calc(100cqh * 16 / 9));
+  height: auto; max-height: 100%; border: 0; border-radius: 0;
+  background: var(--lp-line); box-shadow: 0 0 0 1px var(--lp-line-2); }
+
+/* Шторка сборки поверх сцены: слова по центру, никакого стекла и размытия. */
+.build-overlay { position: absolute; inset: 0; z-index: 5; display: grid;
+  place-items: center; background: rgba(10, 12, 11, .93); }
+.build-overlay__card { display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 24px; text-align: center; }
+.build-overlay__title { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.build-overlay__sub { font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.build-overlay__note { max-width: 432px; font-size: 12px; line-height: 24px;
+  color: var(--lp-muted); }
+.build-overlay__actions { display: flex; gap: 12px; justify-content: center; }
+
+/* ===== Правая панель: содержание слайда ===================================== */
+.rpanel { display: flex; flex-direction: column; gap: 24px; }
+.rpanel-tabs { flex: none; }
+.rpanel-tab.is-disabled, .rpanel-tab.is-disabled:hover { cursor: not-allowed;
+  background: var(--lp-ink); color: var(--lp-muted); box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.builder, .chat { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  gap: 24px; overflow: hidden auto; scrollbar-width: thin; }
+
+/* Строка автосейва — служебный слой: состояние читается словами, поэтому цветом
+   различать нечего. Строка ровно 24, чтобы форма ниже не подпрыгивала. */
+.builder-head { flex: none; display: flex; justify-content: flex-end; min-height: 24px; }
+.save-status { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); opacity: 0; transition: opacity .3s var(--lp-ease); }
+.save-status--saving, .save-status--retrying { opacity: 1; }
+.save-status--saved { opacity: 1; color: var(--lp-soft); }
+.save-status--error, .save-status--invalid { opacity: 1; color: var(--lp-text); }
+.save-status .btn-link { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; }
+
+/* Макет слайда: подпись занимает всю строку, кирпичи встают под ней рядом —
+   в колонке 264 «Схема: Блок-схема» и две кнопки в один ряд не помещаются. */
+.builder-tpl { flex: none; display: flex; flex-wrap: wrap; gap: 12px;
+  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
+.tpl-name { flex: 1 0 100%; font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-soft); }
+
+/* Контекст слайда над формой: читать — не править, поэтому отдельная рамка. */
+.builder-ctx { flex: none; display: flex; flex-direction: column; gap: 12px;
+  padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.builder-ctx__sec > summary { cursor: pointer; list-style: none; user-select: none;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.builder-ctx__sec > summary::-webkit-details-marker { display: none; }
+.builder-ctx__sec > summary:hover { color: var(--lp-text); }
+.builder-ctx__body { margin-top: 12px; max-height: 240px; overflow: auto;
+  scrollbar-width: thin; }
+.builder-ctx__body p { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+
+/* Арифметика формы — канонная: подпись 12 + зазор 12 + контрол 48/96, зазор
+   между блоками 24. Любая комбинация блоков садится на модуль сама. */
+.builder-form { display: flex; flex-direction: column; gap: 24px; }
+.builder-note, .builder-locked { margin: 0; font-size: 13px; line-height: 24px;
+  color: var(--lp-soft); }
+.builder-empty { display: flex; flex-direction: column; gap: 24px; }
+.builder-empty__hint { margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.builder-empty__actions { display: flex; flex-direction: column; gap: 12px; }
+.builder-improve { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
+.improve-note { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+/* Пустая подписка всё равно съедала бы зазор в 12 и уводила блок с модуля. */
+.improve-note:empty { display: none; }
+
+.field { display: flex; flex-direction: column; gap: 12px; }
+.field > label, .field-cap { font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); }
+.field input, .field textarea, .field select, .field-input, .chat-input textarea,
+.glass-q__input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
+  line-height: 24px; padding: 12px; border: 0; border-radius: 0;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-text); transition: box-shadow .2s var(--lp-ease); }
+.field input, .field select, .field-input { height: 48px; }
+.field textarea, .chat-input textarea, .glass-q__input { height: 96px; resize: none; }
+.field input:focus, .field textarea:focus, .field select:focus, .field-input:focus,
+.chat-input textarea:focus, .glass-q__input:focus { outline: none;
+  box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.field input:disabled, .field textarea:disabled { opacity: .4; cursor: default; }
+.field select { appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397A29E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
+/* Ошибка поля — та же обводка --lp-edge, что у фокуса: другого способа метить
+   поле в палитре без красного нет, а спутать их нельзя — фокус ровно один. */
+.field-error input, .field-error textarea,
+.dgm-node-row--over input[data-dgm="label"] { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.field-hint { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); font-variant-numeric: tabular-nums; }
+.field-hint--error, .field-hint--over { color: var(--lp-text); }
+.field-list, .field-lines, .field-card { display: flex; flex-direction: column; gap: 12px; }
+.field-row { display: flex; flex-direction: column; gap: 12px; }
+.field-item { display: flex; gap: 12px; align-items: center; }
+.field-item input { flex: 1 1 auto; min-width: 0; }
+.item-num { flex: none; min-width: 12px; text-align: right;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
+.item-del, .item-move { flex: none; padding: 6px; }
+.item-move:disabled { opacity: .4; cursor: default; }
+.field-file-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* ===== Панель схемы (узлы и связи) ========================================= */
+.dgm-node-row select { flex: 0 1 auto; min-width: 0; max-width: 40%; }
+.dgm-edge-row select { flex: 1 1 0; min-width: 0; }
+.dgm-arrow { flex: none; color: var(--lp-muted); }
+.dgm-edge-label { flex: 0 1 34%; }
+.dgm-val { flex: 0 0 72px; }
+.dgm-acc { display: inline-flex; align-items: center; gap: 6px; flex: none; cursor: pointer;
+  user-select: none; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+/* Единственная галочка редактора. Нативную оставить нельзя: у неё свои скруглени
+   и своя синева — второй акцент на странице. Квадрат тот же, что у .check-row
+   канона, и ровно в высоту строки: 24 внутри 24. */
+.dgm-acc input { appearance: none; -webkit-appearance: none; width: 24px; height: 24px;
+  margin: 0; flex: none; cursor: pointer; border-radius: 0; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  transition: background .2s var(--lp-ease); }
+.dgm-acc input:checked { background: var(--lp-key); box-shadow: inset 0 0 0 1px var(--lp-key);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='8'%3E%3Cpath d='M1 4l3 3 5-6' stroke='%23222222' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: center; }
+.dgm-move { display: inline-flex; flex: none; }
+.dgm-move .item-move + .item-move { margin-left: -1px; }
+/* Претензии к схеме: и наша проверка, и отказ сервера — один тон. Разница
+   читается словами внутри, а не цветом рамки: жёлтого в палитре нет. */
+.dgm-claims { padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-edge);
+  font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+.dgm-claims-head { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.dgm-claims ul { margin: 0; padding-left: 18px; }
+
+/* ===== Чат-панель ========================================================== */
+/* Заголовок панели — служебный слой: моно-капс в строку 24. Собственный margin у
+   h3 обнулён, ритм держит один gap: иначе браузерный 18.72 уводил всю панель с
+   модуля (шапка выходила 126 вместо 96). */
+.chat-head { flex: none; display: flex; flex-direction: column; gap: 12px;
+  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
+.chat-head h3 { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.chat-head p { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+/* «в разработке» — не статус-плашка, а оговорка в той же строке: цвет тише,
+   рамки нет. Плашка добавила бы второй акцент там, где акцент один. */
+.soon-badge { color: var(--lp-muted); }
+.chat-log { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin;
+  display: flex; flex-direction: column; gap: 12px; }
+.msg { padding: 12px; max-width: 90%; font-size: 13px; line-height: 24px;
+  white-space: pre-wrap; word-break: break-word; }
+.msg.user { align-self: flex-end; background: var(--lp-key); color: var(--lp-key-ink); }
+.msg.bot { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-soft); }
+.msg.err { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--lp-edge);
+  color: var(--lp-text); }
+.chat-empty { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+.chat-input { flex: none; display: flex; flex-direction: column; gap: 12px;
+  padding-top: 12px; box-shadow: inset 0 1px 0 var(--lp-line-2); }
+.chat-target { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.chat-input.is-disabled { cursor: not-allowed; }
+.chat-input.is-disabled textarea, .chat-input.is-disabled .btn { opacity: .4;
+  pointer-events: none; }
+
+/* Тултип «почему нельзя». Всплывает без сдвига чего-либо (::after поверх), сам
+   на модуле: поле 12, интерлиньяж 24, отбивка 12 — и прямые углы, как везде. */
+[data-tip] { position: relative; }
+[data-tip]:hover::after { content: attr(data-tip); position: absolute; z-index: 60;
+  left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%);
+  width: max-content; max-width: 264px; padding: 12px; text-align: left;
+  background: var(--lp-line); color: var(--lp-soft);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  font-family: var(--font-text); font-size: 12px; line-height: 24px;
+  pointer-events: none; }
+
+/* ===== Живой аутлайн (режим чата) ========================================== */
+.outline { flex: none; display: flex; flex-direction: column; gap: 12px;
+  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
+.outline-head { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.outline-list { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 12px; max-height: 40vh; overflow: auto; scrollbar-width: thin; }
+.outline-list li { display: flex; align-items: center; gap: 12px; font-size: 13px;
+  line-height: 24px; color: var(--lp-soft); }
+.outline-num { flex: none; min-width: 12px; text-align: right;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; color: var(--lp-muted); }
+.outline-label { flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.outline-badge { flex: none; padding: 0 6px; font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-muted);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.outline-badge.is-ready, .outline-badge.is-typed { color: var(--lp-key-ink);
+  background: var(--lp-key); box-shadow: none; }
+.outline-list li.outline-item { flex-direction: column; align-items: stretch; gap: 12px;
+  padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.outline-item .outline-head { display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-text); font-size: 13px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; color: var(--lp-text); }
+.outline-raw { display: flex; }
+.outline-hint { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+#buildDeck { width: 100%; }
+
+/* ===== Плашка отмены удаления ==============================================
+   Единственный видимый вход в отмену: строка 48 у нижней кромки окна. */
+.undo-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  z-index: 30; display: flex; align-items: center; gap: 12px; height: 48px;
+  padding: 12px; background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+
+/* ===== Пикеры: лайтбокс канона =============================================
+   z-index 70 = z-index лайтбокса канона и выше экрана сборки (60): «выбрать из
+   всех макетов» открывается и во время стеклянной сборки. */
+.picker.lightbox { z-index: 70; }
+/* Одна колонка: у пикера нет боковых действий, и канонические 264 справа
+   стояли бы пустыми, а сетка карточек ужалась бы в них. Селектор повторяет
+   специфичность канона (body.is-tool .lightbox__panel) — иначе не перебьёт.
+   align-items: stretch обязателен: со start строка 1fr схлопывается. */
+body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr); align-items: stretch;
+  max-height: calc(100vh - 48px); overflow: hidden; }
+.picker-head { flex: none; }
+/* Четыре трека по 264 с зазором в ячейку ровно замощают панель: 4×264 + 3×24. */
+.picker-grid { min-height: 0; overflow: auto; scrollbar-width: thin;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
+  gap: 24px; align-content: start; }
+.picker-item { position: relative; display: flex; flex-direction: column;
+  text-align: left; padding: 0; border: 0; border-radius: 0; cursor: pointer;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-text); font: inherit;
+  transition: box-shadow .2s var(--lp-ease); }
+.picker-item:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
+/* Кадр макета вписан по высоте, а не по ширине: подрезать превью слайда нельзя,
+   именно по нему макет и выбирают. 144 = шесть ячеек. */
+.picker-prev { position: relative; width: 100%; height: 144px; flex: none;
+  overflow: hidden; pointer-events: none; background: var(--lp-line); }
+.picker-prev iframe { position: absolute; top: 0; left: 50%; width: 1920px; height: 1080px;
+  border: 0; transform: translateX(-50%) scale(0.13333); transform-origin: top center; }
+.picker-thumb { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: contain; display: block; }
+/* Номер по каталогу и метка «сейчас» — квадраты 24 у кромок кадра. */
+.picker-num { position: absolute; right: 0; top: 0; z-index: 2; padding: 0 6px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; color: var(--lp-key-ink); background: var(--lp-key);
+  opacity: 0; transition: opacity .2s var(--lp-ease); }
+.picker-item:hover .picker-num { opacity: 1; }
+.picker-cur { position: absolute; left: 0; top: 0; z-index: 2; padding: 0 6px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-key-ink); background: var(--lp-key); }
+.picker-item--current { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.picker-meta { display: flex; flex-direction: column; padding: 12px; }
+.picker-id { font-size: 13px; font-weight: 600; line-height: 24px; }
+.picker-intent { font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+.picker-code, .picker-more { font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); }
+.picker-badge { display: inline-block; margin-left: 6px; padding: 0 6px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.picker-group { grid-column: 1 / -1; font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); }
+.picker-empty { grid-column: 1 / -1; margin: 0; padding: 48px 0; text-align: center;
+  font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+/* Будущие волны каталога: карточка видна (расширяемость на витрине), но гаснет. */
+.picker-item--soon { opacity: .4; cursor: default; }
+.picker-item--soon:hover { box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.picker-item--soon .picker-prev { display: grid; place-items: center; }
+.picker-soon { padding: 0 12px; font-family: var(--font-mono); font-weight: 700;
+  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-muted); box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+
+/* ===== Бренд-диалог (замена нативных alert/confirm) =========================
+   z-index 80: диалог перекрывает и пикер (70), и экран сборки (60). */
+.dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
+  padding: 24px; background: rgba(10, 12, 11, .93); }
+.dialog-card { width: min(432px, 100%); display: flex; flex-direction: column;
+  gap: 24px; padding: 24px; background: var(--lp-ink);
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.dialog-text { margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.dialog-actions { display: flex; gap: 12px; justify-content: flex-end; }
+.dialog-actions--modes { flex-direction: column; align-items: stretch; }
+.dialog-card:has(.dialog-actions--modes) { width: min(528px, 100%); }
+.dialog-actions--modes .dialog-cancel { align-self: flex-end; }
+
+/* Кнопка-карточка выбора способа. Тогл-строка канона, но обе строки видны
+   сразу: способы равнозначны, и пояснение — единственное, по чему их
+   различают; прятать его до ховера значило бы выбирать наугад.
+   12 + 24 + 24 + 12 = 72 — блок на модуле. */
+.btn.mode-card { display: flex; flex-direction: column; align-items: stretch;
+  height: 72px; padding: 12px; text-align: left; text-transform: none;
+  letter-spacing: 0; }
+.mode-card__name { font-family: var(--font-text); font-weight: 600; font-size: 13px;
+  line-height: 24px; }
+.mode-card__desc { font-family: var(--font-text); font-weight: 400; font-size: 12px;
+  line-height: 24px; color: var(--lp-muted); }
+.btn.mode-card:hover .mode-card__desc { color: inherit; }
+
+/* ===== Экран сборки (?glass=1) =============================================
+   Полноэкранный этап поверх редактора: во время заполнения весь экран — один
+   фокус, слайд, который заполняется прямо сейчас. Ритм тот же, что у стола:
+   поля 48/24, служебный слой моно-капсом, единственная заливка — ключ. */
+.glass-overlay { position: fixed; inset: 0; z-index: 60; display: flex;
+  flex-direction: column; gap: 24px; padding: 48px; background: var(--lp-ink); }
+/* Служебные ряды не ужимаются: без flex:none длинный список вопросов отъедал у
+   них по паре пикселей, и весь столбец уезжал с линий. Тянется только центр. */
+.glass-overlay > :not(.glass-overlay__center) { flex: none; }
+.glass-overlay__top { display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; gap: 24px; }
+.glass-overlay__side { display: flex; align-items: center; gap: 12px; }
+.glass-overlay__side--right { justify-content: flex-end; }
+.glass-overlay__stepper { display: flex; justify-content: center; gap: 24px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; }
+.glo-stage--done { color: var(--lp-key); }
+.glo-stage--active { color: var(--lp-text); }
+.glo-stage--todo { color: var(--lp-muted); opacity: .6; }
+.glass-overlay__quest { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--lp-key); white-space: nowrap; }
+/* Полоса прогресса — те же 2px, что у плитки работы в ленте. Это единственная
+   толщина индикатора в системе, и второй заводить нельзя. */
+.glass-bar { height: 2px; background: var(--lp-line-2); overflow: hidden; }
+.glass-bar i { display: block; height: 100%; width: 0; background: var(--lp-key);
+  transition: width .35s var(--lp-ease); }
+/* Полоса главного экрана занимает целую ячейку 24 и висит в ней по центру:
+   иначе её 2px — единственное исключение из модуля — сдвинули бы весь столбец
+   на 2 вниз, и ни один блок ниже не сел бы на линию. */
+.glass-overlay__bar { position: relative; height: 24px; background: none;
+  overflow: visible; }
+.glass-overlay__bar::before { content: ""; position: absolute; left: 0; right: 0;
+  top: 50%; transform: translateY(-50%); height: 2px; background: var(--lp-line-2); }
+.glass-overlay__bar i { position: absolute; left: 0; top: 50%;
+  transform: translateY(-50%); height: 2px; }
+.glass-overlay__tele { display: flex; justify-content: center; gap: 24px;
+  min-height: 24px; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+/* Сбой — не красный: обводка --lp-edge и более светлый текст. */
+.glass-overlay__err { display: flex; align-items: center; gap: 12px; padding: 12px;
+  box-shadow: inset 0 0 0 1px var(--lp-edge); font-size: 13px; line-height: 24px;
+  color: var(--lp-text); }
+.glass-overlay__center { flex: 1 1 auto; min-height: 0; display: flex; gap: 24px; }
+.glass-overlay__stagebox { flex: 1 1 auto; min-width: 0; display: flex;
+  flex-direction: column; gap: 12px; }
+.glass-overlay__stagebox iframe { flex: 1 1 auto; width: 100%; min-height: 0;
+  border: 0; border-radius: 0; background: var(--lp-line);
+  box-shadow: 0 0 0 1px var(--lp-line-2); }
+.glass-overlay__cap { text-align: center; font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-muted); }
+/* Скелет заполняемого слайда — место под контент, а не декор: пунктир здесь
+   единственный в системе и означает ровно это. */
+.glo-skel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.glo-skel__mark { font-family: var(--font-mono); font-weight: 700; font-size: 24px;
+  line-height: 24px; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
+.glo-skel__label { max-width: 60ch; padding: 0 24px; text-align: center;
+  font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+/* Этап «Вопросы»: карточки занимают центр экрана одной колонкой. */
+.glass-overlay__resolve { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 744px;
+  margin: 0 auto; overflow: auto; scrollbar-width: thin; display: flex;
+  flex-direction: column; gap: 24px; }
+#gloCards { display: flex; flex-direction: column; gap: 24px; }
+.glass-auto, .glass-rest { align-self: flex-start; }
+.glass-rest { display: flex; flex-direction: column; gap: 12px; }
+.glass-rest-note { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+.glass-foot { flex: none; display: flex; gap: 12px; }
+
+/* Карточка вопроса — плоский стек: заголовок, выдержка, вопрос, кандидаты,
+   уточнение, действия. Ритм держит один gap, а не собственные margin частей:
+   у textarea в потоке добавляется ещё и просвет строки, и блок съезжает. */
+.glass-q { display: flex; flex-direction: column; gap: 12px; padding: 12px;
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+/* Осечка заполнения — не вопрос: карточку метит та же обводка, что ошибку. */
+.glass-q--failed { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.glass-q__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.glass-q__num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-key); }
+.glass-q--failed .glass-q__num { color: var(--lp-text); }
+.glass-q__topic { font-size: 13px; font-weight: 600; line-height: 24px; color: var(--lp-text); }
+.glass-q__excerpt { margin: 0; padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  font-size: 12px; line-height: 24px; color: var(--lp-muted); white-space: pre-line;
+  overflow: clip; overflow-clip-margin: content-box;
+  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
+.glass-q__excerpt.is-open { display: block; max-height: 216px; overflow: auto;
+  scrollbar-width: thin; }
+.glass-q__more, .glass-q__other { border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: 12px; line-height: 24px; color: var(--lp-text);
+  text-decoration: underline; text-underline-offset: 2px; }
+.glass-q__more, .glass-q__other { align-self: flex-start; text-align: left; }
+.glass-q__text { margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.glass-chips { display: flex; flex-direction: column; gap: 12px; }
+/* Кандидат — строка 96: кадр 72 в поле 12, ровно как миниатюра слайда. */
+.glass-chip { display: flex; align-items: center; gap: 12px; height: 96px; padding: 12px;
+  cursor: pointer; text-align: left; border: 0; border-radius: 0; font: inherit;
+  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  color: var(--lp-text); transition: box-shadow .2s var(--lp-ease); }
+.glass-chip:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
+.glass-chip.is-picked { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.glass-chip__prev { position: relative; flex: none; width: 128px; height: 72px;
+  overflow: hidden; background: var(--lp-line); pointer-events: none; }
+.glass-chip__prev iframe { position: absolute; top: 0; left: 0; width: 1920px;
+  height: 1080px; border: 0; transform: scale(0.0667); transform-origin: top left; }
+.glass-chip__meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.glass-chip__row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.glass-chip__name { min-width: 0; font-size: 13px; line-height: 24px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.glass-chip__cur { flex: none; font-style: normal; font-family: var(--font-mono);
+  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--lp-muted); }
+.glass-chip__gist { font-size: 12px; line-height: 24px; color: var(--lp-muted);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+/* Отметка выбора — квадрат 24, залитый ключом. Круга в системе нет. */
+.glass-chip__mark { flex: none; width: 24px; height: 24px; display: grid;
+  place-items: center; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.glass-chip.is-picked .glass-chip__mark { background: var(--lp-key); box-shadow: none; }
+.glass-chip.is-picked .glass-chip__mark::after { content: "✓"; color: var(--lp-key-ink);
+  font-size: 11px; font-weight: 700; line-height: 24px; }
+.glass-q__actions { display: flex; gap: 12px; }
+
+/* Лента честных ячеек внизу экрана: очередь, заполняемый слайд, вопросы,
+   готовые. Готовую можно кликнуть — она откроется в центре. */
+.glass-overlay__film { flex: none; display: flex; gap: 12px; overflow-x: auto;
+  scrollbar-width: thin; }
+.glo-cell { position: relative; flex: 0 0 128px; height: 72px; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
+  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.glo-cell--queued { opacity: .55; }
+.glo-cell--filling, .glo-cell--quest, .glo-cell--failed {
+  box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.glo-cell--quest .glo-cell__mark { color: var(--lp-key); }
+.glo-cell--ready { cursor: pointer; }
+.glo-cell--ready iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+.glo-cell__label { max-width: 100%; padding: 0 6px; text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== Узкий экран и режим без движения =====================================
+   Стоят В КОНЦЕ файла, а не рядом со своими правилами: специфичность у них та
+   же, и, окажись они выше, базовое правило перебивало бы их молча. */
+@media (max-width: 1280px) {
+  /* Первым уходит правый рельс: форма слотов нужнее ленты миниатюр, но обе
+     колонки по 264 вместе со сценой уже не дают деке читаемого размера. */
+  .tool__grid--edit { grid-template-columns: 96px minmax(0, 1fr) var(--rail-w); }
+  .thumb-prev, .thumb-title, .thumbs-hint, .thumb-grip { display: none; }
+  .thumb { height: 48px; justify-content: center; }
+  .rail--edit > .field-label { text-align: center; padding: 0; }
+}
+@media (max-width: 860px) {
+  /* Стол разворачивается в столбик: сцена сверху, рельсы под ней. Страница при
+     этом снова прокручивается — иначе до формы не добраться. */
+  body.is-editor { overflow: auto; }
+  body.is-editor main { height: auto; min-height: 100dvh; }
+  .tool__grid--edit { grid-template-columns: 1fr; height: auto; }
+  .stage { order: -1; height: 72vw; }
+  .rail--edit { overflow: visible; max-height: none; }
+  .thumb-prev, .thumb-title { display: flex; }
+  .thumb { height: 96px; justify-content: flex-start; }
+  .rail--edit > .field-label { text-align: left; padding: 0 12px; }
+  #thumbs { flex-direction: row; flex-wrap: wrap; }
+  .thumb { width: 264px; }
+  .glass-overlay { padding: 24px; }
+  .glass-overlay__top { grid-template-columns: 1fr; gap: 12px; }
+  .glass-overlay__side--right { justify-content: flex-start; }
+}
+/* Перечень закрытый: сюда попадает всё, у чего в этом файле есть transition.
+   Исключение одно — обводка фокуса: она не движение, а признак, и гасить её
+   значит отнять у клавиатуры единственную подсказку, где она находится. */
+@media (prefers-reduced-motion: reduce) {
+  .thumb, .thumb-del, .thumb-grip, .picker-item, .picker-num,
+  .glass-chip, .glass-bar i, .btn, .save-status,
+  .dgm-acc input { transition: none; }
+}

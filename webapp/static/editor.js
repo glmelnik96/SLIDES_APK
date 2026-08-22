@@ -74,7 +74,7 @@ function showOverlay(show) { overlay && overlay.classList.toggle("hidden", !show
 
 // Р§2 — терминальная карточка с выходом из ошибки (Nielsen #9): гасим «ждите»-note
 // и показываем действия («На главную» / «Повторить»). Никакого вечного спиннера.
-const HOME_LINK = '<a class="btn btn-ghost" href="/">На главную</a>';
+const HOME_LINK = `<a class="btn btn-ghost" href="${U("/")}">На главную</a>`;
 function showTerminal(title, sub, actionsHtml) {
   showOverlay(true);
   if (buildTitle) buildTitle.textContent = title;
@@ -3317,8 +3317,20 @@ async function openPicker(onPick, cur) {
     });
   });
 }
-byId("pickerClose")?.addEventListener("click", () =>
-  byId("picker").classList.add("hidden"));
+// Пикеры — лайтбоксы канона: закрываются кнопкой, подложкой и Escape.
+function closePicker(id) { byId(id)?.classList.add("hidden"); }
+for (const id of ["picker", "dgmPicker"]) {
+  byId(id)?.querySelector("[data-picker-close]")
+    ?.addEventListener("click", () => closePicker(id));
+}
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  for (const id of ["dgmPicker", "picker"]) {
+    const box = byId(id);
+    if (box && !box.classList.contains("hidden")) { closePicker(id); return; }
+  }
+});
+byId("pickerClose")?.addEventListener("click", () => closePicker("picker"));
 
 /* ---- diagram type picker (второй шаг мастера «Схема») ---- */
 let dgmCatalog = null;   // [{kind, display_name, when_to_use, available, sample}]
@@ -3396,8 +3408,7 @@ async function openDiagramPicker(onKind, curKind) {
     grid.appendChild(card);
   });
 }
-byId("dgmPickerClose")?.addEventListener("click", () =>
-  byId("dgmPicker").classList.add("hidden"));
+byId("dgmPickerClose")?.addEventListener("click", () => closePicker("dgmPicker"));
 
 // Материализовать тип: записать typed-поля слайда (heading + пример спека) через
 // PUT /fields — пользователь сразу правит живой пример, а не пустоту. prev
@@ -4753,8 +4764,11 @@ async function resumeGlassBuild() {
 byId("glassResume")?.addEventListener("click", resumeGlassBuild);
 
 /* init */
-const homeLink = document.querySelector("a.home");
-if (homeLink) homeLink.href = U("/");
+// Корень навигации в шапке канона — абсолютный от домена (так велит контракт со
+// шлюзом), а вот ссылки ВНУТРИ приложения обязаны нести префикс. Прежний тулбар
+// с «a.home» снят, но «На главную» осталось на экране сборки.
+const gloHome = byId("gloHome");
+if (gloHome) gloHome.href = U("/");
 
 // К§8 — одна правая панель с табами «Поля | Чат» (только manual: там обе панели живут
 // вместе). Переключение — класс .hidden на #builder/.chat (id/DOM не трогаем — JS завязан).
