@@ -124,10 +124,44 @@ const HIST_TOOL = {
   chat: "Чат-ассистент",
 };
 function toolTitle(mode) { return HIST_TOOL[mode] || HIST_TOOL.htmlnew; }
+// Окно хранения объявляет сервер (шлюз может отдать не 24). Читается функцией,
+// а не константой: строки работ рисуются раньше блока init.
+function retHours() { return window.__RETENTION_HOURS__ || 24; }
 // Расход прогона по-русски: неразрывный пробел в тысячах, запятая в копейках, мм:сс.
 const histInt = (n) => Number(n).toLocaleString("ru-RU");
 const histRub = (n) => Number(n).toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₽";
 // histDur — из errtext.js (window): «мм:сс», суб-секундное не схлопывается в 0:00.
+
+/* ---- срок хранения вместо отметки времени ---------------------------------
+   В строке работы стояла дата сборки. Она отвечала на вопрос, которого никто
+   не задаёт: список и так отсортирован по времени, а сама дата ничего не
+   решает — по «22.08.2026, 02:02:53» нельзя понять, успеешь ли ты вернуться
+   к этому черновику. Вопрос, который у работы действительно есть, ровно один:
+   сколько она ещё проживёт. Он и вынесен в строку.
+
+   Отсчёт ведётся от created_at, потому что сервер чистит именно по нему
+   (retention.purge_once: created_at + окно хранения), а не от последней
+   правки. Считать от чего-то другого — значит обещать время, которого нет. */
+// created_at приходит наивным UTC: SQLite не хранит смещение, и isoformat даёт
+// строку без суффикса. Браузер такую строку читает как МЕСТНОЕ время — в
+// Москве отметка уезжала на три часа вперёд. Дописываем Z, если её нет.
+function jobTime(iso) {
+  if (!iso) return null;
+  const t = Date.parse(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + "Z");
+  return Number.isNaN(t) ? null : t;
+}
+// Округление вниз намеренно: «ещё 4 ч» при остатке 4:59 честнее, чем «5 ч» при
+// остатке 4:01. Обещать меньше, чем есть, — единственная безопасная ошибка.
+function retentionLeft(it) {
+  const t = jobTime(it.created_at);
+  if (t == null) return "";
+  const ms = t + retHours() * 3600e3 - Date.now();
+  if (ms <= 0) return "срок хранения истёк";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return "удаляется";
+  if (mins < 60) return `хранится ещё ${mins} мин`;
+  return `хранится ещё ${Math.floor(mins / 60)} ч`;
+}
 
 /* ============================================================================
    ЕДИНЫЙ ФИД «Презентации» — один список всех сборок (активные + черновики +
@@ -239,7 +273,7 @@ function estSegment(it) {
 function cardMeta(it) {
   const SEP = `<span class="sep">·</span>`;
   const tool = esc(toolTitle(it.mode));
-  const when = it.created_at ? new Date(it.created_at).toLocaleString("ru-RU") : "";
+  const ttl = esc(retentionLeft(it));
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
     const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идёт сборка";
@@ -256,16 +290,16 @@ function cardMeta(it) {
   }
   if (it.state === "done") {
     const seg = [tool];
-    if (when) seg.push(esc(when));
+    if (ttl) seg.push(ttl);
     // v5 запретил emoji: пиктограммы ⏱/↓ заменены словами-подписями
     if (it.duration_ms != null) seg.push(`за ${histDur(it.duration_ms)}`);
     if (it.out_tokens != null) seg.push(`${histInt(it.out_tokens)} токенов`);
     if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
     return seg.join(SEP);
   }
-  if (it.state === "draft") return [tool, when ? `изменён ${esc(when)}` : ""].filter(Boolean).join(SEP);
-  if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, when ? esc(when) : ""].filter(Boolean).join(SEP);
-  if (it.state === "cancelled") return ["Остановлено вручную", when ? esc(when) : ""].filter(Boolean).join(SEP);
+  if (it.state === "draft") return [tool, ttl].filter(Boolean).join(SEP);
+  if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, ttl].filter(Boolean).join(SEP);
+  if (it.state === "cancelled") return ["Остановлено вручную", ttl].filter(Boolean).join(SEP);
   return "";
 }
 // Кнопки карточки — только на реально существующие эндпоинты (без «мёртвых»):
@@ -966,9 +1000,8 @@ if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
 
 /* init */
 // Окно ретеншена (истории и черновиков) объявляем подвалом ленты.
-const _retHours = window.__RETENTION_HOURS__ || 24;
 const _retCap = $("#retentionCap");
-if (_retCap) _retCap.textContent = _retHours + " часа";
+if (_retCap) _retCap.textContent = retHours() + " часа";
 resetFile();
 loadFeed();
 autoResumeActive();

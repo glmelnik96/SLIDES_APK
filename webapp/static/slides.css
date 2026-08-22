@@ -145,8 +145,11 @@ body.is-tool main { padding: 0; }
   transition: grid-template-rows .42s var(--lp-ease); }
 .row.is-open { grid-template-rows: auto 1fr; }
 .row__h { margin: 0; }
+/* font: inherit обязателен: <button> не наследует гарнитуру от документа — он
+   берёт системный шрифт формы. Имя двери это скрывало (у него своя гарнитура
+   выписана), а подпись под ним молча набиралась Arial'ом. */
 .row__hit { position: relative; display: block; width: 100%; height: 96px;
-  box-sizing: border-box; padding: 0 var(--sl-gut);
+  font: inherit; box-sizing: border-box; padding: 0 var(--sl-gut);
   border: 0; border-radius: 0; cursor: pointer; text-align: left;
   background: var(--lp-ink); color: var(--lp-text);
   box-shadow: inset 0 1px 0 var(--lp-edge);
@@ -162,38 +165,50 @@ body.is-tool main { padding: 0; }
 .row__name { display: block; margin: 0; font-family: var(--font-display);
   font-weight: 600; font-size: 26px; line-height: 1.1; letter-spacing: -0.02em;
   white-space: nowrap; }
-.row__desc { display: block; font-size: 14px; line-height: 1.5; color: var(--lp-soft); }
+/* Подпись — фраза, и набирается она текстовой гарнитурой прямым начертанием.
+   Выписано целиком, а не унаследовано: строка лежит внутри <h2>, а от него
+   через кнопку приходит дисплей полужирным — второй заголовок вместо подписи. */
+.row__desc { display: block; font-family: var(--font-text); font-weight: 400;
+  font-size: 14px; line-height: 1.5; letter-spacing: 0; color: var(--lp-soft); }
 .row__hit:hover .row__desc,
 .row.is-open .row__hit .row__desc { color: var(--lp-ink); }
 
 /* Хореография имени и описания — только там, где есть курсор. На телефоне
-   описание просто стоит под именем: прятать его за жест, которого нет, нельзя. */
+   описание просто стоит под именем: прятать его за жест, которого нет, нельзя.
+
+   ОБЕ СТРОКИ СТОЯТ НА ОДНОЙ ОСИ. Первая редакция разводила их по горизонтали:
+   имя уезжало к левому краю, описание вставало у правого. Метафора «раскрытой
+   створки» на бумаге работала, вживую — нет. Во-первых, взгляд, поймавший имя
+   на центральной оси, терял его: строка под курсором меняла не только вид, но
+   и место, и прочитать пояснение можно было, только вернувшись глазами через
+   всю строку. Во-вторых, пояснение — не второй заголовок, а подпись к первому;
+   пятьюстами пикселями правее оно читалось отдельным пунктом меню. В-третьих,
+   текст стал длиннее одной фразы, и прижатый к правому краю он оказывался тем
+   ближе к имени, чем длиннее само имя, — расстояние между ними скакало от
+   двери к двери.
+
+   Теперь имя приподнимается, а описание проявляется прямо под ним, обе строки
+   центрированы по той же оси, что и колонка панели ниже. Ход идёт по вертикали
+   и не превышает 14px: под курсором меняется вид, а не композиция. */
 @media (hover: hover) and (pointer: fine) and (min-width: 861px) {
   .row__slot { position: absolute; inset: 0; justify-content: center;
     transition: transform .5s var(--lp-ease); }
-  .row__name { transition: transform .5s var(--lp-ease); }
-  /* Описание прижато к ПРАВОМУ краю колонки, а не отсчитано от левого. Так и
-     задумано: имя уезжает к левому краю, описание встаёт у правого, между ними
-     вся ширина строки — читается как раскрытая створка. Отсчёт слева пробовали
-     (left: 384px) и отказались: описание вставало в 50px от конца длинного имени
-     и в 108px от конца короткого — прилипший к имени ярлык вместо второй опоры.
-     384px оставлен нижней границей, чтобы длинное имя и описание не столкнулись
-     на узком окне. */
-  .row__desc { position: absolute; left: 384px; right: 0; top: 50%;
-    text-align: right;
-    /* Сдвиг ВЛЕВО, а не вправо: описание выходит навстречу уезжающему имени,
-       расходятся в разные стороны. Плюс правый край перестал вылезать за
-       колонку на эти 12px и наводить горизонтальную прокрутку. */
-    opacity: 0; transform: translate(-12px, -50%);
+  /* Описание занимает всю ширину строки и центрируется в ней: так его середина
+     совпадает с серединой имени при любой длине обоих. */
+  .row__desc { position: absolute; left: 0; right: 0; top: 50%;
+    text-align: center;
+    /* Покоится ближе к центру, чем встанет: проявляясь, оно опускается
+       на своё место, а не возникает готовым. */
+    opacity: 0; transform: translateY(calc(-50% + 6px));
     transition: opacity .2s var(--lp-ease), transform .3s var(--lp-ease),
                 color .42s var(--lp-ease); }
-  /* Хореография привязана к курсору, а не к раскрытию: у открытой двери имя
-     обязано вернуться на центральную ось — под ним по этой же оси стоит
-     колонка панели, и уехавшее влево имя рвало бы их связь. */
-  .row__hit:hover .row__slot { transform: translateX(-50%); }
-  .row__hit:hover .row__name { transform: translateX(50%); }
-  .row__hit:hover .row__desc { opacity: 1; transform: translate(0, -50%);
-    transition: opacity .38s var(--lp-ease) .38s, transform .5s var(--lp-ease) .38s,
+  /* 13 вверх и 15 вниз, а не 14/14: имя набрано дисплеем в 26px и оптически
+     тяжелее подписи в 14px — при равном разбеге пара выглядела съехавшей вниз.
+     Сумма 28 — интерлиньяж имени, то есть строки расходятся ровно на строку. */
+  .row__hit:hover .row__slot { transform: translateY(-13px); }
+  .row__hit:hover .row__desc { opacity: 1;
+    transform: translateY(calc(-50% + 15px));
+    transition: opacity .38s var(--lp-ease) .28s, transform .5s var(--lp-ease) .28s,
                 color .42s var(--lp-ease); }
 }
 /* Без курсора описание просто стоит под именем, и высота двери перестаёт быть
@@ -497,6 +512,12 @@ body.is-tool .row__panel button:not(.t-btn) {
    рассчитан на 11px, и 13px в нём встают вплотную к обводке. */
 body.is-tool .t-btn,
 body.is-tool .row__panel button:not(.t-btn) { font-weight: 600; font-size: 12px; }
+/* Интерлиньяж дропзоны отдельной строкой и по той же причине, что и гарнитура:
+   `body.is-tool .gen-form label` навязывает ей 12 — межстрочный шаг подписи
+   поля, у которой строка одна. В дропзоне строк две, и на 12 они слипались.
+   В общее правило выше это не убрать: там же сидят кирпичи высотой 24,
+   которым 12 как раз и нужно. */
+body.v11.is-tool label.dropzone { line-height: 24px; }
 /* Список расширений — не фраза, а перечень: моно возвращается, но без капса,
    иначе «.MD · .TXT» перестаёт быть именами файлов. */
 .dropzone__hint { font-family: var(--font-mono); font-weight: 400; font-size: 11px;
@@ -511,6 +532,16 @@ body.is-tool .row__panel button:not(.t-btn) { font-weight: 600; font-size: 12px;
    набранное капсом в узком моно и было худшим местом на странице. */
 .work__meta { font-weight: 400; font-size: 12px; letter-spacing: .02em;
   text-transform: none; }
+/* Строка статуса — единственное место, где приложение говорит с человеком
+   предложением: «Файл больше 10 МБ», «Очередь занята, попробуйте позже».
+   Набранная узким капсом, она читалась аварийной табличкой, а не репликой.
+   Специфичность (0,3,1) — канон пишет `body.is-tool .status` (0,2,1). */
+body.v11.is-tool .status { font-family: var(--font-text); font-weight: 400;
+  font-size: 13px; letter-spacing: 0; text-transform: none; }
+/* Подвал — три оговорки и ссылка, тоже фразы. Кегль 12 и приглушённый цвет
+   оставляют его последним в порядке чтения без помощи капса. */
+body.v11 .lp-foot { font-family: var(--font-text); font-weight: 400;
+  font-size: 12px; letter-spacing: 0; text-transform: none; }
 
 /* ===== Узкий экран =========================================================
    Брейкпоинт канона один и тот же — 860. Строка работы перестаёт быть строкой:
