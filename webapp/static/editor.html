@@ -174,9 +174,20 @@
     <!-- Фокус заполнения: скелет текущего слайда с таймером, после — его рендер -->
     <div class="glass-overlay__stagebox" id="gloStage">
       <iframe id="gloSlide" title="Последний собранный слайд" tabindex="-1" class="hidden"></iframe>
+      <!-- Пока слайд заполняется, его место занимает не крутилка, а прогресс:
+           крупная доля готовности всей деки, имя слайда и каркас деки,
+           набранный знаками, — он заполняется фронтом слева направо. Доля
+           отвечает «сколько ещё ждать», каркас — «собирается именно слайд», и
+           его дышащая кромка отвечает «работа идёт». Доля набрана ТЕКСТОМ: те
+           же знаки в растре 3×5 пробовали, число перестало читаться с первого
+           взгляда. Секундомера здесь нет намеренно: на вопрос «идёт ли работа»
+           уже отвечает кромка фронта, а бегущие секунды рядом с долей
+           готовности читались вторым, спорящим счётчиком. Тикающий таймер
+           остался в ленте — у той самой ячейки, к которой относится. -->
       <div class="glo-skel hidden" id="gloSkel">
-        <span class="glo-skel__mark" id="gloSkelMark">⟳</span>
+        <p class="glo-skel__pct" id="gloPct">0<small>%</small></p>
         <span class="glo-skel__label" id="gloSkelLabel"></span>
+        <canvas class="glo-skel__deck" id="gloSkelDeck" aria-hidden="true"></canvas>
       </div>
       <div class="glass-overlay__cap" id="gloCap">Слайды появятся здесь по мере заполнения</div>
     </div>
@@ -239,6 +250,9 @@
 </div>
 
 <script src="/static/errtext.js"></script>
+<!-- ASCII-графика канона: здесь нужен только прогресс сборки. Стыка этажей в
+     редакторе нет — полотно с data-ascii-seam ему просто не встретится. -->
+<script src="/static/ascii.js"></script>
 <script src="/static/picker_groups.js"></script>
 <script src="/static/slotmap.js"></script>
 <script src="/static/diagram_editor.js"></script>

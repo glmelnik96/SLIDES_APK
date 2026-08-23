@@ -521,15 +521,39 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-overlay__cap { text-align: center; font-family: var(--font-mono);
   font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
   text-transform: uppercase; color: var(--lp-muted); }
-/* Скелет заполняемого слайда — место под контент, а не декор: пунктир здесь
-   единственный в системе и означает ровно это. */
+/* Скелет заполняемого слайда — место под контент, а не декор.
+   Три вещи стоят одной колонкой шириной с каркас деки: доля готовности, имя
+   слайда и сам каркас. Колонка узкая и стоит по центру панели, а внутри неё
+   всё центровано по той же оси — на этом экране по центру набрано всё
+   остальное (степпер, строка состояния, подпись под сценой), и колонка,
+   прижатая к своему левому краю, выпадала из общего строя.
+   Ось работает только потому, что каркас деки виден целиком с первой секунды
+   (незанятое место помечено редким знаком, см. ascii.js). Пока незаполненная
+   часть не рисовалась вовсе, центровать было не с чем: полотно оставалось
+   пустым справа, и число над ним всегда выглядело сдвинутым влево. */
 .glo-skel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 12px;
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.glo-skel__mark { font-family: var(--font-mono); font-weight: 700; font-size: 24px;
-  line-height: 24px; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
-.glo-skel__label { max-width: 60ch; padding: 0 24px; text-align: center;
-  font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+  align-items: center; justify-content: center; gap: 24px; padding: 24px;
+  text-align: center; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+.glo-skel > * { width: 100%; max-width: 512px; }
+.glo-skel__label { font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+/* Доля готовности деки. Число крупное, потому что на него и смотрят, чтобы
+   понять, сколько ждать; знак процента уведён в служебный кегль, чтобы за
+   главное читалось само число. */
+.glo-skel__pct { margin: 0; font-family: var(--font-display); font-weight: 600;
+  font-size: 88px; line-height: 96px; letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums; color: var(--lp-text); }
+.glo-skel__pct small { font-size: 32px; letter-spacing: -.02em;
+  color: var(--lp-muted); margin-left: 12px; }
+/* Каркас деки знаками. Пропорция 16:9 задана жёстко: полотно рисует макет
+   слайда, и растянутый по остатку высоты макет перестал бы быть макетом.
+   Ширину даёт колонка, высоту считает aspect-ratio. */
+.glo-skel__deck { aspect-ratio: 16 / 9; }
+/* На низком окне число и каркас вдвоём не помещаются, и жертвуем каркасом:
+   доля готовности отвечает на главный вопрос, картинка хода — на украшающий. */
+@media (max-height: 720px) {
+  .glo-skel__deck { display: none; }
+  .glo-skel__pct { font-size: 56px; line-height: 72px; }
+}
 /* Этап «Вопросы»: карточки занимают центр экрана одной колонкой. */
 .glass-overlay__resolve { flex: 1 1 auto; min-width: 0; width: 100%; max-width: 744px;
   margin: 0 auto; overflow: auto; scrollbar-width: thin; display: flex;

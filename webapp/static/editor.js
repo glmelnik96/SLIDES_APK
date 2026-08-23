@@ -4145,7 +4145,14 @@ function renderGlassOverlay() {
   byId("gloStage")?.classList.toggle("hidden", glassResolveOn);
   byId("gloResolve")?.classList.toggle("hidden", !glassResolveOn);
   const bar = byId("gloBarFill");
-  if (bar) bar.style.width = total ? Math.round((filled / total) * 100) + "%" : "0%";
+  const pct = total ? Math.round((filled / total) * 100) : 0;
+  if (bar) bar.style.width = pct + "%";
+  // Та же доля крупным числом и картинкой хода на месте заполняемого слайда.
+  // Источник один — filled/total, поэтому полоса, число и каркас не могут
+  // разойтись между собой.
+  const numEl = byId("gloPct");
+  if (numEl) numEl.innerHTML = pct + "<small>%</small>";
+  gloDeck()?.set(total ? filled / total : 0);
   renderGlassTele();
   renderGloFilm();
 }
@@ -4178,13 +4185,26 @@ function renderGlassTele() {
     byId("gloFilm")?.querySelector(`[data-index="${target.index}"] .glo-cell__mark`);
   if (cell && glassLooping && secs != null)
     cell.textContent = `⟳ ${Math.round(secs)} с`;
-  renderGloFocus(target, secs);
+  renderGloFocus(target);
 }
 
-// Фокус-центр этапа заполнения: скелет слайда, который собирается ПРЯМО СЕЙЧАС,
-// с тикающим таймером; свежезаполненный рендер держится GLO_HOLD_MS — видно,
-// что получилось, — затем фокус переезжает на следующий скелет.
-function renderGloFocus(target, secs) {
+// Каркас деки знаками (ascii.js). Заводится по первому обращению и живёт до
+// конца страницы: полотно одно, а показывается и прячется вместе со скелетом.
+// Кадр рисуется, только пока скелет на экране, — фронт сборки не должен
+// крутиться под спрятанной панелью.
+let gloDeckAscii = null;
+function gloDeck() {
+  if (gloDeckAscii) return gloDeckAscii;
+  const cv = byId("gloSkelDeck");
+  if (!cv || !window.CloudAscii) return null;
+  gloDeckAscii = window.CloudAscii.progress(cv);
+  return gloDeckAscii;
+}
+
+// Фокус-центр этапа заполнения: скелет слайда, который собирается ПРЯМО СЕЙЧАС;
+// свежезаполненный рендер держится GLO_HOLD_MS — видно, что получилось, — затем
+// фокус переезжает на следующий скелет.
+function renderGloFocus(target) {
   if (glassResolveOn) return;
   const ifr = byId("gloSlide");
   const skel = byId("gloSkel");
@@ -4195,13 +4215,15 @@ function renderGloFocus(target, secs) {
     // только что собранный слайд (или пауза между шагами) — показываем рендер
     ifr.classList.remove("hidden");
     skel.classList.add("hidden");
+    gloDeck()?.stop();
     return;
   }
   if (glassLooping && target) {
     ifr.classList.add("hidden");
     skel.classList.remove("hidden");
-    const mark = byId("gloSkelMark");
-    if (mark) mark.textContent = secs != null ? `⟳ ${Math.round(secs)} с` : "⟳";
+    // Кромка фронта дышит только пока скелет виден. Полотно спрятано классом,
+    // и кадры под ним никто бы не увидел — а вентилятор бы услышал.
+    gloDeck()?.start();
     const lbl = byId("gloSkelLabel");
     if (lbl) lbl.textContent = target.label;
     if (cap) cap.textContent =
@@ -4212,6 +4234,7 @@ function renderGloFocus(target, secs) {
   if (!gloShown) {
     ifr.classList.add("hidden");
     skel.classList.add("hidden");
+    gloDeck()?.stop();
     if (cap) cap.textContent = "Слайды появятся здесь по мере заполнения";
   }
 }
