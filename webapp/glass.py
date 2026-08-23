@@ -1004,8 +1004,16 @@ def improve_slide(session_id: str, index: int, *, vision: bool = True,
                            theme=plan.theme or "dark")
     if not fixes:
         return {"improved": False, "notes": 0, "plan": plan.model_dump()}
+    before = dict(content)
     sp = autofix_slide(client or _kimi(), library, sp, fixes,
                        deck_title=plan.title)
+    # Замечания были — но автофикс вправе вернуть тот же текст (модель сочла
+    # прежний вариант лучше). Раньше это всё равно рапортовалось «улучшено»:
+    # пользователь ждал минуты и получал слово вместо правки. Отвечаем по факту
+    # — что изменилось, а не что запускалось.
+    if sp.content == before and (sp.template_id or tid) == tid:
+        return {"improved": False, "notes": len(fixes),
+                "plan": plan.model_dump()}
     # Вызов модели шёл без замка — вклеиваем только свой слайд в свежий план
     # (splice-into-fresh, как _fill_one).
     with _plan_lock(session_id):

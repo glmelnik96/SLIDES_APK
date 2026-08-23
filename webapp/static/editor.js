@@ -3449,7 +3449,8 @@ function syncImproveButton() {
   if (!s) return;
   const building = (draftPlan.slides || []).some((x) => x.brief && !x.filled);
   btn.disabled = improving || building || !!s.freeform;
-  if (note) note.textContent = improving ? "Проверяю и улучшаю…"
+  if (note) note.textContent = improving
+    ? "Проверяю и улучшаю… это занимает несколько минут"
     : building ? "Доступно после завершения сборки"
     : s.freeform ? "Свободный слайд правится в чате"
     : (current === improveResultFor ? improveResult : "");
@@ -3476,9 +3477,16 @@ byId("improveSlide")?.addEventListener("click", async () => {
     if (out.plan) draftPlan = out.plan;
     builtFormFor = -1;
     // Панель чата в manual скрыта табом — итог показывает note рядом с кнопкой.
+    // Три исхода, а не два: «замечаний нет» и «замечания были, но текст не
+    // изменился» — разные вещи, и вторую нельзя называть улучшением.
+    const notes = out.notes || 0;
     improveResult = out.improved
       ? "Слайд проверен и улучшен."
-      : "Слайд проверен — замечаний нет, менять нечего.";
+      : notes
+        ? "Слайд проверен: " + notes + " " +
+          plural(notes, "замечание", "замечания", "замечаний") +
+          ", но переписать лучше не вышло — текст оставлен прежним."
+        : "Слайд проверен — замечаний нет, менять нечего.";
     improveResultFor = at;
     loadDeck();
   } catch (e) {
@@ -4814,10 +4822,16 @@ function setupPanelTabs() {
   tabF.onclick = () => show(true);
   if (CHAT_EDIT_DISABLED) {
     // Вкладка «Правки в чате» — фича в разработке: неактивна, с дружелюбной подсказкой.
+    // Намеренно НЕ disabled: такая кнопка выпадает из табуляции вместе с
+    // причиной, по которой она выключена, — с клавиатуры до объяснения не
+    // добраться. Вместо этого aria-disabled (AT читает состояние), title
+    // (подсказка без мыши) и клик, который называет причину, а не молчит:
+    // «нажал — ничего не произошло» читается поломкой, а не запретом.
     tabC.classList.add("is-disabled");
     tabC.setAttribute("aria-disabled", "true");
     tabC.setAttribute("data-tip", CHAT_DEV_TIP);
-    tabC.onclick = null;
+    tabC.title = CHAT_DEV_TIP;
+    tabC.onclick = () => alertDialog(CHAT_DEV_TIP);
   } else {
     tabC.onclick = () => show(false);
   }

@@ -181,6 +181,7 @@ const CHIPS = [
 ];
 let activeFilter = "all";
 let feedTotal = 0;                       // всего карточек (до фильтра) — для empty-state
+let feedActive = 0;                      // из них идущих (running+queued) — их очистка не трогает
 const feedCards = new Map();             // id -> элемент карточки (реконсиляция)
 const feedItemById = new Map();          // id -> нормализованный элемент данных (для live-перерисовки)
 const livePct = {};                      // id -> % из SSE (свежее поллинга)
@@ -219,7 +220,7 @@ function normHistory(h) {
 }
 function normDraft(d) {
   return {
-    id: d.id, mode: d.mode, source_filename: null, display_name: null, state: "draft",
+    id: d.id, mode: d.mode, source_filename: null, display_name: d.display_name || null, state: "draft",
     active: false, ts: d.created_at ? Date.parse(d.created_at) : 0, created_at: d.created_at, kind: "draft",
   };
 }
@@ -419,6 +420,7 @@ async function loadFeed() {
     else if (it.state === "done") counts.done++;
     else if (it.state === "failed" || it.state === "cancelled") counts.fail++;
   }
+  feedActive = counts.work;
   renderChips(counts);
   items.sort(feedSort);
   renderFeed(items.filter((it) => inFilter(it.state, activeFilter)));
@@ -450,7 +452,8 @@ async function stopBuild(id, btn) {
   loadFeed();
 }
 async function deleteDraft(id, btn) {
-  if (!confirm("Удалить черновик? Это действие необратимо.")) return;
+  if (!(await askConfirm("Удалить черновик? Это действие необратимо.",
+                         "Удалить"))) return;
   if (btn) btn.disabled = true;
   try {
     const r = await fetch(U(`/api/drafts/${id}`), { method: "DELETE" });
@@ -535,6 +538,18 @@ $("#feedChips").addEventListener("click", (e) => {
 });
 
 $("#clear").onclick = async () => {
+  // Спрашиваем ОБЯЗАТЕЛЬНО: очистка сносит разом все готовые деки и все
+  // черновики вместе с файлами — сильнее, чем удаление одной работы, которое
+  // подтверждения требовало. Цену называем числом, чтобы решение принималось
+  // не по слову «история», а по тому, сколько именно исчезнет.
+  const doomed = Math.max(0, feedTotal - feedActive);
+  if (!doomed) return;                       // чистить нечего — молчим
+  const what = doomed + " " + plural(doomed, "работу", "работы", "работ");
+  const keep = feedActive
+    ? " Идущая сборка останется — её очистка не трогает." : "";
+  if (!(await askConfirm(
+    `Очистить историю? Это удалит ${what} — и готовые деки, и черновики — `
+    + `без возможности вернуть.${keep}`, "Очистить"))) return;
   // D-3: обрыв сети — не молчаливый unhandled rejection; фид перерисовываем в
   // любом случае (упавшая очистка = история осталась, список честно покажет её).
   try { await fetch(U("/api/history/clear"), { method: "POST" }); } catch (e) { /* сеть */ }
@@ -986,6 +1001,36 @@ if (_promptBox) _promptBox.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && _promptBox && !_promptBox.hidden) setPromptBox(false);
 });
+
+// Подтверждение необратимого действия — тем же лайтбоксом, что и промпт.
+// Нативный confirm() отсюда убран: он рисуется браузером (чужой шрифт, чужие
+// кнопки, «OK/Cancel» вместо глагола) и блокирует поток страницы целиком.
+// Возвращает Promise<boolean>; Esc и клик по фону = отказ.
+const _askBox = $("#askBox");
+function askConfirm(text, okLabel) {
+  return new Promise((resolve) => {
+    if (!_askBox) { resolve(false); return; }   // разметки нет — не удаляем молча
+    const ok = $("#askOk"), cancel = $("#askCancel");
+    $("#askText").textContent = text;
+    ok.textContent = okLabel || "Удалить";
+    function close(val) {
+      document.removeEventListener("keydown", onKey);
+      _askBox.removeEventListener("click", onClick);
+      _askBox.hidden = true;
+      resolve(val);
+    }
+    function onKey(e) { if (e.key === "Escape") close(false); }
+    function onClick(e) {
+      if (e.target === ok) close(true);
+      else if (e.target.closest("[data-close]") || e.target === cancel) close(false);
+    }
+    _askBox.hidden = false;
+    _askBox.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKey);
+    // Фокус на отказ: у необратимого действия по умолчанию выбран выход.
+    cancel.focus();
+  });
+}
 
 const _copyPrompt = $("#copyPrompt");
 if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {

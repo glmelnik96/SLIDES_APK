@@ -480,6 +480,14 @@ def test_drafts_list_scoped_and_deletable(monkeypatch, tmp_path):
         assert len(items) == 1
         assert items[0]["id"] == sid and items[0]["mode"] == "manual"
         assert items[0]["created_at"]  # дата для «Без названия · дата»
+        # Имя деки — из plan.json, как в истории. Пустое → None (клиент
+        # подставит «Без названия»); названное — приходит строкой, иначе
+        # собранная работа читается в ленте безымянной.
+        assert items[0]["display_name"] is None
+        import webapp.draft as _dr
+        _dr.save_plan(sid, _dr.DraftPlan(title="Итоги квартала"))
+        named = c.get("/api/drafts", headers=H("u1")).json()
+        assert named[0]["display_name"] == "Итоги квартала"
         # scoped to owner — u2 sees nothing and cannot delete
         assert c.get("/api/drafts", headers=H("u2")).json() == []
         assert c.delete(f"/api/drafts/{sid}", headers=H("u2")).status_code == 404

@@ -320,15 +320,30 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     return JSONResponse({"session_id": session_id, "kind": "draft", "mode": mode})
 
 
+def _plan_title(session_id: str) -> str | None:
+    """Имя деки из plan.json — как оно стоит в редакторе. Best-effort I/O:
+    нет плана или он битый → None, и клиент подставляет «Без названия»."""
+    try:
+        return draft.load_plan(session_id).title or None
+    except Exception:  # noqa: BLE001 — missing/corrupt plan → no name
+        return None
+
+
 @app.get("/api/drafts")
 async def list_drafts(request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:
     """Черновики пользователя (status="draft") — незавершённая работа, снова
-    достижимая с главной («Продолжить» ведёт обратно в редактор)."""
+    достижимая с главной («Продолжить» ведёт обратно в редактор).
+
+    Имя отдаём тем же способом, что и история: из plan.json. Без него любая
+    работа в ленте читалась «Без названия» даже после полной сборки."""
     async with request.app.state.sessionmaker() as s:
         jobs = await jobs_repo.list_drafts_for_user(s, user.id)
+    titles = await run_in_threadpool(
+        lambda: {j.session_id: _plan_title(j.session_id) for j in jobs})
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode,
+         "display_name": titles.get(j.session_id),
          "created_at": j.created_at.isoformat() if j.created_at else None}
         for j in jobs
     ])
@@ -1395,13 +1410,8 @@ async def get_history(request: Request,
 
     def _draft_title(j) -> str | None:
         """Deck name for constructor/chat drafts (plan.title); None for uploads
-        so the client falls back to the source filename. Best-effort I/O."""
-        if j.kind != "draft":
-            return None
-        try:
-            return draft.load_plan(j.session_id).title or None
-        except Exception:  # noqa: BLE001 — missing/corrupt plan → no name
-            return None
+        so the client falls back to the source filename."""
+        return _plan_title(j.session_id) if j.kind == "draft" else None
 
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode, "kind": j.kind,

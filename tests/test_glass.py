@@ -1472,6 +1472,25 @@ def test_improve_slide_gate_and_flow(monkeypatch, tmp_path):
     assert out["plan"]["slides"][1]["filled"] is True
 
 
+def test_improve_reports_unchanged_slide_honestly(monkeypatch, tmp_path):
+    """Замечания были, но автофикс вернул ТОТ ЖЕ текст: это не улучшение.
+    Раньше ответ всё равно был improved=True, и пользователь после нескольких
+    минут ожидания получал «Слайд проверен и улучшен» при нетронутых полях."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    import htmlslides.pipeline.filler as filler
+    from webapp import draft_render
+    monkeypatch.setattr(filler, "fill_slide", _fake_fill)
+    plan = _filled_plan()
+    draft.save_plan("imp2", plan)
+    draft_render.render_draft("imp2", plan)
+    monkeypatch.setattr(glass, "_improve_notes",
+                        lambda *a, **k: ["overflow: текст вылез"])
+    # Автофикс отдаёт слайд как есть — модель сочла прежний вариант лучше.
+    monkeypatch.setattr(filler, "autofix_slide", lambda *a, **k: a[2])
+    out = glass.improve_slide("imp2", 2, vision=False, client=FakeClient([]))
+    assert out["improved"] is False and out["notes"] == 1
+
+
 def test_improve_endpoint_gate_and_success(monkeypatch, tmp_path):
     """HTTP-контракт improve: незавершённая сборка → 409 (кнопка в UI в это
     время выключена), после завершения → 200 с improved, кривой номер → 400."""

@@ -482,6 +482,16 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr; gap: 24px; }
   font-family: var(--font-text); font-size: 13px; line-height: 24px;
   white-space: pre-wrap; color: var(--lp-soft); }
 
+/* ===== Диалог подтверждения ================================================
+   Тот же лайтбокс, но узкий: у вопроса «удалять?» одна строка текста и два
+   слова действий — на 1176px промптовой панели они разбегаются по углам, и
+   пара «удалить / отмена» перестаёт читаться как выбор. 432 = 24 × 18. */
+body.is-tool .lightbox__panel--ask { grid-template-columns: 1fr; gap: 24px;
+  width: min(432px, 100%); }
+.ask-text { margin: 0; font-family: var(--font-text); font-size: 13px;
+  line-height: 24px; color: var(--lp-soft); }
+.ask-row { display: flex; gap: 12px; justify-content: flex-end; }
+
 /* ===== ТРЕТИЙ РЕГИСТР: где кончается моно-капс ==============================
    Канон делит текст надвое: содержательный слой — SB Sans Text, служебный —
    SB Sans Cond Mono капсом 11/700/.09em. На лендинге этого хватает: служебного

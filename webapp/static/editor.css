@@ -149,6 +149,9 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .thumb-quest--failed, .thumb-quest--filling { background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
 .addslide { width: 100%; }
+/* Полная подпись — на широком рельсе; короткая ждёт брейкпоинта 1280 (см. конец
+   файла), где рельс ужимается до 96px и полная перестаёт помещаться. */
+.addslide__short { display: none; }
 
 /* ===== Сцена: единственная рама редактора и единственный чертёж =============
    Тот же рецепт, что рама ленты на главной (§8.7): поле 24, хайрлайн по
@@ -696,6 +699,10 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   .thumb-prev, .thumb-title, .thumbs-hint, .thumb-grip { display: none; }
   .thumb { height: 48px; justify-content: center; }
   .rail--edit > .field-label { text-align: center; padding: 0; }
+  /* Кирпич не переносит и не сжимает текст: в 74px полная подпись выезжала
+     за обводку и читалась «обавить слайд». Меняем подпись, а не размер. */
+  .addslide__full { display: none; }
+  .addslide__short { display: inline; }
 }
 @media (max-width: 860px) {
   /* Стол разворачивается в столбик: сцена сверху, рельсы под ней. Страница при
@@ -708,6 +715,10 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   .thumb-prev, .thumb-title { display: flex; }
   .thumb { height: 96px; justify-content: flex-start; }
   .rail--edit > .field-label { text-align: left; padding: 0 12px; }
+  /* Рельс снова во всю ширину — полная подпись возвращается (правило 1280
+     продолжает действовать и здесь, поэтому его нужно отменять явно). */
+  .addslide__full { display: inline; }
+  .addslide__short { display: none; }
   #thumbs { flex-direction: row; flex-wrap: wrap; }
   .thumb { width: 264px; }
   .glass-overlay { padding: 24px; }

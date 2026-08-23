@@ -191,6 +191,22 @@
 В файле — только сам markdown: никаких комментариев, пояснений, приветствий и ```-обёрток.</pre>
     </div>
   </div>
+
+  <!-- Один диалог подтверждения на всю главную. Сильные действия (очистка
+       истории, удаление черновика) спрашивают им, а не нативным confirm:
+       тот рисуется системой браузера — чужой шрифт, чужие кнопки, чужой язык —
+       и вырывает из канона ровно в тот момент, когда решение необратимо. -->
+  <div class="lightbox" id="askBox" hidden>
+    <div class="lightbox__backdrop" data-close></div>
+    <div class="lightbox__panel lightbox__panel--ask" role="dialog" aria-modal="true"
+         aria-labelledby="askText">
+      <p class="ask-text" id="askText"></p>
+      <div class="ask-row">
+        <button type="button" class="t-btn" id="askOk">Удалить</button>
+        <button type="button" class="t-btn" id="askCancel" data-close>Отмена</button>
+      </div>
+    </div>
+  </div>
 </section>
 </main>
 

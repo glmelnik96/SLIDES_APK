@@ -39,8 +39,13 @@
   <!-- ===== Левый рельс: лента слайдов ===== -->
   <aside class="rail rail--edit" id="thumbsRail">
     <p class="field-label">Слайды</p>
-    <button class="btn addslide hidden" id="addSlide"
-            title="Новый слайд встанет сразу после текущего">Добавить слайд</button>
+    <!-- Две подписи: на узком экране рельс сжимается до 96px, и полная в кирпич
+         не влезает — там же, где миниатюры теряют названия, кнопка переходит
+         на короткую. Обрезать подпись нельзя: «обавить слайд» читается сбоем. -->
+    <button class="btn addslide hidden" id="addSlide" aria-label="Добавить слайд"
+            title="Новый слайд встанет сразу после текущего"><span
+      class="addslide__full">Добавить слайд</span><span
+      class="addslide__short" aria-hidden="true">+ слайд</span></button>
     <div id="thumbs"></div>
   </aside>
 
@@ -102,7 +107,10 @@
     <!-- Точечное улучшение: LLM-проверка вёрстки и вида ОДНОГО слайда.
          Активна только после полного завершения сборки (решение спеки). -->
     <div class="builder-improve hidden" id="improveWrap">
-      <button class="btn" id="improveSlide" type="button">Улучшить этот слайд (~1–2 мин)</button>
+      <!-- Оценка по замеру на проде (3,9 мин на слайд с картинкой): прежние
+           «~1–2 мин» врали вдвое, и на четвёртой минуте кнопка читалась как
+           зависшая. -->
+      <button class="btn" id="improveSlide" type="button">Улучшить этот слайд (~2–5 мин)</button>
       <span class="improve-note" id="improveNote"></span>
     </div>
     <div class="builder-empty" id="builderEmpty">
