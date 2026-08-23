@@ -198,7 +198,9 @@ async def download_file(name: str,
         raise HTTPException(404, "не найдено")
     path = _settings.downloads_dir / name
     if not path.is_file():
-        raise HTTPException(404, "file not provisioned")
+        # Файл кладут на прод отдельно (scp в downloads_dir), и его отсутствие —
+        # штатная ситуация раскатки, которую увидит обычный человек по ссылке.
+        raise HTTPException(404, "файл ещё не выложен — напишите нам")
     return FileResponse(path, filename=name, media_type=mime)
 
 

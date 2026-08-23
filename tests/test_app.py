@@ -47,9 +47,38 @@ def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
         # all three sections link to their gateway roots
         assert 'href="/images"' in html
         assert 'href="/creatives"' in html
-        # Слайды is the active section
-        assert 'href="/slides"    class="topnav__link is-active"' in html
+        # Слайды is the active section. Проверяем смысл, а не вёрстку: прежний
+        # вариант ассертил три пробела между атрибутами и падал бы от любого
+        # переформатирования шапки, ничего не сообщая о самой активности.
+        import re
+        assert re.search(r'href="/slides"\s+class="topnav__link is-active"', html)
         assert ">Cloud.ru <span>Design</span>" in html
+
+
+def test_editor_in_app_links_carry_gateway_prefix():
+    """Ссылки ВНУТРЬ приложения обязаны нести префикс шлюза.
+
+    Регрессия редизайна v11: «К работам» (#backHome) появилась в новой разметке
+    редактора, а строка, дописывающая префикс, осталась только у #gloHome —
+    за шлюзом кнопка уводила на корень портала вместо /slides. Тест смотрит не
+    на конкретные два id, а на КЛАСС: любая новая ссылка с href="/" обязана
+    попасть в тот же список, иначе она молча потеряет префикс.
+    """
+    import re
+    from pathlib import Path
+
+    static = Path(__file__).resolve().parents[1] / "webapp" / "static"
+    html = (static / "editor.html").read_text(encoding="utf-8")
+    js = (static / "editor.js").read_text(encoding="utf-8")
+
+    inapp = set(re.findall(r'<a\b[^>]*\bid="([\w-]+)"[^>]*\bhref="/"', html))
+    inapp |= set(re.findall(r'<a\b[^>]*\bhref="/"[^>]*\bid="([\w-]+)"', html))
+    assert inapp, "в editor.html не осталось ссылок внутрь — тест устарел"
+
+    block = re.search(r'\[([^\]]*)\]\.forEach[\s\S]{0,200}?\.href = U\("/"\)', js)
+    assert block, "в editor.js пропал блок, навешивающий префикс шлюза"
+    prefixed = set(re.findall(r'"([\w-]+)"', block.group(1)))
+    assert inapp <= prefixed, f"без префикса остались: {sorted(inapp - prefixed)}"
 
 
 def test_index_has_two_entry_cards(monkeypatch, tmp_path):

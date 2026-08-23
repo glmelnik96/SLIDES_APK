@@ -1016,18 +1016,6 @@ function setupExport(btn) {
 
 document.querySelectorAll("[data-fmt]").forEach(setupExport);
 
-// Р§1 — overflow-меню «Скачать»: закрытие по клику вне и по Esc. Клик по пункту
-// ВНУТРИ меню его НЕ закрывает — пользователь видит смену «Готовлю…» → «Скачать».
-const exportMenu = document.getElementById("exportMenu");
-if (exportMenu) {
-  document.addEventListener("click", (e) => {
-    if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.removeAttribute("open");
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && exportMenu.open) exportMenu.removeAttribute("open");
-  });
-}
-
 // К§3 — «Скачать HTML» для драфта: та же предэкспортная проверка на пример-текст.
 const htmlLink = document.getElementById("html");
 htmlLink?.addEventListener("click", async (e) => {
@@ -4205,7 +4193,11 @@ function gloDeck() {
 // свежезаполненный рендер держится GLO_HOLD_MS — видно, что получилось, — затем
 // фокус переезжает на следующий скелет.
 function renderGloFocus(target) {
-  if (glassResolveOn) return;
+  // Разбор вопросов забирает центр себе, скелет уезжает под .hidden — кадры под
+  // ним никто не увидит. Остановка стоит ДО выхода: раньше выход был первой
+  // строкой, stop() оставался за ним недостижимым, и цикл жил до перезагрузки
+  // страницы, обещая обратное в комментарии ниже.
+  if (glassResolveOn) { gloDeck()?.stop(); return; }
   const ifr = byId("gloSlide");
   const skel = byId("gloSkel");
   const cap = byId("gloCap");
@@ -4707,6 +4699,7 @@ function exitGlassMode() {
   glassRunning = false;
   glassOverlayOn = false;
   glassTickStop();
+  gloDeck()?.stop();     // оверлей закрыт — каркасу деки больше не для кого дышать
   document.title = glassBaseTitle;
   byId("glassOverlay")?.classList.add("hidden");
   const badge = byId("modeBadge");
@@ -4788,10 +4781,16 @@ byId("glassResume")?.addEventListener("click", resumeGlassBuild);
 
 /* init */
 // Корень навигации в шапке канона — абсолютный от домена (так велит контракт со
-// шлюзом), а вот ссылки ВНУТРИ приложения обязаны нести префикс. Прежний тулбар
-// с «a.home» снят, но «На главную» осталось на экране сборки.
-const gloHome = byId("gloHome");
-if (gloHome) gloHome.href = U("/");
+// шлюзом), а вот ссылки ВНУТРИ приложения обязаны нести префикс. Их две: «К
+// работам» на сцене редактора и «На главную» на экране сборки. Список, а не два
+// отдельных обращения, — потому что именно здесь ветка редизайна и оступилась:
+// прежний тулбар с «a.home» сняли, префикс переехал на «#gloHome», а появившийся
+// в новой разметке «#backHome» остался без него — и за шлюзом кнопка уводила на
+// корень портала вместо /slides. Появится третья ссылка внутрь — дописать сюда.
+["backHome", "gloHome"].forEach(function (id) {
+  const a = byId(id);
+  if (a) a.href = U("/");
+});
 
 // К§8 — одна правая панель с табами «Поля | Чат» (только manual: там обе панели живут
 // вместе). Переключение — класс .hidden на #builder/.chat (id/DOM не трогаем — JS завязан).

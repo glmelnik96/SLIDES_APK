@@ -1001,7 +1001,10 @@ if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
 /* init */
 // Окно ретеншена (истории и черновиков) объявляем подвалом ленты.
 const _retCap = $("#retentionCap");
-if (_retCap) _retCap.textContent = retHours() + " часа";
+// Число приходит из конфига сервера, поэтому падеж считается, а не дописан
+// строкой: на дефолтных 24 «часа» верно случайно, а на 48 или 21 — уже нет.
+if (_retCap) _retCap.textContent =
+  retHours() + " " + plural(retHours(), "час", "часа", "часов");
 resetFile();
 loadFeed();
 autoResumeActive();

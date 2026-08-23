@@ -179,7 +179,15 @@
     this._tick = function (ts) {
       self.t = ts || 0;
       self.draw();
-      if (self.live) self.raf = requestAnimationFrame(self._tick);
+      if (!self.live) return;
+      // Полотно без размеров — спрятано классом или снято медиазапросом (в
+      // редакторе каркас уходит на окнах ниже 720). Рисовать нечего, а крутить
+      // кадры под невидимым холстом — греть вентилятор впустую. Паркуемся:
+      // цикл заведётся заново из set(), когда холст вернётся в раскладку.
+      // Именно set() и будит, а не таймер: доля готовности обновляется всю
+      // сборку, значит парковка не может стать вечной, пока работа идёт.
+      if (!self.cv.clientWidth || !self.cv.clientHeight) { self.raf = 0; return; }
+      self.raf = requestAnimationFrame(self._tick);
     };
   }
 
@@ -248,6 +256,8 @@
   Progress.prototype.set = function (frac) {
     this.prog = clamp01(frac);
     if (!this.live) this.draw();
+    else if (!this.raf && this.cv.clientWidth && this.cv.clientHeight)
+      this.raf = requestAnimationFrame(this._tick);   // холст вернулся — оживаем
     return this;
   };
 

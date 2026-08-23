@@ -52,7 +52,8 @@ async def upsert_user(session: AsyncSession, *, gateway_user_id: str,
 async def get_current_user(request: Request) -> models.User:
     gid = request.headers.get("X-User-Id") or settings.dev_user_id
     if not gid:
-        raise HTTPException(status_code=401, detail="not authenticated")
+        raise HTTPException(status_code=401,
+                            detail="сессия не опознана — войдите заново")
     email = request.headers.get("X-User-Email", "")
     Session = request.app.state.sessionmaker
     async with Session() as s:
