@@ -1,0 +1,1105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Песочница: пиксельная графика для /slides</title>
+<!-- ============================================================================
+     ПЕСОЧНИЦА, А НЕ БОЕВОЙ КОД. Лежит в docs/, а не в webapp/static: /static
+     смонтирован без авторизации (webapp/app.py:87), и всё, что туда попадает,
+     доступно наружу. Отсюда ничего никуда само не уедет.
+
+     Задача файла одна: показать варианты рядом, чтобы выбрать глазами. Здесь
+     намеренно нет ни разбиения на модули, ни переиспользуемых абстракций —
+     в бой поедет только выбранный вариант и уже переписанный по-человечески.
+
+     Три сюжета, у каждого есть мокап в настоящих пропорциях:
+       А — граница этажей, осыпающаяся 1-битным дизерингом;
+       В — крупный ASCII-образ, считанный настоящим 3D (четыре раздела);
+       Г — ASCII-прогресс сборки с цифрами.
+
+     Палитра и модуль взяты из канона v11 (webapp/static/v11.css) и слоя
+     /slides (webapp/static/slides.css) один в один — иначе сравнивать нечего.
+     ========================================================================= -->
+<style>
+@font-face { font-family: "SB Sans Text"; font-weight: 400; font-display: swap;
+  src: url("/webapp/static/fonts/sb-sans-text-400.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Text"; font-weight: 600; font-display: swap;
+  src: url("/webapp/static/fonts/sb-sans-text-600.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Display"; font-weight: 600; font-display: swap;
+  src: url("/webapp/static/fonts/sb-sans-display-600.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Cond Mono"; font-weight: 400; font-display: swap;
+  src: url("/webapp/static/fonts/sb-sans-cond-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "SB Sans Cond Mono"; font-weight: 700; font-display: swap;
+  src: url("/webapp/static/fonts/sb-sans-cond-mono-700.woff2") format("woff2"); }
+
+:root {
+  --ink: #141817;      /* чернила /slides */
+  --text: #E3E8E6;     /* свет */
+  --soft: #B3BCB8;
+  --muted: #97A29E;
+  --line2: #2C3532;
+  --stone: #D9DEDB;    /* камень — светлый этаж */
+  --stone-text: #171C1A;
+  --stone-muted: #565E5B;
+  --key: #3FB67C;
+  --ease: cubic-bezier(.645,.045,.355,1);
+  --mono: "SB Sans Cond Mono", ui-monospace, monospace;
+  --textf: "SB Sans Text", system-ui, sans-serif;
+  --disp: "SB Sans Display", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ink); color: var(--text);
+  font-family: var(--textf); font-size: 13px; line-height: 24px; }
+h1, h2 { font-family: var(--disp); font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+h1 { font-size: 26px; line-height: 36px; }
+h2 { font-size: 20px; line-height: 24px; }
+.wrap { max-width: 1176px; margin: 0 auto; padding: 48px 24px 96px; }
+.lab { font-family: var(--mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.note { color: var(--soft); max-width: 720px; margin: 12px 0 0; }
+section { margin-top: 72px; }
+.sec-head { padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--line2); }
+
+/* Кирпич канона: прямоугольник, хайрлайн, без радиуса. */
+button.t { height: 24px; cursor: pointer; border: 0; border-radius: 0; padding: 0 12px;
+  background: transparent; color: var(--soft); box-shadow: inset 0 0 0 1px var(--line2);
+  font-family: var(--textf); font-weight: 600; font-size: 12px; line-height: 24px;
+  transition: background .25s var(--ease), color .25s var(--ease); }
+button.t:hover { background: var(--key); color: #222; box-shadow: inset 0 0 0 1px var(--key); }
+button.t[aria-pressed="true"] { background: var(--key); color: #222;
+  box-shadow: inset 0 0 0 1px var(--key); }
+.ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0; }
+input[type=range] { accent-color: var(--key); width: 200px; }
+
+/* Каждый вариант — подпись сверху, полотно снизу. Рамок нет: сравнивают
+   картинки, а рамка добавила бы в сравнение саму себя. */
+.grid { display: grid; gap: 48px 24px; margin-top: 24px; }
+.grid--2 { grid-template-columns: repeat(2, 1fr); }
+.card__cap { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+canvas { display: block; width: 100%; image-rendering: pixelated; }
+
+/* ---- Мокапы --------------------------------------------------------------
+   Голое полотно не отвечает на вопрос «хорошо или плохо»: графику судят не
+   саму по себе, а рядом с типографикой, которая на неё давит. Поэтому все
+   три сюжета показаны ещё и в настоящих пропорциях /slides: двери по 96 на
+   камне, работы по 48 на чернилах, поля 48, модуль кратен 12. */
+.mock { margin-top: 24px; }
+.mock__stone { background: var(--stone); color: var(--stone-text); padding: 72px 48px 48px; }
+.mock__ink { background: var(--ink); color: var(--text); padding: 48px 48px 72px; }
+.mock canvas { display: block; width: 100%; image-rendering: pixelated; }
+.mock__lab { font-family: var(--mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--stone-muted); margin: 0 0 24px; }
+.mock__lab--d { color: var(--muted); margin: 0 0 24px; padding-bottom: 24px;
+  box-shadow: inset 0 -1px 0 var(--line2); }
+.mock__door { height: 96px; display: flex; flex-direction: column; justify-content: center;
+  box-shadow: inset 0 -1px 0 rgba(23, 28, 26, .16); }
+.mock__name { font-family: var(--disp); font-weight: 600; font-size: 28px; line-height: 36px;
+  letter-spacing: -.02em; }
+.mock__desc { color: var(--stone-muted); font-size: 13px; line-height: 24px; }
+.mock__work { height: 48px; display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; box-shadow: inset 0 -1px 0 var(--line2); font-size: 13px; }
+.mock__work i { font-style: normal; font-family: var(--mono); font-weight: 700; font-size: 11px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+
+/* Герой раздела: слева слово, справа образ. Образ не подложка под текст —
+   текст на картинке в 1 бите нечитаем, а канон запрещает тени и подложки. */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+.hero__eyebrow { font-family: var(--mono); font-weight: 700; font-size: 11px; line-height: 24px;
+  letter-spacing: .09em; text-transform: uppercase; color: var(--key); margin: 0 0 24px; }
+.hero__h { font-family: var(--disp); font-weight: 600; font-size: 52px; line-height: 60px;
+  letter-spacing: -.03em; margin: 0; }
+.hero__sub { color: var(--soft); font-size: 15px; line-height: 24px; margin: 24px 0 0;
+  max-width: 420px; }
+.hero__go { margin-top: 36px; }
+
+/* Прогресс сборки: число — главное, оно и набрано крупно. Пробовали набрать
+   его теми же блоками, что и каркас деки: в растре 3×5 цифры перестают
+   читаться с первого взгляда, а число здесь читают именно так. Цифры —
+   текстом, блоки — только картинке хода. */
+.prog__num { font-family: var(--disp); font-weight: 600; font-size: 88px; line-height: 96px;
+  letter-spacing: -.04em; margin: 0; font-variant-numeric: tabular-nums; }
+.prog__num small { font-size: 32px; letter-spacing: -.02em; color: var(--muted);
+  margin-left: 12px; }
+.prog__row { display: flex; align-items: baseline; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap; }
+.prog__of { font-family: var(--mono); font-weight: 700; font-size: 11px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted); }
+.prog__now { font-size: 15px; line-height: 24px; margin: 12px 0 24px; }
+.prog__now b { font-weight: 600; }
+.prog__now span { color: var(--key); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="lab">Песочница</p>
+  <h1>Пиксельная графика для /slides</h1>
+  <p class="note">Палитра, модуль и шрифты — канона v11, один в один. Ничего отсюда
+    не подключено к странице: это стенд для выбора глазами. Всё рисуется на canvas,
+    поэтому конденсированная моноширинная не искажает пропорции — знаки ставятся
+    по явным координатам, а не потоком текста.</p>
+
+  <!-- =====================================================================
+       А — ГРАНИЦА ЭТАЖЕЙ ДИЗЕРИНГОМ
+       ===================================================================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет А</p><h2>Граница этажей осыпается</h2></div>
+    <p class="note">Стык камня и чернил перестаёт быть линией. Порог сравнивается
+      с матрицей: где значение матрицы больше вертикального градиента — ставим
+      чернила, иначе камень. Зерно кратно 6, как весь модуль.</p>
+
+    <div class="ctl">
+      <span class="lab">Зерно</span>
+      <button class="t" data-a-cell="4">4</button>
+      <button class="t" data-a-cell="6">6</button>
+      <button class="t" data-a-cell="8" aria-pressed="true">8</button>
+      <button class="t" data-a-cell="12">12</button>
+      <span class="lab" style="margin-left:12px">Высота полосы</span>
+      <input type="range" id="aH" min="48" max="240" step="24" value="48">
+      <span class="lab" id="aHv">48</span>
+    </div>
+
+    <div class="grid grid--2">
+      <div>
+        <div class="card__cap"><span class="lab">А1 · Байер 8×8</span><span class="lab">регулярный</span></div>
+        <canvas id="a1" height="480"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">А2 · Байер 4×4</span><span class="lab">крупнее шаг</span></div>
+        <canvas id="a2" height="480"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">А3 · синий шум</span><span class="lab">нерегулярный</span></div>
+        <canvas id="a3" height="480"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">А4 · Байер + зелёная крошка</span><span class="lab">акцент 4%</span></div>
+        <canvas id="a4" height="480"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       А НА МАКЕТЕ — тот же стык, но с настоящей типографикой сверху и снизу.
+       ===================================================================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет А · в контексте</p><h2>Стык на макете страницы</h2></div>
+    <p class="note">Этажи в настоящих пропорциях: двери по 96 на камне, работы по 48
+      на чернилах, поля 48. Осыпь не должна начинаться сразу под последней строкой
+      двери — ей нужен свой воздух с обеих сторон, иначе она читается грязью под
+      текстом, а не границей. Отступ ниже и есть этот воздух.</p>
+
+    <div class="ctl">
+      <span class="lab">Отступ у стыка</span>
+      <input type="range" id="aPad" min="0" max="120" step="12" value="60">
+      <span class="lab" id="aPadv">60</span>
+      <span class="lab" style="margin-left:12px">Матрица</span>
+      <button class="t" data-m-mode="b8" aria-pressed="true">Байер 8×8</button>
+      <button class="t" data-m-mode="b4">Байер 4×4</button>
+      <button class="t" data-m-mode="noise">Шум</button>
+      <button class="t" data-m-mode="key">+ крошка</button>
+    </div>
+
+    <div class="mock">
+      <div class="mock__stone" id="mockStone">
+        <p class="mock__lab">С чего начать</p>
+        <div class="mock__door">
+          <span class="mock__name">Презентация из документа</span>
+          <span class="mock__desc">Слайды заполняются на глазах — сборка пошагово с ИИ</span>
+        </div>
+        <div class="mock__door">
+          <span class="mock__name">Презентация вручную</span>
+          <span class="mock__desc">Выбор макетов и полей — ручная сборка на готовых макетах</span>
+        </div>
+      </div>
+      <canvas id="am"></canvas>
+      <div class="mock__ink" id="mockInk">
+        <p class="mock__lab mock__lab--d">Работы 12</p>
+        <div class="mock__work"><span>Стратегия платформы 2026</span><i>24 слайда · 12:40</i></div>
+        <div class="mock__work"><span>Отчёт по кварталу</span><i>18 слайдов · 11:05</i></div>
+        <div class="mock__work"><span>Онбординг для партнёров</span><i>31 слайд · вчера</i></div>
+        <div class="mock__work"><span>Питч для инвесткомитета</span><i>12 слайдов · вчера</i></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       В — ASCII-ОБРАЗ, СЧИТАННЫЙ НАСТОЯЩИМ 3D
+       Первая версия рисовала плоское поле яркости функцией от (x,y) — и
+       читалась игрушкой: без перспективы, без теней, без затенения складок
+       глаз видит не объём, а орнамент. Здесь честная сцена: луч из камеры
+       марширует по знаковому полю расстояний (SDF), на попадании считаются
+       нормаль, направленный свет, мягкая тень, окклюзия в складках и блик.
+       Получается ОДНО число — яркость 0..1 — и только оно превращается в
+       знак. Фон при промахе остаётся пустым.
+
+       ОБРАЗЫ АБСТРАКТНЫЕ, И ЭТО РЕШЕНИЕ, А НЕ ЛЕНЬ. Все прошлые заходы
+       делали предмет: арку, рамку, лист, стопку листов. Предмет требует,
+       чтобы его узнали, — а узнанный предмет тут же начинает что-то
+       обещать («это про двери?», «это про фото?»), и образ спорит с
+       заголовком вместо того, чтобы его держать. Абстрактное тело не
+       обещает ничего и остаётся фактурой: объём, свет, тень.
+       ===================================================================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет В</p><h2>ASCII-образы · шесть абстрактных тел</h2></div>
+    <p class="note">Сцена честно считается лучом, а печатается знаками: яркость
+      выбирает знак из ряда — от точки до сплошного блока. Свет один и
+      сверху-слева, как во всём каноне. Шесть кандидатов; какой из них к какому
+      разделу — решаем после того, как посмотрим их рядом.</p>
+
+    <div class="ctl">
+      <span class="lab">Зерно</span>
+      <button class="t" data-b-cell="3">3</button>
+      <button class="t" data-b-cell="4">4</button>
+      <button class="t" data-b-cell="5">5</button>
+      <button class="t" data-b-cell="6" aria-pressed="true">6</button>
+      <span class="lab" style="margin-left:12px">Знаки</span>
+      <button class="t" data-b-set="0" aria-pressed="true">Блоки</button>
+      <button class="t" data-b-set="1">Точки</button>
+      <button class="t" data-b-set="2">Штрих</button>
+      <span class="lab" style="margin-left:12px">Свечение</span>
+      <button class="t" id="bGlow" aria-pressed="true">Акцент</button>
+    </div>
+    <div class="ctl" style="margin-top:-12px">
+      <span class="lab">Поворот</span>
+      <input type="range" id="bA" min="0" max="359" step="1" value="34">
+      <button class="t" id="bSpin">Вращать</button>
+      <button class="t" id="bMorph">Дышать</button>
+      <input type="range" id="bPhs" min="0" max="628" step="1" value="0" style="width:120px">
+      <span class="lab" id="bPhv">фаза 0</span>
+      <span class="lab" style="margin-left:12px">Контраст</span>
+      <input type="range" id="bC" min="0" max="100" step="1" value="15" style="width:150px">
+      <button class="t" id="bFloor" style="margin-left:12px">Пол и тень</button>
+      <button class="t" id="bFlip">Камень / чернила</button>
+      <span class="lab" style="margin-left:12px" id="bMs"></span>
+    </div>
+
+    <div class="grid grid--2">
+      <div>
+        <div class="card__cap"><span class="lab">В1 · лента Мёбиуса</span><span class="lab">полоса с одним краем</span></div>
+        <canvas id="b1" height="432" data-scene="mobius"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">В2 · вихрь</span><span class="lab">раструб с закруткой</span></div>
+        <canvas id="b2" height="432" data-scene="vortex"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">В3 · слияние капель</span><span class="lab">мягкое объединение</span></div>
+        <canvas id="b3" height="432" data-scene="blobs"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">В4 · гироид</span><span class="lab">минимальная поверхность</span></div>
+        <canvas id="b4" height="432" data-scene="gyroid"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">В5 · вложенные оболочки</span><span class="lab">срез по четверти</span></div>
+        <canvas id="b5" height="432" data-scene="shells"></canvas>
+      </div>
+      <div>
+        <div class="card__cap"><span class="lab">В6 · скрученная колонна</span><span class="lab">сечение по высоте</span></div>
+        <canvas id="b6" height="432" data-scene="column"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== В НА МАКЕТЕ: герой раздела ===================================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет В · в контексте</p><h2>Образ в шапке раздела</h2></div>
+    <p class="note">Слово слева, образ справа — текста поверх картинки нет намеренно:
+      в одном бите подложки не существует, а канон запрещает и тень, и плашку.
+      Текст шапки один и тот же для всех тел: так видно, что образ держит
+      заголовок, а не иллюстрирует его. Переключатель подставляет тело.</p>
+
+    <div class="ctl">
+      <button class="t" data-hero="mobius" aria-pressed="true">Лента Мёбиуса</button>
+      <button class="t" data-hero="vortex">Вихрь</button>
+      <button class="t" data-hero="blobs">Слияние капель</button>
+      <button class="t" data-hero="gyroid">Гироид</button>
+      <button class="t" data-hero="shells">Оболочки</button>
+      <button class="t" data-hero="column">Колонна</button>
+    </div>
+
+    <div class="mock">
+      <div class="mock__ink" style="padding-top:96px;padding-bottom:96px">
+        <div class="hero">
+          <div>
+            <p class="hero__eyebrow" id="heroEye">Cloud.ru Design · лента Мёбиуса</p>
+            <h2 class="hero__h" id="heroH">Портал<br>материалов<br>в бренде</h2>
+            <p class="hero__sub" id="heroSub">Картинки, презентации и промо-баннеры —
+              собираются здесь и выходят одинаково фирменными.</p>
+            <p class="hero__go"><button class="t">Начать</button></p>
+          </div>
+          <canvas id="bm" height="432" data-scene="mobius"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+       Г — ASCII-ПРОГРЕСС СБОРКИ  ✔ ПРИНЯТ
+       Единственный сюжет, который сообщает, а не украшает: плотность знаков
+       равна доле готовых слайдов. Поэтому он и живёт не на витрине, а в
+       стеклянной сборке, и по reduced-motion его гасить не нужно.
+       Цифры обязательны: картинка показывает ХОД, число отвечает на вопрос
+       «сколько осталось». Одно без другого не работает — по одной плотности
+       знаков долю не считают, а голое число не показывает, что процесс жив.
+       ===================================================================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет Г · принят</p><h2>ASCII-прогресс сборки с цифрами</h2></div>
+    <p class="note">Каркас деки 16:9. Слайд, до которого сборка не дошла, — редкие
+      точки; готовый — плотные блоки; тот, что собирается прямо сейчас, мерцает.
+      Ползунок ниже подменяет собой настоящий прогресс.</p>
+
+    <div class="ctl">
+      <span class="lab">Готово</span>
+      <input type="range" id="gP" min="0" max="100" step="1" value="38">
+      <span class="lab" id="gPv">38%</span>
+      <button class="t" id="gPlay" aria-pressed="true">Идёт сборка</button>
+      <span class="lab" style="margin-left:12px">Набор знаков</span>
+      <button class="t" data-g-set="0" aria-pressed="true">Блоки</button>
+      <button class="t" data-g-set="1">Точки</button>
+      <button class="t" data-g-set="2">Штрих</button>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card__cap"><span class="lab">Г1 · каркас деки</span><span class="lab" id="gStat"></span></div>
+        <canvas id="g1" height="540"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Г НА МАКЕТЕ: экран стеклянной сборки ========================== -->
+  <section>
+    <div class="sec-head"><p class="lab">Сюжет Г · в контексте</p><h2>Экран сборки</h2></div>
+    <p class="note">Число крупное и первое: на него смотрят, чтобы понять, сколько
+      ждать. Цифры — текстом: набрать их теми же блоками пробовали, в растре 3×5
+      число перестаёт читаться с первого взгляда, а читают его именно так.
+      Блоки остаются картинке хода. Проценты и счёт слайдов дублируют друг друга
+      намеренно: доля отвечает «сколько осталось», счёт — «где именно мы
+      находимся».</p>
+
+    <div class="mock">
+      <div class="mock__ink" style="padding-top:72px">
+        <p class="mock__lab mock__lab--d">Сборка презентации</p>
+        <div class="prog__row">
+          <p class="prog__num" id="pNum">38<small>%</small></p>
+          <p class="prog__of" id="pOf">9 из 24 слайдов · осталось ≈ 4 мин</p>
+        </div>
+        <p class="prog__now" id="pNow">Сейчас: <b>«Как мы считаем юнит-экономику»</b>
+          <span>— подбирается макет</span></p>
+        <canvas id="gm" height="432"></canvas>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* Общее для всех сюжетов ------------------------------------------------- */
+
+// Матрица Байера порядка n (n = 2,4,8). Классическое рекурсивное построение:
+// каждый следующий порядок — четыре копии предыдущего со сдвигом 0/2/3/1.
+function bayer(n) {
+  var m = [[0, 2], [3, 1]];
+  while (m.length < n) {
+    var s = m.length, r = [], i, j;
+    for (i = 0; i < s * 2; i++) r.push(new Array(s * 2));
+    for (i = 0; i < s; i++) for (j = 0; j < s; j++) {
+      var v = m[i][j] * 4;
+      r[i][j] = v; r[i][j + s] = v + 2; r[i + s][j] = v + 3; r[i + s][j + s] = v + 1;
+    }
+    m = r;
+  }
+  var d = n * n, out = [];
+  for (i = 0; i < n; i++) { out.push([]); for (j = 0; j < n; j++) out[i].push(m[i][j] / d); }
+  return out;
+}
+var B8 = bayer(8), B4 = bayer(4);
+
+// Дешёвый детерминированный шум: тот же сид — та же картинка, а значит
+// вариант можно обсуждать, не боясь, что он перерисуется другим.
+function hash(x, y, seed) {
+  var h = x * 374761393 + y * 668265263 + seed * 1442695040888963407;
+  h = (h ^ (h >> 13)) * 1274126177;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+}
+
+function threshold(mode, gx, gy) {
+  if (mode === 'noise') return hash(gx, gy, 7);
+  var M = mode === 'b4' ? B4 : B8, n = M.length;
+  return M[gy % n][gx % n];
+}
+
+// Полотно под плотность точек: canvas в CSS-пикселях, но с учётом DPR,
+// иначе зерно 4px на ретине превращается в мыло.
+function fit(cv) {
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var w = cv.clientWidth || 560, h = +cv.getAttribute('height');
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  var ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx: ctx, w: w, h: h };
+}
+
+var C = { ink: '#141817', stone: '#D9DEDB', key: '#3FB67C',
+          text: '#E3E8E6', stoneText: '#171C1A', muted: '#97A29E' };
+
+function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+/* ===== Сюжет А ==========================================================
+   Значения выбраны владельцем на макете и зафиксированы как настройка по
+   умолчанию: зерно 8, полоса 48, воздух у стыка 60, матрица — Байер 8×8.
+   Ручки оставлены, но открывается песочница уже на принятом варианте. */
+var aCell = 8, aBand = 48, aMockMode = 'b8', aPad = 60;
+
+// Одна и та же осыпь рисуется и на голом полотне, и на макете.
+function dissolve(ctx, w, top, bot, mode) {
+  for (var y = top; y < bot; y += aCell) {
+    // Доля пути от камня к чернилам — линейная. Сглаженная (smoothstep)
+    // сжимает распад к середине: полоса заявлена в 96, а осыпается в 50,
+    // и ползунок высоты почти ничего не меняет. Линейная тратит всю полосу,
+    // а мягкость краёв обеспечивает сама матрица: у t≈0 порог проходят
+    // считаные ячейки из 64, и край получается разрежённым сам собой.
+    var t = (y - top) / (bot - top);
+    for (var x = 0; x < w; x += aCell) {
+      var gx = Math.floor(x / aCell), gy = Math.floor(y / aCell);
+      var isInk = t > threshold(mode, gx, gy);
+      var col = isInk ? C.ink : C.stone;
+      if (mode === 'key' && isInk && hash(gx, gy, 21) > 0.96) col = C.key;
+      ctx.fillStyle = col;
+      ctx.fillRect(x, y, aCell, aCell);
+    }
+  }
+}
+
+function drawA(id, mode) {
+  var cv = document.getElementById(id); if (!cv) return;
+  var f = fit(cv), ctx = f.ctx, w = f.w, h = f.h;
+  var mid = Math.round(h / 2);
+  var top = mid - Math.round(aBand / 2), bot = mid + Math.round(aBand / 2);
+  ctx.fillStyle = C.stone; ctx.fillRect(0, 0, w, top);
+  ctx.fillStyle = C.ink;   ctx.fillRect(0, bot, w, h - bot);
+  dissolve(ctx, w, top, bot, mode);
+}
+
+// На макете осыпь получает свой воздух: aPad чистого камня сверху и столько
+// же чистых чернил снизу — плюс поля этажей. Без этого распад начинается
+// вплотную к последней строке двери и читается грязью под текстом.
+function drawMock() {
+  var cv = document.getElementById('am'); if (!cv) return;
+  var st = document.getElementById('mockStone'), ik = document.getElementById('mockInk');
+  if (st) st.style.paddingBottom = aPad + 'px';
+  if (ik) ik.style.paddingTop = aPad + 'px';
+  cv.setAttribute('height', aBand);
+  cv.style.height = aBand + 'px';
+  var f = fit(cv);
+  f.ctx.fillStyle = C.stone; f.ctx.fillRect(0, 0, f.w, f.h);
+  dissolve(f.ctx, f.w, 0, aBand, aMockMode);
+}
+
+function renderA() {
+  drawA('a1', 'b8'); drawA('a2', 'b4'); drawA('a3', 'noise'); drawA('a4', 'key');
+  drawMock();
+}
+
+/* ===== Сюжет В: реймарчинг ==============================================
+   Зерно 6 — не «покрупнее для красоты», а выбранная владельцем цена кадра.
+   Замер одного полотна 492×432: зерно 3 — 21 мс, 4 — 13 мс, 6 — 5.8 мс.
+   Считает главный поток, и при включённом дыхании кадр повторяется каждые
+   80 мс: на медленной машине 13 мс успевают подпортить прокрутку, 6 — нет.
+   Ручки 3–5 оставлены для сравнения, но открывается стенд на 6. */
+var bCell = 6, bAng = 34 * Math.PI / 180, bSpin = false, bFloor = false;
+var bOnStone = false, bDith = 'b8', bCon = 0.15, bSet = 0, bGlow = true;
+var bMorph = false, bLast = 0;
+
+// Ряды знаков от пустого к плотному: индекс = ступень яркости. Ряд длиннее
+// двух ступеней превращает один бит в подобие полутона, не заводя ни одного
+// нового цвета — плотность знака и есть шкала.
+var B_SETS = [
+  [' ', '·', ':', '+', '▒', '▓', '█'],
+  [' ', '.', ',', ':', 'o', 'O', '●'],
+  [' ', '.', '-', '=', '+', '≡', '#']
+];
+
+/* --- Знаковые поля расстояний. Всё скалярно и без единой аллокации: на
+       каждый шаг марша приходится вызов, и объекты-векторы здесь стоят
+       дороже самой математики. --------------------------------------- */
+function sdBox(x, y, z, bx, by, bz) {
+  var qx = Math.abs(x) - bx, qy = Math.abs(y) - by, qz = Math.abs(z) - bz;
+  var mx = qx > 0 ? qx : 0, my = qy > 0 ? qy : 0, mz = qz > 0 ? qz : 0;
+  return Math.sqrt(mx * mx + my * my + mz * mz) +
+         Math.min(Math.max(qx, Math.max(qy, qz)), 0);
+}
+function sdSphere(x, y, z, r) { return Math.sqrt(x * x + y * y + z * z) - r; }
+// Прямоугольник на плоскости — тот же sdBox, но в 2D. Нужен там, где тело
+// собрано из плоского сечения: у ленты и у воронки сечение и есть форма.
+function sdBox2(x, y, bx, by) {
+  var qx = Math.abs(x) - bx, qy = Math.abs(y) - by;
+  var mx = qx > 0 ? qx : 0, my = qy > 0 ? qy : 0;
+  return Math.sqrt(mx * mx + my * my) + Math.min(Math.max(qx, qy), 0);
+}
+// Мягкое объединение: два тела не стыкуются швом, а срастаются. k — ширина
+// перетекания. Без него капли читаются кучей отдельных шаров.
+function smin(a, b, k) {
+  var h = k - Math.abs(a - b); if (h < 0) h = 0;
+  return Math.min(a, b) - h * h * 0.25 / k;
+}
+
+/* --- ПОЧЕМУ ЗДЕСЬ НЕТ ДРОБЛЁНЫХ ФОРМ ------------------------------------
+   Первый заход делал образы через дробление формы на ячейки: монолит,
+   рассыпающийся в облако кубиков, и рой зёрен на стволе. В цвете и в
+   пикселях приём работает, а в знаках — нет. Печать знаками сама по себе
+   уже зерно: каждая клетка либо занята, либо пуста. Дроблёная поверхность
+   накладывает второе зерно на первое, и вместо формы в кадре остаётся шум.
+   Поэтому все образы — гладкие тела. Знак отвечает за тон, тон — за грань,
+   и форма читается с одного взгляда. ------------------------------------ */
+
+/* --- СОБСТВЕННОЕ ДВИЖЕНИЕ ТЕЛА -------------------------------------------
+   Вращение — движение камеры: форма при нём остаётся той же, меняется
+   только точка зрения, и через полминуты смотреть уже не на что. Поэтому у
+   каждого тела есть ещё и своя медленная жизнь: bPh — одна общая фаза, и
+   каждое поле берёт её туда, где у формы главный параметр. Меняется именно
+   ПАРАМЕТР, а не положение: тело не ездит по кадру (это читалось бы сбоем
+   вёрстки), оно дышит на месте. Амплитуды малы намеренно — движение должно
+   быть замечено боковым зрением, а не отвлекать от текста. -------------- */
+var bPh = 0;
+
+var MAPS = {
+  /* ЛЕНТА МЁБИУСА. Сечение — прямоугольник, который едет по окружности и
+     за полный оборот успевает перевернуться на пол-оборота. Шва на стыке
+     нет и быть не может: при a = ±π полуугол прыгает на π, а прямоугольник
+     симметричен относительно центра — (u,v) и (−u,−v) дают одно и то же
+     расстояние, поле остаётся непрерывным.
+     Жизнь: точка перекрута едет по кольцу — фаза прибавляется к полууглу. */
+  mobius: function (x, y, z) {
+    var a = Math.atan2(z, x);
+    var r = Math.sqrt(x * x + z * z) - 0.62;
+    var ha = a * 0.5 + bPh * 0.5, c = Math.cos(ha), s = Math.sin(ha);
+    return sdBox2(r * c + y * s, -r * s + y * c, 0.30 + 0.05 * Math.sin(bPh * 1.3), 0.028);
+  },
+
+  /* ВИХРЬ. Тело вращения: радиус стенки растёт с высотой по квадрату —
+     внизу горло, вверху раструб. Поверх радиуса пущена винтовая рябь
+     (угол минус высота): без неё раструб читается просто рупором, с ней —
+     закруткой. Толщина стенки одна, поэтому кромка везде одинаковая.
+     Жизнь: рябь стекает по стенке вниз — фаза сдвигает винт. */
+  vortex: function (x, y, z) {
+    var r = Math.sqrt(x * x + z * z);
+    var t = clamp01((y + 0.78) / 1.52);
+    var rw = 0.07 + 0.78 * t * t +
+             0.05 * Math.cos(Math.atan2(z, x) * 3 - y * 4.2 + bPh * 1.6);
+    var wall = Math.abs(r - rw) - 0.030;
+    return Math.max(wall, Math.abs(y) - 0.74);
+  },
+
+  /* СЛИЯНИЕ КАПЕЛЬ. Четыре массы разного размера, сросшиеся мягким
+     объединением. Ключ — ширина перетекания: при малой k видны четыре
+     шара, при большой всё сливается в один ком без силуэта.
+     Жизнь: капли ходят по маленьким окружностям с разными периодами, и
+     перемычки между ними то натягиваются, то заплывают. */
+  blobs: function (x, y, z) {
+    var p = bPh;
+    var d = sdSphere(x + 0.30 + 0.10 * Math.sin(p * 0.9),
+                     y + 0.14 + 0.08 * Math.cos(p * 0.7), z - 0.08, 0.40);
+    d = smin(d, sdSphere(x - 0.24 - 0.09 * Math.sin(p * 1.1),
+                         y - 0.16 - 0.07 * Math.cos(p * 1.3), z + 0.14, 0.34), 0.34);
+    d = smin(d, sdSphere(x - 0.02, y - 0.46 - 0.09 * Math.sin(p * 0.8),
+                         z - 0.20 + 0.09 * Math.cos(p * 1.0), 0.25), 0.30);
+    d = smin(d, sdSphere(x - 0.46 + 0.08 * Math.cos(p * 1.2),
+                         y + 0.34, z - 0.18, 0.27), 0.30);
+    return d;
+  },
+
+  /* ГИРОИД. Периодическая минимальная поверхность: тело не собрано из
+     деталей, а задано одним уравнением на всё пространство. Значение
+     функции — не расстояние, поэтому делим на масштаб частоты: без
+     нормировки марш перелетает стенку и поверхность рвётся. Куб обрезает
+     бесконечный узор до предмета.
+     Жизнь: узор течёт сквозь куб — фаза сдвигает решётку по всем трём
+     осям, и толщина стенки дышит. Куб при этом стоит, поэтому кажется,
+     что тело перебирает само себя, оставаясь на месте. */
+  gyroid: function (x, y, z) {
+    // Частота решётки: при 3.4 в куб влезало почти два периода, и тело
+    // читалось не формой, а рябью. Полтора периода — предел, за которым
+    // гироид перестаёт быть предметом и становится текстурой.
+    var s = 2.5, p = bPh * 0.55;
+    var g = Math.sin(x * s + p) * Math.cos(y * s) +
+            Math.sin(y * s + p) * Math.cos(z * s) +
+            Math.sin(z * s + p) * Math.cos(x * s);
+    var surf = (Math.abs(g) - (0.42 + 0.12 * Math.sin(bPh * 0.9))) / (s * 1.5);
+    return Math.max(surf, sdBox(x, y, z, 0.70, 0.70, 0.70));
+  },
+
+  /* ВЛОЖЕННЫЕ ОБОЛОЧКИ. Четыре сферических слоя; у трёх внешних вырезана
+     четверть, и в вырезе видно, что внутри ещё что-то есть. Внутренняя
+     оболочка целая — иначе разрез проваливается в пустоту.
+     Жизнь: слои дышат вразнобой — каждый со своим сдвигом фазы, поэтому
+     зазоры между ними то сходятся, то расходятся. */
+  shells: function (x, y, z) {
+    var R = [0.86, 0.63, 0.42, 0.22], d = 1e9;
+    for (var i = 0; i < 4; i++) {
+      var rr = R[i] + 0.055 * Math.sin(bPh * 0.85 + i * 1.4);
+      var sh = Math.abs(sdSphere(x, y, z, rr)) - 0.024;
+      // Вырез смотрит НА камеру: при повороте сцены на 34° зритель стоит со
+      // стороны −x, +z, и четверть x>0 уходила бы за горизонт — снаружи это
+      // выглядело просто целым шаром.
+      if (i < 3) sh = Math.max(sh, Math.min(-x, y));
+      if (sh < d) d = sh;
+    }
+    return d;
+  },
+
+  /* СКРУЧЕННАЯ КОЛОННА. Скруглённое квадратное сечение, провёрнутое по
+     высоте. Поворот пространства ломает честность расстояния, поэтому
+     шаг марша укорочен — иначе луч проскакивает сквозь грань.
+     Жизнь: крутизна винта ходит туда-обратно — колонна то свивается
+     плотнее, то почти распрямляется. */
+  column: function (x, y, z) {
+    var a = y * (1.25 + 0.55 * Math.sin(bPh * 0.75));
+    var ca = Math.cos(a), sa = Math.sin(a);
+    var rx = x * ca - z * sa, rz = x * sa + z * ca;
+    return sdBox(rx, y, rz, 0.30, 0.84, 0.30) - 0.06;
+  }
+};
+
+// Укорочённый шаг — там, где поле перестало быть честным расстоянием:
+// поворот пространства (лента, колонна), модуляция радиуса (вихрь),
+// уравнение вместо расстояния (гироид).
+var STEP = { mobius: 0.4, vortex: 0.32, blobs: 0.9, gyroid: 0.6,
+             shells: 1, column: 0.4 };
+
+// Высота камеры: кольцевым телам нужен взгляд сверху, иначе кольцо видно
+// с ребра и читается полоской; стоячим хватает середины.
+var CAM = { mobius: 1.15, vortex: 0.72, blobs: 0.34, gyroid: 0.50,
+            shells: 0.42, column: 0.26 };
+
+// Крупность в кадре. Тело должно занимать три четверти высоты: при 2.1
+// все шесть висели в середине кадра как марка на конверте.
+var ZOOM = { mobius: 3.9, vortex: 3.3, blobs: 4.0, gyroid: 3.8,
+             shells: 3.6, column: 3.1 };
+
+/* Акцент. Не свечение, а ЦВЕТ: тон знака остаётся прежним, меняется только
+   краска. Прежний приём (светящиеся ячейки заливались в максимум) выжигал
+   в форме плоские пятна и добавлял ровно тот шум, ради которого всё
+   переделывалось. Место акцента у каждого тела одно и осмысленное: то, что
+   в форме главное. У гироида и капель акцента нет вовсе — у них нет
+   выделенной части, и любая покраска там была бы произволом. */
+var TINT = {
+  // Полвитка ленты — ровно та половина, которая успела перевернуться.
+  mobius: function (x, y, z) { return Math.atan2(z, x) > 0; },
+  // Горло воронки: самая узкая часть, туда и уходит взгляд.
+  vortex: function (x, y, z) { return y < -0.30; },
+  // Целая внутренняя оболочка — то, ради чего сделан вырез.
+  shells: function (x, y, z) { return x * x + y * y + z * z < 0.075; },
+  // Верхняя треть колонны, где поворот сечения набрал максимум.
+  column: function (x, y, z) { return y > 0.40; }
+};
+
+var FLOOR_Y = -1.02;
+function withFloor(m) {
+  if (!bFloor) return m;
+  return function (x, y, z) { var a = m(x, y, z), b = y - FLOOR_Y; return a < b ? a : b; };
+}
+
+// Марш: шагаем ровно на расстояние до ближайшей поверхности — по построению
+// столкнуться раньше не с чем. Порог попадания растёт с дальностью, иначе
+// на далёких точках луч топчется до исчерпания шагов.
+function march(map, ox, oy, oz, dx, dy, dz, step) {
+  var t = 0.02;
+  for (var i = 0; i < 96; i++) {
+    var d = map(ox + dx * t, oy + dy * t, oz + dz * t);
+    if (d < 0.0016 * t + 0.0008) return t;
+    t += d * step;
+    if (t > 10) break;
+  }
+  return -1;
+}
+
+// Нормаль центральной разностью. Четыре пробы (тетраэдр) вместо шести —
+// вдвое дешевле при неразличимом на глаз результате.
+var NX = 0, NY = 0, NZ = 0;
+function normal(map, x, y, z) {
+  var e = 0.0035;
+  var a = map(x + e, y - e, z - e), b = map(x - e, y - e, z + e);
+  var c = map(x - e, y + e, z - e), d = map(x + e, y + e, z + e);
+  var nx = a - b - c + d, ny = -a - b + c + d, nz = -a + b - c + d;
+  var l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+  NX = nx / l; NY = ny / l; NZ = nz / l;
+}
+
+// Мягкая тень: маршируем к свету и запоминаем, насколько близко луч прошёл
+// от геометрии. Именно она читается как «предмет стоит», а не «наклеен».
+function shadow(map, px, py, pz, lx, ly, lz) {
+  var res = 1, t = 0.03;
+  for (var i = 0; i < 22; i++) {
+    var h = map(px + lx * t, py + ly * t, pz + lz * t);
+    if (h < 0.0012) return 0;
+    var k = 9 * h / t; if (k < res) res = k;
+    t += Math.min(Math.max(h, 0.025), 0.3);
+    if (t > 4) break;
+  }
+  return res < 0 ? 0 : (res > 1 ? 1 : res);
+}
+
+// Окклюзия: пять проб вдоль нормали. Там, где поле «не отпускает» на
+// ожидаемое расстояние, рядом есть складка — и она темнеет.
+function occl(map, px, py, pz) {
+  var o = 0, s = 1;
+  for (var i = 1; i <= 5; i++) {
+    var h = 0.022 * i * i;
+    var d = map(px + NX * h, py + NY * h, pz + NZ * h);
+    o += (h - d) * s; s *= 0.72;
+  }
+  return clamp01(1 - 1.5 * o);
+}
+
+function drawB(cv) {
+  if (!cv) return;
+  var name = cv.dataset.scene;
+  var f = fit(cv), ctx = f.ctx, w = f.w, h = f.h;
+  var bg = bOnStone ? C.stone : C.ink;
+  var fg = bOnStone ? C.stoneText : C.text;
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+
+  var solid = MAPS[name], map = withFloor(solid), step = STEP[name];
+  var tintFn = bGlow ? TINT[name] : null;
+
+  // Знакоместо не квадратное: у конденсированной моноширинной ширина знака
+  // примерно вдвое меньше высоты. Поэтому высоту ячейки берём от зерна, а
+  // ширину МЕРЯЕМ у самого шрифта — подставлять коэффициент на глаз значит
+  // получить либо щели между знаками, либо наползание.
+  var chh = bCell * 2, fs = Math.round(chh * 0.92);
+  ctx.font = '700 ' + fs + 'px "SB Sans Cond Mono", monospace';
+  var cww = ctx.measureText('#').width || fs * 0.5;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  var cols = Math.floor(w / cww), rows = Math.floor(h / chh);
+  var set = B_SETS[bSet], top = set.length - 1;
+
+  // Камера. Поворот сцены делается один раз над лучом, а не внутри поля:
+  // вращать точку на каждом шаге марша — это лишние синусы там, где их
+  // считают сотни тысяч раз.
+  var ca = Math.cos(bAng), sa = Math.sin(bAng);
+  // Высота камеры у каждого образа своя. Единая высота — компромисс, который
+  // не устраивает никого: пейзажу нужен низкий горизонт, стопке листов —
+  // почти профиль, иначе видна только верхняя пластина.
+  var cx = 0, cy = CAM[name] !== undefined ? CAM[name] : 0.72, cz = 3.35;
+  var ox = cx * ca - cz * sa, oz = cx * sa + cz * ca, oy = cy;
+
+  // Направление на цель и базис кадра. Знаки здесь не косметика:
+  // right = cross(forward, (0,1,0)) = (-fz, 0, fx), и если перепутать,
+  // «вверх» получается перевёрнутым — кадр встаёт вверх ногами, сверху
+  // оказывается пол, и вся сцена читается кашей.
+  var fx = -ox, fy = 0.02 - oy, fz = -oz;
+  var fl = Math.sqrt(fx * fx + fy * fy + fz * fz); fx /= fl; fy /= fl; fz /= fl;
+  var rx = -fz, ry = 0, rz = fx;
+  var rl = Math.sqrt(rx * rx + rz * rz) || 1; rx /= rl; rz /= rl;
+  var ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx;
+
+  var lx = -0.5, ly = 0.78, lz = 0.38;      // свет один и сверху-слева
+  var ll = Math.sqrt(lx * lx + ly * ly + lz * lz); lx /= ll; ly /= ll; lz /= ll;
+
+  // Чем больше zoom, тем уже угол и крупнее предмет в кадре. При 1.5 форма
+  // занимала треть высоты и тонула в фоне — объём не читался.
+  var half = h / 2, zoom = ZOOM[name] !== undefined ? ZOOM[name] : 2.1;
+
+  for (var r = 0; r < rows; r++) {
+    for (var c = 0; c < cols; c++) {
+      var px = (c + 0.5) * cww, py = (r + 0.5) * chh;
+      var sx = (px - w / 2) / half;
+      var sy = -(py - half) / half;
+
+      var dx = rx * sx + ux * sy + fx * zoom;
+      var dy = ry * sx + uy * sy + fy * zoom;
+      var dz = rz * sx + uz * sy + fz * zoom;
+      var dl = Math.sqrt(dx * dx + dy * dy + dz * dz); dx /= dl; dy /= dl; dz /= dl;
+
+      // Промах — чистый фон. Никакого «неба»: зерно по всему полотну
+      // спорит с образом и превращает его в текстуру. Пусто значит пусто.
+      var t = march(map, ox, oy, oz, dx, dy, dz, step);
+      if (t < 0) continue;
+
+      var hx = ox + dx * t, hy = oy + dy * t, hz = oz + dz * t;
+      normal(map, hx, hy, hz);
+      var dif = NX * lx + NY * ly + NZ * lz; if (dif < 0) dif = 0;
+      // У тени есть дно. Полная тень гасила в ноль всё, что закрыто сверху —
+      // ствол под облаком в рою пропадал из кадра целиком, а не темнел.
+      var sh = 0.22 + 0.78 * shadow(map, hx + NX * 0.008, hy + NY * 0.008,
+                                    hz + NZ * 0.008, lx, ly, lz);
+      var ao = occl(map, hx, hy, hz);
+      var sky = 0.5 + 0.5 * NY;                       // подсвет сверху
+      var vd = -(NX * dx + NY * dy + NZ * dz); if (vd < 0) vd = 0;
+      var rim = Math.pow(1 - vd, 3.2);                // контровой кант
+      // Блик по половинному вектору — маленький и резкий, он даёт
+      // «поверхность», а не просто освещённое пятно.
+      var hvx = lx - dx, hvy = ly - dy, hvz = lz - dz;
+      var hl = Math.sqrt(hvx * hvx + hvy * hvy + hvz * hvz) || 1;
+      var sp = (NX * hvx + NY * hvy + NZ * hvz) / hl; if (sp < 0) sp = 0;
+
+      var lum = 0.16 * sky * ao + 0.82 * dif * sh + 0.22 * rim * ao +
+                0.45 * Math.pow(sp, 26) * sh;
+      if (lum > 1) lum = 1;
+      // Гаммы здесь намеренно нет. Подъём полутонов (pow < 1) вместе с
+      // кривой контраста ниже загонял в максимум всё, что освещено хотя бы
+      // вполсилы: сфера превращалась в сплошной диск без единой ступени.
+
+      // Пол — не предмет, а подставка под тень. С полной отдачей он уходит
+      // до горизонта и забивает кадр. Отличаем его по полю самого предмета,
+      // а не по высоте попадания: допуск марша растёт с дальностью, и
+      // сравнение с плоскостью на дальних точках начинает врать.
+      if (bFloor && solid(hx, hy, hz) > 0.02) {
+        var rr2 = Math.sqrt(hx * hx + hz * hz);
+        var fade = 1 - rr2 / 2.4; if (fade < 0) fade = 0;
+        lum *= 0.55 * fade * fade * fade;
+      }
+      lum *= 1 - Math.min(0.3, Math.max(0, (t - 2.8) * 0.13));
+
+      // Кривая контраста. Ровный полутон в одном бите читается грязью: глаз
+      // видит зерно, а не грань. Сжимая диапазон вокруг середины, делаем
+      // освещённые грани плотными, теневые — пустыми, а переходы оставляем
+      // ступеням ряда знаков.
+      var wdt = 0.62 * (1 - bCon) + 0.08;
+      var q = clamp01((lum - (0.50 - wdt / 2)) / wdt);
+      lum = q * q * (3 - 2 * q);
+
+      // Любое попадание печатается хотя бы редким зерном: силуэт держит
+      // форму, тон отвечает за рельеф. Без дна теневая часть выпадала из
+      // кадра дырой — форма распадалась на несвязные светлые пятна.
+      // Дно намеренно низкое: на 0.08 дизеринг сыпал знак в каждую вторую
+      // клетку тени, и вся теневая половина образа читалась шумом.
+      if (lum < 0.035) lum = 0.035;
+
+      var lit = tintFn && tintFn(hx - NX * 0.012, hy - NY * 0.012, hz - NZ * 0.012);
+
+      // Ступень выбирается с дизерингом: дробная часть сравнивается с
+      // порогом. Иначе на плавном переходе видны полосы — знак меняется
+      // разом по всей изолинии яркости.
+      var lv = lum * top, i0 = Math.floor(lv);
+      if (lv - i0 > threshold(bDith, c, r)) i0++;
+      if (i0 > top) i0 = top;
+      if (i0 <= 0) continue;
+
+      ctx.fillStyle = lit ? C.key : fg;
+      ctx.fillText(set[i0], px, py);
+    }
+  }
+}
+
+function renderB() {
+  var t0 = performance.now();
+  ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'bm'].forEach(function (id) {
+    drawB(document.getElementById(id));
+  });
+  var el = document.getElementById('bMs');
+  if (el) el.textContent = Math.round(performance.now() - t0) + ' мс на семь полотен';
+}
+
+// Подпись под переключателем — название тела. Текст шапки не меняется:
+// пока выбираем образ, менять вместе с ним и слово нечестно — не поймёшь,
+// что именно понравилось.
+var SHAPE_NAME = {
+  mobius: 'лента Мёбиуса', vortex: 'вихрь', blobs: 'слияние капель',
+  gyroid: 'гироид', shells: 'вложенные оболочки', column: 'скрученная колонна'
+};
+
+/* ===== Сюжет Г ========================================================== */
+var gProg = .38, gPlay = true, gSet = 0, gT = 0;
+var SETS = [
+  [' ', '·', '▒', '▓', '█'],
+  [' ', '.', ':', 'o', '●'],
+  [' ', '-', '=', '≡', '#']
+];
+var G_COLS = 44, G_ROWS = 20;   // каркас деки 16:9 знаками
+var G_TOTAL = 24;
+
+function drawGOn(cv) {
+  if (!cv) return;
+  var f = fit(cv), ctx = f.ctx, w = f.w, h = f.h;
+  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+
+  var cw = w / G_COLS, ch = h / G_ROWS;
+  var set = SETS[gSet];
+  ctx.font = '700 ' + Math.round(ch * 0.82) + 'px "SB Sans Cond Mono", monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+  // Раскладка слайда: заголовок сверху, два столбца текста, полоса картинки.
+  // Каждая зона получает свой «вес» — насколько плотной она станет, дойдя
+  // до готовности. Заголовок плотнее текста, как и на настоящем слайде.
+  function zone(c, r) {
+    if (r < 2) return 0;                       // поле
+    if (r < 5) return c > 2 && c < 30 ? 1 : 0; // заголовок
+    if (r < 7) return 0;                       // воздух
+    if (r < 16) {
+      if (c > 2 && c < 20) return .62;         // левый столбец текста
+      if (c > 23 && c < 41) return .95;        // правый блок — картинка
+      return 0;
+    }
+    if (r < 18) return c > 2 && c < 14 ? .45 : 0;  // подпись
+    return 0;
+  }
+
+  // Фронт сборки идёт слева направо по столбцам: так видно, что дека
+  // именно СОБИРАЕТСЯ, а не просто плавно проявляется целиком.
+  var front = gProg * (G_COLS + 8) - 4;
+
+  for (var r = 0; r < G_ROWS; r++) {
+    for (var c = 0; c < G_COLS; c++) {
+      var wgt = zone(c, r);
+      if (wgt === 0) continue;
+      var lead = front - c;
+      var ready = clamp01(lead / 6);
+      if (ready <= 0) continue;
+
+      var lvl = ready * (wgt === 1 ? 1 : wgt);
+      var edge = lead > 0 && lead < 6;   // кромка фронта дышит
+      if (edge && gPlay) lvl *= .55 + .45 * (Math.sin(gT * .006 + c * .5) * .5 + .5);
+
+      var idx = Math.min(set.length - 1, Math.round(lvl * (set.length - 1)));
+      if (idx === 0) continue;
+      ctx.fillStyle = edge ? C.key : (wgt === 1 ? C.text : C.muted);
+      ctx.globalAlpha = edge ? .9 : (wgt === 1 ? 1 : .8);
+      ctx.fillText(set[idx], (c + .5) * cw, (r + .5) * ch);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Цифры — не подпись к картинке, а главное сообщение экрана. Доля отвечает
+// «сколько осталось», счёт слайдов — «где именно мы находимся»; они не
+// дублируют друг друга, поэтому показаны оба.
+function drawG() {
+  drawGOn(document.getElementById('g1'));
+  drawGOn(document.getElementById('gm'));
+
+  var pct = Math.round(gProg * 100);
+  var done = Math.round(gProg * G_TOTAL);
+  var st = document.getElementById('gStat');
+  if (st) st.textContent = done + ' из ' + G_TOTAL + ' · ' + pct + '%';
+
+  var num = document.getElementById('pNum');
+  if (num) num.innerHTML = pct + '<small>%</small>';
+  var of = document.getElementById('pOf');
+  if (of) {
+    // Грубая оценка остатка: секунд двадцать на слайд. На стенде это
+    // заглушка, в бою число придёт от раннера.
+    var left = Math.max(0, G_TOTAL - done) * 20;
+    of.textContent = done + ' из ' + G_TOTAL + ' слайдов · осталось ≈ ' +
+      (left >= 60 ? Math.round(left / 60) + ' мин' : left + ' с');
+  }
+  var now = document.getElementById('pNow');
+  if (now) {
+    now.style.opacity = done >= G_TOTAL ? '.5' : '1';
+    now.innerHTML = done >= G_TOTAL
+      ? 'Готово: <b>все ' + G_TOTAL + ' слайдов собраны</b>'
+      : 'Сейчас: <b>слайд ' + (done + 1) + ' — «Как мы считаем юнит-экономику»</b> ' +
+        '<span>— подбирается макет</span>';
+  }
+}
+
+// Один общий кадр на оба живых сюжета. Реймарчинг заметно дороже ASCII,
+// поэтому сцены крутятся по времени: даже если кадров мало, поворот идёт
+// с той же скоростью, просто рывками — для стенда этого достаточно.
+function loop(ts) {
+  gT = ts || 0;
+  if (gPlay) drawG();
+  // Семь полотен реймарча — это десятки миллисекунд, и гнать их каждый кадр
+  // незачем: движение здесь медленное, на глаз 12 кадров в секунду от 60
+  // не отличаются, а вентилятор — отличается.
+  if ((bSpin || bMorph) && gT - bLast > 80) {
+    bLast = gT;
+    if (bSpin) {
+      bAng = (gT * 0.00035) % (Math.PI * 2);
+      var s = document.getElementById('bA');
+      if (s) s.value = Math.round(bAng * 180 / Math.PI);
+    }
+    if (bMorph) bPh = gT * 0.00042;
+    renderB();
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ===== Управление ======================================================= */
+function group(sel, cb) {
+  var els = [].slice.call(document.querySelectorAll(sel));
+  els.forEach(function (b) {
+    b.addEventListener('click', function () {
+      els.forEach(function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+      cb(b);
+    });
+  });
+}
+group('[data-a-cell]', function (b) { aCell = +b.dataset.aCell; renderA(); });
+group('[data-m-mode]', function (b) { aMockMode = b.dataset.mMode; drawMock(); });
+group('[data-b-cell]', function (b) { bCell = +b.dataset.bCell; renderB(); });
+group('[data-b-set]',  function (b) { bSet = +b.dataset.bSet; renderB(); });
+group('[data-g-set]',  function (b) { gSet = +b.dataset.gSet; drawG(); });
+group('[data-hero]',   function (b) {
+  var k = b.dataset.hero;
+  document.getElementById('bm').dataset.scene = k;
+  document.getElementById('heroEye').textContent = 'Cloud.ru Design · ' + SHAPE_NAME[k];
+  drawB(document.getElementById('bm'));
+});
+
+document.getElementById('aH').addEventListener('input', function () {
+  aBand = +this.value; document.getElementById('aHv').textContent = aBand; renderA();
+});
+document.getElementById('aPad').addEventListener('input', function () {
+  aPad = +this.value; document.getElementById('aPadv').textContent = aPad; drawMock();
+});
+document.getElementById('bA').addEventListener('input', function () {
+  bAng = +this.value * Math.PI / 180; renderB();
+});
+document.getElementById('bC').addEventListener('input', function () {
+  bCon = +this.value / 100; renderB();
+});
+document.getElementById('bSpin').addEventListener('click', function () {
+  bSpin = !bSpin; this.setAttribute('aria-pressed', bSpin ? 'true' : 'false');
+});
+document.getElementById('bMorph').addEventListener('click', function () {
+  bMorph = !bMorph; this.setAttribute('aria-pressed', bMorph ? 'true' : 'false');
+});
+// Ручка фазы нужна, чтобы разглядеть крайние состояния формы: на ходу
+// момент не поймать, а тело в крайней фазе может оказаться совсем не тем,
+// что понравилось в средней.
+document.getElementById('bPhs').addEventListener('input', function () {
+  bPh = +this.value / 100;
+  document.getElementById('bPhv').textContent = 'фаза ' + bPh.toFixed(1);
+  renderB();
+});
+document.getElementById('bGlow').addEventListener('click', function () {
+  bGlow = !bGlow; this.setAttribute('aria-pressed', bGlow ? 'true' : 'false'); renderB();
+});
+document.getElementById('bFloor').addEventListener('click', function () {
+  bFloor = !bFloor; this.setAttribute('aria-pressed', bFloor ? 'true' : 'false'); renderB();
+});
+document.getElementById('bFlip').addEventListener('click', function () {
+  bOnStone = !bOnStone; renderB();
+});
+document.getElementById('gP').addEventListener('input', function () {
+  gProg = +this.value / 100;
+  document.getElementById('gPv').textContent = this.value + '%';
+  drawG();
+});
+document.getElementById('gPlay').addEventListener('click', function () {
+  gPlay = !gPlay; this.setAttribute('aria-pressed', gPlay ? 'true' : 'false');
+  this.textContent = gPlay ? 'Идёт сборка' : 'Пауза';
+  drawG();
+});
+
+var rt;
+window.addEventListener('resize', function () {
+  clearTimeout(rt);
+  rt = setTimeout(function () { renderA(); renderB(); drawG(); }, 150);
+});
+
+// Шрифты приезжают после первой отрисовки — оба знаковых сюжета набраны
+// конденсированной моноширинной, и без пересчёта остались бы в браузерном
+// monospace. Для В это не косметика: ширина знакоместа МЕРЯЕТСЯ у шрифта,
+// и по метрике запасного получилась бы другая сетка.
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(function () { renderB(); drawG(); });
+}
+renderA(); renderB(); drawG(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>

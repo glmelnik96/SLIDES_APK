@@ -12,6 +12,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["scripts/devserver.py", "--port", "8021"],
       "port": 8021
+    },
+    {
+      "name": "sandbox",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8031"],
+      "port": 8031
     }
   ]
 }
