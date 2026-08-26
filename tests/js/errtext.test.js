@@ -297,3 +297,43 @@ test("briefDisplay: обычный текст не трогаем, пустой 
   assert.strictEqual(briefDisplay(""), "");
   assert.strictEqual(briefDisplay(null), "");
 });
+
+/* ── surveyDue: когда звать на опрос ──────────────────────────────────────────
+   Баннер опроса на главной. Логика вынесена отдельно от DOM: единственное, что
+   тут можно сломать, — это позвать человека, который уже сходил, или замолчать
+   навсегда из-за мусора в хранилище. */
+const { surveyDue, SURVEY_SNOOZE_MS } = require("../../webapp/static/errtext.js");
+const DAY = 24 * 60 * 60 * 1000;
+
+test("surveyDue: отметки нет — зовём", () => {
+  assert.strictEqual(surveyDue(null, Date.now()), true);
+});
+
+test("surveyDue: опрос пройден — больше не зовём никогда", () => {
+  assert.strictEqual(surveyDue({ done: true }, Date.now()), false);
+  assert.strictEqual(surveyDue({ done: true }, Date.now() + 365 * DAY), false);
+});
+
+test("surveyDue: отложено вчера — молчим", () => {
+  const now = Date.now();
+  assert.strictEqual(surveyDue({ snoozed: now - DAY }, now), false);
+});
+
+test("surveyDue: отложено дольше недели — зовём снова", () => {
+  const now = Date.now();
+  assert.strictEqual(surveyDue({ snoozed: now - SURVEY_SNOOZE_MS - 1 }, now), true);
+});
+
+// Хранилище переживает и битую запись, и переведённые часы. Оба случая решаем
+// в пользу показа: потерять просьбу молча хуже, чем позвать второй раз.
+test("surveyDue: битая отметка — зовём", () => {
+  const now = Date.now();
+  assert.strictEqual(surveyDue("мусор", now), true);
+  assert.strictEqual(surveyDue({ snoozed: "вчера" }, now), true);
+  assert.strictEqual(surveyDue({ snoozed: NaN }, now), true);
+});
+
+test("surveyDue: отметка из будущего (часы перевели) — зовём", () => {
+  const now = Date.now();
+  assert.strictEqual(surveyDue({ snoozed: now + 30 * DAY }, now), true);
+});

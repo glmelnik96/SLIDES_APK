@@ -92,6 +92,31 @@ def test_index_has_two_entry_cards(monkeypatch, tmp_path):
         assert 'id="openChat"' not in html
 
 
+def test_index_has_survey_banner(monkeypatch, tmp_path):
+    """Главная несёт просьбу пройти опрос — и несёт её СКРЫТОЙ.
+
+    Два инварианта, которые легко потерять правкой разметки:
+    1) адрес опроса на месте и открывается новой вкладкой с rel="noopener" —
+       без него внешняя страница получает доступ к window.opener;
+    2) баннер лежит в разметке с hidden. Показывает его app.js, только если
+       отметки о показе ещё нет; без hidden человек с проставленной отметкой
+       увидит вспышку баннера на каждой загрузке страницы.
+    """
+    import re
+
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/").text
+    m = re.search(r'<aside[^>]*id="survey"[^>]*>', html)
+    assert m, "баннер опроса пропал с главной"
+    assert "hidden" in m.group(0), "баннер отдаётся показанным — будет вспышка"
+    go = re.search(r'<a[^>]*id="surveyGo"[^>]*>', html, re.S)
+    assert go, "кнопка «Пройти опрос» пропала"
+    assert "https://public.oprosso.sber.ru/p/ms50kuwi" in go.group(0)
+    assert 'target="_blank"' in go.group(0)
+    assert "noopener" in go.group(0)
+    assert 'id="surveyLater"' in html, "отказаться от опроса стало нечем"
+
+
 def test_index_has_prep_cards(monkeypatch, tmp_path):
     """Интро несёт карточку промпта для LLM (копирование + раскрываемый текст,
     запрет LLM-приписок) и ссылку на скилл В ОПИСАНИИ сверху («тут соберёте в

@@ -1043,6 +1043,34 @@ if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
   setTimeout(() => { _copyPrompt.textContent = "Копировать промпт"; }, 2000);
 });
 
+/* Баннер опроса. Решение «звать или молчать» живёт в errtext.js (surveyDue) и
+   тестируется отдельно; здесь — только хранилище и три обработчика.
+   Ключ содержит почту: за одним браузером могут сидеть двое, и отметка одного
+   не должна молчать за другого. localStorage в приватном окне бросает на
+   запись и на чтение — всё обёрнуто, отказ хранилища значит «позовём снова», а
+   не «страница сломалась». */
+function surveyKey() {
+  const email = $(".topbar__user")?.textContent.trim() || "";
+  return "slides.survey:" + email;
+}
+function surveyMark(mark) {
+  try { localStorage.setItem(surveyKey(), JSON.stringify(mark)); } catch {}
+  const box = $("#survey");
+  if (box) box.hidden = true;
+}
+(function initSurvey() {
+  const box = $("#survey");
+  if (!box || typeof surveyDue !== "function") return;
+  let mark = null;
+  try { mark = JSON.parse(localStorage.getItem(surveyKey())); } catch {}
+  if (!surveyDue(mark, Date.now())) return;
+  box.hidden = false;
+  // Ссылку не перехватываем (href открывает вкладку сам) — только помечаем.
+  $("#surveyGo")?.addEventListener("click", () => surveyMark({ done: true }));
+  $("#surveyLater")?.addEventListener("click", () =>
+    surveyMark({ snoozed: Date.now() }));
+})();
+
 /* init */
 // Окно ретеншена (истории и черновиков) объявляем подвалом ленты.
 const _retCap = $("#retentionCap");

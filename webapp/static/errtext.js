@@ -403,6 +403,27 @@
     return total > 0 && !hasWork;
   }
 
+  /* ── Баннер опроса о сервисе ───────────────────────────────────────────────
+     Отметка о показе лежит в localStorage браузера: своей таблицы предпочтений
+     у App2 нет, а заводить миграцию и эндпоинт ради одной галочки дороже, чем
+     согласиться, что отметка — на браузер, а не на человека. Плата известна:
+     с другой машины позовём ещё раз. */
+  var SURVEY_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+
+  // Показывать ли баннер. mark — то, что удалось достать из хранилища:
+  //   null            — не видел ни разу;
+  //   {done:true}     — сходил по ссылке, больше не тревожим;
+  //   {snoozed:<ms>}  — отложил, вернёмся через неделю.
+  // Мусор в хранилище и часы из будущего решаем в пользу показа: замолчать
+  // навсегда из-за битой записи хуже, чем позвать второй раз.
+  function surveyDue(mark, now) {
+    if (!mark || typeof mark !== "object") return true;
+    if (mark.done) return false;
+    var t = mark.snoozed;
+    if (typeof t !== "number" || !isFinite(t) || t > now) return true;
+    return now - t >= SURVEY_SNOOZE_MS;
+  }
+
   root.SAVE_STATUS = SAVE_STATUS;
   root.glassStepDecision = glassStepDecision;
   root.glassStatusText = glassStatusText;
@@ -422,6 +443,8 @@
   root.estimateLine = estimateLine;
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
+  root.surveyDue = surveyDue;
+  root.SURVEY_SNOOZE_MS = SURVEY_SNOOZE_MS;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
       glassStepDecision: glassStepDecision, glassStatusText: glassStatusText,
@@ -432,6 +455,7 @@
       CHAT_BUILD_EMPTY: CHAT_BUILD_EMPTY, plural: plural, errText: errText,
       briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
-      healthLine: healthLine, checkedAgo: checkedAgo };
+      healthLine: healthLine, checkedAgo: checkedAgo,
+      surveyDue: surveyDue, SURVEY_SNOOZE_MS: SURVEY_SNOOZE_MS };
   }
 })(typeof window !== "undefined" ? window : globalThis);
