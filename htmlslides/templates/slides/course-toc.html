@@ -1,0 +1,17 @@
+{#- Содержание электронного курса (Figma «Слайдовый гайд» oawKNdlwcvb2jNikd60tC8).
+    Тёмный кадр, логотип cloud.ru, зелёные стрелки справа, нумерованный список модулей. -#}
+<section class="slide" data-template="course-toc">
+  {% include "_chrome.html" %}
+  <div class="cs-arrows m-loop-draw" aria-hidden="true">
+    {% for _ in range(3) %}{% include "_arrow.html" %}{% endfor %}
+  </div>
+  <h1 class="ctoc-title t-hero-156 m-enter m-enter--hero" data-slot="title">{{ content.title }}</h1>
+  <ol class="ctoc-list m-stagger" data-slot="items">
+    {% for item in content.items %}
+    <li class="ctoc-item">
+      <span class="ctoc-num">{% if loop.index < 10 %}0{% endif %}{{ loop.index }}</span>
+      <span class="ctoc-label t-body-30">{{ item.label }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>

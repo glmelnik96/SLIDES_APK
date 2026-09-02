@@ -2,17 +2,19 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { groupTemplates } = require("../../webapp/static/picker_groups.js");
 
-// Полный видимый каталог (22 макета, порядок как в library.json — см.
+// Полный видимый каталог (порядок как в library.json — см.
 // webapp/templates_api.py; hidden cards-6 в пикер не попадает).
 const IDS = ["cover", "cover-image", "statement", "statement-green", "contacts",
   "kpi", "stats-row", "bar-chart", "donut-chart", "line-chart", "stacked-bar",
   "kpi-rings", "before-after", "service-table", "quote", "timeline",
-  "two-col-cards", "three-col", "grid-2x2", "frames-grid", "blank", "diagram"];
+  "two-col-cards", "three-col", "grid-2x2", "frames-grid", "blank", "diagram",
+  "course-toc", "course-section", "course-quiz"];
 
-test("22 макета раскладываются в 4 группы без потерь и дублей", () => {
+test("видимый каталог раскладывается в 5 групп без потерь и дублей", () => {
   const groups = groupTemplates(IDS.map((id) => ({ id })));
   assert.deepEqual(groups.map((g) => g.label), ["Обложки и финал",
-    "Цифры и графики", "Сравнение и структура", "Текст и карточки"]);
+    "Цифры и графики", "Сравнение и структура", "Текст и карточки",
+    "Электронный курс"]);
   const flat = groups.flatMap((g) => g.items.map((t) => t.id));
   assert.equal(flat.length, IDS.length);
   assert.deepEqual([...flat].sort(), [...IDS].sort());

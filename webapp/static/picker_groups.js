@@ -13,6 +13,7 @@
     ["Текст и карточки", ["statement", "statement-green", "quote",
       "service-table", "two-col-cards", "three-col", "grid-2x2",
       "frames-grid", "blank"]],
+    ["Электронный курс", ["course-toc", "course-section", "course-quiz"]],
   ];
 
   // catalog: [{id, …}] (уже без hidden) → [{label, items}] без пустых групп.

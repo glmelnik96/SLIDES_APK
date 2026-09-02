@@ -1,0 +1,17 @@
+{#- Разделитель модуля курса: крупный заголовок + нижняя навигация разделов
+    (гайд: «Раздел 2» … «Раздел 7» в футере). -#}
+<section class="slide" data-template="course-section">
+  {% include "_chrome.html" %}
+  <div class="cs-arrows m-loop-draw" aria-hidden="true">
+    {% for _ in range(3) %}{% include "_arrow.html" %}{% endfor %}
+  </div>
+  <h1 class="cs-title m-enter m-enter--hero" data-slot="label">{{ content.label }}</h1>
+  {% if content.number %}{% set num = content.number | string | trim %}<p class="cs-number t-sub-36 m-enter" data-slot="number">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</p>{% endif %}
+  {% if content.sections %}
+  <nav class="course-nav" data-slot="sections" aria-label="Разделы курса">
+    {% for sec in content.sections %}
+    <span class="course-nav__item{% if (sec.active | string | lower) in ['1', 'true', 'yes'] %} is-active{% endif %}">{{ sec.label }}</span>
+    {% endfor %}
+  </nav>
+  {% endif %}
+</section>

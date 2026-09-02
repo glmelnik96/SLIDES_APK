@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
-FORMATS = ("png", "pptx")
+FORMATS = ("png", "pptx", "figma")
 
 
 @dataclass

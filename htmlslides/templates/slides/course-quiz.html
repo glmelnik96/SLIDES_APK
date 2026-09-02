@@ -1,0 +1,18 @@
+{#- Вопрос электронного курса: варианты с состояниями pick / ok / bad
+    (зелёный верный, carrot неверный — как в гайде тестов). Контентный макет. -#}
+<section class="slide slide--chrome-sm" data-template="course-quiz">
+  {% include "_chrome.html" %}
+  <div class="content-head">
+    <h3 class="content-head-title t-head-42" data-slot="title">{{ content.title }}</h3>
+    {% if content.lead %}<p class="content-head-sub t-sub-36" data-slot="lead">{{ content.lead }}</p>{% endif %}
+  </div>
+  <ol class="cquiz-list m-stagger" data-slot="options">
+    {% for opt in content.options %}
+    {% set mark = (opt.mark or '') | string | trim | lower %}
+    <li class="cquiz-opt cquiz-opt--{{ mark or 'idle' }}">
+      <span class="cquiz-letter">{{ "ABCD"[loop.index0] if loop.index0 < 4 else loop.index }}</span>
+      <span class="cquiz-text t-body-30">{{ opt.text }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>

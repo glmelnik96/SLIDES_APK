@@ -421,6 +421,55 @@
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "diagram":  {"kind": "text", "required": true,  "max_chars": 8000, "label": "Данные схемы", "hint": "JSON DiagramSpec — заполняется пикером типов/ИИ, не руками"}
       }
+    },
+    {
+      "id": "course-toc",
+      "type": "title",
+      "file": "course-toc.html",
+      "display_name": "Содержание курса",
+      "intent": "Оглавление электронного курса: заголовок «Содержание» и нумерованный список модулей/разделов (как в слайдовом гайде). Бери вторым слайдом после обложки, когда вход — программа обучения, а не разовая презентация.",
+      "slots": {
+        "title": {"kind": "text", "required": true, "max_chars": 24, "label": "Заголовок"},
+        "items": {"kind": "list", "required": true, "max_items": 8, "label": "Разделы",
+                  "item_max_chars": 48,
+                  "item_slots": {
+                    "label": {"kind": "text", "required": true, "max_chars": 40, "label": "Название раздела"}
+                  }}
+      }
+    },
+    {
+      "id": "course-section",
+      "type": "section",
+      "file": "course-section.html",
+      "display_name": "Раздел курса",
+      "intent": "Разделитель модуля электронного курса: крупное название раздела, зелёные стрелки справа сверху и нижняя навигация по всем разделам курса (активный подсвечен). Бери вместо section-frame, когда дека — курс с несколькими модулями.",
+      "slots": {
+        "label":    {"kind": "text", "required": true,  "max_chars": 28, "label": "Название раздела"},
+        "number":   {"kind": "text", "required": false, "max_chars": 4,  "label": "Номер", "hint": "Напр. «01»"},
+        "sections": {"kind": "list", "required": false, "max_items": 8, "label": "Навигация разделов",
+                     "item_max_chars": 24,
+                     "item_slots": {
+                       "label":  {"kind": "text", "required": true, "max_chars": 20, "label": "Подпись"},
+                       "active": {"kind": "text", "required": false, "max_chars": 3, "label": "Активный", "hint": "1 — текущий раздел"}
+                     }}
+      }
+    },
+    {
+      "id": "course-quiz",
+      "type": "content",
+      "file": "course-quiz.html",
+      "display_name": "Вопрос курса",
+      "intent": "Слайд проверки знаний: формулировка вопроса и 2–4 варианта ответа. Состояния варианта: пусто — обычный, pick — выбран, ok — верный, bad — неверный. Бери, когда в документе есть тест, самопроверка, вопрос с вариантами.",
+      "slots": {
+        "title":   {"kind": "text", "required": true,  "max_chars": 90, "label": "Вопрос"},
+        "lead":    {"kind": "text", "required": false, "max_chars": 70, "label": "Пояснение"},
+        "options": {"kind": "list", "required": true, "max_items": 4, "label": "Варианты",
+                    "item_max_chars": 80,
+                    "item_slots": {
+                      "text": {"kind": "text", "required": true,  "max_chars": 72, "label": "Текст варианта"},
+                      "mark": {"kind": "text", "required": false, "max_chars": 8,  "label": "Состояние", "hint": "пусто / pick / ok / bad"}
+                    }}
+      }
     }
   ]
 }

@@ -11,5 +11,8 @@ from importlib import resources
 
 @lru_cache(maxsize=1)
 def brand_rules() -> str:
-    """Текст бренд-правил (Russian, ≤1500 символов). Один объект на процесс."""
-    return (resources.files("htmlslides") / "brand" / "rules.md").read_text("utf-8")
+    """Текст бренд-правил (Russian). Один объект на процесс."""
+    pack = resources.files("htmlslides") / "brand"
+    core = (pack / "rules.md").read_text("utf-8")
+    course = (pack / "course_rules.md").read_text("utf-8")
+    return core.rstrip() + "\n" + course.strip() + "\n"

@@ -572,6 +572,30 @@ html[data-theme="dark"] .sd-number{color:var(--accent);}
   background-size:var(--dot-step,20px) var(--dot-step,20px);
   background-position:5px 5px;pointer-events:none;}
 
+/* ---- электронный курс (Figma «Слайдовый гайд» oawKNdlwcvb2jNikd60tC8) ---- */
+.cs-arrows{position:absolute;left:1440px;top:62px;display:flex;gap:29.22px;color:var(--line);}
+.ctoc-title{position:absolute;left:60px;top:200px;width:1400px;white-space:nowrap;}
+.ctoc-list{position:absolute;left:60px;top:380px;width:1700px;list-style:none;display:flex;flex-direction:column;gap:20px;}
+.ctoc-item{display:flex;align-items:baseline;gap:28px;}
+.ctoc-num{font-size:30px;font-weight:600;color:var(--accent);width:64px;flex:none;}
+.ctoc-label{flex:1;}
+.cs-title{position:absolute;left:60px;top:420px;width:1600px;
+  font-size:96px;font-weight:600;line-height:1.05;letter-spacing:-2px;color:var(--fg);}
+.cs-number{position:absolute;left:60px;top:860px;color:var(--fg);}
+.course-nav{position:absolute;left:60px;right:60px;bottom:48px;display:flex;gap:28px;flex-wrap:wrap;
+  font-size:16px;font-weight:400;color:var(--fg-muted);}
+.course-nav__item.is-active{color:var(--accent);font-weight:600;}
+.cquiz-list{position:absolute;left:60px;top:340px;width:1800px;list-style:none;display:flex;flex-direction:column;gap:20px;}
+.cquiz-opt{display:flex;align-items:center;gap:24px;min-height:88px;padding:20px 28px;
+  border:1px solid var(--line-frame);background:var(--bg-card);}
+.cquiz-opt--pick{border-color:var(--accent);}
+.cquiz-opt--ok{border-color:var(--cl-green);background:var(--cl-green);color:var(--cl-graphite);}
+.cquiz-opt--ok .cquiz-text,.cquiz-opt--ok .cquiz-letter{color:var(--cl-graphite);}
+.cquiz-opt--bad{border-color:var(--cl-carrot);color:var(--cl-carrot);}
+.cquiz-letter{font-size:30px;font-weight:600;color:var(--accent);width:36px;flex:none;}
+.cquiz-opt--ok .cquiz-letter{color:var(--cl-graphite);}
+.cquiz-text{flex:1;}
+
 /* ---- печать в PDF: слайд на страницу ---- */
 @media print{
   body{overflow:visible;background:var(--cl-white);}

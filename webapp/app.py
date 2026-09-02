@@ -22,8 +22,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from webapp import (
-    chat_edit, deck_edit, draft, draft_render, exports, jobs_repo, render_png,
-    render_pptx, stats,
+    chat_edit, deck_edit, draft, draft_render, exports, jobs_repo, render_figma,
+    render_png, render_pptx, stats,
 )
 from webapp.auth import get_current_user
 from webapp.paths import session_dir
@@ -1353,6 +1353,9 @@ _EXPORT_META = {
     "pptx": {"out": "deck.pptx", "download": "slides.pptx",
              "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
              "render": lambda deck, out: render_pptx.export_pptx(deck, out)},
+    "figma": {"out": "figma_deck.json", "download": "figma-deck.json",
+              "mime": "application/json",
+              "render": lambda deck, out: render_figma.export_figma(deck, out)},
 }
 
 

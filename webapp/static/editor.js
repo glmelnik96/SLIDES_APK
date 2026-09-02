@@ -878,6 +878,7 @@ themeToggle?.addEventListener("click", async () => {
 const EXPORT_LABEL = {
   png: { idle: "Скачать PNG (ZIP)", busy: "Готовлю PNG… ~10–20 сек", ready: "Скачать PNG (ZIP)" },
   pptx: { idle: "Скачать PPTX", busy: "Готовлю PPTX… ~10–20 сек", ready: "Скачать PPTX" },
+  figma: { idle: "Figma", busy: "Готовлю Figma…", ready: "Скачать Figma JSON" },
 };
 
 // Any deck edit invalidates a finished (or in-flight) export — a "Скачать" pill
