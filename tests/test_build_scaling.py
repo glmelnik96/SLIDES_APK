@@ -422,3 +422,54 @@ def test_structlog_renders_priority_prefix(capsys):
         logging.getLogger().handlers = saved_handlers
     assert out.startswith("<4>")
     assert "planner.section_fallback" in out
+
+
+# ── замер геометрии больше не висит на флаге vision ──────────────────────────
+def test_measure_runs_even_when_vision_is_off(monkeypatch):
+    """Дешёвая детерминированная проверка не должна уходить вместе с дорогой.
+
+    Замер bbox жил внутри vision-ветки: при vision=False (точный перенос, CLI
+    --no-vision) и при обрезании вычитки дедлайном он молча не выполнялся —
+    то есть переставал работать ровно на крупных деках, где текст и вылетает.
+    """
+    monkeypatch.setattr(build, "lint_html", lambda html: [])
+    monkeypatch.setattr(
+        shotmod, "measure_overflow",
+        lambda p: [shotmod.LintIssue(2, "overflow", "текст за границей")])
+
+    notes = build._qa_notes(_plan(3), "<html></html>", vision=False,
+                            client=object(), artifacts=None,
+                            progress=lambda m: None)
+
+    assert notes == {2: ["overflow: текст за границей"]}
+
+
+def test_missing_chromium_is_announced_not_swallowed(monkeypatch):
+    """Непроверенная дека и проверенная выглядят одинаково — значит про пропуск
+    замера надо сказать вслух. Прежнее сообщение называло только vision-QA."""
+    def _boom(path):
+        raise shotmod.QAUnavailable("playwright не установлен")
+
+    monkeypatch.setattr(build, "lint_html", lambda html: [])
+    monkeypatch.setattr(shotmod, "measure_overflow", _boom)
+    msgs = []
+
+    notes = build._qa_notes(_plan(2), "<html></html>", vision=False,
+                            client=object(), artifacts=None,
+                            progress=msgs.append)
+
+    assert notes == {}
+    assert any("замерить не удалось" in m and "незамеченным" in m for m in msgs), msgs
+
+
+def test_measure_can_be_switched_off(monkeypatch):
+    """measure=False не должен трогать браузер вообще (вызовы без Chromium)."""
+    def _boom(path):
+        raise AssertionError("браузер не должен запускаться при measure=False")
+
+    monkeypatch.setattr(build, "lint_html", lambda html: [])
+    monkeypatch.setattr(shotmod, "measure_overflow", _boom)
+
+    assert build._qa_notes(_plan(2), "<html></html>", vision=False, measure=False,
+                           client=object(), artifacts=None,
+                           progress=lambda m: None) == {}

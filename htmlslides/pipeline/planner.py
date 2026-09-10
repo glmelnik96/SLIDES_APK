@@ -370,20 +370,23 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
         brief = _merge_brief(ss.brief, section)
         if ss.freeform and freeform_ok:
             out.append(SlidePlan(index=1, type="content", template_id=None,
-                                 freeform=True, content={"brief": brief}))
+                                 freeform=True, content={"brief": brief},
+                                 brief=brief))
             continue
         tid = ss.template_id if ss.template_id in known else None
         if tid is None or tid in ("cover", "contacts", "back-cover", "blank"):
             tid = _fallback_template(section, library)
         out.append(SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
-                             freeform=False, content={"brief": brief}))
+                             freeform=False, content={"brief": brief},
+                             brief=brief))
     return (out or [_fallback_slide(section, library)]), False
 
 
 def _fallback_slide(section: Section, library: TemplateLibrary) -> SlidePlan:
     tid = _fallback_template(section, library)
     return SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
-                     freeform=False, content={"brief": _section_to_text(section)})
+                     freeform=False, content={"brief": _section_to_text(section)},
+                     brief=_section_to_text(section))
 
 
 # ===================== REDUCE: сборка деки в коде =====================
@@ -392,7 +395,7 @@ def _cover_slide(doc: InputDoc, library: TemplateLibrary) -> SlidePlan:
     spec = library.get("cover")
     brief = doc.title or "Cloud.ru"
     return SlidePlan(index=1, type=spec.type, template_id="cover",
-                     content={"brief": brief})
+                     content={"brief": brief}, brief=brief)
 
 
 # Два макета-разделителя чередуем для разнообразия (точки → рамка → точки …).

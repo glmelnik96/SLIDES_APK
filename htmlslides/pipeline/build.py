@@ -111,7 +111,6 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
                        wrapup=wrapup)
 
 
-
 def polish_plan(plan: DeckPlan, out_path: str | Path, *,
                 client: Optional[KimiClient] = None,
                 library: Optional[TemplateLibrary] = None,
@@ -281,13 +280,39 @@ def _cap_slides(plan: DeckPlan, *, max_slides: int, progress: Progress,
         plan.model_copy(update={"slides": plan.slides[:max_slides]}))
 
 
+def _add_measure_notes(html: str, notes: dict[int, list[str]],
+                       progress: Progress) -> bool:
+    """Браузерный замер bbox: вылет за слайд и за safe-зону. Ни одного LLM-вызова.
+
+    Возвращает False, если Chromium недоступен, и обязательно ГОВОРИТ об этом:
+    непроверенная дека и проверенная выглядят одинаково, поэтому молчание здесь
+    читается как «проверено, всё чисто». Прежнее сообщение называло только
+    vision-QA, хотя вместе с ней молча отключался и этот замер.
+    """
+    from .screenshot import QAUnavailable, measure_overflow
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_html = Path(tmp) / "deck.html"
+            tmp_html.write_text(html, encoding="utf-8")
+            for issue in measure_overflow(tmp_html):
+                notes.setdefault(issue.slide_index, []).append(
+                    f"{issue.code}: {issue.detail}".rstrip())
+    except QAUnavailable as exc:
+        progress(f"warn: геометрию слайдов замерить не удалось ({exc}) — "
+                 "вылет текста за границы слайда мог остаться незамеченным")
+        return False
+    return True
+
+
 def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
               theme: str = "dark", artifacts: Optional[Path],
               progress: Progress, vision_all: bool = False,
-              workers: int = QA_WORKERS) -> dict[int, list[str]]:
+              workers: int = QA_WORKERS,
+              measure: bool = True) -> dict[int, list[str]]:
     """slide_index -> замечания (линтер + замер bbox + vision-QA).
 
-    vision_all=True ревьюит КАЖДЫЙ слайд (а не только flagged/freeform)."""
+    vision_all=True ревьюит КАЖДЫЙ слайд (а не только flagged/freeform).
+    measure=False выключает браузерный замер (для тестов и вызовов без Chromium)."""
     notes: dict[int, list[str]] = {}
     for issue in lint_html(html):
         notes.setdefault(issue.slide_index, []).append(
@@ -304,21 +329,36 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
             for issue in validate_freeform(frag, _ff_idx[pos]):
                 notes.setdefault(issue.slide_index, []).append(
                     f"{issue.code}: {issue.detail}".rstrip())
+    # Сохранность фактуры — тоже детерминированно и без LLM. Стоит РЯДОМ с
+    # линтером, а не в vision-ветке: линтер видит вёрстку, vision видит картинку,
+    # и ни один из них не знает, что было в исходнике. Дека, потерявшая половину
+    # цифр, проходит обе проверки безупречно.
+    from .facts import check_facts
+    for issue in check_facts(plan, html):
+        notes.setdefault(issue.slide_index, []).append(
+            f"{issue.code}: {issue.detail}".rstrip())
+
+    # Замер геометрии — детерминированный, браузерный и БЕЗ LLM, поэтому он
+    # больше не висит на флаге vision. Раньше он жил внутри vision-ветки, и
+    # выключенная (или обрезанная дедлайном) визуальная вычитка уносила с собой
+    # и его: на крупных деках — то есть ровно там, где текст и вылетает, — мы
+    # переставали мерить именно тогда, когда это нужнее всего. Дорогая проверка
+    # и дешёвая теперь падают по отдельности.
+    if measure:
+        _add_measure_notes(html, notes, progress)
+
     if not vision:
         return notes
     freeform = {s.index for s in plan.slides if s.freeform}
     all_idx = {s.index for s in plan.slides} if vision_all else set()
     if not (notes or freeform or all_idx):
         return notes
-    from .screenshot import QAUnavailable, measure_overflow, screenshot_slides
+    from .screenshot import QAUnavailable, screenshot_slides
     from .vision_qa import review_slide
     try:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_html = Path(tmp) / "deck.html"
             tmp_html.write_text(html, encoding="utf-8")
-            for issue in measure_overflow(tmp_html):
-                notes.setdefault(issue.slide_index, []).append(
-                    f"{issue.code}: {issue.detail}".rstrip())
             targets = sorted(set(notes) | freeform | all_idx)
             shots = screenshot_slides(tmp_html, targets, artifacts or Path(tmp))
             briefs = {s.index: json.dumps(s.content, ensure_ascii=False)[:2000]

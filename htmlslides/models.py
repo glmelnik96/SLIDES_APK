@@ -10,6 +10,12 @@ class SlidePlan(BaseModel):
     template_id: Optional[str] = None
     freeform: bool = False
     content: dict[str, Any] = Field(default_factory=dict)
+    # Исходная фактура раздела. Планировщик кладёт её ещё и в content["brief"]
+    # — оттуда её читает филлер, — но заполнение затирает content целиком, и к
+    # QA сверять результат становится не с чем. Отдельное поле переживает
+    # model_copy(update={"content": ...}) и питает проверку сохранности чисел
+    # (pipeline/facts.py). Необязательное: планы из черновика брифа не несут.
+    brief: str = ""
 
     @model_validator(mode="after")
     def _template_required_unless_freeform(self) -> "SlidePlan":

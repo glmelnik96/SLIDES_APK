@@ -124,3 +124,26 @@ def test_catalog_marks_slots_that_render_filler_when_empty():
     assert "filler" not in by_id["bar-chart"]["slots"]["bars"]      # список — не рыба
     display = by_id["bar-chart"]["slots"]["bars"]["item_slots"]["display"]
     assert "filler" not in display                                 # падает на value
+
+
+# ── неизвестные ключи ВНУТРИ элемента списка ─────────────────────────────────
+def test_unknown_key_inside_list_item_is_reported():
+    """Опечатка в подслоте молча съедала текст вместе с ключом.
+
+    Шаблон читает только объявленные подслоты, поэтому «descr» вместо «desc»
+    не ломал ни сборку, ни линтер — подпись KPI просто исчезала, и ни одна
+    проверка об этом не говорила. На верхнем уровне такой ключ ловился всегда;
+    проверка доведена до той же глубины.
+    """
+    lib = TemplateLibrary.load()
+    errors = lib.validate_content(
+        "kpi", {"title": "Итоги", "kpis": [{"value": "42", "descr": "штук"}]})
+    assert [(e.code, e.slot) for e in errors] == [("unknown_slot", "kpis[0].descr")]
+
+
+def test_correct_list_item_stays_clean():
+    """Обратная сторона того же: объявленные подслоты не должны ложно срабатывать."""
+    lib = TemplateLibrary.load()
+    assert lib.validate_content(
+        "kpi", {"title": "Итоги",
+                "kpis": [{"value": "42", "unit": "%", "desc": "штук"}]}) == []

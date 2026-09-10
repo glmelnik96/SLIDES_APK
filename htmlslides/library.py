@@ -140,4 +140,14 @@ def _check_group(prefix: str, spec: SlotSpec, item: Any) -> list[ContentError]:
                 errors.append(ContentError("missing_required", f"{prefix}.{sub_name}"))
             continue
         errors.extend(_check_slot(f"{prefix}.{sub_name}", sub_spec, sub_value))
+    # Опечатка ВНУТРИ элемента списка («descr» вместо «desc») не ломала ничего
+    # видимого: шаблон читает только объявленные подслоты, лишний ключ молча
+    # выпадал вместе с текстом, который в нём лежал. На верхнем уровне такой
+    # ключ ловился с самого начала (см. validate_content) — здесь правило просто
+    # доведено до той же глубины. Пустой item_slots ничего не объявляет, поэтому
+    # там проверять нечего: иначе неизвестным оказался бы каждый ключ.
+    if spec.item_slots:
+        for key in item:
+            if key not in spec.item_slots:
+                errors.append(ContentError("unknown_slot", f"{prefix}.{key}"))
     return errors
