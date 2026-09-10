@@ -837,77 +837,34 @@ def test_cloudru_model_env_overrides_default(monkeypatch):
     assert c.model == "moonshotai/Kimi-K2.6"
 
 
-def test_create_job_forwards_exact_transfer(monkeypatch, tmp_path):
+def test_create_job_accepts_pptx(monkeypatch, tmp_path):
+    """.pptx принимается обычной сборкой. Раньше это проверялось в связке с
+    «Точным переносом» (снят 2026-09-06) — сам приём формата проверять надо."""
     started = {}
     monkeypatch.setattr(appmod.runner, "start",
-                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
-                        or asyncio.Queue())
-    with _client(monkeypatch, tmp_path) as c:
-        r = c.post("/api/jobs",
-                   data={"mode": "htmlnew", "exact_transfer": "true"},
-                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
-        assert r.status_code == 200
-        assert started["exact"] is True
-
-
-def test_create_job_exact_defaults_false(monkeypatch, tmp_path):
-    started = {}
-    monkeypatch.setattr(appmod.runner, "start",
-                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        lambda inp, **kw: started.update(name=inp.source_filename)
                         or asyncio.Queue())
     with _client(monkeypatch, tmp_path) as c:
         r = c.post("/api/jobs", data={"mode": "htmlnew"},
-                   files={"file": ("x.md", b"# hi", "text/markdown")}, headers=H())
-        assert r.status_code == 200
-        assert started["exact"] is False
-
-
-def test_create_job_exact_docx_rejected_early(monkeypatch, tmp_path):
-    """«Точный перенос» + .docx отбраковывается на входе понятной 400, а не
-    падает глубоко в воркере голым ValueError (реальные прод-сбои 2026-07)."""
-    calls = {"n": 0}
-    monkeypatch.setattr(appmod.runner, "start",
-                        lambda inp, **kw: calls.update(n=calls["n"] + 1)
-                        or asyncio.Queue())
-    with _client(monkeypatch, tmp_path) as c:
-        r = c.post("/api/jobs",
-                   data={"mode": "htmlnew", "exact_transfer": "true"},
-                   files={"file": ("doc.docx", b"PK\x03\x04stub", "application/octet-stream")},
-                   headers=H())
-        assert r.status_code == 400
-        assert "Точный перенос" in r.json()["detail"]
-        assert ".docx" in r.json()["detail"]
-        assert calls["n"] == 0  # сборка не поставлена в очередь
-
-
-def test_create_job_exact_pptx_allowed(monkeypatch, tmp_path):
-    """.pptx с «Точным переносом» — валидная связка, сборка стартует."""
-    started = {}
-    monkeypatch.setattr(appmod.runner, "start",
-                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
-                        or asyncio.Queue())
-    with _client(monkeypatch, tmp_path) as c:
-        r = c.post("/api/jobs",
-                   data={"mode": "htmlnew", "exact_transfer": "true"},
                    files={"file": ("d.pptx", b"PK\x03\x04stub",
                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
                    headers=H())
         assert r.status_code == 200
-        assert started["exact"] is True
+        assert started["name"] == "d.pptx"
 
 
-def test_create_job_docx_allowed_without_exact(monkeypatch, tmp_path):
-    """.docx в обычной (не exact) сборке по-прежнему принимается."""
+def test_create_job_accepts_docx(monkeypatch, tmp_path):
+    """.docx принимается обычной сборкой."""
     started = {}
     monkeypatch.setattr(appmod.runner, "start",
-                        lambda inp, **kw: started.update(exact=inp.exact_transfer)
+                        lambda inp, **kw: started.update(name=inp.source_filename)
                         or asyncio.Queue())
     with _client(monkeypatch, tmp_path) as c:
         r = c.post("/api/jobs", data={"mode": "htmlnew"},
                    files={"file": ("doc.docx", b"PK\x03\x04stub", "application/octet-stream")},
                    headers=H())
         assert r.status_code == 200
-        assert started["exact"] is False
+        assert started["name"] == "doc.docx"
 
 
 def test_chat_accumulates_usage():

@@ -74,13 +74,6 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
 _ALLOWED = {
     "htmlnew": {".md", ".txt", ".docx", ".pptx"},
 }
-# «Точный перенос» (mode=exact) переносит источник послайдово 1-в-1 без ИИ: в
-# .pptx слайды есть, в .md/.txt границы задаёт метка «Слайд N:». В .docx понятия
-# «слайд» нет (parse_docx режет по стилям заголовков), поэтому exact его не берёт.
-# Раньше эта связка проходила приём, занимала слот очереди и падала глубоко в
-# воркере голым ValueError — теперь режем на входе понятной 400.
-_EXACT_ALLOWED = {".pptx", ".md", ".txt"}
-
 from webapp.config import settings as _settings
 
 app = FastAPI(title="Slides App")
@@ -206,7 +199,6 @@ async def download_file(name: str,
 
 @app.post("/api/jobs")
 async def create_job(request: Request, mode: str = Form(...),
-                     exact_transfer: str = Form(default="false"),
                      file: UploadFile = File(...),
                      user=Depends(get_current_user)) -> JSONResponse:
     from schemas.session import Mode, SessionInput
@@ -218,14 +210,6 @@ async def create_job(request: Request, mode: str = Form(...),
         raise HTTPException(
             400, f"формат {suffix or 'без расширения'} не поддерживается — "
                  f"загрузите {allowed}")
-
-    exact = exact_transfer.lower() in ("1", "true", "on", "yes")
-    if exact and suffix not in _EXACT_ALLOWED:
-        raise HTTPException(
-            400,
-            f"«Точный перенос» не поддерживает {suffix} — снимите галочку "
-            "«Точный перенос» (обычная сборка отлично переносит Word) или "
-            "загрузите .pptx, .md либо .txt.")
 
     raw = await file.read()
     # Reject an empty upload up front: an all-whitespace doc would otherwise pass
@@ -240,8 +224,7 @@ async def create_job(request: Request, mode: str = Form(...),
 
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(mode), input_s3_key=None,
-                       source_filename=file.filename,
-                       exact_transfer=exact)
+                       source_filename=file.filename)
     dest = session_dir(inp.session_id) / f"input{suffix}"
     dest.write_bytes(raw)
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
@@ -273,8 +256,7 @@ async def _start_build(request: Request, inp, user, *,
     async with request.app.state.sessionmaker() as s:
         await jobs_repo.create(s, session_id=inp.session_id, user_id=user.id,
                                mode=inp.mode.value, kind=kind,
-                               source_filename=inp.source_filename,
-                               exact_transfer=inp.exact_transfer)
+                               source_filename=inp.source_filename)
         await s.commit()
     try:
         runner.start(inp, user_id=user.id, section_count=section_count)
@@ -1133,10 +1115,7 @@ async def retry_job(session_id: str, request: Request,
     from schemas.session import Mode, SessionInput
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(job.mode), input_s3_key=None,
-                       source_filename=job.source_filename,
-                       # NULL у строк, созданных до появления колонки: тогда флага
-                       # не существовало, все сборки были обычными.
-                       exact_transfer=bool(job.exact_transfer))
+                       source_filename=job.source_filename)
     dest = session_dir(inp.session_id) / source.name
     dest.write_bytes(source.read_bytes())
     inp = inp.model_copy(update={"input_s3_key": str(dest)})

@@ -42,11 +42,9 @@ def _no_run(monkeypatch):
 MD = b"# Title\n\n## Section\n\ntext\n"
 
 
-def _upload(c, name="doc.md", exact=False):
-    data = {"mode": "htmlnew"}
-    if exact:
-        data["exact_transfer"] = "true"
-    r = c.post("/api/jobs", data=data, files={"file": (name, MD)}, headers=H())
+def _upload(c, name="doc.md"):
+    r = c.post("/api/jobs", data={"mode": "htmlnew"},
+               files={"file": (name, MD)}, headers=H())
     assert r.status_code == 200, r.text
     return r.json()["session_id"]
 
@@ -83,18 +81,6 @@ def test_retry_restarts_from_the_stored_source(monkeypatch, tmp_path):
         assert copied.is_file() and copied.read_bytes() == MD
         assert started and started[-1].session_id == new_sid
         assert started[-1].source_filename == "doc.md"
-
-
-def test_retry_preserves_exact_transfer(monkeypatch, tmp_path):
-    """Без сохранённого флага перезапуск «Точного переноса» молча собрал бы
-    обычную ИИ-деку: пользователь просит повторить то же самое."""
-    with _client(monkeypatch, tmp_path) as c:
-        started = _no_run(monkeypatch)
-        sid = _upload(c, exact=True)
-        _fail(sid)
-        r = c.post(f"/api/jobs/{sid}/retry", headers=H())
-        assert r.status_code == 200, r.text
-        assert started[-1].exact_transfer is True
 
 
 def test_retry_without_source_is_410_with_an_explanation(monkeypatch, tmp_path):

@@ -54,7 +54,6 @@ class SessionInput(BaseModel):
     # file `{session_id}_{source}.pptx` so a deck can be tied back to its run.
     source_filename: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    exact_transfer: bool = False        # точный перенос 1-в-1 (в обход ИИ)
 
 
 class SessionState(BaseModel):
@@ -84,7 +83,6 @@ class SessionState(BaseModel):
     # Inputs / outputs
     input_s3_key: str | None = None
     source_filename: str | None = None
-    exact_transfer: bool = False        # точный перенос 1-в-1 (в обход ИИ)
     result_s3_key: str | None = None
     report_s3_key: str | None = None
 
@@ -116,7 +114,6 @@ class SessionState(BaseModel):
             created_at_iso=inp.created_at.isoformat(),
             input_s3_key=inp.input_s3_key,
             source_filename=inp.source_filename,
-            exact_transfer=inp.exact_transfer,
         )
 
 

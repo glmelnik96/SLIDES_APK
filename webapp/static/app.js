@@ -574,20 +574,6 @@ async function autoResumeActive() {
 async function createJob(opts) {
   if (!selectedFile) return;
   const force = !!(opts && opts.force);
-  const ex = document.getElementById("exactTransfer");
-  const isExact = !!(ex && ex.checked);
-  // Client-side gate: «Точный перенос» works only on slide-structured inputs
-  // (.pptx) or slide-delimited text (.md/.txt). A .docx has no slide boundaries,
-  // so this combo can only fail deep in the worker — reject it instantly with a
-  // clear, actionable message, no wasted round-trip or queue slot. The server
-  // enforces the same rule (400) as the source of truth.
-  if (isExact && !/\.(pptx|md|txt)$/i.test(selectedFile.name || "")) {
-    launchError("Не удалось запустить сборку",
-      `<p>«Точный перенос» поддерживает .pptx, .md и .txt. ` +
-      `Для .docx снимите галочку «Точный перенос» — обычная сборка отлично ` +
-      `переносит Word, — либо сохраните файл как .pptx.</p>`);
-    return;
-  }
   // Сервис ИИ лежал на момент последней пробы — предупреждаем, но не запрещаем:
   // состояние могло измениться за секунды, и решать должен пользователь.
   if (!force && mhData && mhData.state === "down") {
@@ -614,7 +600,6 @@ async function createJob(opts) {
   const fd = new FormData();
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
-  if (isExact) fd.append("exact_transfer", "true");
   setStartEnabled(false);
   let res;
   try {
@@ -652,10 +637,7 @@ async function createJob(opts) {
   resetFile();                            // дропзона свободна — можно готовить следующую
 }
 // Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
-// «Точный перенос» — единственный веб-путь чёрного ящика: дословный перенос
-// не задаёт вопросов про макеты, стеклянный степпер ему нечем помочь.
-$("#createGlass").onclick = () =>
-  ($("#exactTransfer")?.checked ? createJob() : createGlass());
+$("#createGlass").onclick = () => createGlass();
 
 /* ---- пошаговая сборка: черновик + /glass/start → редактор со степпером ---- */
 let glassStarting = false;

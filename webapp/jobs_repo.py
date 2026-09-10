@@ -22,11 +22,9 @@ _CLEARABLE = _TERMINAL | {"draft"}
 
 async def create(session: AsyncSession, *, session_id: str, user_id: int,
                  mode: str, kind: str, source_filename: str | None,
-                 status: str = "queued",
-                 exact_transfer: bool = False) -> models.Job:
+                 status: str = "queued") -> models.Job:
     job = models.Job(session_id=session_id, user_id=user_id, mode=mode, kind=kind,
-                     source_filename=source_filename, status=status,
-                     exact_transfer=exact_transfer)
+                     source_filename=source_filename, status=status)
     session.add(job)
     await session.flush()
     return job

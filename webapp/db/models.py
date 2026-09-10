@@ -43,9 +43,11 @@ class Job(Base):
     mode: Mapped[str] = mapped_column(String(16))
     kind: Mapped[str] = mapped_column(String(8))  # "html" | "pptx"
     source_filename: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    # «Точный перенос» (1-в-1, в обход ИИ). Нужен перезапуску: без него «Повторить»
-    # молча собрало бы обычную деку вместо запрошенного дословного переноса.
-    # NULL у строк, созданных до появления колонки, = False (флага тогда не было).
+    # НАСЛЕДИЕ: «Точный перенос» (1-в-1, в обход ИИ) снят 2026-09-06 — режима
+    # больше нет, никто в эту колонку не пишет, у новых строк тут NULL. Колонку
+    # оставили намеренно: в SQLite её снос требует пересборки таблицы, а старые
+    # строки и их архивные копии (retention._META_COLS) значение ещё несут.
+    # Разбор решения — docs/superpowers/specs/2026-09-06-bento-deep-analysis.md.
     exact_transfer: Mapped[Optional[bool]] = mapped_column(
         Boolean, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="queued")

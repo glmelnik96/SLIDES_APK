@@ -693,7 +693,7 @@ function thumbGrip(i) {
 // К§3 — на превью помечаем пустые текст-слоты (и пустые ОБЯЗАТЕЛЬНЫЕ list-слоты)
 // классом .is-placeholder: пример-рыба должна быть визуально отличима и не уйти
 // молча в экспорт. Источник истины «слот пуст» — draftPlan + каталог; на
-// freeform/exact-слайдах (каталог не покрывает шаблон) просто не срабатывает.
+// freeform-слайдах (каталог не покрывает шаблон) просто не срабатывает.
 function markPlaceholders() {
   if (!isDraft) return;
   const doc = frame.contentDocument;
@@ -2862,7 +2862,7 @@ byId("emptySkeleton")?.addEventListener("click", async () => {
 
 // Подсветка редактируемого блока на слайде: #deck — iframe того же origin, поэтому
 // дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
-// находим в деке элемент [data-slot=<слот>] и обводим его. На exact/freeform-слайдах
+// находим в деке элемент [data-slot=<слот>] и обводим его. На freeform-слайдах
 // data-slot нет — подсветка просто не срабатывает.
 function highlightSlot(slot, on) {
   const doc = frame.contentDocument;

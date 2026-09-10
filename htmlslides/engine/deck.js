@@ -116,32 +116,6 @@
     return m ? parseInt(m[1], 10) - 1 : 0;
   }
 
-  /* Точный перенос: вписать блок .exact-fit в .exact-zone. Текст НЕ сокращаем —
-     масштабируем весь блок (transform:scale) и центрируем по вертикали, чтобы
-     контент не «прилипал» к верху с пустотой снизу. Разрежённый (короткий) контент
-     можно УВЕЛИЧИТЬ до _EXACT_MAX_UP (заполняет зону, но не раздувается), длинный —
-     ужать (нижний предел 0.35: ниже нечитаемо — оставляем как есть, текст цел, но
-     может подрезаться зоной). */
-  var _EXACT_MAX_UP = 1.8;
-  function autofitExact() {
-    var zones = document.querySelectorAll(".exact-zone");
-    for (var i = 0; i < zones.length; i++) {
-      var zone = zones[i];
-      var fit = zone.querySelector(".exact-fit");
-      if (!fit) continue;
-      fit.style.transform = "none";
-      var needH = fit.scrollHeight, needW = fit.scrollWidth;
-      if (!needH || !needW) continue;
-      var zh = zone.clientHeight, zw = zone.clientWidth;
-      var scale = Math.min(zh / needH, zw / needW);
-      if (scale > _EXACT_MAX_UP) scale = _EXACT_MAX_UP;
-      if (scale < 0.35) scale = 0.35;
-      var ty = (zh - needH * scale) / 2;             // центр по вертикали
-      if (ty < 0) ty = 0;
-      fit.style.transform = "translateY(" + ty + "px) scale(" + scale + ")";
-    }
-  }
-
   /* stats-row: «цифры-герои» в ряду (.sr-value) при длинных значениях-диапазонах
      («−30–45%», «15→65%») вылезали за свою ячейку и наезжали на соседнюю. Считаем,
      во сколько раз надо ужать, чтобы КАЖДОЕ значение влезло в свою ячейку, берём
@@ -256,11 +230,10 @@
     for (var s = 0; s < slides.length; s++) slides[s].classList.remove("is-active");
 
     rescale();
-    autofitExact();
     autofitStats();
     autofitCells();
     window.addEventListener("load", function () {   // пересчёт после подгрузки шрифтов/картинок
-      autofitExact(); autofitStats(); autofitCells();
+      autofitStats(); autofitCells();
     });
     window.addEventListener("resize", rescale);
     document.addEventListener("visibilitychange", rescale);

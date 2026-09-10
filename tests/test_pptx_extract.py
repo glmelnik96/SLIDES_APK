@@ -5,8 +5,8 @@ parse_pptx терял три вещи: (1) текст внутри сгрупп�
 диаграмм, (3) заметки докладчика. Тесты строят НАСТОЯЩИЙ pptx (python-pptx умеет
 и создавать группы/графики) и проверяют, что контент доезжает до InputDoc.
 
-Ключевой инвариант: заметки идут в Section.notes, а НЕ в blocks — иначе они
-утекут прямо на слайд в режиме «Точный перенос» (exact рендерит heading+blocks).
+Ключевой инвариант: заметки идут в Section.notes, а НЕ в blocks — иначе
+конфиденциальный комментарий докладчика уедет на слайд как обычный текст.
 """
 from pathlib import Path
 
@@ -70,20 +70,10 @@ def test_chart_numbers_captured_as_table(tmp_path):
 
 
 def test_notes_go_to_section_notes_not_blocks(tmp_path):
-    """Заметка — в Section.notes и НЕ в контенте (иначе утечёт в exact)."""
+    """Заметка — в Section.notes и НЕ в контенте (иначе утечёт на слайд)."""
     s3 = parse_pptx(_fixture(tmp_path)).sections[2]
     assert s3.notes == "СЕКРЕТНАЯ-ЗАМЕТКА"
     assert "СЕКРЕТНАЯ-ЗАМЕТКА" not in _all_text(s3)
-
-
-def test_exact_mode_does_not_leak_notes(tmp_path):
-    """Контракт exact: рендерятся heading+blocks, заметки докладчика — никогда."""
-    from htmlslides.pipeline.exact_builder import build_exact_plan
-    doc = parse_pptx(_fixture(tmp_path))
-    plan, _ = build_exact_plan(doc)
-    html = " ".join(s.content.get("html", "") for s in plan.slides)
-    assert "Видимый текст слайда" in html        # контент на месте
-    assert "СЕКРЕТНАЯ-ЗАМЕТКА" not in html        # заметка не утекла
 
 
 def test_notes_reach_planner_section_text(tmp_path):

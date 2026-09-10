@@ -205,8 +205,7 @@ def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) 
         # statement--accent — это и есть «зелёный» statement). Разворачивать его
         # нельзя: теряется класс секции и удваивается chrome — после перезагрузки
         # два слайда с разными мастерами схлопывались в один. Отдаём как есть.
-        if (not slide.content.get("exact")
-                and re.match(r'(?is)^<section\b[^>]*\bclass="[^"]*\bslide\b', fragment)
+        if (re.match(r'(?is)^<section\b[^>]*\bclass="[^"]*\bslide\b', fragment)
                 and "chrome-logo" in fragment):
             return fragment
         if fragment.startswith("<section"):
@@ -225,12 +224,6 @@ def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) 
         if m:
             head, inner = m.group(1), m.group(2)
         chrome = env.get_template("_chrome.html").render()
-        if slide.content.get("exact"):
-            # exact-слайд: контент в .exact-fit (JS ужимает масштаб под .exact-zone),
-            # отдельный маркер data-template="exact" — для QA/отладки.
-            return ('<section class="slide slide--chrome-sm" data-template="exact">'
-                    f'{chrome}{head}<div class="exact-zone">'
-                    f'<div class="exact-fit">{inner}</div></div></section>')
         return ('<section class="slide slide--chrome-sm" data-template="freeform">'
                 f'{chrome}{head}<div class="freeform-zone">{inner}</div></section>')
 

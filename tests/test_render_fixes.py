@@ -140,14 +140,18 @@ def test_units_glued_in_rendered_slide():
     assert "12 ВМ" not in html
 
 
-def test_units_not_glued_in_exact_verbatim():
-    """Точный перенос дословен: NBSP не вставляем (freeform идёт мимо Jinja)."""
+def test_units_not_glued_in_freeform_verbatim():
+    """Freeform идёт мимо Jinja, поэтому NBSP между числом и единицей не
+    вставляется — фрагмент попадает в деку ровно таким, каким его отдали.
+
+    Раньше это проверялось на слайде «Точного переноса» (режим снят 2026-09-06);
+    само свойство принадлежит freeform и осталось в силе."""
     html = ('<div class="content-head"><h2 class="content-head-title t-head-42">'
-            'Шапка</h2></div><div class="exact-text">'
+            'Шапка</h2></div><div class="content">'
             '<p class="t-body-30">Срок 18 мес. и 12 ВМ</p></div>')
     plan = DeckPlan(title="T", slides=[
-        SlidePlan(index=1, type="exact", freeform=True,
-                  content={"html": html, "exact": True})])
+        SlidePlan(index=1, type="content", freeform=True,
+                  content={"html": html})])
     out = assemble(plan, theme="dark")
     assert "18 мес." in out          # ровно как в источнике, обычный пробел
     assert f"18{_NBSP}мес." not in out

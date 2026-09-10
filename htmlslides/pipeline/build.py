@@ -65,8 +65,6 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
       openai.* (APIError и наследники) — сеть/авторизация при вызовах LLM.
     """
     src, out = Path(input_path), Path(out_path)
-    if mode == "exact":
-        return _build_exact(src, out, theme=theme, progress=progress)
     if mode == "rebrand" and src.suffix.lower() != ".pptx":
         raise ValueError("mode=rebrand доступен только для .pptx")
     client = client or KimiClient()
@@ -112,47 +110,6 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
                        progress=progress, check_cancel=check_cancel,
                        wrapup=wrapup)
 
-
-def _build_exact(src: Path, out: Path, *, theme: str,
-                 progress: Progress) -> Path:
-    """Точный перенос: 1 слайд источника → 1 слайд, текст дословно, без ИИ.
-
-    pptx читаем существующим parse_pptx (дословный текст + картинки, 1 секция на
-    слайд); .md/.txt режем по меткам «Слайд N:». docx на Этапе 1 не поддержан.
-    """
-    from ..parsers import parse_file
-    from ..parsers.base import InputDoc, read_text_smart
-    from ..parsers.exact_text import split_exact_text
-    from .exact_builder import build_exact_plan
-
-    progress(f"parse: {src.name}")
-    suffix = src.suffix.lower()
-    if suffix == ".pptx":
-        doc = parse_file(src)
-    elif suffix in (".md", ".txt"):
-        raw = read_text_smart(src)
-        doc = InputDoc(title=src.stem,
-                       sections=split_exact_text(raw, progress=progress))
-    else:
-        raise ValueError(
-            "точный перенос на Этапе 1 поддерживает .pptx/.md/.txt, "
-            f"не {suffix or 'без расширения'}")
-    if not doc.sections:
-        raise LLMFormatError(
-            "источник пуст (0 слайдов) — точную деку не собираем")
-
-    progress(f"plan: {len(doc.sections)} слайдов 1-в-1")
-    plan, warnings = build_exact_plan(doc)
-    for w in warnings:
-        progress(f"warn: {w}")
-
-    # Этап 2 (ИИ-вёрстка) отключён намеренно: вёрстка теперь детерминированная
-    # (build_exact_plan → flow-раскладки), ноль ИИ-вызовов — нет таймаутов и
-    # заглушек. exact_designer.py остаётся в репо, но из exact-пути не зовётся.
-
-    # polish без vision/autofix: только assemble.
-    return polish_plan(plan, out, theme=theme, vision=False, max_autofix=0,
-                       progress=progress)
 
 
 def polish_plan(plan: DeckPlan, out_path: str | Path, *,
