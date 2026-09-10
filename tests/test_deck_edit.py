@@ -212,3 +212,62 @@ def test_extract_slide_keeps_head_tail_and_one_section():
     assert "<style>" in out and "var deck=1" in out       # шапка и хвост живы
     assert deck_edit.extract_slide(html, 0) is None
     assert deck_edit.extract_slide(html, 4) is None
+
+
+# ── общая обвязка миниатюр ───────────────────────────────────────────────────
+_ASSET_DECK = ('<html data-theme="dark"><head><style>.s{color:red}</style></head><body>'
+         '<section class="slide">ONE</section>'
+         '<section class="slide">TWO</section>'
+         '<script>var deck=1;</script><script>var diagram=2;</script>'
+         '</body></html>')
+
+
+def test_inline_assets_returns_css_and_scripts_in_order():
+    """Отдаём обвязку ИЗ САМОЙ ДЕКИ: у неё своя тема и своя версия сборки, и
+    «похожий» css показал бы миниатюру не тем, чем её видит превью."""
+    css, js = deck_edit.inline_assets(_ASSET_DECK)
+    assert css == ".s{color:red}"
+    assert js == ["var deck=1;", "var diagram=2;"]
+
+
+def test_extract_slide_shared_version_swaps_inline_assets_for_links():
+    """Миниатюра весила 334 КБ, из них 330 (99%) — та же самая обвязка на 3 КБ
+    содержимого. Со ссылкой браузер берёт её один раз на всю ленту."""
+    out = deck_edit.extract_slide(_ASSET_DECK, 2, shared_version="42")
+    assert "TWO" in out and "ONE" not in out
+    # ни одного встроенного ресурса не осталось
+    assert "<style>" not in out and "var deck=1" not in out and "var diagram=2" not in out
+    assert 'href="deck-asset?kind=css&amp;v=42"' in out
+    # каждый скрипт — ОТДЕЛЬНЫМ тегом: исключение в первом не должно уносить второй
+    assert 'src="deck-asset?kind=js&amp;i=0&amp;v=42"' in out
+    assert 'src="deck-asset?kind=js&amp;i=1&amp;v=42"' in out
+
+
+def test_extract_slide_stays_self_contained_by_default():
+    """Режим строго по запросу: этот же extract_slide питает «Улучшить слайд»,
+    а тот отдаёт html в Playwright — относительная ссылка там не разрешится и
+    слайд уехал бы в vision-QA голым, без единого стиля."""
+    out = deck_edit.extract_slide(_ASSET_DECK, 2)
+    assert "<style>" in out and "var deck=1" in out
+    assert "deck-asset" not in out
+
+
+def test_shared_version_reaches_the_url():
+    """Версия (mtime деки) стоит в адресе: без неё перекрас dark↔light показывал
+    бы в миниатюрах кэш от прошлой темы."""
+    a = deck_edit.extract_slide(_ASSET_DECK, 1, shared_version="111")
+    b = deck_edit.extract_slide(_ASSET_DECK, 1, shared_version="222")
+    assert "v=111" in a and "v=222" in b and a != b
+
+
+def test_assets_version_survives_text_edits_but_not_a_repaint():
+    """Ключ кэша считается по СОДЕРЖИМОМУ обвязки, а не по mtime деки.
+
+    От mtime версия менялась бы на каждом сохранении слайда — и браузер тянул
+    бы 236 КБ стилей заново ровно там, где вся затея и задумывалась ради их
+    переиспользования. Перекрас dark↔light стили меняет по-настоящему, и новый
+    адрес получается сам собой."""
+    правка_текста = _ASSET_DECK.replace(">TWO<", ">ДРУГОЙ ТЕКСТ<")
+    перекрас = _ASSET_DECK.replace("color:red", "color:white")
+    assert deck_edit.assets_version(_ASSET_DECK) == deck_edit.assets_version(правка_текста)
+    assert deck_edit.assets_version(_ASSET_DECK) != deck_edit.assets_version(перекрас)

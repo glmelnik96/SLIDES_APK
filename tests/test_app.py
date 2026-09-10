@@ -846,7 +846,7 @@ def test_create_job_accepts_pptx(monkeypatch, tmp_path):
                         or asyncio.Queue())
     with _client(monkeypatch, tmp_path) as c:
         r = c.post("/api/jobs", data={"mode": "htmlnew"},
-                   files={"file": ("d.pptx", b"PK\x03\x04stub",
+                   files={"file": ("d.pptx", b"PKstub",
                                    "application/vnd.openxmlformats-officedocument.presentationml.presentation")},
                    headers=H())
         assert r.status_code == 200
@@ -861,7 +861,7 @@ def test_create_job_accepts_docx(monkeypatch, tmp_path):
                         or asyncio.Queue())
     with _client(monkeypatch, tmp_path) as c:
         r = c.post("/api/jobs", data={"mode": "htmlnew"},
-                   files={"file": ("doc.docx", b"PK\x03\x04stub", "application/octet-stream")},
+                   files={"file": ("doc.docx", b"PKstub", "application/octet-stream")},
                    headers=H())
         assert r.status_code == 200
         assert started["name"] == "doc.docx"
@@ -1084,3 +1084,68 @@ def test_deck_error_texts_are_russian(monkeypatch, tmp_path):
         # экспорт: неизвестный формат; файл до старта экспорта
         _ru(c.post(f"/api/jobs/{sid}/export/exe", headers=H()), 404)
         _ru(c.get(f"/api/jobs/{sid}/export/pptx/file", headers=H()), 409)
+
+
+# ── общая обвязка миниатюр (deck-asset) ──────────────────────────────────────
+_ASSET_DECK = ('<html data-theme="dark"><head><style>.s{color:red}</style></head><body>'
+               '<section class="slide">ONE</section>'
+               '<section class="slide">TWO</section>'
+               '<script>var deck=1;</script></body></html>')
+
+
+def _seed_deck(monkeypatch, c):
+    """Черновик со своей deck.html — миниатюры и обвязка читают именно её."""
+    import webapp.deck_edit as de
+    _no_run(monkeypatch)
+    r = c.post("/api/drafts", json={"mode": "manual"}, headers=H())
+    assert r.status_code == 200, r.text
+    sid = r.json()["session_id"]
+    de.save_deck(sid, _ASSET_DECK)
+    return sid
+
+
+def test_thumbnail_drops_the_boilerplate_and_links_it_instead(monkeypatch, tmp_path):
+    """Миниатюра весила 334 КБ, из которых 330 (99%) — обвязка, одна и та же во
+    всей ленте. Теперь документ несёт только слайд, а стили со скриптами берёт
+    по ссылке, общей для всех миниатюр."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _seed_deck(monkeypatch, c)
+        one = c.get(f"/api/jobs/{sid}/deck?slide=2", headers=H()).text
+        assert "TWO" in one and "ONE" not in one
+        assert "<style>" not in one and "var deck=1" not in one
+        assert "deck-asset?kind=css" in one and "deck-asset?kind=js" in one
+        # полная дека остаётся самодостаточной — её скачивают и открывают offline
+        full = c.get(f"/api/jobs/{sid}/deck", headers=H()).text
+        assert "<style>" in full and "deck-asset" not in full
+
+
+def test_deck_asset_serves_css_and_js_from_the_deck_itself(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _seed_deck(monkeypatch, c)
+        css = c.get(f"/api/jobs/{sid}/deck-asset?kind=css&v=1", headers=H())
+        assert css.status_code == 200 and css.text == ".s{color:red}"
+        assert css.headers["content-type"].startswith("text/css")
+        js = c.get(f"/api/jobs/{sid}/deck-asset?kind=js&i=0&v=1", headers=H())
+        assert js.status_code == 200 and js.text == "var deck=1;"
+        assert js.headers["content-type"].startswith("text/javascript")
+        assert c.get(f"/api/jobs/{sid}/deck-asset?kind=js&i=7", headers=H()).status_code == 404
+        assert c.get(f"/api/jobs/{sid}/deck-asset?kind=png", headers=H()).status_code == 400
+
+
+def test_deck_asset_is_cacheable_only_with_a_version(monkeypatch, tmp_path):
+    """Адрес с ?v= меняется вместе с декой, поэтому кэш можно держать вечным.
+    Без версии адрес постоянный, а содержимое — нет: кэшировать нельзя."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _seed_deck(monkeypatch, c)
+        with_v = c.get(f"/api/jobs/{sid}/deck-asset?kind=css&v=7", headers=H())
+        assert "immutable" in with_v.headers["cache-control"]
+        bare = c.get(f"/api/jobs/{sid}/deck-asset?kind=css", headers=H())
+        assert bare.headers["cache-control"] == "no-store"
+
+
+def test_deck_asset_is_owner_only(monkeypatch, tmp_path):
+    """Обвязка несёт вёрстку чужой деки — отдаём её по тем же правам, что и деку."""
+    with _client(monkeypatch, tmp_path) as c:
+        sid = _seed_deck(monkeypatch, c)
+        assert c.get(f"/api/jobs/{sid}/deck-asset?kind=css",
+                     headers=H("u2")).status_code == 404

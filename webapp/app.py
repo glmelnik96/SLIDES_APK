@@ -18,7 +18,7 @@ from fastapi import (
     Depends, FastAPI, File, Form, HTTPException, Request, UploadFile,
 )
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from webapp import (
@@ -1202,12 +1202,53 @@ async def get_deck(session_id: str, request: Request, download: int = 0,
         return FileResponse(path, filename="deck.html", media_type="text/html")
     html = path.read_text("utf-8")
     if slide:
-        # Лёгкие миниатюры редактора: документ с одним слайдом вместо всей деки.
-        one = deck_edit.extract_slide(html, slide)
+        # Лёгкие миниатюры редактора: документ с одним слайдом вместо всей деки,
+        # и БЕЗ встроенной обвязки — стили со скриптами уезжают в /deck-asset,
+        # общий для всей ленты (иначе каждая миниатюра тащила бы свои 330 КБ).
+        # Версия — отпечаток самой обвязки: правка текста слайда её не трогает,
+        # поэтому кэш переживает сохранения, а перекрас темы сбрасывает сам.
+        one = deck_edit.extract_slide(
+            html, slide, shared_version=deck_edit.assets_version(html))
         if one is None:
             raise HTTPException(404, f"слайда {slide} в деке нет")
         return HTMLResponse(one)
     return HTMLResponse(html)
+
+
+@app.get("/api/jobs/{session_id}/deck-asset")
+async def get_deck_asset(session_id: str, request: Request, kind: str = "css",
+                         i: int = 0, v: str = "", user=Depends(get_current_user)):
+    """Стили и скрипты деки отдельным файлом — общая обвязка миниатюр редактора.
+
+    Лента строит по документу на слайд, и раньше каждый нёс свою копию: 236 КБ
+    CSS плюс 94 КБ JS на 3 КБ содержимого (99% веса). Здесь они отдаются один
+    раз и переиспользуются из кэша всей лентой.
+
+    Берём их ИЗ САМОЙ ДЕКИ, а не из файлов движка: у деки на диске может быть
+    своя тема и своя версия сборки, и «похожий» css показал бы миниатюру не тем,
+    чем её видит превью.
+
+    ?v= (mtime деки) стоит в URL, который генерируется вместе с миниатюрой,
+    поэтому пересборка и перекрас dark↔light сами дают новый адрес — кэш можно
+    держать длинным и immutable, не рискуя показать прошлую тему.
+    """
+    await _owned_or_404(request, session_id, user)
+    path = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+    if path is None:
+        raise HTTPException(404, "дека не найдена")
+    css, scripts = deck_edit.inline_assets(path.read_text("utf-8"))
+    if kind == "css":
+        body, media = css, "text/css; charset=utf-8"
+    elif kind == "js":
+        if not 0 <= i < len(scripts):
+            raise HTTPException(404, f"скрипта {i} в деке нет")
+        body, media = scripts[i], "text/javascript; charset=utf-8"
+    else:
+        raise HTTPException(400, f"неизвестный ресурс: {kind}")
+    # immutable — адрес меняется вместе с декой (см. ?v= выше). Без v (прямой
+    # заход) кэшировать нельзя: тогда адрес постоянный, а содержимое — нет.
+    cache = "public, max-age=31536000, immutable" if v else "no-store"
+    return Response(body, media_type=media, headers={"Cache-Control": cache})
 
 
 @app.post("/api/jobs/{session_id}/deck")

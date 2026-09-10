@@ -119,10 +119,40 @@
     return spec.kind === "group" ? patched[0] : patched;
   }
 
+  // Решение «точечный патч превью или перезагрузка всей деки» — чистая часть
+  // patchPreviewText (editor.js). Возвращает имена ТЕКСТОВЫХ слотов, которые надо
+  // обновить в DOM, либо null — значит без серверного рендера не обойтись.
+  //
+  // `shown` — содержимое, из которого нарисовано текущее превью; `content` — новое.
+  // Список и картинку клиент рисовать не умеет: рыбу-пример, обрезку по max_items и
+  // геометрию графика делает сервер. Поэтому правило звучит не «есть ли такой слот в
+  // шаблоне», а «менялся ли он»: заголовок на слайде с карточками теперь правится без
+  // единого запроса, а тронутые карточки по-прежнему уезжают на сервер.
+  function textSlotsToPatch(slots, shown, content) {
+    // Отсутствие слота и пустая строка для рендера — одно и то же: без этой
+    // нормализации снятие последнего символа читалось бы как «слот исчез».
+    var norm = function (v) { return (v == null || v === "") ? null : v; };
+    var out = [];
+    var names = Object.keys(slots || {});
+    for (var i = 0; i < names.length; i++) {
+      var name = names[i];
+      var spec = slots[name] || {};
+      var same = JSON.stringify(norm((shown || {})[name]))
+              === JSON.stringify(norm((content || {})[name]));
+      if (spec.kind !== "text" || name === "image") {
+        if (!same) return null;          // не-текст изменился — только сервер
+        continue;
+      }
+      if (!same) out.push(name);
+    }
+    return out;
+  }
+
   root.remapLists = remapLists;
   root.remapItem = remapItem;
   root.applySlotEdit = applySlotEdit;
+  root.textSlotsToPatch = textSlotsToPatch;
   if (typeof module !== "undefined" && module.exports)
     module.exports = { remapLists: remapLists, remapItem: remapItem, roleOf: roleOf,
-                       applySlotEdit: applySlotEdit };
+                       applySlotEdit: applySlotEdit, textSlotsToPatch: textSlotsToPatch };
 })(typeof window !== "undefined" ? window : globalThis);

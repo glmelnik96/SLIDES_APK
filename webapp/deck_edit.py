@@ -1,8 +1,11 @@
 """Persist the browser-edited deck HTML and count its slides."""
 from __future__ import annotations
 
+import hashlib
+import itertools
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 from webapp.paths import session_dir
 
@@ -34,6 +37,11 @@ _BODY_CLASS_RE = re.compile(r'(<body\b[^>]*\bclass=")([^"]*)(")', re.IGNORECASE)
 # attribute repaints the whole deck; PNG/PPTX exports re-render from deck.html
 # and pick the new theme up with no engine involvement.
 THEMES = ("dark", "light")
+# Встроенные ресурсы деки — их выносит наружу только миниатюра (extract_slide).
+_INLINE_STYLE_RE = re.compile(r"<style\b[^>]*>[\s\S]*?</style>", re.IGNORECASE)
+_INLINE_SCRIPT_RE = re.compile(r"<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?</script>",
+                               re.IGNORECASE)
+
 _THEME_ATTR_RE = re.compile(r'(<html\b[^>]*?\bdata-theme=")([^"]*)(")',
                             re.IGNORECASE)
 _HTML_TAG_RE = re.compile(r'<html\b[^>]*>', re.IGNORECASE)
@@ -84,13 +92,81 @@ def slides_with_hardcoded_colors(html: str) -> list[int]:
     return flagged
 
 
-def extract_slide(html: str, index: int) -> str | None:
+def _tag_body(block: str) -> str:
+    """Содержимое <style>/<script> без самих тегов."""
+    return block[block.index(">") + 1:block.rindex("<")]
+
+
+def assets_version(html: str) -> str:
+    """Отпечаток обвязки — ключ её кэша в браузере.
+
+    Считаем по СОДЕРЖИМОМУ, а не по mtime деки: правка текста слайда трогает
+    файл, но не стили, и версия от mtime сбрасывала бы кэш на каждом сохранении
+    — то есть возвращала бы ровно ту стоимость, ради которой всё и затевалось.
+    Перекрас dark↔light содержимое меняет, и новый адрес получается сам.
+    Замер: извлечь и хешировать 330 КБ — 4 мс."""
+    css, js = inline_assets(html)
+    digest = hashlib.blake2b(css.encode("utf-8"), digest_size=8)
+    for script in js:
+        digest.update(script.encode("utf-8"))
+    return digest.hexdigest()
+
+
+def inline_assets(html: str) -> tuple[str, list[str]]:
+    """Встроенные в деку ресурсы: (css, [js…]) — ровно в порядке появления.
+
+    Отдаются тем же эндпоинтом, что и сама дека: так миниатюра ссылается на код,
+    байт в байт совпадающий с её собственной вёрсткой, а не на похожий."""
+    css = "\n".join(_tag_body(m.group(0)) for m in _INLINE_STYLE_RE.finditer(html))
+    js = [_tag_body(m.group(0)) for m in _INLINE_SCRIPT_RE.finditer(html)]
+    return css, js
+
+
+def _share_assets(html: str, version: str) -> str:
+    """Заменить встроенные <style>/<script> ссылками на общий deck-asset.
+
+    Ссылки ОТНОСИТЕЛЬНЫЕ: документ отдаётся по .../jobs/<sid>/deck, поэтому
+    «deck-asset» разрешается в .../jobs/<sid>/deck-asset и одинаково работает
+    локально и за шлюзом с префиксом /slides — вычислять базу не нужно.
+
+    Каждый скрипт остаётся ОТДЕЛЬНЫМ тегом. Склеить их в один файл было бы на
+    запрос меньше, но исключение в первом унесло бы второй: сейчас deck.js и
+    diagram.js падают независимо, и терять это ради байтов не стоит.
+    """
+    ver = quote(version, safe="")
+    html = _INLINE_STYLE_RE.sub(
+        '<link rel="stylesheet" href="deck-asset?kind=css&amp;v=' + ver + '">',
+        html, count=1)
+    counter = itertools.count()
+    return _INLINE_SCRIPT_RE.sub(
+        lambda _m: '<script src="deck-asset?kind=js&amp;i=' + str(next(counter))
+                   + "&amp;v=" + ver + '"></script>',
+        html)
+
+
+def extract_slide(html: str, index: int, *,
+                  shared_version: str | None = None) -> str | None:
     """Полный HTML-документ, в котором оставлен ТОЛЬКО слайд index (1-based).
 
     Шапка (стили, токены темы) и хвост (встроенный deck.js) сохраняются —
     документ остаётся самодостаточным. Лёгкие миниатюры редактора грузят один
     слайд вместо всей деки: 8 миниатюр = 8 документов, а не 8×N рендеров.
-    Вне диапазона — None."""
+    Вне диапазона — None.
+
+    shared_version переводит документ в режим ОБЩИХ ресурсов: встроенные
+    <style>/<script> заменяются ссылками на соседний deck-asset. Замер
+    2026-09-10: миниатюра весит 334 КБ, из которых 330 (99%) — та же самая
+    обвязка (236 КБ CSS + 94 КБ JS), а собственно слайд 3 КБ. Браузер тянет и
+    разбирает её заново для КАЖДОЙ миниатюры; со ссылкой — один раз на ленту
+    (замер на 20 миниатюрах: 4824 КБ → 309 КБ, 217 мс → 107 мс).
+
+    Режим строго по запросу, а не по умолчанию: этот же extract_slide питает
+    точечное «Улучшить слайд» (glass.py), и тот отдаёт html в Playwright, где
+    относительная ссылка на сессионный URL не разрешится — слайд поехал бы в
+    vision-QA голым, без единого стиля.
+
+    Значение уходит в URL как ?v=: без него перекрас деки dark↔light показывал
+    бы в миниатюрах кэш от прошлой темы."""
     starts = [m.start() for m in _SLIDE_RE.finditer(html)]
     if not 1 <= index <= len(starts):
         return None
@@ -100,8 +176,9 @@ def extract_slide(html: str, index: int) -> str | None:
         end = close + len("</section>") if close != -1 else (
             starts[i + 1] if i + 1 < len(starts) else len(html))
         spans.append((start, end))
-    return (html[:spans[0][0]] + html[spans[index - 1][0]:spans[index - 1][1]]
-            + html[spans[-1][1]:])
+    out = (html[:spans[0][0]] + html[spans[index - 1][0]:spans[index - 1][1]]
+           + html[spans[-1][1]:])
+    return out if shared_version is None else _share_assets(out, shared_version)
 
 
 def strip_contenteditable(html: str) -> str:

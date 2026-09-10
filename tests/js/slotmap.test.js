@@ -3,7 +3,7 @@
    и слайд показывал вместо него пример-рыбу. */
 const test = require("node:test");
 const assert = require("node:assert");
-const { remapLists, remapItem, applySlotEdit } =
+const { remapLists, remapItem, applySlotEdit, textSlotsToPatch } =
   require("../../webapp/static/slotmap.js");
 
 const CARDS = {
@@ -160,4 +160,70 @@ test("applySlotEdit: group — правится поле объекта", () => 
 test("applySlotEdit: image и неизвестный kind не мапятся", () => {
   assert.strictEqual(applySlotEdit({ kind: "image" }, "data:...", "x", "y"), null);
   assert.strictEqual(applySlotEdit(null, "x", "x", "y"), null);
+});
+
+/* ── textSlotsToPatch: патчить превью или перезагружать всю деку ──────────────
+   Быстрый путь отказывал ПО ШАБЛОНУ: есть в макете хоть один список — и правка
+   обычного заголовка тянула всю деку заново. На живых деках такие макеты — 164
+   слайда из 207 (79%); замер 2026-09-10 на cards-6: 376 КБ на один заголовок,
+   при том что на cover та же правка обходилась нулём запросов. Теперь решение
+   послотовое: смотрим, что реально изменилось. */
+const CARDS6 = {
+  title: { kind: "text" },
+  subtitle: { kind: "text" },
+  cards: { kind: "list", max_items: 6,
+           item_slots: { heading: { kind: "text" }, text: { kind: "text" } } },
+};
+const WITH_IMAGE = { title: { kind: "text" }, image: { kind: "text" } };
+
+test("textSlotsToPatch: заголовок на макете со списком — патчим, сервер не нужен", () => {
+  const cards = [{ heading: "A", text: "a" }];
+  const out = textSlotsToPatch(CARDS6, { title: "Было", cards },
+                                        { title: "Стало", cards });
+  assert.deepStrictEqual(out, ["title"]);   // ровно один слот, и только текстовый
+});
+
+test("textSlotsToPatch: тронули список — только полная перезагрузка", () => {
+  // Рыбу-пример, обрезку по max_items и геометрию графика рисует сервер.
+  const out = textSlotsToPatch(CARDS6,
+    { title: "T", cards: [{ heading: "A", text: "a" }] },
+    { title: "T", cards: [{ heading: "Б", text: "a" }] });
+  assert.strictEqual(out, null);
+});
+
+test("textSlotsToPatch: список добавился или исчез — тоже перезагрузка", () => {
+  assert.strictEqual(textSlotsToPatch(CARDS6, { title: "T" },
+                                      { title: "T", cards: [{ heading: "A" }] }), null);
+  assert.strictEqual(textSlotsToPatch(CARDS6, { title: "T", cards: [{ heading: "A" }] },
+                                      { title: "T" }), null);
+});
+
+test("textSlotsToPatch: смена картинки — перезагрузка (слот текстовый, но это <img>)", () => {
+  // image хранится скрытым text-слотом (data-URI), но textContent туда писать нельзя.
+  assert.strictEqual(
+    textSlotsToPatch(WITH_IMAGE, { title: "T", image: "data:image/jpeg;base64,AAA" },
+                                 { title: "T", image: "data:image/jpeg;base64,BBB" }), null);
+  // а тот же макет с нетронутой картинкой заголовок патчить не мешает
+  assert.deepStrictEqual(
+    textSlotsToPatch(WITH_IMAGE, { title: "Было", image: "data:image/jpeg;base64,AAA" },
+                                 { title: "Стало", image: "data:image/jpeg;base64,AAA" }),
+    ["title"]);
+});
+
+test("textSlotsToPatch: ничего не изменилось — патчить нечего, но и релоад не нужен", () => {
+  const same = { title: "T", cards: [{ heading: "A" }] };
+  assert.deepStrictEqual(textSlotsToPatch(CARDS6, same, { ...same }), []);
+});
+
+test("textSlotsToPatch: пустая строка и отсутствие слота — одно и то же", () => {
+  // collectContent не кладёт пустые значения, поэтому снятие последнего символа
+  // выглядит как исчезновение ключа; без нормализации это гнало кадр на релоад.
+  assert.deepStrictEqual(textSlotsToPatch(CARDS6, { title: "T", subtitle: "" },
+                                          { title: "T" }), []);
+});
+
+test("textSlotsToPatch: правки в нескольких текстовых слотах возвращаются все", () => {
+  const out = textSlotsToPatch(CARDS6, { title: "A", subtitle: "B" },
+                                       { title: "A2", subtitle: "B2" });
+  assert.deepStrictEqual(out.sort(), ["subtitle", "title"]);
 });

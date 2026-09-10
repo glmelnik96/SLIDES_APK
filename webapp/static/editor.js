@@ -2519,20 +2519,32 @@ function flushPendingSave() {
 // К§6 — точечный патч ТЕКСТ-слотов текущего слайда прямо в DOM превью (без полного
 // релоада: нет вспышки, не перезапускаются входы/count-up, живёт .slot-highlight).
 // Возвращает true, если патч применим и выполнен; false — если нужен полный loadDeck
-// (list/group/image-слоты, опустевший слот → сервер вернёт рыбу, .js-count/.sr-value
+// (изменился список/картинка, опустевший слот → сервер вернёт рыбу, .js-count/.sr-value
 // пересчитывает приватный autofitStats движка, или узел не найден).
-function patchPreviewText(idx) {
+//
+// `prev` — содержимое слайда ДО этой правки, то есть ровно то, что сейчас нарисовано
+// в превью: дека рендерится сервером из плана, а удачный патч возвращает текст в DOM
+// к плану, так что цепочка не рвётся. Сравнение с ним отвечает на единственный вопрос,
+// решающий судьбу кадра: менялся ли слот, который клиент рисовать не умеет.
+//
+// Раньше этот вопрос не задавался вовсе — функция отказывалась, если в ШАБЛОНЕ есть
+// хоть один список или картинка, даже когда правили обычный заголовок. На живых деках
+// такие шаблоны занимают 164 слайда из 207 (79%), то есть почти каждая правка тянула
+// всю деку заново: замер 2026-09-10 на cards-6 — 376 КБ на один изменённый заголовок,
+// при том что рядом на cover та же правка обходилась нулём запросов.
+function patchPreviewText(idx, prev) {
   const doc = frame.contentDocument;
   const section = doc && doc.querySelectorAll(".slide")[idx];
   const slide = draftPlan.slides[idx];
   if (!section || !slide) return false;
   const tpl = tplOf(slide.template_id);
   if (!tpl) return false;
-  // Любой не-текстовый слот (или загруженное изображение) — превью не гарантируем → релоад.
-  if (Object.entries(tpl.slots).some(([n, s]) => s.kind !== "text" || n === "image")) return false;
   const content = slide.content || {};
-  for (const [name, spec] of Object.entries(tpl.slots)) {
-    if (spec.kind !== "text") continue;
+  // Что именно правили — решает textSlotsToPatch (slotmap.js, покрыт тестами):
+  // null означает «изменился список или картинка», и тогда рисует только сервер.
+  const names = textSlotsToPatch(tpl.slots, prev || {}, content);
+  if (names === null) return false;
+  for (const name of names) {
     const el = section.querySelector(`[data-slot="${name}"]`);
     if (!el) return false; // узел не найден — надёжнее полный релоад
     const val = content[name];
@@ -2561,6 +2573,9 @@ async function saveCurrentSlide(attempt = 0) {
     return saveDiagramSlide(idx, attempt);
   }
   const content = collectContent();
+  // До перезаписи: это ровно то, что сейчас нарисовано в превью — по нему patchPreviewText
+  // и решает, можно ли обойтись точечной правкой вместо перезагрузки всей деки.
+  const shownContent = slide.content;
   slide.content = content; // optimistic local update
   setSaveStatus(attempt ? "retrying" : "saving");
   let r;
@@ -2577,7 +2592,7 @@ async function saveCurrentSlide(attempt = 0) {
     if (current === idx) markFieldErrors(errors || []); // only if still shown
     setSaveStatus("saved");
     // К§6 — точечный патч, если слайд ещё показан и правка чисто текстовая; иначе релоад.
-    if (current === idx && patchPreviewText(idx)) markExportsStale?.();
+    if (current === idx && patchPreviewText(idx, shownContent)) markExportsStale?.();
     else loadDeck();
     return;
   }
@@ -2864,13 +2879,20 @@ byId("emptySkeleton")?.addEventListener("click", async () => {
 // дотягиваемся до его DOM напрямую (без postMessage). По фокусу поля конструктора
 // находим в деке элемент [data-slot=<слот>] и обводим его. На freeform-слайдах
 // data-slot нет — подсветка просто не срабатывает.
+//
+// Искать ОБЯЗАТЕЛЬНО внутри текущей секции. В iframe лежит вся дека разом, а
+// слоты называются одинаково на всех слайдах (замер на data/e2e/dr: 41 секция,
+// data-slot="title" в сорока), поэтому doc.querySelector отдавал слот ПЕРВОГО
+// слайда. Тот не показан — и подсветка молча не работала везде, кроме слайда 1.
+// Остальной код деки уже берёт секцию как querySelectorAll(".slide")[i].
 function highlightSlot(slot, on) {
   const doc = frame.contentDocument;
   if (!doc) return;
   doc.querySelectorAll(".slot-highlight").forEach((n) =>
     n.classList.remove("slot-highlight"));
   if (on && slot) {
-    const el = doc.querySelector(`[data-slot="${slot}"]`);
+    const section = doc.querySelectorAll(".slide")[current];
+    const el = section && section.querySelector(`[data-slot="${slot}"]`);
     if (el) el.classList.add("slot-highlight");
   }
 }
