@@ -29,6 +29,9 @@
 """
 from __future__ import annotations
 
+# Под другим именем: параметр `html` у slide_texts/check_facts затенял модуль,
+# и html.unescape вызывался у строки (регрессия 2026-09-11, поймана тестами).
+from html import unescape as _html_unescape
 import re
 
 from .linter import LintIssue
@@ -39,8 +42,18 @@ _HEADER = re.compile(r"^\s*(?:слайд|slide)\s*\d+\s*", re.I)
 _SOURCES = re.compile(r"\[Sources\].*", re.S | re.I)
 _URL = re.compile(r"https?://\S+|\bwww\.\S+")
 #: Число с разделителями тысяч и необязательным процентом: 1 200 · 99,95% · 3.2.1
+#
+#: Число не начинается внутри другого числа, группа тысяч не отрывается от следующей
+#: цифры, а после буквы число не начинает группу тысяч. Без этого «Q3 100 млн»
+#: читалось как «3 100», а «2024 1 628 2025» — как «1 628 202»: цифра квартала и
+#: начало года приклеивались к сумме по правилу разделителя тысяч. Хуже ложной
+#: тревоги: автофиксу уходило «верни 3100» — числа, которого в документе нет (замер
+#: 2026-09-11 на деках b2b-маркетинга). Запрет после буквы — только для группы тысяч:
+#: первая версия правки запрещала число после буквы вообще, и «v1.12.18» переставало
+#: быть фактом — версии в release notes молча выпадали из проверки.
 _TOKEN = re.compile(
-    r"(?P<num>\d{1,3}(?:[  ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)*)"
+    r"(?<!\d)"
+    r"(?P<num>(?<![A-Za-zА-Яа-яЁё])\d{1,3}(?:[  ]\d{3})+(?!\d)(?:[.,]\d+)?|\d+(?:[.,]\d+)*)"
     r"(?P<pct>\s?%)?")
 #: Столько потерянных чисел на слайде считаем провалом даже при частичной потере.
 _MANY_LOST = 3
@@ -69,14 +82,29 @@ def extract_facts(text: str) -> set[str]:
     return facts
 
 
-def _reached(fact: str, slide_text: str) -> bool:
-    """Факт дошёл, если его цифровое ядро есть в тексте слайда.
+def _digit_cores(text: str) -> set[str]:
+    """Цифровые ядра ВСЕХ чисел текста: «99,95%» → «9995», «1 200» → «1200»."""
+    return {re.sub(r"\D", "", m.group("num")) for m in _TOKEN.finditer(text or "")}
 
-    Сравниваем по ядру, а не по написанию: «152» засчитывается и в «152-ФЗ», и в
-    «ФЗ-152». Требовать точного совпадения строки значило бы ругаться на слайд,
-    который оформил число правильнее исходника.
+
+def _reached(fact: str, slide_text: str, cores: set[str] | None = None) -> bool:
+    """Факт дошёл, если его цифровое ядро совпадает с ядром какого-то числа слайда.
+
+    Сравниваем ЯДРА ЧИСЕЛ, а не подстроку в сплошном тексте. Первая версия
+    искала «9995» в «99,95%» — и не находила из-за запятой: любое число с
+    десятичным разделителем и любая версия вида 3.2.1 считались потерянными,
+    даже стоя на слайде дословно, а ложная тревога гнала слайд в автофикс с
+    просьбой «верни 99,95%», которое там уже было. Обратная дыра была тоже:
+    «15» находилось внутри «2015», и потеря пряталась за годом.
+
+    Ядро засчитывается и в другой записи: «152» — в «152-ФЗ», «99,95%» — в
+    «99.95 %». Длинному ядру (от 4 цифр) разрешено входить в число: «57580»
+    засчитывается в «57580.1» — тот же ГОСТ с номером части. Короткое — только
+    точно, иначе «15» опять нашлось бы в «2015».
     """
-    return re.sub(r"\D", "", fact) in _flat(slide_text)
+    need = re.sub(r"\D", "", fact)
+    have = cores if cores is not None else _digit_cores(slide_text)
+    return need in have or (len(need) >= 4 and any(need in c for c in have))
 
 
 def slide_texts(html: str) -> list[str]:
@@ -90,8 +118,15 @@ def slide_texts(html: str) -> list[str]:
     for part in re.split(r"<section\b", body)[1:]:
         part = part.split("</section>")[0]
         part = re.sub(r"<style[\s\S]*?</style>", " ", part)
-        part = re.sub(r"<[^>]+>", " ", part).replace("&nbsp;", " ")
-        out.append(re.sub(r"\s+", " ", part).strip())
+        # Пробелы исходника HTML — один пробел, а граница тега — перевод строки. Иначе
+        # «медиаиндекс 170» в подписи одной ячейки и «200 тыс.» в значении соседней
+        # склеивались по правилу тысяч в «170 200»: на слайде не находилось ни 170, ни
+        # 200 — ложная тревога (замер 2026-09-11, макет stats-row).
+        part = re.sub(r"<[^>]+>", "\n", re.sub(r"\s+", " ", part))
+        # Все сущности, а не один &nbsp;: «Data Scientist&#39;ы» иначе давало число 39
+        # (замер 2026-09-11) — лишнее ядро на слайде маскирует потерю этого числа.
+        part = _html_unescape(part)
+        out.append(re.sub(r" *\n[\n ]*", "\n", part).strip())
     return out
 
 
@@ -111,7 +146,8 @@ def check_facts(plan, html: str) -> list[LintIssue]:
         facts = extract_facts(brief)
         if not facts:
             continue
-        missing = sorted(f for f in facts if not _reached(f, texts[position]))
+        cores = _digit_cores(texts[position])
+        missing = sorted(f for f in facts if not _reached(f, texts[position], cores))
         if not missing:
             continue
         if len(missing) < len(facts) and len(missing) < _MANY_LOST:
