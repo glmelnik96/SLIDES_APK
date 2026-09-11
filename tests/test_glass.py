@@ -1288,6 +1288,26 @@ def test_unfinished_outlines_counts_only_pending(monkeypatch, tmp_path):
     assert glass.unfinished_outlines(["u1", "u2", "нет-такой"]) == 1
 
 
+def test_start_glass_cuts_an_unmarked_document_into_slides(monkeypatch, tmp_path):
+    """Документ без разметки — больше не титул и один слайд: так до слайдов
+    доходило 10% мыслей автора (исследование 2026-09-11). Каждая часть — свой
+    слайд, бриф начинается заголовком части, модель на старте не зовётся."""
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    monkeypatch.setattr(glass, "_kimi", lambda: (_ for _ in ()).throw(
+        AssertionError("старт не имеет права звать модель")))
+    src = tmp_path / "notes.txt"
+    src.write_text("\n".join(
+        f"Пункт {i}: рост выручки на {i}% и {i * 3} новых клиентов в отрасли."
+        for i in range(1, 61)), encoding="utf-8")
+
+    plan = glass.start_glass("cut1", src, origin_name="Заметки.txt")
+
+    parts = plan.slides[1:]
+    assert len(parts) >= 6
+    assert all(s.brief.startswith("Пункт") for s in parts)
+    assert plan.title == "Заметки"
+
+
 def test_start_glass_caps_sections_and_says_so(monkeypatch, tmp_path):
     """Потолок разделов ниже, чем у чёрного ящика: стеклянную деку автор
     дособирает по слайду. Обрезку не молчим — иначе автор гадает, куда делись

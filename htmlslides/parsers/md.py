@@ -8,7 +8,11 @@ from .base import (CodeBlock, ImageBlock, InputDoc, ListBlock, Section,
                    TableBlock, TextBlock)
 
 
-def parse_md(text: str) -> InputDoc:
+def parse_md(text: str, *, keep_lines: bool = False) -> InputDoc:
+    """``keep_lines`` — для .txt: перевод строки внутри абзаца остаётся переводом.
+    В markdown это перенос, и строки склеиваются пробелом; в простом тексте строка —
+    это заголовок или пункт без маркера, и склейка превращала документ в один абзац
+    (по строкам его потом режет parsers/split.py)."""
     tokens = MarkdownIt("commonmark").enable("table").parse(text)
     doc = InputDoc()
     section = Section()
@@ -37,7 +41,7 @@ def parse_md(text: str) -> InputDoc:
         if tok.type == "paragraph_open":
             inline = tokens[i + 1]
             section.blocks.extend(_inline_images(inline))
-            text_part = _inline_text(inline).strip()
+            text_part = _inline_text(inline, keep_lines).strip()
             if text_part:
                 section.blocks.append(TextBlock(text=text_part))
             i += 3
@@ -61,13 +65,13 @@ def parse_md(text: str) -> InputDoc:
     return doc
 
 
-def _inline_text(inline: Token) -> str:
+def _inline_text(inline: Token, keep_lines: bool = False) -> str:
     parts: list[str] = []
     for child in inline.children or []:
         if child.type in ("text", "code_inline"):
             parts.append(child.content)
         elif child.type in ("softbreak", "hardbreak"):
-            parts.append(" ")
+            parts.append("\n" if keep_lines else " ")
     return "".join(parts)
 
 

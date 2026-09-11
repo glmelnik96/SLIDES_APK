@@ -220,7 +220,8 @@ def _block_to_text(block: Block) -> str:
         return block.text
     if isinstance(block, ListBlock):
         if block.ordered:
-            return "\n".join(f"{i}. {item}" for i, item in enumerate(block.items, 1))
+            return "\n".join(f"{i}. {item}"
+                             for i, item in enumerate(block.items, block.start))
         return "\n".join(f"- {item}" for item in block.items)
     if isinstance(block, TableBlock):
         return "\n".join("| " + " | ".join(row) + " |" for row in block.rows)

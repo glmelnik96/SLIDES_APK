@@ -17,6 +17,8 @@ class ListBlock(BaseModel):
     kind: Literal["list"] = "list"
     items: list[str]
     ordered: bool = False
+    start: int = 1                   # номер первого пункта: список, разрезанный на
+    #                                  части (parsers/split.py), продолжает нумерацию
 
 
 class TableBlock(BaseModel):
@@ -96,16 +98,27 @@ def read_text_smart(path: str | Path) -> str:
 
 
 def parse_file(path: str | Path) -> InputDoc:
-    """Диспетчер по расширению: .md/.markdown/.txt, .docx, .pptx."""
+    """Диспетчер по расширению: .md/.markdown/.txt, .docx, .pptx.
+
+    Текстовые форматы после разбора проходят split_oversized: раздел, который не
+    влезает в слайд, режется на части размером в слайд (почему — в split.py). pptx
+    не режем: там раздел — это слайд автора.
+    """
     p = Path(path)
     suffix = p.suffix.lower()
-    if suffix in (".md", ".markdown", ".txt"):
-        from .md import parse_md
-        return parse_md(read_text_smart(p))
-    if suffix == ".docx":
-        from .docx import parse_docx
-        return parse_docx(p)
     if suffix == ".pptx":
         from .pptx import parse_pptx
         return parse_pptx(p)
-    raise ValueError(f"unsupported input format: {suffix}")
+    if suffix in (".md", ".markdown", ".txt"):
+        from .md import parse_md
+        # В .txt перевод строки — новая строка (заголовок, пункт без маркера), а не
+        # перенос внутри абзаца, как в markdown: реальная txt-загрузка с прода — 254
+        # строки без единой пустой, и markdown склеивал её в абзац на 22 тыс. символов.
+        doc = parse_md(read_text_smart(p), keep_lines=suffix == ".txt")
+    elif suffix == ".docx":
+        from .docx import parse_docx
+        doc = parse_docx(p)
+    else:
+        raise ValueError(f"unsupported input format: {suffix}")
+    from .split import split_oversized
+    return split_oversized(doc)
