@@ -67,14 +67,18 @@ async def purge_once(sessionmaker, *, ttl_hours: int,
     cutoff = datetime.now(timezone.utc) - timedelta(hours=ttl_hours)
     cond = (models.Job.created_at < cutoff) & models.Job.status.in_(_PURGEABLE)
     async with sessionmaker() as s:
-        rows = await s.execute(select(*_META_COLS).where(cond))
+        rows = await s.execute(select(*_META_COLS, models.Job.user_id).where(cond))
         records = [dict(r) for r in rows.mappings().all()]
         if records:
             await s.execute(delete(models.Job).where(cond))
             await s.commit()
     for rec in records:
+        # Владелец нужен только статистике: архив остаётся анонимным (см. _META_COLS).
+        owner = rec.pop("user_id", None)
         sid = rec["session_id"]
         d = session_dir(sid)
+        if rec.get("status") == "draft":
+            await _count_glass_build(sessionmaker, sid, owner)
         if archive_dir is not None:
             try:
                 await asyncio.to_thread(
@@ -84,6 +88,28 @@ async def purge_once(sessionmaker, *, ttl_hours: int,
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)
     return len(records)
+
+
+async def _count_glass_build(sessionmaker, sid: str, owner: int | None) -> None:
+    """Стеклянная сборка, которую не посчитали при done (автор её бросил: вопросы
+    без ответа, сбой модели), уходит в статистику сейчас — после rmtree её план уже
+    не прочитать. Черновики конструктора и посчитанные сборки glass пропускает сам.
+    Статистика не мешает удалению: любой сбой здесь глотаем."""
+    try:
+        from webapp import glass, usage
+        summary = await asyncio.to_thread(glass.claim_usage, sid, final=True)
+        if summary is None:
+            return
+        async with sessionmaker() as s:
+            await usage.log_render(
+                s, owner_user_id=owner, status=summary["status"], workflow="glass",
+                started_at=None,                 # момент ухода автора неизвестен
+                result_path=str(session_dir(sid) / "deck.html"), session_id=sid,
+                section_count=summary["section_count"],
+                error_code=summary["error_code"], mode="glass")
+            await s.commit()
+    except Exception:  # noqa: BLE001 — see docstring
+        pass
 
 
 async def retention_loop(sessionmaker, *, ttl_hours: int,

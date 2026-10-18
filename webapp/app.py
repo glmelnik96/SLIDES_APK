@@ -865,6 +865,33 @@ async def build_draft(session_id: str, request: Request,
 # слайд (~15-60с, как /agent), лента растёт без SSE; сомнительные слайды ждут
 # /glass/answer, не блокируя остальные шаги.
 
+async def _count_glass_build(request: Request, session_id: str, user,
+                             out: dict) -> None:
+    """Дособранная стеклянная сборка — строка usage_events, одна на сборку.
+
+    Glass идёт мимо раннера, а событие писал только его терминальный хук: с
+    2026-08-20 сборки с сайта в статистику не попадали вовсе. Брошенные сборки
+    считает ретеншен (retention.purge_once). Сбой записи шаг не роняет."""
+    if not out.get("done"):
+        return
+    from webapp import glass, usage
+    try:
+        summary = await run_in_threadpool(glass.claim_usage, session_id)
+        if summary is None:
+            return
+        async with request.app.state.sessionmaker() as s:
+            job = await jobs_repo.get_owned(s, session_id, user.id)
+            await usage.log_render(
+                s, owner_user_id=user.id, status=summary["status"],
+                workflow="glass", started_at=job.created_at if job else None,
+                result_path=str(session_dir(session_id) / "deck.html"),
+                session_id=session_id, section_count=summary["section_count"],
+                error_code=summary["error_code"], mode="glass")
+            await s.commit()
+    except Exception:  # noqa: BLE001 — аналитика не роняет сборку
+        logger.warning("glass usage log failed (session %s)", session_id,
+                       exc_info=True)
+
 @app.post("/api/drafts/{session_id}/glass/start")
 async def glass_start(session_id: str, request: Request,
                       file: UploadFile = File(...),
@@ -966,7 +993,9 @@ async def glass_step(session_id: str, request: Request,
     вопрос (needs_input) сборку не останавливает — слайд откладывается."""
     from webapp import glass
     await _draft_or_404(request, session_id, user, mutate=True)
-    return JSONResponse(await run_in_threadpool(glass.step_fill, session_id))
+    out = await run_in_threadpool(glass.step_fill, session_id)
+    await _count_glass_build(request, session_id, user, out)
+    return JSONResponse(out)
 
 
 @app.post("/api/drafts/{session_id}/glass/score")
@@ -976,7 +1005,9 @@ async def glass_score(session_id: str, request: Request,
     «разведчик» зовёт это параллельно шагам заполнения."""
     from webapp import glass
     await _draft_or_404(request, session_id, user, mutate=True)
-    return JSONResponse(await run_in_threadpool(glass.score_next, session_id))
+    out = await run_in_threadpool(glass.score_next, session_id)
+    await _count_glass_build(request, session_id, user, out)
+    return JSONResponse(out)
 
 
 @app.post("/api/drafts/{session_id}/glass/stop")
@@ -1032,6 +1063,7 @@ async def glass_answer(session_id: str, request: Request,
         raise HTTPException(409, "вопрос уже закрыт — обновите страницу")
     except SlotValidationError:
         raise HTTPException(400, f"неизвестный макет: {template_id}")
+    await _count_glass_build(request, session_id, user, out)
     return JSONResponse(out)
 
 

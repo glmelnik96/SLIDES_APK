@@ -589,6 +589,40 @@ def _done(plan: draft.DraftPlan, busy: set[int]) -> bool:
             and not any(s.brief and not s.filled for s in plan.slides))
 
 
+def claim_usage(session_id: str, *, final: bool = False) -> dict | None:
+    """Разрезы строки usage_events — ровно один раз на стеклянную сборку.
+
+    Считаем, когда сборка дособрана: done, а failed — если больше половины
+    слайдов стали заглушками (осечка заполнения ставит заглушку и помечает слайд
+    заполненным, так что дека из одних заглушек формально «готова»). С final=True
+    черновик удаляет ретеншен — тогда недособранная сборка брошена (cancelled).
+
+    None — записывать нечего: черновик конструктора (документ не загружали), уже
+    посчитанная сборка или сборка, которая ещё идёт."""
+    from htmlslides.pipeline.client import degradation_is_total
+
+    if _source_file(session_id) is None:
+        return None
+    with _plan_lock(session_id):
+        plan = draft.load_plan(session_id)
+        if plan.usage_logged:
+            return None
+        done = _done(plan, _INFLIGHT.get(session_id, set()))
+        if not (done or final):
+            return None
+        content = [s for s in plan.slides if s.brief]
+        stubs = sum(1 for s in content if s.status == "failed")
+        if not done:
+            status, code = "cancelled", None
+        elif degradation_is_total(stubs, len(content)):
+            status, code = "failed", "fill_failed"
+        else:
+            status, code = "done", None
+        plan.usage_logged = True
+        draft.save_plan(session_id, plan)
+    return {"status": status, "error_code": code, "section_count": len(content)}
+
+
 def _fill_one(session_id: str, plan: draft.DraftPlan, index: int,
               client: Any, *, kind: str = "",
               context: str | None = None) -> draft.DraftPlan:

@@ -70,9 +70,14 @@ async def log_render(session: AsyncSession, *, owner_user_id: int | None,
                      session_id: str | None = None,
                      section_count: int | None = None,
                      truncated: bool = False,
-                     error_code: str | None = None) -> None:
+                     error_code: str | None = None,
+                     mode: str | None = None) -> None:
     """Stage a usage row in the caller's session (the caller commits). Identity is
     resolved from the owning User; meta carries a whitelist of safe slices.
+
+    ``mode`` перекрывает режим из строки jobs: черновик стеклянной сборки создаётся
+    с mode="manual", и без явного "glass" сборки из документа читались бы в
+    админке как ручной конструктор.
 
     Пустые ключи опускаем: отсутствие в `meta` читается агрегатором как
     «неизвестно» (старые строки без обогащения остаются валидными), а `null`
@@ -83,7 +88,8 @@ async def log_render(session: AsyncSession, *, owner_user_id: int | None,
     meta: dict[str, object] = {
         k: v for k, v in (await _job_slices(session, session_id)).items()
         if v is not None}
-    for key, value in (("section_count", section_count),
+    for key, value in (("mode", mode),
+                       ("section_count", section_count),
                        ("slides_count", _slides_count(result_path)),
                        ("error_code", error_code),
                        ("truncated", True if truncated else None)):
