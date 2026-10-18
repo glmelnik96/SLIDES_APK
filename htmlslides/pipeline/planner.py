@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import structlog
+from openai import BadRequestError
 from pydantic import BaseModel, Field
 
 from ..brand import brand_rules
@@ -33,7 +34,8 @@ from ..models import DeckPlan, SlidePlan
 from ..parsers.base import (Block, CodeBlock, ImageBlock, InputDoc, ListBlock,
                             Section, TableBlock, TextBlock)
 from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
-                     ProviderUnavailable, degradation_is_total, image_part)
+                     ProviderUnavailable, degradation_is_total, image_part,
+                     is_not_multimodal)
 
 logger = structlog.get_logger(__name__)
 
@@ -361,6 +363,15 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
         # retries=1: вторую медленную попытку не ждём — деградируем эвристикой.
         sp = client.chat_json(messages, _SectionPlan, max_tokens=max_tokens,
                               retries=1, extra_body=_PLANNER_NO_THINK)
+    except BadRequestError as exc:
+        # Модель без зрения, о которой мы не знали: шлюз отказался от скриншота.
+        # Скриншот лишь дополняет текст раздела — планируем по тексту, как без
+        # LibreOffice, а не эвристикой и не падением сборки.
+        if image is None or not is_not_multimodal(exc):
+            raise
+        logger.warning("planner.section_text_only", heading=heading[:40])
+        return _plan_section(client, library, menu, section,
+                             freeform_ok=freeform_ok, image=None)
     except (LLMFormatError, *TRANSIENT_API_ERRORS) as exc:
         logger.warning("planner.section_fallback", heading=heading[:40],
                        error=str(exc)[:80])
@@ -573,14 +584,25 @@ def plan_deck(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
     рассинхроне «скриншоты ≠ разделы» (рендер исходника отдал не все PNG).
     Бросает SlotValidationError на неизвестный template_id.
     """
+    if slide_images and not getattr(client, "sees_images", True):
+        # Модель без зрения: скриншоты ей не отдать — ни по разделу, ни монолитом.
+        logger.warning("planner.text_only_model", images=len(slide_images))
+        slide_images = ()
     if slide_images and len(slide_images) == len(doc.sections):
         plan = _plan_deck_text(client, doc, library, freeform_ok=freeform_ok,
                                images=slide_images)
     elif slide_images:
         logger.warning("planner.vision_monolith_fallback",
                        images=len(slide_images), sections=len(doc.sections))
-        plan = _plan_deck_vision(client, doc, library, slide_images,
-                                 freeform_ok=freeform_ok, max_tokens=max_tokens)
+        try:
+            plan = _plan_deck_vision(client, doc, library, slide_images,
+                                     freeform_ok=freeform_ok, max_tokens=max_tokens)
+        except BadRequestError as exc:
+            # Шлюз отказался от скриншотов (модель без зрения) — планируем по тексту.
+            if not is_not_multimodal(exc):
+                raise
+            logger.warning("planner.text_only_model", images=len(slide_images))
+            plan = _plan_deck_text(client, doc, library, freeform_ok=freeform_ok)
     else:
         plan = _plan_deck_text(client, doc, library, freeform_ok=freeform_ok)
     return _finalize(plan, library, freeform_ok=freeform_ok)

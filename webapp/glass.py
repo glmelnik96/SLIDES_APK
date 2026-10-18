@@ -301,6 +301,10 @@ def _read_source_slide(session_id: str, src_index: int | None,
     Пусто = не прочиталось, останется вопросом автору."""
     from htmlslides.parsers.render import RenderUnavailable, render_pptx_pngs
 
+    if not getattr(client, "sees_images", True):
+        # Модель без зрения (временный прод на MiniMax-M2.5): картинку не прочтёт,
+        # рендер исходника был бы десятками секунд впустую. Раздел — вопрос автору.
+        return ""
     source = _source_file(session_id)
     if (source is None or source.suffix.lower() != ".pptx"
             or src_index is None):

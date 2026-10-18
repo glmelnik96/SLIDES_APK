@@ -8,11 +8,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
+from openai import BadRequestError
+
 from ..assembler import assemble
 from ..library import TemplateLibrary
 from ..models import DeckPlan, SlidePlan
 from ..parsers import parse_file
-from .client import TRANSIENT_API_ERRORS, KimiClient, LLMFormatError
+from .client import (TRANSIENT_API_ERRORS, KimiClient, LLMFormatError,
+                     is_not_multimodal)
 from .filler import FillError, autofix_slide, fill_deck
 from .linter import lint_html
 from .planner import plan_deck
@@ -79,7 +82,7 @@ def build_deck(input_path: str | Path, out_path: str | Path, *,
 
     progress(f"parse: {src.name}")
     doc = parse_file(src)
-    slide_images = _render_source_slides(src, mode, artifacts, progress)
+    slide_images = _source_images(src, mode, client, artifacts, progress)
 
     doc, slide_images, capped = _cap_sections(
         doc, slide_images, max_slides=max_slides, progress=progress)
@@ -349,6 +352,11 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
 
     if not vision:
         return notes
+    if not getattr(client, "sees_images", True):
+        # Модель только текстовая (временный прод на MiniMax-M2.5): скриншот ей не
+        # отдать — ревью по картинке пропускаем так же, как без Chromium.
+        progress(f"vision-qa пропущен: модель {client.model} не принимает картинки")
+        return notes
     freeform = {s.index for s in plan.slides if s.freeform}
     all_idx = {s.index for s in plan.slides} if vision_all else set()
     if not (notes or freeform or all_idx):
@@ -379,6 +387,14 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
                 except LLMFormatError as exc:
                     progress(f"warn: vision-qa слайда {index} не удался: {exc}")
                     return index, []
+                except BadRequestError as exc:
+                    # Модель, про которую мы не знали, что она без зрения: шлюз
+                    # отказался от картинки. Это «зрения нет», а не сбой сборки.
+                    if not is_not_multimodal(exc):
+                        raise
+                    progress(f"warn: vision-qa слайда {index} пропущен — модель "
+                             "не принимает картинки")
+                    return index, []
                 except TRANSIENT_API_ERRORS as exc:
                     # Тот же контракт, что и в fill_deck: транзиентный сбой шлюза
                     # стоит ревью одного слайда, а не всей сборки.
@@ -399,6 +415,20 @@ def _qa_notes(plan: DeckPlan, html: str, *, vision: bool, client: KimiClient,
     except QAUnavailable as exc:
         progress(f"vision-qa пропущен: {exc}")
     return notes
+
+
+def _source_images(src: Path, mode: str, client, artifacts: Optional[Path],
+                   progress: Progress) -> list[Path]:
+    """Скриншоты исходных слайдов для планировщика — если модель их примет.
+
+    Модели без зрения (client.sees_images) картинки не рендерим: LibreOffice на
+    деку стоит десятки секунд, а шлюз ответил бы 400 на первом же разделе."""
+    if not getattr(client, "sees_images", True):
+        if src.suffix.lower() == ".pptx":
+            progress(f"модель {client.model} не принимает картинки — исходные "
+                     "слайды не рендерю, планирую по тексту")
+        return []
+    return _render_source_slides(src, mode, artifacts, progress)
 
 
 def _render_source_slides(src: Path, mode: str, artifacts: Optional[Path],

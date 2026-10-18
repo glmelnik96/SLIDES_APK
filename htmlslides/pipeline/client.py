@@ -17,8 +17,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional, Type, TypeVar
 
-from openai import (APIConnectionError, APITimeoutError, InternalServerError,
-                    OpenAI, RateLimitError)
+from openai import (APIConnectionError, APITimeoutError, BadRequestError,
+                    InternalServerError, OpenAI, RateLimitError)
 from pydantic import BaseModel, ValidationError
 
 DEFAULT_BASE_URL = "https://foundation-models.api.cloud.ru/v1"
@@ -148,6 +148,27 @@ def image_part(png_path: str | Path) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}
 
 
+#: Модели каталога Cloud.ru, которые принимают только текст (metadata.input_modalities
+#: == ["text"]): на картинку шлюз отвечает 400 «… is not a multimodal model». Список
+#: появился 2026-10-18, когда проекту закрыли MiniMax-M3 и Kimi-K2.6 и прод временно
+#: перешёл на MiniMax-M2.5 (CLOUDRU_MODEL): vision-ветки обязаны такую модель обходить.
+#: Модель не из списка, отказавшаяся от картинки, ловится is_not_multimodal.
+TEXT_ONLY_MODELS = frozenset({
+    "MiniMaxAI/MiniMax-M2.5",
+    "zai-org/GLM-4.7",
+    "ai-sage/GigaChat3.5-432B-A28B-Reasoning",
+})
+
+
+def is_not_multimodal(exc: BaseException) -> bool:
+    """Шлюз отказался принять картинку: модель только текстовая.
+
+    Для vision-ветки это не сбой сборки, а «зрения нет» — как недоступный
+    Chromium или LibreOffice: ветка пропускается, сборка идёт дальше по тексту."""
+    return (isinstance(exc, BadRequestError)
+            and "not a multimodal model" in f"{exc} {getattr(exc, 'body', '')}")
+
+
 class KimiClient:
     """Cloud.ru FM client: модель/гейт/JSON-валидация. transport= для тестов.
 
@@ -211,6 +232,12 @@ class KimiClient:
             timeout=timeout)
 
     # ── доступность модели ───────────────────────────────────────────────────
+
+    @property
+    def sees_images(self) -> bool:
+        """Принимает ли картинки ТЕКУЩАЯ модель — после переезда на резерв ответ
+        может измениться (основная мультимодальна, резерв — нет)."""
+        return self.model not in TEXT_ONLY_MODELS
 
     @property
     def fallback_model(self) -> str:
