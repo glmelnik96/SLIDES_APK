@@ -98,6 +98,14 @@ _DOT_LIMIT = 8000
 # остальное в интерфейсе генератора. Неизвестная тема останется своим id.
 _THEME_RU = {"dark": "тёмная", "light": "светлая"}
 
+# Шаблоны, которые deck.js перекладывает уже в браузере, по НАСТОЯЩЕМУ тексту:
+# autofitCells ужимает кегль плашек grid-2x2/frames-grid, пока они не влезут,
+# autofitStatsHeight ужимает подписи stats-row и сдвигает блок рядов к середине
+# свободного места. Таблица снята на рыбе и этого не знает: на деках прогонов
+# весь блок stats-row в PPTX стоял на 28–76 px выше, чем в браузере. Поэтому
+# такие слайды мерятся браузером по самой деке всегда, а не только на промахе.
+LIVE_TEMPLATES = frozenset({"grid-2x2", "frames-grid", "stats-row"})
+
 
 class ConvertError(Exception):
     """Деку не удалось разобрать или в таблице нет нужного варианта."""
@@ -989,10 +997,11 @@ def convert(deck_html: str | Path, out_pptx: str | Path,
     """Сконвертировать деку в PPTX. -> статистика (и список промахов таблицы).
 
     measure_missing — поднимать ли браузер ради слайда, которому геометрию не
-    дала таблица (_Builder.absent -> learn). По умолчанию да: секунда на
-    экспорт дешевле и потерянного слайда, и 790 px от донора. Выключается там,
-    где браузера нет совсем; тогда остаётся донор, а если не справится и он —
-    ошибка, а не пропажа слайда.
+    дала таблица (_Builder.absent -> learn), и ради слайдов LIVE_TEMPLATES. По
+    умолчанию да: секунда на экспорт дешевле и потерянного слайда, и 790 px от
+    донора. Выключается там, где браузера нет совсем; тогда остаётся донор, а
+    если не справится и он — ошибка, а не пропажа слайда. Слайды
+    LIVE_TEMPLATES без браузера собираются по таблице — как на рыбе.
 
     Слайд не теряется ни при каком исходе. Раньше терялся: когда ключа не было
     в таблице и донор не находился, add_slide возвращала None, и слайда просто
@@ -1037,6 +1046,13 @@ def convert(deck_html: str | Path, out_pptx: str | Path,
     # разбором lxml, что и был. Почему решает именно промах по таблице, а не
     # «донор не справился», — см. _Builder.absent.
     gap = b.absent(sections)
+    # Слайды, которые deck.js перекладывает по тексту: в таблице они есть, но
+    # верна она для них только на рыбе (см. LIVE_TEMPLATES). Мерятся тем же
+    # проходом браузера, что и промахи.
+    missed = {i for i, _ in gap}
+    live = [(i, variant_key(s)) for i, s in enumerate(sections, start=1)
+            if i not in missed and s.get("data-template") in LIVE_TEMPLATES]
+    b.stats["live"] = [i for i, _ in live]
     fresh, verdict = table_state()
     b.stats["table"] = verdict
     # Совет по делу, а не один на все случаи. Раньше промах всегда предлагал
@@ -1048,14 +1064,15 @@ def convert(deck_html: str | Path, out_pptx: str | Path,
            f"добавить в refdeck или дать замерить браузером" if fresh else
            verdict)
     measured = False
-    if not gap:
+    want = sorted(gap + live)
+    if not want:
         pass
     elif not measure_missing:
         why = f"замер браузером отключён (measure_missing=False), {why}"
     else:
         try:
             b.learn(src.read_text(encoding="utf-8") if src else text,
-                    sections, gap)
+                    sections, want)
             measured = True
         except ConvertError:
             # Замер сам нашёл несходимость (разное число секций, разъехавшийся
@@ -1139,13 +1156,17 @@ def main(argv: list[str] | None = None) -> int:
     if st["dropped"]:
         print(f"  не перенесено из фона: {st['dropped']} "
               f"(точечный паттерн — это тысячи фигур на слайд)")
-    if st["measured"]:
+    if st["live"]:
+        # Штатно: эти шаблоны deck.js перекладывает по тексту (LIVE_TEMPLATES).
+        print(f"  снято браузером по тексту: {len(st['live'])} слайдов")
+    gap_measured = [m for m in st["measured"] if m[0] not in st["live"]]
+    if gap_measured:
         # Не ошибка, но сигнал: таблица отстала от шаблонов. Геометрия этих
         # слайдов точная (снята браузером по реальному тексту), а вот секунда
         # на браузер платится при каждом экспорте такой деки, пока таблицу не
         # пересоберут.
-        print(f"  доснято браузером: {len(st['measured'])} деревьев")
-        for idx, key in st["measured"][:10]:
+        print(f"  доснято браузером: {len(gap_measured)} деревьев")
+        for idx, key in gap_measured[:10]:
             print(f"    слайд {idx}: {key}")
     if st["repaired"]:
         # Не ошибка, но и не норма: геометрия здесь приближённая. Печатаем, чтобы

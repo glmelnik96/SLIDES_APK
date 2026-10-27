@@ -211,6 +211,11 @@ def sources_digest() -> str:
 
     Хэш, а не время правки файла: mtime меняет git checkout, не меняя
     содержимого, и отпечаток срабатывал бы на каждом клоне репозитория.
+
+    По той же причине переводы строк сводятся к LF: git на Windows
+    (core.autocrlf=true) выкладывает шаблоны с CRLF, и по сырым байтам таблица,
+    снятая на сервере, «отставала» на машине разработчика, а снятая на Windows —
+    на сервере. Раскладку перевод строки не меняет: Jinja сама сводит их к LF.
     """
     h = hashlib.blake2b(digest_size=6)
     from importlib import resources
@@ -221,7 +226,7 @@ def sources_digest() -> str:
         # а ключ оно меняет (data-template лежит в variant_key).
         h.update(name.encode("utf-8"))
         h.update(b"\0")
-        h.update(blob)
+        h.update(blob.replace(b"\r\n", b"\n"))
         h.update(b"\0")
 
     tpl = root / "templates" / "slides"

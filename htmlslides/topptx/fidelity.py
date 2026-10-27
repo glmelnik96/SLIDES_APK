@@ -173,7 +173,7 @@ def compare(theme: str = "dark", out: Path | None = None) -> dict:
     from lxml import html as LH
 
     from .calibrate import collect
-    from .convert import _Builder
+    from .convert import LIVE_TEMPLATES, _Builder
     from .domkey import variant_key
 
     html = build_deck(theme)
@@ -181,6 +181,12 @@ def compare(theme: str = "dark", out: Path | None = None) -> dict:
     sections = doc.xpath('//section[contains(@class,"slide")]')
 
     builder = _Builder(theme)
+    # Как в convert(): слайды, которые deck.js перекладывает по тексту, идут
+    # не по таблице, а замером самой деки. Иначе проверка мерила бы путь,
+    # которым экспорт эти слайды уже не собирает.
+    builder.learn(html, sections,
+                  [(i, variant_key(s)) for i, s in enumerate(sections, start=1)
+                   if s.get("data-template") in LIVE_TEMPLATES])
     for i, section in enumerate(sections, start=1):
         builder.add_slide(section, i)
     if out:
@@ -257,11 +263,16 @@ def compare_all(theme: str = "dark", only: str | None = None,
     from lxml import html as LH
 
     from .calibrate import CHUNK, _pages, collect
-    from .convert import _Builder
+    from .convert import LIVE_TEMPLATES, _Builder
     from .refdeck import build_deck as assemble, unique_variants
 
+    # Слайды LIVE_TEMPLATES экспорт берёт не из таблицы, а замером самой деки:
+    # сверять их табличный путь — мерить то, чем экспорт не пользуется (на рыбе
+    # там до 340 px, и вся остальная сводка тонула бы в этом числе). Явный
+    # only= их всё же показывает.
     picked = [g for g in unique_variants(theme)
-              if only is None or g[1].template_id == only]
+              if (g[1].template_id == only if only is not None
+                  else g[1].template_id not in LIVE_TEMPLATES)]
     if not picked:
         raise ValueError(f"нет деревьев шаблона {only!r}")
 

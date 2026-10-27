@@ -199,6 +199,33 @@ def test_the_digest_ignores_what_cannot_stale_the_table():
                             1)) == base
 
 
+def test_line_endings_do_not_change_the_sources_digest():
+    """CRLF и LF — один и тот же шаблон.
+
+    git на Windows (core.autocrlf=true) выкладывает файлы с CRLF, на сервере
+    они с LF. По сырым байтам таблица, снятая на одной машине, «отставала» на
+    другой, хотя разметка та же.
+    """
+    import pathlib
+    import shutil
+    import tempfile
+
+    base = domkey.sources_digest()
+    p = pathlib.Path("htmlslides/templates/slides/statement.html")
+    lf = p.read_bytes().replace(b"\r\n", b"\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        keep = pathlib.Path(tmp) / "keep"
+        shutil.copy(p, keep)
+        try:
+            for blob in (lf, lf.replace(b"\n", b"\r\n")):
+                p.write_bytes(blob)
+                domkey.sources_digest.cache_clear()
+                assert domkey.sources_digest() == base
+        finally:
+            shutil.copy(keep, p)
+            domkey.sources_digest.cache_clear()
+
+
 def test_the_shipped_table_matches_the_shipped_templates():
     """Таблица в репозитории соответствует шаблонам в репозитории.
 

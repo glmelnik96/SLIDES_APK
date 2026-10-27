@@ -289,12 +289,18 @@ def test_a_fresh_reader_finds_everything_we_wrote(built, theme):
     держал в памяти, а не то, что доехало до диска. Между этими двумя числами и
     живут потери при сохранении.
     """
+    from lxml import html as LH
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
     from pptx.util import Emu
 
     prs = Presentation(built[theme].filename)
-    assert len(prs.slides) == 112, len(prs.slides)
+    # Сколько секций в деке, столько и слайдов. Число не зашито: каталог растёт
+    # (diagram добавил секции), и зашитое 112 падало не по делу.
+    src = built[theme].filename.rsplit(".", 1)[0] + ".html"
+    want = len(LH.parse(src).xpath('//section[contains(@class,"slide")]'))
+    assert want > 100, want
+    assert len(prs.slides) == want, (len(prs.slides), want)
     assert prs.slide_width == Emu(1920 * 6350)
     assert prs.slide_height == Emu(1080 * 6350)
 

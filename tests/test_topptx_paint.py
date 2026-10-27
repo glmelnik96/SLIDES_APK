@@ -550,6 +550,40 @@ def test_a_path_that_does_not_exist_says_so(tmp_path):
         convert.convert(str(tmp_path / "нету.html"), tmp_path / "o.pptx")
 
 
+def test_slides_deck_js_relays_by_text_are_measured_live(tmp_path, monkeypatch):
+    """grid-2x2, frames-grid и stats-row мерятся браузером по самой деке всегда.
+
+    deck.js ужимает в них кегль и сдвигает блоки по НАСТОЯЩЕМУ тексту, а таблица
+    снята на рыбе: по таблице блок stats-row на деках прогонов стоял на 28–76 px
+    выше, чем в браузере. Без браузера (measure_missing=False) замера нет.
+    """
+    from lxml import html as LH
+
+    from htmlslides.topptx import fidelity
+
+    asked = []
+    monkeypatch.setattr(convert._Builder, "learn",
+                        lambda self, html, sections, want, **kw:
+                        asked.extend(want) or 0)
+    html = fidelity.build_deck("dark")
+    sections = LH.document_fromstring(html).xpath(
+        '//section[contains(@class,"slide")]')
+    live = {i for i, s in enumerate(sections, start=1)
+            if s.get("data-template") in convert.LIVE_TEMPLATES}
+    assert live, "в эталонной деке нет таких слайдов — проверка ослабла"
+    # Смеси, которых нет в таблице, браузер мерит и так — тем же проходом.
+    gap = {i for i, _ in convert._Builder("dark").absent(sections)}
+
+    stats = convert.convert(html, tmp_path / "o.pptx", theme="dark")
+    assert {i for i, _ in asked} == live | gap
+    assert set(stats["live"]) == live - gap
+
+    asked.clear()
+    convert.convert(html, tmp_path / "n.pptx", theme="dark",
+                    measure_missing=False)
+    assert asked == []
+
+
 def _slides(deck) -> list[etree._Element]:
     """Слайды в порядке деки — по номеру в имени части, а не по порядку в zip."""
     names = sorted((n for n in deck[0].namelist()

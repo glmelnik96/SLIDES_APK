@@ -44,6 +44,20 @@ def _part(deck, name: str):
     return etree.fromstring(deck[0].read(name))
 
 
+def _templates(deck) -> list[str]:
+    """Шаблон каждого слайда по порядку — из исходной деки рядом с PPTX.
+
+    Номера слайдов и число шаблонов не зашиты в тесты: каталог растёт (diagram
+    добавил секции, two-col-cards потерял варианты), и зашитые числа падали не
+    по делу.
+    """
+    from lxml import html as LH
+
+    src = deck[0].filename.rsplit(".", 1)[0] + ".html"
+    return [s.get("data-template") for s in
+            LH.parse(src).xpath('//section[contains(@class,"slide")]')]
+
+
 def _layouts(deck) -> dict[str, etree._Element]:
     """{имя раскладки: её cSld} — по именам, не по номерам частей."""
     out = {}
@@ -154,7 +168,9 @@ def test_every_slide_sits_on_the_layout_of_its_template(deck):
     names = set(_layouts(deck))
     assert names <= titles, f"раскладка не из каталога: {sorted(names - titles)}"
     assert len(names) == deck[1]["layouts"]
-    assert 20 <= len(names) <= 25, f"ожидали раскладку на шаблон, вышло {len(names)}"
+    used = set(_templates(deck))
+    assert len(names) == len(used), (
+        f"ожидали раскладку на шаблон: шаблонов {len(used)}, раскладок {len(names)}")
 
 
 def test_the_layout_takes_the_background_of_its_section(deck):
@@ -233,7 +249,8 @@ def test_shapes_are_named_by_selector_not_rectangle_37(deck):
     Без этого на слайде с двумя сотнями фигур список выглядит как
     «Прямоугольник 37 / TextBox 112» и нужную подпись в нём не найти.
     """
-    sld = _part(deck, "ppt/slides/slide80.xml")       # two-col-cards со смесью
+    index = _templates(deck).index("two-col-cards") + 1
+    sld = _part(deck, f"ppt/slides/slide{index}.xml")
     names = [e.get("name") for e in sld.findall(f".//{P}cNvPr")
              if e.get("name")]
     assert names
