@@ -54,9 +54,10 @@ def test_the_markup_does_branch_on_content():
     """Страховка от «тест ничего не нашёл и потому прошёл»."""
     slots = _branching_slots()
     assert len(slots) >= 10
-    # Два случая, из-за которых тест и появился.
-    assert "image" in slots["timeline"]
+    # Случай, из-за которого тест и появился (у таймлайна картинки больше нет:
+    # feature/template-fixes убрал фото из макета, осталось ветвление на subtitle).
     assert "image" in slots["service-table"]
+    assert "subtitle" in slots["timeline"]
 
 
 def test_every_branching_slot_is_an_axis_of_the_reference_deck():
@@ -127,8 +128,10 @@ def test_the_image_axis_yields_two_trees_where_the_markup_branches(picked):
     from collections import Counter
 
     trees = Counter(k.split("|")[0] for k, _, _ in picked)
-    assert trees["timeline"] == 20          # было 10 до появления оси
-    assert trees["service-table"] == 24     # было 12
+    # У таймлайна картинки больше нет (feature/template-fixes) — ось image
+    # даёт то же дерево, вторых деревьев не появляется.
+    assert trees["timeline"] == 10
+    assert trees["service-table"] == 24     # было 12 до появления оси
     assert trees["cover-image"] == 1        # разметка не ветвится — дерево одно
 
 

@@ -176,16 +176,16 @@ def test_every_slide_sits_on_the_layout_of_its_template(deck):
 def test_the_layout_takes_the_background_of_its_section(deck):
     """Фон раскладки — замеренный фон секции, а не общий фон деки.
 
-    У statement-green секция зелёная; без этого «Новый слайд -> Акцентный
-    тезис (зелёный)» дал бы графитовый слайд, и пользователь решил бы, что
+    У statement-green секция зелёная; без этого «Новый слайд -> Титул-тезис
+    (зелёный)» дал бы графитовый слайд, и пользователь решил бы, что
     макет сломан.
     """
     def bg(name):
         node = _layouts(deck)[name].find(f"{P}bg//{A}srgbClr")
         return node is not None and node.get("val")
 
-    assert bg("Акцентный тезис (зелёный)") == "26D07C"
-    assert bg("Акцентный тезис") == "222222"
+    assert bg("Титул-тезис (зелёный)") == "26D07C"
+    assert bg("Титул-тезис") == "222222"
 
 
 def test_layouts_carry_no_placeholders(deck):

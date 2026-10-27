@@ -201,5 +201,5 @@ def test_pseudo_rows_follow_their_element_through_repair(table):
     # колонок три -> сепаратора два, у второй и третьей
     assert len(seps) == 2
     for r in seps:
-        assert r["w"] == 1.0
+        assert r["w"] == 2.0   # штрих 2px (feature/template-fixes: линии 2)
         assert r["h"] > 600
