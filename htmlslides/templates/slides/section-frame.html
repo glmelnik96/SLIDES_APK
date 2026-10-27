@@ -7,7 +7,8 @@
   {#- Рамка = объединение двух прямоугольников R21(60,180 600.67×720) и
       R22(300.87,240 1559.13×720); путь в локальных координатах viewBox 1800×780. -#}
   <svg class="sf-frame" viewBox="0 0 1800 780" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M0.5 0.5H600.67V60H1799.5V779.5H240.87V720H0.5V0.5Z" stroke="currentColor"/>
+    {#- stroke-width 2: правило «все структурные линии 2px» (1px гаснет при растеризации; в PPTX 2px == 1pt). -#}
+    <path d="M1 1H600.67V60H1799V779H240.87V720H1V1Z" stroke="currentColor" stroke-width="2"/>
   </svg>
   <h1 class="sf-title m-enter m-enter--hero" data-slot="label">{{ content.label }}</h1>
   {#- Номер секции: голое целое дополняем ведущим нулём до NN (1→01, 2→02); «02» оставляем; нечисловое — как есть; пусто — ничего. -#}

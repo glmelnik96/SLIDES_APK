@@ -264,8 +264,7 @@
                      "item_max_chars": 60,
                      "item_slots": {
                        "text": {"kind": "text", "required": true, "max_chars": 50, "label": "Веха"}
-                     }},
-        "image":    {"kind": "text", "required": false, "label": "Иллюстрация", "hint": "Ссылка на картинку"}
+                     }}
       }
     },
     {

@@ -150,10 +150,10 @@
      ЗА нижний край, а .slide{overflow:hidden} срезает их молча: человек видит
      ряд без половины пояснений и не понимает, что текст вообще был.
      Ужимаем подписи и пояснения всех ячеек блока до кегля, при котором ряды
-     влезают (цифру-героя не трогаем — она и есть смысл слайда). Пол
-     читаемости 20px для подписи (база 30) и пропорциональные ~15 для
-     пояснения (база 22). */
-  var _SR_MIN_FS = 20, _SR_BOTTOM = 60, _SR_SLACK = 40;
+     влезают (цифру-героя не трогаем — она и есть смысл слайда).
+     Правило владельца продукта (2026-10-27): минимальный кегль ЛЮБОГО текста
+     16px, ниже не ужимаем (подпись и пояснение упираются в один пол). */
+  var _SR_MIN_FS = 16, _SR_BOTTOM = 60, _SR_SLACK = 40;
   function autofitStatsHeight() {
     var blocks = document.querySelectorAll(".sr-rows");
     for (var b = 0; b < blocks.length; b++) {
@@ -171,7 +171,7 @@
       for (fs = 30; fs > _SR_MIN_FS; fs--) {
         if (box.offsetHeight <= budget) break;
         for (i = 0; i < labels.length; i++) labels[i].style.fontSize = (fs - 1) + "px";
-        for (i = 0; i < caps.length; i++) caps[i].style.fontSize = ((fs - 1) * 22 / 30) + "px";
+        for (i = 0; i < caps.length; i++) caps[i].style.fontSize = Math.max(_SR_MIN_FS, (fs - 1) * 22 / 30) + "px";
       }
       /* Остаток бюджета делим пополам. Верх блока задан константой в CSS под
          ДВА ряда по четыре метрики, а типичный слайд — один ряд из трёх: он
@@ -183,29 +183,64 @@
     }
   }
 
-  /* Плашки grid-2x2 / frames-grid: зона 659px делится между рядами, и текст,
-     который в плашку не влез, просто срезался overflow:hidden — БЕЗ всякого
-     признака, что часть текста не показана. А влезть легко не может: 2 ряда по
-     4 плашки с текстом на слотовом капе (140 симв.) уже теряли 84px, 3×5 —
-     325px, то есть больше половины. Ужимаем кегль текста плашек до того,
-     который вмещает САМУЮ плотную плашку сетки, и ставим его всем плашкам —
-     как в autofitStats: у дизайнера плашки одного кегля. Пол читаемости 20px
-     (база 30): ниже текст перестаёт читаться с экрана, лучше подрезать. */
-  var _CELL_MIN_FS = 20;
+  /* Единое автоужатие кегля для «похожих фреймов» (правило владельца продукта,
+     2026-10-27). Текст, который во фрейм не влез, молча срезался overflow:hidden —
+     БЕЗ всякого признака, что часть текста не показана (2 ряда по 4 плашки на
+     слотовом капе теряли 84px, 3×5 — 325px). Правило: кегль базовый (30), ужимаем
+     ТОЛЬКО если текст не помещается во фрейм (с учётом его паддинга-отступа), и
+     РАВНОМЕРНО во всех похожих фреймах одного слайда — до кегля, при котором
+     влезает САМЫЙ плотный фрейм (у дизайнера все плашки слайда одного кегля).
+     Пол читаемости 16px: ниже не ужимаем, пусть лучше модель режет текст.
+     Покрытие — все шаблоны с текстовыми фреймами/строками:
+       grid-2x2, frames-grid, cards-6, two-col-cards, three-col,
+       service-table (строки 179px), timeline (строки 132px). */
+  var _CELL_MIN_FS = 16;
+  var _FIT_GRIDS = [
+    { grid: ".g22-grid", cell: ".g22-cell", text: ".g22-text" },
+    { grid: ".fg-grid",  cell: ".fg-frame", text: ".fg-text" },
+    { grid: ".c6-grid",  cell: ".c6-cell",  text: ".c6-text" },
+    { grid: ".tcc-grid", cell: ".tcc-body", text: ".tcc-text" },
+    { grid: ".tcl-grid", cell: ".tcl-col",  text: ".tcl-text" },
+    { grid: ".svc-rows", cell: ".svc-row",  text: ".svc-benefit" },
+    { grid: ".tl-list",  cell: ".tl-row",   text: ".tl-text" }
+  ];
   function autofitCells() {
-    var grids = document.querySelectorAll(".g22-grid, .fg-grid");
-    for (var g = 0; g < grids.length; g++) {
-      var cells = grids[g].querySelectorAll(".g22-cell, .fg-frame");
-      var texts = grids[g].querySelectorAll(".g22-text, .fg-text");
-      var i, fs;
-      for (i = 0; i < texts.length; i++) texts[i].style.fontSize = "";   // сброс к базе
-      for (fs = 30; fs > _CELL_MIN_FS; fs--) {
-        var fits = true;
-        for (i = 0; i < cells.length; i++) {
-          if (cells[i].scrollHeight > cells[i].clientHeight + 1) { fits = false; break; }
+    for (var k = 0; k < _FIT_GRIDS.length; k++) {
+      var grids = document.querySelectorAll(_FIT_GRIDS[k].grid);
+      for (var g = 0; g < grids.length; g++) {
+        var cells = grids[g].querySelectorAll(_FIT_GRIDS[k].cell);
+        var texts = grids[g].querySelectorAll(_FIT_GRIDS[k].text);
+        if (!texts.length) continue;
+        var i, fs;
+        for (i = 0; i < texts.length; i++) texts[i].style.fontSize = "";   // сброс к базе
+        for (fs = 30; fs > _CELL_MIN_FS; fs--) {
+          var fits = true;
+          for (i = 0; i < cells.length; i++) {
+            if (cells[i].scrollHeight > cells[i].clientHeight + 1) { fits = false; break; }
+          }
+          if (fits) break;
+          for (i = 0; i < texts.length; i++) texts[i].style.fontSize = (fs - 1) + "px";
         }
-        if (fits) break;
-        for (i = 0; i < texts.length; i++) texts[i].style.fontSize = (fs - 1) + "px";
+      }
+    }
+    autofitServiceName();
+  }
+
+  /* service-table: имя сервиса (.svc-name, база 54) течёт сверху панели, а блок
+     строк (.svc-rows) прибит на top:182 — имя на слотовом капе (40 симв.)
+     занимает 4 строки и НАЕЗЖАЕТ на «01» (стресс-замер 2026-10-27). Ужимаем
+     кегль имени, пока его низ не поднимется над блоком строк; пол тот же 16px. */
+  function autofitServiceName() {
+    var panels = document.querySelectorAll(".svc-panel");
+    for (var p = 0; p < panels.length; p++) {
+      var name = panels[p].querySelector(".svc-name");
+      var rows = panels[p].querySelector(".svc-rows");
+      if (!name || !rows || !rows.offsetTop) continue;
+      name.style.fontSize = "";                                        // сброс к базе
+      var base = parseFloat(getComputedStyle(name).fontSize) || 54;
+      for (var fs = base; fs > _CELL_MIN_FS; fs--) {
+        if (name.offsetTop + name.offsetHeight <= rows.offsetTop) break;
+        name.style.fontSize = (fs - 1) + "px";
       }
     }
   }

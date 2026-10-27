@@ -1,6 +1,8 @@
 {#- Таймлайн (figma D 3393:11332 / L 3393:11079): слева 5 строк текста с
-    горизонтальными разделителями, справа большая иллюстрация на голубой подложке.
-    Контентный макет — малый логотип (.slide--chrome-sm). -#}
+    горизонтальными разделителями, справа брендовый лайнарт на голубой подложке.
+    Контентный макет — малый логотип (.slide--chrome-sm).
+    Вариант с фото УДАЛЁН по решению владельца продукта (2026-10-27): иллюстрация
+    таймлайна — всегда лайнарт, слота image больше нет (см. library.json). -#}
 <section class="slide slide--chrome-sm" data-template="timeline">
   {% include "_chrome.html" %}
   <div class="content-head">
@@ -14,15 +16,9 @@
     </div>
     {% endfor %}
   </div>
-  <div class="tl-art m-enter-right" aria-hidden="true" data-slot="image">
-    {% if content.image %}
-    {#- есть иллюстрация — ступенчатые голубые подложки + картинка (как в Figma) -#}
-    <div class="tl-art-panel tl-art-panel--a"></div>
-    <div class="tl-art-panel tl-art-panel--b"></div>
-    <img class="tl-art-img" src="{{ content.image }}" alt="">
-    {% else %}
-    {#- без картинки — бренд-лайнарт на голубой подложке (как в Figma 3393:11332):
-        контурные облака тонким штрихом + диагональные стрелки-коннекторы. -#}
+  <div class="tl-art m-enter-right" aria-hidden="true">
+    {#- Бренд-лайнарт на голубой подложке (как в Figma 3393:11332): ступенчатые
+        панели + контурные облака тонким штрихом + диагональные стрелки-коннекторы. -#}
     <div class="tl-art-panel tl-art-panel--a"></div>
     <div class="tl-art-panel tl-art-panel--b"></div>
     {#- Точная иллюстрация из референса (docs/slide-refs/15-illustration-clouds-arrows.svg):
@@ -41,6 +37,5 @@
         <path d="M0.757812 820.45L432.244 317.004L678.547 316.993M669.559 306.831L639.602 276.692M639.604 356.351L669.561 326.212"/>
       </g>
     </svg>
-    {% endif %}
   </div>
 </section>

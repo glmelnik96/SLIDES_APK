@@ -174,13 +174,15 @@ a{color:inherit;}
     var(--line) 0, var(--line) 2px, transparent 2px, transparent 20px);}
 
 /* ---- statement (figma 3393:11145/3393:10882) ---- */
-/* Оба текстовых поля мастера (рамка H1 и зелёная плашка) — ОДИН отступ 32px со всех
-   сторон и выравнивание по верхне-левому краю: их левые кромки текста совпадают
-   (60+1border+32 == 61+32 == 93). Правило проекта: контент во фреймах — top-left. */
+/* Оба текстовых поля мастера (рамка H1 и зелёная плашка) — выравнивание по
+   верхне-левому краю, левые кромки текста совпадают (60+2border+31 == 61+32 == 93).
+   Правило проекта (2026-10-27): ВСЕ структурные линии — 2px (в PPTX 1pt); хэйрлайн
+   1px гаснет при суб-пиксельной растеризации (см. .cover-hatch). Отступ контента
+   во фрейме единый: border+padding == 33px со всех сторон. */
 /* Рамка H1 растянута на весь формат (правка 16): не узкая полоса посередине, а
    крупный фрейм от подвала логотипа до плашки — слайд перестаёт быть «куцым». */
 .statement-box{position:absolute;left:60px;top:200px;width:1800px;height:400px;
-  border:1px solid var(--line-frame);padding:32px;
+  border:2px solid var(--line-frame);padding:31px;
   display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;}
 .statement-title{font-size:80px;line-height:1.1;white-space:normal;}   /* меньше базового hero (120→80) + перенос: свободно вмещает 2 строки; вес/капс/цвет — от роли .t-hero-156 */
 .statement-plate{position:absolute;left:61px;top:630px;width:959px;height:180px;
@@ -297,7 +299,7 @@ html[data-theme="light"] .kpi-value{color:var(--fg-body);}
 .sr-row{display:grid;grid-template-columns:repeat(var(--sr-cols,4),1fr);
   column-gap:40px;align-items:start;}
 .sr-cell{min-width:0;display:flex;flex-direction:column;
-  border-top:1px solid var(--line);padding-top:28px;}
+  border-top:2px solid var(--line);padding-top:28px;}
 .sr-value{font-size:104px;font-weight:400;line-height:1.0;letter-spacing:-2px;
   white-space:nowrap;color:var(--accent);}
 html[data-theme="light"] .sr-value{color:var(--fg-body);}
@@ -395,17 +397,17 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
 html[data-theme="light"] .svc-name{color:var(--fg-body);}
 .svc-desc{position:absolute;left:631px;top:23px;color:var(--accent);}  /* «Описание» зелёный, по верхней линии названия */
 .svc-rows{position:absolute;left:21px;top:182px;width:1211px;}  /* блок строк @ (621,421) */
-.svc-row{position:relative;height:179px;border-top:1px solid var(--line);
+.svc-row{position:relative;height:179px;border-top:2px solid var(--line);
   display:flex;align-items:flex-start;padding-top:23px;}  /* линии-разделители ТОЛЬКО сверху каждой строки (y=421/600/780), шаг 179; нижней замыкающей линии НЕТ — как в референсе */
 .svc-num{width:611px;color:var(--fg-body);}              /* номер @ x=620 */
 .svc-benefit{width:601px;color:var(--fg-body);}          /* преимущество @ x=1231 */
 
 /* ---- timeline (figma 3393:11332/3393:11079) ---- */
 .tl-list{position:absolute;left:61px;top:300px;width:839px;}
-.tl-row{position:relative;height:132px;border-top:1px solid var(--line);
+.tl-row{position:relative;height:132px;border-top:2px solid var(--line);
   display:flex;align-items:flex-start;padding-top:19px;}  /* строки шаг 132, текст +19 от линии */
 .tl-list .tl-row:last-child::after{content:"";position:absolute;left:0;bottom:0;
-  width:100%;height:1px;background:var(--line);}          /* нижняя 6-я линия y=960 */
+  width:100%;height:2px;background:var(--line);}          /* нижняя 6-я линия y=960 */
 .tl-text{width:839px;color:var(--accent);}               /* текст зелёный(D)/чёрный(L) */
 html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tl-art{position:absolute;left:960px;top:300px;width:900px;height:660px;
@@ -415,12 +417,9 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tl-art-panel{position:absolute;background:var(--image-bg);}
 .tl-art-panel--a{left:0;top:0;width:840px;height:495px;}        /* @ (960,300) */
 .tl-art-panel--b{left:60px;top:166px;width:840px;height:494px;} /* @ (1020,466) */
-/* Картинка вписана ВНУТРЬ кластера панелей (а не поверх всего бокса 900x660),
-   чтобы ступенчатые голубые края панелей --a (сверху-слева) и --b (снизу-справа)
-   оставались видны вокруг непрозрачного рендера. Инсет 90px со всех сторон. */
-.tl-art-img{position:absolute;left:90px;top:90px;width:720px;height:480px;object-fit:cover;}
-/* Фолбэк без картинки: бренд-лайнарт (контурные облака + диагонали) на голубой
-   подложке панелей --a/--b. Облака тонким приглушённым штрихом, стрелки — акцент. */
+/* Бренд-лайнарт (контурные облака + диагонали) на голубой подложке панелей
+   --a/--b — единственная иллюстрация таймлайна (фото-вариант и .tl-art-img
+   удалены по решению владельца продукта, 2026-10-27). */
 .tl-art-svg{position:absolute;left:-265px;top:84px;width:1144px;height:898px;overflow:visible;}  /* масштаб 1:1 с viewBox (было 840×660 ≈0.734 — лайнарт был мелким и «поехал» вверх): облака ложатся в (972,384)-(1839,849) как в референсе 15, стрелки-хвосты уходят в нижний-левый угол подложки и обрезаются clip-path */
 .tl-art-clouds path{fill:none;stroke:var(--cl-white);stroke-width:2.5;opacity:.85;}
 .tl-art-arrows path{fill:none;stroke:var(--cl-graphite);stroke-width:2.5;
@@ -442,12 +441,12 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
 .tcc-arrow .brand-arrow{width:140px;height:140px;}
 
 /* ---- three-col (figma 3393:11262/3393:11009): 3 текстовые колонки ----
-   Колонки x=61/691/1321 width 540 top 300; зелёные 1px сепараторы @ x=660/1290 h=658. */
+   Колонки x=61/691/1321 width 540 top 300; зелёные 2px сепараторы @ x=660/1290 h=658. */
 .tcl-grid{position:absolute;left:61px;top:300px;width:1799px;height:660px;display:flex;}
 .tcl-col{width:540px;}
 .tcl-col + .tcl-col{margin-left:90px;position:relative;}  /* зазор 90 (691−61−540 и 1321−691−540) */
-.tcl-col + .tcl-col::before{content:"";position:absolute;left:-45px;top:2px;
-  width:1px;height:658px;background:var(--line);}         /* сепаратор по центру зазора @ x=660/1290 */
+.tcl-col + .tcl-col::before{content:"";position:absolute;left:-46px;top:2px;
+  width:2px;height:658px;background:var(--line);}         /* сепаратор по центру зазора @ x=660/1290 */
 .tcl-text{width:540px;}                                    /* типографика — роль .t-body-30 */
 .tcl-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя колонки — зелёный акцент */
@@ -491,17 +490,17 @@ html[data-theme="light"] .tl-text{color:var(--fg-body);}
    Зона контента 1800×659 @ (60,301) как у grid-2x2/cards-6. Ряды делят высоту
    поровну (flex:1), рамки в ряду — ширину (flex:1): «ужимаются при добавлении,
    растягиваются при удалении». min-*:0 разрешает сжатие ниже контента.
-   Рамки СТЫКУЮТСЯ контурами (без отступов): gap:0 + отрицательные поля −1px
-   схлопывают смежные 1px-границы в одну общую линию (как grid-2x2). box-sizing
+   Рамки СТЫКУЮТСЯ контурами (без отступов): gap:0 + отрицательные поля −2px
+   схлопывают смежные 2px-границы в одну общую линию (как grid-2x2). box-sizing
    глобально border-box (deck.css §base) — паддинг не расширяет рамку. */
 .fg-grid{position:absolute;left:60px;top:301px;width:1800px;height:659px;
   display:flex;flex-direction:column;gap:0;}
 .fg-row{display:flex;flex:1 1 0;gap:0;min-height:0;}
-.fg-row + .fg-row{margin-top:-1px;}                       /* смежные ряды делят одну горизонтальную линию */
-.fg-frame{flex:1 1 0;min-width:0;border:1px solid var(--line);padding:30px;
+.fg-row + .fg-row{margin-top:-2px;}                       /* смежные ряды делят одну горизонтальную линию */
+.fg-frame{flex:1 1 0;min-width:0;border:2px solid var(--line);padding:30px;
   display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;
   overflow:hidden;}                                       /* контур-рамка; текст от ВЕРХА и левого края */
-.fg-frame + .fg-frame{margin-left:-1px;}                  /* смежные рамки в ряду делят одну вертикальную линию */
+.fg-frame + .fg-frame{margin-left:-2px;}                  /* смежные рамки в ряду делят одну вертикальную линию */
 .fg-name{font-size:30px;font-weight:600;line-height:1.15;letter-spacing:-.3px;
   color:var(--accent);margin-bottom:10px;}                /* имя рамки — зелёный акцент (как g22-name) */
 .fg-text{color:var(--fg-body);}                           /* типографика — роль .t-body-30 */
@@ -539,7 +538,7 @@ html[data-theme="dark"] .sd-number{color:var(--accent);}
 .pattern-waterfall > *:nth-child(3){flex:4;}  /* 20% */
 .pattern-waterfall > *:nth-child(4){flex:3;}  /* 15% */
 .pattern-waterfall > *:nth-child(5){flex:2;}  /* 10% */
-.pattern-waterfall > *{border:1px solid var(--line);background:transparent;}
+.pattern-waterfall > *{border:2px solid var(--line);background:transparent;}
 /* Точечный паттерн (statement, contacts-light): сетка точек шагом --dot-step.
    Цвет — через currentColor: контейнер задаёт color токеном темы.
    Шаг параметризуется (как --step у .pattern-lines): дефолт 20 px, statement — 30 px. */

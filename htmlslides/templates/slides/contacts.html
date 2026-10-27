@@ -7,7 +7,8 @@
     <div class="contacts-dots pattern-dots m-loop-drift"></div>
   </div>
   <svg class="contacts-frame" viewBox="0 0 1803 960" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M421 119.5H0.5V959.5H1802.5V0.5H421V119.5Z" stroke="currentColor"/>
+    {#- stroke-width 2: правило «все структурные линии 2px» (1px гаснет при растеризации; в PPTX 2px == 1pt). -#}
+    <path d="M421 119H1V959H1802V1H421V119Z" stroke="currentColor" stroke-width="2"/>
   </svg>
   <div class="contacts-logo-plate" aria-hidden="true"></div>
   {% include "_chrome.html" %}
