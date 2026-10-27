@@ -206,43 +206,51 @@
     /* Эллипс, а не окружность: холст 1800×720, и круг r=265 оставлял по 600px
        пустоты слева и справа, зажимая плашки в узкий сектор — от шести этапов
        на подписи оставалось по 200px, а стрелки между ними сходили на нет. */
-    var ry = Math.min(H / 2 - 70, 265), rx = Math.min(W / 2 - 320, 640);
+    var ry = Math.min(H / 2 - 70, 265), rx = Math.min(W / 2 - 240, 640);
     var perim = Math.PI * (3 * (rx + ry) -
       Math.sqrt((3 * rx + ry) * (rx + 3 * ry)));   // приближение Рамануджана
-    var pos = {}, links = [];
-    function at(a) { return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]; }
+    var pos = {};
     nodes.forEach(function (node, i) {
       var a = -Math.PI / 2 + (2 * Math.PI * i) / n;   // старт сверху, по часовой
-      var p = at(a);
       pos[node.id] = {
         // От девяти этапов плашки жмутся на боках эллипса — иначе стрелка между
-        // ними снова сжимается в царапину.
-        x: p[0], y: p[1], w: Math.min(300, perim / n - 40),
-        h: n > 8 ? 74 : 96, angle: a,
+        // ними снова сжимается в царапину. 390×84 — пропорции плашки из макета
+        // (416×80 на кадре 1920), пересчитанные на холст 1800.
+        x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a),
+        w: Math.min(390, perim / n - 40), h: n > 8 ? 74 : 84, angle: a,
       };
     });
-    /* Где дуга выходит из плашки — считаем по самой плашке, а не фиксированным
-       0.42·π/n: широкий узел наверху занимает больший угол, чем такой же сбоку,
-       и дуга упиралась ВНУТРЬ плашки. Наконечник рисуется до узлов и закрывался
-       ими — у стрелки «Формирование гипотезы → Пилот» просто не было головы.
-       Шаг перебора мелкий и фиксированный: раскладка обязана быть повторяемой. */
-    function edgeAngle(p, sign) {
-      var lim = (Math.PI / n) * 0.92, step = Math.PI / 720;
-      for (var d = step; d < lim; d += step) {
-        var q = at(p.angle + sign * d);
-        if (Math.abs(q[0] - p.x) > p.w / 2 + 16 ||
-            Math.abs(q[1] - p.y) > p.h / 2 + 16) return p.angle + sign * d;
-      }
-      return p.angle + sign * lim;
+    /* Связи — по макету (Slide decks, 146:982): ортогональное «колено» вместо
+       дуги, угол СНАРУЖИ эллипса — x угла от бокового узла, y от верхнего или
+       нижнего. Стрелки на ОБОИХ концах, как нарисовано в макете. */
+    var PAD = 10;    // зазор между наконечником и краем плашки
+    var ROOM = 34;   // PAD + место под сам наконечник и кусочек линии
+    function elbow(A, B) {
+      var sx = B.x > A.x ? 1 : -1, sy = B.y > A.y ? 1 : -1;
+      if (Math.abs(A.x - B.x) < 1)        // соседи в одной колонке: вертикаль
+        return [[A.x, A.y + sy * (A.h / 2 + PAD)],
+                [B.x, B.y - sy * (B.h / 2 + PAD)]];
+      if (Math.abs(A.y - B.y) < 1)        // в одном ряду: горизонталь
+        return [[A.x + sx * (A.w / 2 + PAD), A.y],
+                [B.x - sx * (B.w / 2 + PAD), B.y]];
+      var aV = Math.abs(A.y - cy) >= Math.abs(B.y - cy);  // кто ближе к полюсу
+      var v = aV ? A : B, s = aV ? B : A;
+      /* Колену не хватает места (от девяти этапов соседние плашки почти в одном
+         ряду) — честная прямая между краями, как у графа связей. */
+      if (Math.abs(v.x - s.x) < v.w / 2 + ROOM ||
+          Math.abs(v.y - s.y) < s.h / 2 + ROOM) return trimSegment(A, B);
+      return aV
+        ? [[A.x + sx * (A.w / 2 + PAD), A.y], [B.x, A.y],
+           [B.x, B.y - sy * (B.h / 2 + PAD)]]
+        : [[A.x, A.y + sy * (A.h / 2 + PAD)], [A.x, B.y],
+           [B.x - sx * (B.w / 2 + PAD), B.y]];
     }
+    var links = [];
     for (var i = 0; i < n; i++) {
-      var from = nodes[i].id, to = nodes[(i + 1) % n].id;
-      var a1 = edgeAngle(pos[from], 1);
-      var a2 = edgeAngle(pos[to], -1);
+      var A = pos[nodes[i].id], B = pos[nodes[(i + 1) % n].id];
       links.push({
-        from: from, to: to, label: "", style: "solid",
-        arc: { cx: cx, cy: cy, rx: rx, ry: ry, a1: a1, a2: a2 },
-        points: [at(a1), at(a2)],
+        from: nodes[i].id, to: nodes[(i + 1) % n].id, label: "", style: "solid",
+        both: true, width: 2, points: elbow(A, B),
       });
     }
     return { nodes: pos, links: links };
@@ -1126,8 +1134,13 @@
   }
 
   function linkPath(link, markerId, boxes, taken) {
-    var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="3"' +
+    /* width: цикл по макету рисуется линией 2 (наконечник масштабируется сам —
+       markerUnits по умолчанию strokeWidth); both: стрелки на обоих концах,
+       marker-start живёт за счёт orient="auto-start-reverse" в определении. */
+    var attrs = 'fill="none" stroke="var(--fg-muted)" stroke-width="' +
+      (link.width || 3) + '"' +
       (link.style === "dashed" ? ' stroke-dasharray="10 8"' : "") +
+      (link.both ? ' marker-start="url(#' + markerId + ')"' : "") +
       ' marker-end="url(#' + markerId + ')"';
     var d;
     if (link.arc) {

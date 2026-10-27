@@ -139,12 +139,24 @@ test("layoutCycle: узлы на эллипсе, старт сверху, лин
   assert.ok(pos.a.y < pos.c.y);             // старт сверху, противоположный снизу
   assert.strictEqual(links.length, 4);      // замкнутый круг
   assert.strictEqual(links[3].to, "a");
-  // Дуга эллиптическая (rx≠ry): окружность r=265 оставляла по 600px пустоты
-  // по бокам холста 1800×720 и зажимала плашки в узкий сектор.
+  // По макету 146:982: ортогональные «колени» вместо дуг, стрелки на обоих
+  // концах, линия 2. Каждый сегмент колена строго горизонтален или вертикален.
   links.forEach((l) => {
-    assert.ok(l.arc && l.arc.rx > 0 && l.arc.ry > 0);
-    assert.ok(l.arc.rx > l.arc.ry);
+    assert.strictEqual(l.arc, undefined);
+    assert.ok(l.both, `${l.from}→${l.to}: нет флага двусторонней стрелки`);
+    assert.strictEqual(l.width, 2);
+    assert.strictEqual(l.points.length, 3);   // ромб n=4: всегда колено
+    for (let i = 1; i < l.points.length; i++) {
+      const [p, q] = [l.points[i - 1], l.points[i]];
+      assert.ok(Math.abs(p[0] - q[0]) < 1 || Math.abs(p[1] - q[1]) < 1,
+        `${l.from}→${l.to}: сегмент ${i} не ортогонален`);
+    }
   });
+  // Угол колена — снаружи: у верхней плашки «a» стрелка к правой «b» уходит
+  // вбок на её же высоте (y угла = y полюсной плашки, x — боковой).
+  const ab = links.find((l) => l.from === "a" && l.to === "b");
+  assert.ok(Math.abs(ab.points[1][1] - pos.a.y) < 1);
+  assert.ok(Math.abs(ab.points[1][0] - pos.b.x) < 1);
 });
 
 test("layoutFunnel: ширины по value убывают, без value — линейное сужение", () => {
