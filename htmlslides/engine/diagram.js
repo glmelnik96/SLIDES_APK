@@ -1737,9 +1737,13 @@
     var markerId = "dgm-arrow-" + (++uid);
     var parts = ['<svg class="diagram-svg m-enter" viewBox="0 0 ' + W + " " + H +
       '" fill="none" xmlns="http://www.w3.org/2000/svg" role="img">'];
+    /* Голова стрелки — ОТКРЫТАЯ галочка, не закрашенный треугольник (правило
+     * 2026-10-27, бренд-референс). markerUnits по умолчанию strokeWidth →
+     * маркер масштабируется толщиной линии: при stroke-width 3 внутренний
+     * штрих 1 даёт те же 3px на голове, плечо ~17px, раскрыв ~76°. */
     parts.push('<defs><marker id="' + markerId + '" viewBox="0 0 10 10" refX="8.5" refY="5" ' +
-      'markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
-      '<path d="M0 0L10 5L0 10z" fill="var(--fg-muted)"/></marker></defs>');
+      'markerWidth="10" markerHeight="10" orient="auto-start-reverse">' +
+      '<path d="M4 1.5L8.5 5L4 8.5" fill="none" stroke="var(--fg-muted)" stroke-width="1"/></marker></defs>');
     var decor = DECOR[spec.kind];
     if (decor) parts.push(decor(spec, result, markerId));
     var taken = [];   // занятые подписями места — чтобы не печатать их друг на друге
