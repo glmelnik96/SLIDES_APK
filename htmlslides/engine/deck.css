@@ -167,8 +167,10 @@ a{color:inherit;}
    Шаг штрихов 20px (линия 2px + 18px пустоты). Линия именно 2px, а не 1px: хэйрлайн
    в 1px не переживает суб-пиксельную растеризацию — при масштабировании деки (вьюер,
    превью-тумбнейл) часть линий гаснет и полоса выглядит рваной. 2px растеризуется
-   ровно и держится при уменьшении. */
-.cover-hatch{position:absolute;left:60px;top:830px;width:1800px;height:183px;
+   ровно и держится при уменьшении.
+   .sh-hatch — та же полоса у разделителя section-hatch (макет кавера как
+   разделитель раздела, правило 2026-10-27). */
+.cover-hatch,.sh-hatch{position:absolute;left:60px;top:830px;width:1800px;height:183px;
   pointer-events:none;opacity:.5;
   background-image:repeating-linear-gradient(90deg,
     var(--line) 0, var(--line) 2px, transparent 2px, transparent 20px);}
@@ -518,6 +520,15 @@ html[data-theme="dark"] .sd-number{color:var(--accent);}
   font-size:114px;font-weight:600;line-height:1.0;letter-spacing:-2.28px;color:var(--fg);}  /* Section 114px @ центр (960,486) */
 .sf-number{position:absolute;left:60px;top:926px;color:var(--fg);}   /* «01» @ (60,926) — typo роль .t-sub-36 */
 .sf-arrows{position:absolute;left:1440px;top:62px;display:flex;gap:29.22px;color:var(--line);}  /* 3 стрелки y=62, x=1440/1589/1738; глиф — .brand-arrow */
+
+/* ---- section-hatch (правило 2026-10-27): макет кавера как ОСНОВНОЙ разделитель ----
+   Огромное название раздела на позиции титула + полоса штрихов внизу (.sh-hatch,
+   общее правило с .cover-hatch) + номер главы справа на строке названия.
+   Акцентные цвета как у section-dots: зелёный в тёмной теме, графит в светлой. */
+.sh-label{position:absolute;left:60px;top:291px;width:1500px;white-space:nowrap;}  /* typo роль .t-hero-156 (120px), ширина до зоны номера */
+html[data-theme="dark"] .sh-label{color:var(--accent);}
+.sh-number{position:absolute;right:60px;top:291px;width:240px;text-align:right;}  /* «01» 120px, правая кромка x=1860, базлайн как у sh-label */
+html[data-theme="dark"] .sh-number{color:var(--accent);}
 
 /* ---- patterns (линейные/Waterfall по гайдбуку, без растров) ---- */
 /* Линейный паттерн: вертикальные линии 1 px, шаг ~10 px (xs-density, 3401:906).

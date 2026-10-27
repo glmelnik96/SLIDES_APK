@@ -181,7 +181,9 @@ class _Planner:
         if self.first is not None:
             exc, self.first = self.first, None
             raise exc
-        return _SectionPlan(slides=[_SectionSlide(template_id="statement", brief="тезис")])
+        # three-col: эвристика для короткого текста дала бы quote — по id видно,
+        # что в деку попал именно план модели, а не фолбэк.
+        return _SectionPlan(slides=[_SectionSlide(template_id="three-col", brief="тезис")])
 
 
 def _sends_image(messages) -> bool:
@@ -212,7 +214,7 @@ def test_planner_retries_by_text_when_gateway_refuses_image(tmp_path):
 
     plan = planner.plan_deck(client, _doc(), TemplateLibrary.load(), slide_images=[png])
 
-    assert [s.template_id for s in plan.slides][1] == "statement"   # план модели, не эвристика
+    assert [s.template_id for s in plan.slides][1] == "three-col"   # план модели, не эвристика
     assert _sends_image(client.seen[0]) and not _sends_image(client.seen[1])
 
 
@@ -226,7 +228,7 @@ def test_planner_monolith_falls_back_to_text_when_gateway_refuses(tmp_path):
 
     plan = planner.plan_deck(client, _doc(), TemplateLibrary.load(), slide_images=pngs)
 
-    assert [s.template_id for s in plan.slides][1] == "statement"
+    assert [s.template_id for s in plan.slides][1] == "three-col"
     assert _sends_image(client.seen[0]) and not any(_sends_image(m) for m in client.seen[1:])
 
 

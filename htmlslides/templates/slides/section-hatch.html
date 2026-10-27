@@ -1,0 +1,12 @@
+{#- Разделитель секции «обложка со штриховкой» (правило 2026-10-27): макет титула
+    cover — огромное название раздела + полоса вертикальных штрихов внизу
+    (.sh-hatch, общее CSS-правило с .cover-hatch) + номер главы справа.
+    ОСНОВНОЙ разделитель начала раздела; section-dots / section-frame — запасные.
+    Секционный макет — большой логотип (без .slide--chrome-sm). -#}
+<section class="slide" data-template="section-hatch">
+  {% include "_chrome.html" %}
+  <h1 class="sh-label t-hero-156 m-enter m-enter--hero" data-slot="label">{{ content.label }}</h1>
+  {#- Номер секции: голое целое дополняем ведущим нулём до NN (1→01, 2→02); «02» оставляем; нечисловое — как есть; пусто — ничего. -#}
+  {% if content.number %}{% set num = content.number | string | trim %}<div class="sh-number t-hero-156 m-enter" data-slot="number">{% if num.isdigit() %}{{ "%02d" | format(num | int) }}{% else %}{{ num }}{% endif %}</div>{% endif %}
+  <div class="sh-hatch m-loop-drift" aria-hidden="true"></div>
+</section>

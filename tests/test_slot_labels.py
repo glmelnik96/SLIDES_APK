@@ -59,7 +59,7 @@ def test_templatespec_display_name_defaults_empty():
 
 def test_library_every_template_has_display_name():
     lib = TemplateLibrary.load()
-    assert len(lib.templates) == 26  # 25 + diagram («Схема»)
+    assert len(lib.templates) == 27  # 25 + diagram («Схема») + section-hatch
     for t in lib.templates:
         assert t.display_name, f"{t.id}: пустой display_name"
 
@@ -67,7 +67,8 @@ def test_library_every_template_has_display_name():
 def test_library_known_display_names():
     by_id = {t.id: t for t in TemplateLibrary.load().templates}
     assert by_id["cover"].display_name == "Обложка"
-    assert by_id["statement"].display_name == "Акцентный тезис"
+    assert by_id["statement"].display_name == "Титул-тезис"
+    assert by_id["section-hatch"].display_name == "Раздел (штриховка)"
     assert by_id["kpi-rings"].display_name == "KPI-кольца"
     assert by_id["stacked-bar"].display_name == "Составные бары"
 

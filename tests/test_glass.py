@@ -106,17 +106,16 @@ def test_candidates_menu_excludes_system_templates(library):
 
 
 def test_candidates_collapse_cosmetic_twins(library):
-    """statement и statement-green — один макет в двух цветах. Двумя чипами они
-    предлагают выбор без выбора, а их близкая уверенность поднимала ложный
-    вопрос: разрыв меньше GAP_FLOOR считался сомнением, хотя различался только
-    фон. Схлопываем в один вариант — и вопрос задаётся по существу."""
+    """statement и statement-green с 2026-10-27 — титульные макеты: внутри деки
+    их не предлагаем (меню раздела их не содержит), и если модель всё же их
+    галлюцинирует, кандидаты отфильтровываются как чужие id. Остаётся quote —
+    единственный акцент внутри раздела."""
     fake = FakeClient([SectionChoice(
         candidates=[Candidate(template_id="statement", confidence=0.86),
                     Candidate(template_id="statement-green", confidence=0.8),
                     Candidate(template_id="quote", confidence=0.4)])])
     out = glass.plan_section_candidates(fake, library, _section())
-    assert [c.template_id for c in out.candidates] == ["statement", "quote"]
-    assert glass._doubtful(out) is False   # без дубля разрыв 0.46 — вопроса нет
+    assert [c.template_id for c in out.candidates] == ["quote"]
 
 
 def test_doubtful_thresholds():
@@ -148,7 +147,7 @@ def test_start_glass_is_parse_only_no_llm(monkeypatch, tmp_path):
 
     assert plan.title == "Отчёт"
     cover = plan.slides[0]
-    assert cover.template_id == "cover" and cover.filled
+    assert cover.template_id == "cover-image" and cover.filled
     assert len(plan.slides) == 3
     for s in plan.slides[1:]:
         assert s.status == "unscored" and not s.filled
@@ -162,21 +161,23 @@ def test_start_glass_is_parse_only_no_llm(monkeypatch, tmp_path):
 
 
 def test_cover_keeps_the_whole_document_title(monkeypatch, tmp_path):
-    """Длинное название не режется посреди слова: заголовок обложки узкий, хвост
-    уходит в подзаголовок (иначе первый слайд деки — обрубок и текст-рыба)."""
+    """Длинное название не режется посреди слова: заголовок обложки ограничен,
+    хвост уходит во вводный текст (иначе первый слайд деки — обрубок и
+    текст-рыба). Титул с 2026-10-27 — cover-image."""
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
     src = tmp_path / "doc.md"
-    long_title = "Программа модернизации логистического оператора «Северный путь»"
+    long_title = ("Программа модернизации логистического оператора "
+                  "«Северный путь» на горизонте до 2030 года")
     src.write_text(f"# {long_title}\n\n## Раздел\n\nТекст про метрики.\n",
                    encoding="utf-8")
     plan = glass.start_glass("cov", src)
 
     from htmlslides.library import TemplateLibrary
-    cap = TemplateLibrary.load().get("cover").slots["title"].max_chars
+    cap = TemplateLibrary.load().get("cover-image").slots["title"].max_chars
     cover = plan.slides[0].content
     assert len(cover["title"]) <= cap
     assert long_title[len(cover["title"])] == " "   # разрез по границе слова
-    assert cover["title"] + " " + cover["subtitle"] == long_title
+    assert cover["title"] + " " + cover["lead"] == long_title
 
 
 def test_cover_short_title_ships_without_sample_subtitle(monkeypatch, tmp_path):

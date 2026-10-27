@@ -49,9 +49,12 @@ MAX_GLASS_SLIDES = 40
 # недозаполненных аутлайнов, каждый со своими вызовами модели.
 MAX_ACTIVE_PER_USER = 10
 
-# Эти шаблоны ставит система (обложку — start_glass), в меню раздела им не место.
-_EXCLUDED = {"cover", "cover-image", "contacts", "back-cover",
-             "section-dots", "section-frame", "blank"}
+# Эти шаблоны ставит система (титул — start_glass), в меню раздела им не место.
+# statement/statement-green с 2026-10-27 — титульные (вариант 2 после cover-image),
+# внутри деки их не предлагаем; акцент внутри раздела — quote.
+_EXCLUDED = {"cover", "cover-image", "statement", "statement-green",
+             "contacts", "back-cover",
+             "section-hatch", "section-dots", "section-frame", "blank"}
 
 _DEFAULT_QUESTION = ("Раздел одинаково хорошо ложится в несколько макетов — "
                      "выберите вариант или напишите, что важно показать.")
@@ -96,7 +99,7 @@ _GLASS_SYSTEM = """\
 - ДАННЫЕ ВАЖНЕЕ ТЕКСТА: числа/метрики/таблицы → профильный data-шаблон;
   процесс с ветвлениями, цикл, воронка, оргсхема → diagram; этапы с датами →
   timeline; иначе текстовый по числу пунктов.
-- statement/statement-green/quote — АКЦЕНТ, а не макет по умолчанию. Бери их,
+- quote — АКЦЕНТ, а не макет по умолчанию. Бери его,
   только когда в разделе ровно одна мысль и её нечем разложить. Есть
   перечисление, сравнение, причины и следствия, несколько аспектов или ролей —
   бери карточный/колоночный макет, даже если текст идёт сплошным абзацем.
@@ -400,15 +403,17 @@ def unfinished_outlines(session_ids: Iterable[str]) -> int:
 def _cover_content(title: str, library: Any) -> dict:
     """Название документа → слоты обложки.
 
-    Слот заголовка узкий (у «Обложки» 20 симв. — он рисуется огромным капсом), а
-    названия документов длинные, и раньше сюда клался весь заголовок целиком:
-    рендер резал его ЖЁСТКО по символу («ПРОГРАММА МОДЕРНИЗАЦ»), а подзаголовок
-    оставался пустым и подставлялся примером — первый слайд деки выходил
-    обрубленным и с текстом-рыбой. Режем по границе слова, хвост уводим в
-    подзаголовок: обложка читается как две строки и ничего не теряет."""
-    slots = library.get("cover").slots
+    Титул с 2026-10-27 — «Обложка с картинкой» (cover-image, первый приоритет
+    титулов; без ссылки шаблон сам подставляет брендовую заставку, слот image
+    не трогаем). Слот заголовка ограничен, а названия документов длинные, и
+    раньше сюда клался весь заголовок целиком: рендер резал его ЖЁСТКО по
+    символу («ПРОГРАММА МОДЕРНИЗАЦ»), а вводный текст оставался пустым и
+    подставлялся примером — первый слайд деки выходил обрубленным и с
+    текстом-рыбой. Режем по границе слова, хвост уводим во вводный текст:
+    обложка читается как две строки и ничего не теряет."""
+    slots = library.get("cover-image").slots
     cap = slots["title"].max_chars or 0
-    sub_cap = slots["subtitle"].max_chars or 0
+    lead_cap = slots["lead"].max_chars or 0
     text = " ".join((title or "").split())
     if not (cap and len(text) > cap):
         return {"title": text}
@@ -419,7 +424,7 @@ def _cover_content(title: str, library: Any) -> dict:
     tail = text[len(head):].strip()
     out = {"title": head}
     if tail:
-        out["subtitle"] = tail[:sub_cap] if sub_cap else tail
+        out["lead"] = tail[:lead_cap] if lead_cap else tail
     return out
 
 
@@ -480,7 +485,7 @@ def start_glass(session_id: str, source: Path, *,
     title = " ".join((title or "").split()) or _deck_title(doc, origin_name,
                                                            sections)
 
-    slides = [draft.DraftSlide(template_id="cover",
+    slides = [draft.DraftSlide(template_id="cover-image",
                                content=_cover_content(title, library), filled=True)]
     for src_i, section in pairs:
         slides.append(draft.DraftSlide(

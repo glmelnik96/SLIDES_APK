@@ -1,7 +1,7 @@
 """Роль 1 — Deck Planner: InputDoc + каталог шаблонов -> DeckPlan.
 
 Текстовый вход (основной путь) планируется ПО РАЗДЕЛАМ (map) параллельно, затем
-структура деки собирается в коде (reduce: cover/разнообразие/accent).
+структура деки собирается в коде (reduce: титул/разделители/разнообразие).
 Причина — монолитный вызов на весь документ систематически падал на крупных доках:
 reasoning-heavy модели уходили в runaway и возвращали пустой content (no JSON), а у
 планировщика не было мягкой деградации, поэтому падал ВЕСЬ билд. Per-section вызовы
@@ -82,7 +82,12 @@ PLANNER_SYSTEM = """\
 ]}}
 
 Правила:
-- Первый слайд — cover.
+- Первый слайд — титульный, приоритет: cover-image (первый выбор, работает и без
+  картинки — подставится брендовая заставка) → statement/statement-green
+  (акцентная плашка) → cover (крайний запасной). Титульные шаблоны НИГДЕ,
+  кроме первого слайда, не используются.
+- Начало каждого нового раздела — разделитель section-hatch (запасные для
+  разнообразия: section-dots, section-frame). Акцент внутри раздела — quote.
 - template_id строго из каталога; type бери из каталога.
 - ПОЛНОТА: КАЖДЫЙ смысловой раздел исходника — ОТДЕЛЬНЫЙ слайд; не объединяй и не
   выбрасывай разделы. Ориентир 6–18 слайдов.
@@ -90,7 +95,7 @@ PLANNER_SYSTEM = """\
   сохраняй единицы и суффиксы (152-ФЗ, %, млрд, Tier III).
 - Выбор шаблона по числу пунктов: 2→two-col-cards; 3→three-col/cards-6; 4→grid-2x2;
   5-6→cards-6. Числовые данные → bar/line/donut/stats-row/timeline/kpi-rings.
-- РАЗНООБРАЗИЕ: один шаблон не чаще 2 раз и не подряд; statement максимум один.
+- РАЗНООБРАЗИЕ: один шаблон не чаще 2 раз и не подряд; quote максимум один.
 {freeform_rule}
 
 БРЕНД-ПРАВИЛА:
@@ -128,10 +133,12 @@ SECTION_SYSTEM = """\
   оргструктуру/декомпозицию или последовательность шагов БЕЗ дат — выбирай
   diagram, НЕ разворачивай связи в плоский список. Этапы с датами → timeline.
 - Иначе по числу именованных пунктов: 2→two-col-cards; 3→three-col; 4→grid-2x2;
-  5-6→cards-6. Короткий тезис из 1-2 предложений без списка/чисел → statement.
+  5-6→cards-6. Короткий тезис из 1-2 предложений без списка/чисел → quote.
 - В brief — конкретика раздела (цифры, названия, тезисы), сохраняй единицы и
   суффиксы (152-ФЗ, %, млрд, Tier III). Ничего не выдумывай.
-- НЕ выбирай cover/contacts/back-cover/blank — их ставит система.
+- НЕ выбирай титульные (cover, cover-image, statement, statement-green),
+  разделители (section-*) и сервисные (contacts, back-cover, blank) — их
+  ставит система.
 {freeform_rule}
 
 БРЕНД-ПРАВИЛА:
@@ -307,8 +314,9 @@ def _fallback_template(section: Section, library: TemplateLibrary) -> str:
         candidates.append("bar-chart")
     by_items = {2: "two-col-cards", 3: "three-col", 4: "grid-2x2",
                 5: "cards-6", 6: "cards-6"}
-    candidates.append(by_items.get(min(items, 6)) if items >= 2 else "statement")
-    candidates += ["statement", "blank"]
+    # Короткий тезис без пунктов → quote (statement теперь титульный, 2026-10-27).
+    candidates.append(by_items.get(min(items, 6)) if items >= 2 else "quote")
+    candidates += ["quote", "blank"]
     for choice in candidates:
         if choice in known:
             return choice
@@ -386,7 +394,11 @@ def _plan_section(client: KimiClient, library: TemplateLibrary, menu: str,
                                  brief=brief))
             continue
         tid = ss.template_id if ss.template_id in known else None
-        if tid is None or tid in ("cover", "contacts", "back-cover", "blank"):
+        # Титульные (правило 2026-10-27: cover-image/statement — только 1-й слайд)
+        # и сервисные шаблоны модели запрещены — ставит система.
+        if tid is None or tid in ("cover", "cover-image", "statement",
+                                  "statement-green", "contacts", "back-cover",
+                                  "blank") or tid.startswith("section-"):
             tid = _fallback_template(section, library)
         out.append(SlidePlan(index=1, type=library.get(tid).type, template_id=tid,
                              freeform=False, content={"brief": brief},
@@ -404,14 +416,20 @@ def _fallback_slide(section: Section, library: TemplateLibrary) -> SlidePlan:
 # ===================== REDUCE: сборка деки в коде =====================
 
 def _cover_slide(doc: InputDoc, library: TemplateLibrary) -> SlidePlan:
-    spec = library.get("cover")
+    """Титул ставит система (правило 2026-10-27, приоритет cover-image →
+    statement → cover). Детерминированно берём первый приоритет: cover-image
+    работает и без своей картинки — шаблон подставляет брендовую заставку.
+    Плашка-statement и текстовый cover остаются запасными для редактора."""
+    spec = library.get("cover-image")
     brief = doc.title or "Cloud.ru"
-    return SlidePlan(index=1, type=spec.type, template_id="cover",
+    return SlidePlan(index=1, type=spec.type, template_id="cover-image",
                      content={"brief": brief}, brief=brief)
 
 
-# Два макета-разделителя чередуем для разнообразия (точки → рамка → точки …).
-_SECTION_TEMPLATES = ("section-dots", "section-frame")
+# Основной разделитель — «обложка со штриховкой» (правило 2026-10-27: начало
+# каждого раздела открывает section-hatch); section-dots / section-frame
+# остаются запасными для ручного выбора в редакторе.
+_SECTION_TEMPLATES = ("section-hatch",)
 
 
 def _divider_label(heading: str, max_chars: int) -> str:
@@ -486,14 +504,6 @@ def _enforce_variety(slides: list[SlidePlan], library: TemplateLibrary) -> None:
         prev = tid
 
 
-def _pick_accent(slides: list[SlidePlan]) -> None:
-    """≤1 зелёный accent-слайд на деку: первый statement (бренд-приём). In-place."""
-    for slide in slides:
-        if slide.template_id == "statement" and isinstance(slide.content, dict):
-            slide.content = {**slide.content, "accent": "1"}
-            return
-
-
 def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary, *,
                     freeform_ok: bool, workers: int = _MAP_WORKERS,
                     images: Sequence[Path] | None = None) -> DeckPlan:
@@ -533,9 +543,9 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
     else:
         body_plans = {}
 
-    # REDUCE: cover + [разделитель части?] + слайды разделов (в порядке документа);
+    # REDUCE: титул + [разделитель части?] + слайды разделов (в порядке документа);
     # контакты автоматически НЕ добавляем — вставляются вручную при необходимости.
-    # Разнообразие и accent — в коде.
+    # Разнообразие — в коде.
     slides: list[SlidePlan] = [_cover_slide(doc, library)]
     divider_no = 0
     for i, section in enumerate(sections):
@@ -545,7 +555,6 @@ def _plan_deck_text(client: KimiClient, doc: InputDoc, library: TemplateLibrary,
         if i in body_plans:
             slides.extend(body_plans[i])
     _enforce_variety(slides, library)
-    _pick_accent(slides)
     for i, slide in enumerate(slides, start=1):
         slide.index = i
     return DeckPlan(title=doc.title or "Презентация", slides=slides)
@@ -615,8 +624,9 @@ def _finalize(plan: DeckPlan, library: TemplateLibrary, *,
     seen_accent = False
     for slide in plan.slides:
         if not slide.freeform and slide.template_id == "blank":
-            spec = library.get("statement")
-            slide.template_id = "statement"
+            # statement теперь титульный (2026-10-27) — акцент внутри деки = quote.
+            spec = library.get("quote")
+            slide.template_id = "quote"
             slide.type = spec.type
         if slide.freeform and not freeform_ok:
             raise ValueError(f"slide {slide.index}: freeform запрещён (freeform_ok=False)")

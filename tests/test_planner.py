@@ -47,12 +47,12 @@ def _sp(template_id, brief="факт"):
 
 def test_text_path_maps_sections_and_wraps_cover():
     lib = TemplateLibrary.load()
-    client = FakeClient([_sp("three-col"), _sp("statement")])
+    client = FakeClient([_sp("three-col"), _sp("quote")])
     plan = planner.plan_deck(client, _doc(), lib)
     ids = [s.template_id for s in plan.slides]
-    assert ids[0] == "cover"
+    assert ids[0] == "cover-image"          # титул (правило 2026-10-27)
     assert "contacts" not in ids            # контакты больше не прикрепляются автоматически
-    assert "three-col" in ids and "statement" in ids
+    assert "three-col" in ids and "quote" in ids
     assert [s.index for s in plan.slides] == list(range(1, len(plan.slides) + 1))
     assert client.calls == 2                      # один вызов на раздел
 
@@ -60,11 +60,11 @@ def test_text_path_maps_sections_and_wraps_cover():
 def test_section_failure_falls_back_not_aborts():
     """Сбойный раздел не роняет деку — деградирует на эвристический шаблон."""
     lib = TemplateLibrary.load()
-    client = FakeClient([LLMFormatError("no JSON object"), _sp("statement")])
+    client = FakeClient([LLMFormatError("no JSON object"), _sp("quote")])
     plan = planner.plan_deck(client, _doc(), lib)
     # деки собралась: cover + 2 контентных (без авто-contacts)
     assert len(plan.slides) == 3
-    assert plan.slides[0].template_id == "cover"
+    assert plan.slides[0].template_id == "cover-image"
     # упавший раздел (3 пункта списка) ушёл на эвристику three-col, брифом — текст раздела
     assert plan.slides[1].template_id == "three-col"
     assert "раз" in plan.slides[1].content["brief"]
@@ -75,25 +75,26 @@ def test_variety_swaps_adjacent_duplicate():
     # оба раздела просят cards-6 подряд → второй должен свапнуться на альтернативу
     client = FakeClient([_sp("cards-6"), _sp("cards-6")])
     plan = planner.plan_deck(client, _doc(), lib)
-    content = [s.template_id for s in plan.slides if s.template_id != "cover"]
+    content = [s.template_id for s in plan.slides
+               if s.template_id != "cover-image"]
     assert content[0] == "cards-6"
     assert content[1] != "cards-6"                # разнообразие
     assert content[1] in planner._VARIETY_SWAP["cards-6"]
 
 
-def test_accent_on_first_statement_only():
+def test_statement_inside_deck_is_replaced():
+    """statement/statement-green с 2026-10-27 — титульные макеты: внутри деки
+    они запрещены, запрос модели заменяется эвристикой (акцент — quote)."""
     lib = TemplateLibrary.load()
-    client = FakeClient([_sp("statement"), _sp("statement")])
+    client = FakeClient([_sp("statement"), _sp("statement-green")])
     plan = planner.plan_deck(client, _doc(), lib)
-    accented = [s for s in plan.slides if isinstance(s.content, dict)
-                and s.content.get("accent")]
-    assert len(accented) == 1
-    assert accented[0].template_id == "statement"
+    ids = [s.template_id for s in plan.slides]
+    assert "statement" not in ids[1:] and "statement-green" not in ids[1:]
 
 
 def test_unknown_template_id_falls_back():
     lib = TemplateLibrary.load()
-    client = FakeClient([_sp("totally-made-up"), _sp("statement")])
+    client = FakeClient([_sp("totally-made-up"), _sp("quote")])
     plan = planner.plan_deck(client, _doc(), lib)
     # неизвестный id заменён эвристикой (3 пункта → three-col), деки валидна
     assert plan.slides[1].template_id in {t.id for t in lib.templates}
@@ -104,7 +105,7 @@ def test_empty_plan_is_impossible():
     lib = TemplateLibrary.load()
     client = FakeClient([])
     plan = planner.plan_deck(client, InputDoc(title="Пусто", sections=[]), lib)
-    assert [s.template_id for s in plan.slides] == ["cover"]
+    assert [s.template_id for s in plan.slides] == ["cover-image"]
     assert isinstance(plan, DeckPlan)
 
 
@@ -128,7 +129,7 @@ def test_fallback_is_data_aware():
     assert _fallback_template(
         _sec([ListBlock(items=["a", "b", "c"])]), lib) == "three-col"
     assert _fallback_template(
-        _sec([TextBlock(text="Просто мысль без чисел.")]), lib) == "statement"
+        _sec([TextBlock(text="Просто мысль без чисел.")]), lib) == "quote"
 
 
 def test_failed_numeric_section_yields_chart_not_text():
@@ -145,7 +146,8 @@ def test_failed_numeric_section_yields_chart_not_text():
 
 def test_part_title_sections_become_dividers():
     """Раздел-«шапка части» (заголовок без тела) -> детерминированный разделитель,
-    а не титул; LLM для него не зовётся, нумерация 01/02, макеты чередуются."""
+    а не титул; LLM для него не зовётся, нумерация 01/02. Основной разделитель
+    с 2026-10-27 — section-hatch (макет кавера со штриховкой)."""
     lib = TemplateLibrary.load()
     doc = InputDoc(title="D", sections=[
         Section(heading="Часть 1", level=1, blocks=[]),
@@ -153,18 +155,17 @@ def test_part_title_sections_become_dividers():
         Section(heading="Часть 2", level=1, blocks=[]),
         Section(heading="Итоги", level=2, blocks=[TextBlock(text="Выводы по проекту.")]),
     ])
-    client = FakeClient([_sp("statement"), _sp("statement")])
+    client = FakeClient([_sp("quote"), _sp("quote")])
     plan = planner.plan_deck(client, doc, lib)
     ids = [s.template_id for s in plan.slides]
     assert client.calls == 2                       # шапки частей LLM не трогают
-    assert ids[0] == "cover" and "contacts" not in ids
-    dots = next(s for s in plan.slides if s.template_id == "section-dots")
-    frame = next(s for s in plan.slides if s.template_id == "section-frame")
-    assert dots.content == {"label": "ЧАСТЬ 1", "number": "01"}
-    assert frame.content == {"label": "ЧАСТЬ 2", "number": "02"}
+    assert ids[0] == "cover-image" and "contacts" not in ids
+    first, second = [s for s in plan.slides if s.template_id == "section-hatch"]
+    assert first.content == {"label": "ЧАСТЬ 1", "number": "01"}
+    assert second.content == {"label": "ЧАСТЬ 2", "number": "02"}
     # разделитель заполнен детерминированно — без ключа brief (филлер его пропустит)
-    assert "brief" not in dots.content
-    assert not lib.validate_content("section-dots", dots.content)
+    assert "brief" not in first.content
+    assert not lib.validate_content("section-hatch", first.content)
 
 
 def test_top_level_sections_with_subsections_get_dividers():
@@ -178,13 +179,13 @@ def test_top_level_sections_with_subsections_get_dividers():
         Section(heading="Безопасность", level=1, blocks=[TextBlock(text="Введение 2.")]),
         Section(heading="Доступ", level=2, blocks=[TextBlock(text="Про доступ.")]),
     ])
-    client = FakeClient([_sp("statement")] * 5)
+    client = FakeClient([_sp("quote")] * 5)
     plan = planner.plan_deck(client, doc, lib)
     ids = [s.template_id for s in plan.slides]
-    assert ids.count("section-dots") + ids.count("section-frame") == 2
+    assert ids.count("section-hatch") == 2
     assert client.calls == 5                       # у всех 5 разделов есть контент
     # дивайдер стоит ПЕРЕД контентом своей главы
-    assert ids[1] in ("section-dots", "section-frame")
+    assert ids[1] == "section-hatch"
 
 
 def test_flat_doc_gets_no_dividers():
@@ -195,10 +196,10 @@ def test_flat_doc_gets_no_dividers():
         Section(heading="B", level=2, blocks=[TextBlock(text="Текст B.")]),
         Section(heading="C", level=2, blocks=[TextBlock(text="Текст C.")]),
     ])
-    client = FakeClient([_sp("statement")] * 3)
+    client = FakeClient([_sp("quote")] * 3)
     plan = planner.plan_deck(client, doc, lib)
     ids = [s.template_id for s in plan.slides]
-    assert "section-dots" not in ids and "section-frame" not in ids
+    assert not any(tid.startswith("section-") for tid in ids)
 
 
 def test_single_divider_is_suppressed_and_section_survives():
@@ -209,10 +210,10 @@ def test_single_divider_is_suppressed_and_section_survives():
         Section(heading="Часть 1", level=1, blocks=[]),
         Section(heading="Обзор", level=2, blocks=[TextBlock(text="Обзор.")]),
     ])
-    client = FakeClient([_sp("statement"), _sp("statement")])
+    client = FakeClient([_sp("quote"), _sp("quote")])
     plan = planner.plan_deck(client, doc, lib)
     ids = [s.template_id for s in plan.slides]
-    assert "section-dots" not in ids and "section-frame" not in ids
+    assert not any(tid.startswith("section-") for tid in ids)
     assert client.calls == 2                       # оба раздела ушли в body
     assert len(plan.slides) == 3                   # cover + 2, ничего не пропало
 
@@ -270,7 +271,7 @@ def test_brief_always_carries_source_text():
     конкретику исходника, а не только сжатый пересказ планировщика."""
     lib = TemplateLibrary.load()
     client = FakeClient([_sp("three-col", brief="пересказ-1"),
-                         _sp("statement", brief="пересказ-2")])
+                         _sp("quote", brief="пересказ-2")])
     plan = planner.plan_deck(client, _doc(), lib)
     briefs = " ".join(s.content["brief"] for s in plan.slides[1:])
     assert "пересказ-1" in briefs and "пересказ-2" in briefs
@@ -283,11 +284,11 @@ def test_rebrand_aligned_images_use_map_reduce(tmp_path):
     вызов на раздел, модель _SectionPlan (не DeckPlan)."""
     lib = TemplateLibrary.load()
     imgs = _pngs(tmp_path, 2)
-    client = CapturingClient([_sp("three-col"), _sp("statement")])
+    client = CapturingClient([_sp("three-col"), _sp("quote")])
     plan = planner.plan_deck(client, _doc(), lib, slide_images=imgs)
     assert client.calls == 2
     assert all(mc is _SectionPlan for _, mc in client.seen)
-    assert plan.slides[0].template_id == "cover"
+    assert plan.slides[0].template_id == "cover-image"
     # каждый map-вызов несёт ровно один скриншот; оба скриншота использованы
     per_call = [_image_urls(m) for m, _ in client.seen]
     assert all(len(urls) == 1 for urls in per_call)
@@ -300,7 +301,7 @@ def test_rebrand_map_call_gets_its_own_screenshot(tmp_path):
     детерминизма), плюс rebrand-примечание в тексте вызова."""
     lib = TemplateLibrary.load()
     imgs = _pngs(tmp_path, 2)
-    client = CapturingClient([_sp("three-col"), _sp("statement")])
+    client = CapturingClient([_sp("three-col"), _sp("quote")])
     planner._plan_deck_text(client, _doc(), lib, freeform_ok=False,
                             workers=1, images=imgs)
     for (messages, _), img in zip(client.seen, imgs):
