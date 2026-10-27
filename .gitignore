@@ -7,6 +7,8 @@ __pycache__/
 .pytest_cache/
 # app2 runtime data (sqlite db, sessions, results)
 data/
+# ...но данные конвертера PPTX — часть пакета, а не рантайм (таблица геометрии, тема)
+!htmlslides/topptx/data/
 # local scratch
 tmp_*.py
 # per-machine разрешения Claude Code (локальные пути, SSH-команды) — не общий конфиг

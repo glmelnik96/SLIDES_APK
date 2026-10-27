@@ -31,6 +31,10 @@ dependencies = [
     "python-docx>=1.1,<2.0",
     "markdown-it-py>=3.0",
     "jinja2>=3.1",
+    # Редактируемый PPTX (htmlslides.topptx): ширина строк тем же HarfBuzz, что у
+    # Chromium; woff2 шрифтов деки распаковывает fontTools (brotli — в [woff]).
+    "uharfbuzz>=0.39,<1.0",
+    "fonttools[woff]>=4.40,<5.0",
     # Observability / utils
     "structlog>=24.4,<25.0",
     "tenacity>=9.0,<10.0",
@@ -53,4 +57,4 @@ include = ["webapp*", "graph*", "llm*", "worker*", "schemas*",
            "renderers*", "bot*", "htmlslides*", "skill_assets*", "scripts*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.html", "*.css", "*.js", "*.md", "*.woff2", "*.json", "*.pptx", "*.yaml", "*.yml"]
+"*" = ["*.html", "*.css", "*.js", "*.md", "*.woff2", "*.json", "*.pptx", "*.yaml", "*.yml", "*.xml"]
