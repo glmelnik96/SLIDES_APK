@@ -156,14 +156,13 @@ class _BaseSpec(BaseModel):
     def dropped_edge_errors(self) -> list[str]:
         """Претензия к связям у типов, где движок их не рисует ВООБЩЕ.
 
-        У сравнения, матрицы и Венна раскладку задают не связи, а стороны и
-        множества — заданные рёбра молча пропадают. Замер на живой модели
-        (декa «Партнёры») показал, зачем это ловить: модель выбирала
-        ``comparison`` для процессного раздела, объявляла три перехода, и на
-        слайде оставались две колонки плашек без единой стрелки — связи, ради
-        которых раздел и брали в схему, исчезали без следа. Наличие рёбер здесь
-        — сигнал не «лишний ключ», а «выбран не тот тип», поэтому и текст
-        претензии зовёт сменить kind."""
+        У матрицы и Венна раскладку задают не связи, а оси и множества —
+        заданные рёбра молча пропадают. Замер на живой модели (дека
+        «Партнёры») показал, зачем это ловить: модель брала бессвязный тип для
+        процессного раздела, объявляла три перехода, и на слайде оставались
+        плашки без единой стрелки — связи, ради которых раздел и брали в схему,
+        исчезали без следа. Наличие рёбер здесь — сигнал не «лишний ключ», а
+        «выбран не тот тип», поэтому и текст претензии зовёт сменить kind."""
         if not self.edges:
             return []
         return [f"{self.kind}: связи (edges) в этом типе не рисуются — если "
@@ -218,7 +217,12 @@ class CycleSpec(_BaseSpec):
 
 
 class FunnelSpec(_BaseSpec):
-    """Воронка: слои сверху вниз, ширина по value (или равномерное сужение)."""
+    """Воронка: ступени сверху вниз, ширина — ровный линейный сход.
+
+    Ширина НЕ считается по value: на живых данных (12 000 → 280) пропорция
+    схлопывает последние ступени в полоски, куда не влезает подпись. Величину
+    несёт число value в правой колонке, ступенька — только порядок.
+    """
     kind: Literal["funnel"]
 
     def semantic_errors(self) -> list[str]:
@@ -284,7 +288,11 @@ class MatrixSpec(_BaseSpec):
 
 
 class PyramidSpec(_BaseSpec):
-    """Пирамида: узлы сверху вниз (вершина первой), минимум 3 уровня."""
+    """Пирамида: узлы сверху вниз (вершина первой), минимум 3 уровня.
+
+    Фигура одна — сплошной треугольник, ярусы отбиты линиями поверх него, а
+    узел задаёт только подпись яруса (своей плашки у него нет).
+    """
     kind: Literal["pyramid"]
 
     def semantic_errors(self) -> list[str]:
@@ -295,8 +303,9 @@ class PyramidSpec(_BaseSpec):
 
 
 class HubSpokeSpec(_BaseSpec):
-    """Хаб и лучи: первый узел — центр, остальные — вокруг. Рёбра опциональны
-    (без них движок сам соединяет центр с каждым лучом)."""
+    """Хаб и лучи: первый узел — центр, остальные расходятся от него двумя
+    рядами, вверх и вниз. Рёбра опциональны (без них движок сам соединяет
+    центр с каждым лучом)."""
     kind: Literal["hub_spoke"]
 
     def semantic_errors(self) -> list[str]:
@@ -304,21 +313,6 @@ class HubSpokeSpec(_BaseSpec):
         if len(self.nodes) < 3:
             errors.append("hub_spoke требует минимум 3 узла (центр и два луча)")
         return errors
-
-
-class ComparisonSpec(_BaseSpec):
-    """Сравнение сторон: у каждого узла lane = название стороны, сторон ровно 2."""
-    kind: Literal["comparison"]
-
-    def semantic_errors(self) -> list[str]:
-        errors = super().semantic_errors()
-        if any(not n.lane for n in self.nodes):
-            errors.append("comparison: у каждого узла должен быть lane — "
-                          "название его стороны")
-        elif len(_lanes(self.nodes)) != 2:
-            errors.append("comparison требует ровно 2 стороны "
-                          f"(разных lane), сейчас {len(_lanes(self.nodes))}")
-        return errors + self.dropped_edge_errors()
 
 
 class VennSpec(_BaseSpec):
@@ -430,7 +424,7 @@ class NetworkSpec(_BaseSpec):
 
 DiagramSpec = Annotated[
     Union[FlowchartSpec, ProcessSpec, CycleSpec, FunnelSpec, HierarchySpec,
-          MatrixSpec, PyramidSpec, HubSpokeSpec, ComparisonSpec, VennSpec,
+          MatrixSpec, PyramidSpec, HubSpokeSpec, VennSpec,
           SwimlanesSpec, GanttLiteSpec, StepsSpec, MindmapSpec, NetworkSpec],
     Field(discriminator="kind"),
 ]

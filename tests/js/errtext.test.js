@@ -109,7 +109,7 @@ test("diagramClaims: счётные капы типов", () => {
     nodes: [{ id: "a", label: "Раз" }, { id: "b", label: "Два" }] }).length, 0);
 });
 
-test("diagramClaims: дорожки и стороны", () => {
+test("diagramClaims: дорожки", () => {
   const noLane = diagramClaims({ kind: "swimlanes",
     nodes: [{ id: "a", label: "Раз", lane: "Продажи" }, { id: "b", label: "Два" }] });
   assert.match(noLane[0], /«исполнитель» у узлов «Два»/);
@@ -117,10 +117,6 @@ test("diagramClaims: дорожки и стороны", () => {
     nodes: [{ id: "a", label: "Раз", lane: "Продажи" },
             { id: "b", label: "Два", lane: "Продажи" }] });
   assert.match(oneLane[0], /от 2 до 5 — сейчас 1/);
-  const sides = diagramClaims({ kind: "comparison",
-    nodes: [{ id: "a", label: "Раз", lane: "Мы" }, { id: "b", label: "Два", lane: "Они" },
-            { id: "c", label: "Три", lane: "Третьи" }] });
-  assert.match(sides[0], /ровно 2 стороны — сейчас 3/);
 });
 
 test("diagramClaims: два родителя в оргсхеме", () => {

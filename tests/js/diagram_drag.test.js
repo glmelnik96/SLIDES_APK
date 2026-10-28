@@ -92,17 +92,21 @@ test("snapAxis: при равном расстоянии направляюща�
   assert.strictEqual(r.k, "c");
 });
 
-test("anchors: у трапеции габарит по широкой грани (воронка, пирамида)", () => {
-  // Верх 200, низ 400: левый край видимой фигуры — 100−200 = −100, а не 100−100.
-  const a = Drag.anchors({ x: 100, w: 200, wBottom: 400 }, "x");
-  assert.deepStrictEqual(a.map((p) => p.v), [100, -100, 300]);
+test("anchors: опоры — центр и две грани по габариту узла", () => {
+  // Раньше здесь проверялась трапеция (габарит по широкой грани): воронка и
+  // пирамида рисовались трапециями и отдавали вторую ширину wBottom. Теперь
+  // трапеций в движке нет ни одной, и у узла одна ширина.
+  const a = Drag.anchors({ x: 100, w: 200 }, "x");
+  assert.deepStrictEqual(a.map((p) => p.v), [100, 0, 200]);
+  const b = Drag.anchors({ y: 300, h: 100 }, "y");
+  assert.deepStrictEqual(b.map((p) => p.v), [300, 250, 350]);
 });
 
 // Магнит обязан работать на ЛЮБОМ типе схемы: раскладка у всех разная
 // (ряды, окружность, трапеции, круги Венна, дорожки), но контракт один —
 // конечные координаты, возврат «домой» и притяжение центра к центру соседа.
 const KINDS = ["flowchart", "process", "cycle", "funnel", "hierarchy", "matrix",
-  "pyramid", "hub_spoke", "comparison", "venn", "swimlanes"];
+  "pyramid", "hub_spoke", "venn", "swimlanes"];
 const THREE = [{ id: "a", label: "А" }, { id: "b", label: "Б" }, { id: "c", label: "В" }];
 
 KINDS.forEach((kind) => {
@@ -121,9 +125,13 @@ KINDS.forEach((kind) => {
     const home = Drag.snapOffset({ dx: 4, dy: -3 }, { auto: auto.a, others });
     assert.strictEqual(home.dx, 0);
     assert.strictEqual(home.dy, 0);
-    // Промах в 6 и 5 единиц по осям — узел должен сесть точно в центр соседа.
+    /* Промах в 6 и 5 единиц по осям — узел должен сесть точно в центр соседа.
+       Промах по Y берём с ПЕРЕлётом: магнит ловит ещё и ось холста, и у
+       пирамиды средняя полоса стоит на 365 — недолёт в 5 попадал ровно на 360,
+       то есть на ось, и магнит честно выбирал её как более близкую цель. Тест
+       обязан проверять притяжение к соседу, а не совпадение чисел. */
     const s = Drag.snapOffset(
-      { dx: auto.b.x - auto.a.x + 6, dy: auto.b.y - auto.a.y - 5 }, { auto: auto.a, others });
+      { dx: auto.b.x - auto.a.x + 6, dy: auto.b.y - auto.a.y + 5 }, { auto: auto.a, others });
     assert.ok(Math.abs(auto.a.x + s.dx - auto.b.x) < 1e-9, "по X не притянулся");
     assert.ok(Math.abs(auto.a.y + s.dy - auto.b.y) < 1e-9, "по Y не притянулся");
   });
@@ -188,8 +196,8 @@ test("смена типа режет список до верхнего капа
 });
 
 test("смена типа добивает узлы до минимума типа", () => {
-  // Две стороны сравнения → цикл: три узла минимум, третий берётся из примера.
-  const two = { kind: "comparison", nodes: [{ id: "a", label: "Своё" }, { id: "b", label: "Облако" }] };
+  // Два множества Венна → цикл: три узла минимум, третий берётся из примера.
+  const two = { kind: "venn", nodes: [{ id: "a", label: "Своё" }, { id: "b", label: "Облако" }] };
   const out = Drag.carryLabels(clone({ kind: "cycle", nodes: [
     { id: "c1", label: "Планирование" }, { id: "c2", label: "Внедрение" },
     { id: "c3", label: "Замер" }, { id: "c4", label: "Улучшение" }] }), two);

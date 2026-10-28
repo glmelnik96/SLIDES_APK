@@ -159,27 +159,37 @@ test("layoutCycle: узлы на эллипсе, старт сверху, лин
   assert.ok(Math.abs(ab.points[1][0] - pos.b.x) < 1);
 });
 
-test("layoutFunnel: ширины по value убывают, без value — линейное сужение", () => {
-  const byVal = {
-    kind: "funnel",
-    nodes: [{ id: "f1", value: "12000" }, { id: "f2", value: "3400" },
-            { id: "f3", value: "280" }],
-  };
-  const p = D.layoutFunnel(byVal).nodes;
+test("layoutFunnel: прямоугольники лесенкой, колонка не по центру холста", () => {
+  // Ширина НЕ пропорциональна величине, и это сознательно: на живых данных
+  // 12 000 / 3 400 / 1 100 / 280 пропорция дала бы последним ступеням полоски
+  // по 26 px, в которые не влезает ни подпись, ни число. Величину несёт число
+  // в правой колонке, ступенька — только порядок. Поэтому ширины идут ровным
+  // линейным сходом от 1136 к 544 (замер макета) при любых value.
+  const spec = { kind: "funnel", nodes: [
+    { id: "f1", value: "12 000" }, { id: "f2", value: "3 400" },
+    { id: "f3", value: "1 100" }, { id: "f4", value: "280" }] };
+  const p = D.layoutFunnel(spec).nodes;
   inCanvas(p);
-  assert.ok(p.f1.w > p.f2.w && p.f2.w > p.f3.w);
-  assert.ok(p.f1.y < p.f2.y && p.f2.y < p.f3.y);   // сверху вниз
-  assert.ok(p.f1.wBottom <= p.f1.w);
-
-  const plain = { kind: "funnel", nodes: [{ id: "a" }, { id: "b" }, { id: "c" }] };
-  const q = D.layoutFunnel(plain).nodes;
-  assert.ok(q.a.w > q.b.w && q.b.w > q.c.w);
+  const ids = ["f1", "f2", "f3", "f4"];
+  assert.strictEqual(Math.round(p.f1.w), 1136);
+  assert.strictEqual(Math.round(p.f4.w), 544);
+  // Сход ровный: шаг ширины одинаков на всех ступенях.
+  const d = p.f1.w - p.f2.w;
+  ids.slice(1).forEach((id, i) => {
+    assert.ok(Math.abs((p[ids[i]].w - p[id].w) - d) < 0.5, `рваный сход на ${id}`);
+    assert.ok(p[id].y > p[ids[i]].y, "ступени идут не сверху вниз");
+  });
+  // Трапеций больше нет — у ступени одна ширина.
+  ids.forEach((id) => assert.strictEqual(p[id].wBottom, undefined));
+  // Колонка смещена влево: справа отрезана полоса под числа.
+  ids.forEach((id) => assert.strictEqual(p[id].x, 629));
 });
 
-test("layoutFunnel: ступень без числа не раздувает воронку обратно", () => {
-  // Числа проставлены не у всех этапов (обычная история: последние ещё не
-  // посчитали). Раньше пустая ступень бралась из линейного скоса «с нуля» и
-  // оказывалась ШИРЕ соседней сверху — воронка разъезжалась посреди склона.
+test("layoutFunnel: ступень без числа ничем не отличается от остальных", () => {
+  // Раньше пустая ступень бралась из линейного скоса «с нуля» и оказывалась
+  // ШИРЕ соседней сверху — воронка разъезжалась посреди склона. Теперь value
+  // на геометрию не влияет вовсе, так что случай «числа посчитали не у всех»
+  // перестал быть особым: проверяем, что ряд всё так же монотонен.
   const spec = { kind: "funnel", nodes: [
     { id: "a", value: "12000" }, { id: "b", value: "3400" },
     { id: "c", value: "1100" }, { id: "d", value: "280" },
@@ -188,13 +198,8 @@ test("layoutFunnel: ступень без числа не раздувает в�
   inCanvas(p);
   const w = ["a", "b", "c", "d", "e", "f"].map((k) => p[k].w);
   w.slice(1).forEach((cur, i) => {
-    assert.ok(cur <= w[i] + 1e-6, `ступень ${i + 2} шире предыдущей: ${w[i]} → ${cur}`);
+    assert.ok(cur < w[i], `ступень ${i + 2} не уже предыдущей: ${w[i]} → ${cur}`);
   });
-
-  // Дырка посреди известных величин тянется между соседями, а не скачет.
-  const mid = D.layoutFunnel({ kind: "funnel", nodes: [
-    { id: "a", value: "100" }, { id: "b" }, { id: "c", value: "20" }] }).nodes;
-  assert.ok(mid.a.w > mid.b.w && mid.b.w > mid.c.w);
 });
 
 test("layoutHierarchy: корень над детьми, родитель по центру потомков", () => {
@@ -243,7 +248,7 @@ test("applyOffsets: без offsets — только кламп, позиции �
 
 /* ---------------- волна 2 ---------------- */
 
-test("layoutMatrix: 4 карточки по квадрантам в порядке чтения", () => {
+test("layoutMatrix: 4 квадранта 880×309 делят холст, сверху полоса под подпись оси", () => {
   const spec = { kind: "matrix", nodes: ["q1", "q2", "q3", "q4"].map((id) => ({ id })) };
   const { nodes: pos, links } = D.layoutMatrix(spec);
   inCanvas(pos);
@@ -252,17 +257,73 @@ test("layoutMatrix: 4 карточки по квадрантам в порядк
   assert.ok(pos.q2.x > W / 2 && pos.q2.y < H / 2);   // верх-право
   assert.ok(pos.q3.x < W / 2 && pos.q3.y > H / 2);   // низ-лево
   assert.ok(pos.q4.x > W / 2 && pos.q4.y > H / 2);   // низ-право
+  // Замер макета: квадрант — четверть зоны, а не плашка внутри неё.
+  ["q1", "q2", "q3", "q4"].forEach((id) => {
+    assert.strictEqual(pos[id].w, 880);
+    assert.strictEqual(pos[id].h, 309);
+  });
+  // По ширине сетка занимает холст без остатка, зазор между колонками 40.
+  assert.strictEqual(pos.q1.x - pos.q1.w / 2, 0);
+  assert.strictEqual(pos.q2.x + pos.q2.w / 2, W);
+  assert.strictEqual((pos.q2.x - pos.q2.w / 2) - (pos.q1.x + pos.q1.w / 2), 40);
+  // По высоте прижата к низу: снизу вплотную, сверху остаётся 61 под «Эффект».
+  assert.strictEqual(pos.q3.y + pos.q3.h / 2, H);
+  assert.strictEqual(pos.q1.y - pos.q1.h / 2, 61);
+  assert.strictEqual((pos.q3.y - pos.q3.h / 2) - (pos.q1.y + pos.q1.h / 2), 41);
 });
 
-test("layoutPyramid: ширины растут сверху вниз, совместимо с renderFunnel", () => {
+test("render матрицы: подписи по внешним углам, оси в зазорах", () => {
+  const spec = {
+    kind: "matrix",
+    meta: { x_axis: "Усилия", y_axis: "Эффект" },
+    nodes: [
+      { id: "q1", label: "Быстрые победы", accent: true },
+      { id: "q2", label: "Стратегические проекты" },
+      { id: "q3", label: "Фоновые задачи" },
+      { id: "q4", label: "Неблагодарная работа" },
+    ],
+  };
+  const host = fakeHost();
+  D.render(host, spec);
+  const svg = host.innerHTML;
+  // Четыре угла: верх-лево, верх-право, низ-лево, низ-право — каждый свой.
+  const corners = [...svg.matchAll(/align-items:(\w[\w-]*);justify-content:(\w[\w-]*)/g)]
+    .map((m) => m[1] + "/" + m[2]);
+  assert.deepStrictEqual(corners, [
+    "flex-start/flex-start", "flex-start/flex-end",
+    "flex-end/flex-start", "flex-end/flex-end",
+  ]);
+  // Зелёный ровно один — «Быстрые победы», и текст на нём графитовый.
+  assert.strictEqual((svg.match(/var\(--accent\)/g) || []).length, 1);
+  assert.ok(svg.includes("var(--cl-graphite)"));
+  // Кегль подписи квадранта 30 (а не общие для схем 24).
+  assert.ok(svg.includes("font-size:30px"), "кегль квадранта не 30");
+  // Оси стоят в зазорах: вертикальная на 900, горизонтальная на 390.5.
+  assert.ok(svg.includes('<line x1="900" y1="720" x2="900" y2="61"'), "вертикальной оси нет");
+  assert.ok(svg.includes('<line x1="0" y1="390.5" x2="1700" y2="390.5"'), "горизонтальной оси нет");
+  // Подпись вертикальной оси — над острием, то есть выше верха квадрантов.
+  assert.ok(/<text x="900" y="41" text-anchor="middle"[^>]*>Эффект</.test(svg));
+  assert.ok(/<text x="1800" y="398.5" text-anchor="end"[^>]*>Усилия</.test(svg));
+});
+
+test("layoutPyramid: ярусы-полосы равной высоты по оси фигуры", () => {
+  // Раскладка отдаёт не плашки, а ПОЛЯ ПОДПИСЕЙ внутри одного треугольника
+  // (его рисует декор). Отсюда и проверки: ряды равной высоты сверху вниз,
+  // все по оси, поля не шире контура на своей высоте.
   const spec = { kind: "pyramid", nodes: [{ id: "p1" }, { id: "p2" }, { id: "p3" }] };
-  const { nodes: pos } = D.layoutPyramid(spec);
+  const { nodes: pos, links } = D.layoutPyramid(spec);
   inCanvas(pos);
+  assert.strictEqual(links.length, 0);
   assert.ok(pos.p1.y < pos.p2.y && pos.p2.y < pos.p3.y);   // вершина сверху
-  assert.ok(pos.p1.w < pos.p2.w && pos.p2.w < pos.p3.w);
-  // каждый слой — трапеция, низ шире верха; стыки слоёв сходятся
-  assert.ok(pos.p1.wBottom > pos.p1.w);
-  assert.ok(Math.abs(pos.p1.wBottom - pos.p2.w) < 1);
+  ["p1", "p2", "p3"].forEach((id) => assert.strictEqual(pos[id].x, W / 2));
+  assert.ok(Math.abs(pos.p1.h - pos.p3.h) < 0.5, "полосы разной высоты");
+  // Трапеций нет: у поля подписи одна ширина, и она не расширяется бесконечно.
+  assert.strictEqual(pos.p1.wBottom, undefined);
+  assert.ok(pos.p3.w <= 583 && pos.p1.w <= pos.p3.w);
+  // Верхнее поле не вылезает за контур: ширина треугольника на нижней кромке
+  // первой полосы — 1754·(y+35)/725, поле обязано быть уже.
+  const edge = 1754 * ((pos.p1.y + pos.p1.h / 2) + 35) / 725;
+  assert.ok(pos.p1.w <= edge, `поле ${pos.p1.w} шире контура ${edge}`);
 });
 
 test("layoutHubSpoke: первый узел в центре, лучи вокруг, авто-линки", () => {
@@ -282,30 +343,29 @@ test("layoutHubSpoke: первый узел в центре, лучи вокру
   });
 });
 
-test("layoutComparison: две колонки по lane, элементы стопкой", () => {
-  const spec = { kind: "comparison", nodes: [
-    { id: "a1", lane: "До" }, { id: "a2", lane: "До" },
-    { id: "b1", lane: "После" }, { id: "b2", lane: "После" },
-  ] };
-  const out = D.layoutComparison(spec);
-  inCanvas(out.nodes);
-  assert.deepStrictEqual(out.lanes, ["До", "После"]);
-  assert.ok(out.nodes.a1.x < W / 2 && out.nodes.b1.x > W / 2);
-  assert.strictEqual(out.nodes.a1.x, out.nodes.a2.x);       // колонка
-  assert.ok(out.nodes.a1.y < out.nodes.a2.y);               // стопка
-});
-
-test("layoutVenn: 2 и 3 круга, метки оттянуты от центра относительно", () => {
+test("layoutVenn: прямоугольники внахлёст, метки — в своих полосах", () => {
   const two = { kind: "venn", nodes: [{ id: "v1" }, { id: "v2" }] };
   const p2 = D.layoutVenn(two).nodes;
-  assert.ok(p2.v1.x < p2.v2.x && p2.v1.r > 0);
-  assert.ok(p2.v1.labelDx < 0 && p2.v2.labelDx > 0);        // наружу
-  // круги пересекаются: расстояние центров меньше суммы радиусов
-  assert.ok(p2.v2.x - p2.v1.x < p2.v1.r + p2.v2.r);
+  // стопка идёт вправо-вниз и занимает зону целиком по ширине
+  assert.ok(p2.v1.x < p2.v2.x && p2.v1.y < p2.v2.y);
+  assert.strictEqual(p2.v1.x - p2.v1.w / 2, 0);
+  assert.strictEqual(p2.v2.x + p2.v2.w / 2, W);
+  // соседи действительно пересекаются
+  assert.ok(p2.v2.x - p2.v2.w / 2 < p2.v1.x + p2.v1.w / 2);
+  assert.ok(p2.v1.labelDx < 0 && p2.v2.labelDx > 0);        // наружу, в свою полосу
 
   const three = { kind: "venn", nodes: [{ id: "a" }, { id: "b" }, { id: "c" }] };
   const p3 = D.layoutVenn(three).nodes;
-  assert.ok(p3.a.y < p3.b.y && Math.abs(p3.b.y - p3.c.y) < 1);
+  assert.ok(p3.a.y < p3.b.y && p3.b.y < p3.c.y);
+  // Общая часть всех трёх обязана быть НЕвырожденной: иначе подпись
+  // пересечения рисовать негде (на половинном нахлёсте она схлопывалась в
+  // линию нулевой ширины).
+  const x0 = Math.max(...["a", "b", "c"].map((k) => p3[k].x - p3[k].w / 2));
+  const x1 = Math.min(...["a", "b", "c"].map((k) => p3[k].x + p3[k].w / 2));
+  assert.ok(x1 - x0 > 200, `тройное пересечение вырождено: ${x1 - x0}`);
+  // у среднего своей полосы нет — его подпись уходит вверх, а не вбок
+  assert.strictEqual(p3.b.labelDx, 0);
+  assert.ok(p3.b.labelDy < 0);
 });
 
 test("layoutSwimlanes: ряды по lane, ранги по рёбрам, коллизии разведены", () => {
@@ -347,7 +407,35 @@ test("render: дорожка не заливается цветом плашки
   assert.ok(!/<rect[^>]*fill="var\(--bg-card\)"[^>]*fill-opacity/.test(host.innerHTML),
             "полоса дорожки снова залита цветом плашки");
   const lines = host.innerHTML.match(/<line[^>]*stroke="var\(--fg-muted\)"/g) || [];
-  assert.strictEqual(lines.length, 2);   // три дорожки — две внутренние границы
+  assert.strictEqual(lines.length, 4);   // три дорожки — четыре границы, включая крайние
+  // Подпись дорожки прижата к верхней линии (+10), а не центрирована в полосе.
+  assert.ok(/<foreignObject x="0" y="10"/.test(host.innerHTML), "подпись не у верхней линии");
+  assert.ok(/align-items:flex-start/.test(host.innerHTML));
+});
+
+test("layoutSwimlanes: плашки по замерам, коленья коннекторов из двух отрезков", () => {
+  const spec = { kind: "swimlanes", nodes: [
+    { id: "a", label: "Заявка", lane: "Клиент" },
+    { id: "b", label: "Проверка", lane: "Менеджер" },
+    { id: "c", label: "Квота", lane: "Инженер" },
+  ], edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }] };
+  const out = D.layoutSwimlanes(spec);
+  // Поле под подпись дорожки в начале полосы — плашки туда не заходят.
+  assert.ok(out.nodes.a.x - out.nodes.a.w / 2 >= 240, "плашка залезла на подпись дорожки");
+  ["a", "b", "c"].forEach((id) => {
+    assert.strictEqual(out.nodes[id].w, 300);
+    assert.strictEqual(out.nodes[id].h, 100);
+  });
+  // Колено — ровно три точки (два отрезка), вертикаль выходит из центра источника.
+  out.links.forEach((l) => {
+    assert.strictEqual(l.points.length, 3, "коннектор не из двух отрезков");
+    assert.strictEqual(l.points[0][0], l.points[1][0]);        // первый отрезок вертикальный
+    assert.strictEqual(l.points[1][1], l.points[2][1]);        // второй горизонтальный
+  });
+  assert.strictEqual(out.links[0].points[0][0], out.nodes.a.x);
+  // Старт — на нижней кромке источника, финиш — не доходя до левого края приёмника.
+  assert.strictEqual(out.links[0].points[0][1], out.nodes.a.y + out.nodes.a.h / 2);
+  assert.ok(out.links[0].points[2][0] < out.nodes.b.x - out.nodes.b.w / 2);
 });
 
 test("layoutSwimlanes: одинаковый ранг в одной дорожке не слипается", () => {
@@ -398,33 +486,54 @@ test("layoutGantt: единицы и запятая в длительности 
   assert.strictEqual(out.total, 3.5);
 });
 
-test("layoutSteps: ступени идут вправо и вверх", () => {
+test("layoutSteps: столбики на общем основании, растут вправо", () => {
+  // Была лесенка из одинаковых плашек, висящих на разной высоте. Стали
+  // столбики с ОБЩИМ низом: рост несёт высота, её видно и можно сравнить.
   const out = D.layoutSteps({ kind: "steps", nodes: [
     { id: "a", label: "Раз" }, { id: "b", label: "Два" }, { id: "c", label: "Три" },
   ] });
   inCanvas(out.nodes);
   const p = out.nodes;
   assert.ok(p.a.x < p.b.x && p.b.x < p.c.x);
-  assert.ok(p.a.y > p.b.y && p.b.y > p.c.y);   // y растёт вниз: выше = меньше
+  ["a", "b", "c"].forEach((id) =>
+    assert.strictEqual(p[id].y + p[id].h / 2, H, "столбик " + id + " не на основании"));
+  assert.ok(p.a.h < p.b.h && p.b.h < p.c.h);           // прибавка на ступень
+  assert.strictEqual(p.b.h - p.a.h, p.c.h - p.b.h);    // прибавка одинаковая
   assert.strictEqual(out.links.length, 0);
+  // Колонки делят ширину без остатка, между столбиками остаётся зазор.
+  assert.strictEqual(p.a.x - p.a.w / 2, 0);
+  assert.ok(Math.abs(p.c.x + p.c.w / 2 - W) < 10);
+  assert.ok(p.b.x - p.b.w / 2 > p.a.x + p.a.w / 2);
 });
 
-test("render: у ступени есть линия проступи, а не только заливка", () => {
-  // Подступенок — тот же --bg-card, что и плашка, в 0.45 прозрачности. В светлой
-  // теме между фоном (#FFF) и плашкой (#F2F2F2) всего 13 пунктов, половина — 6:
-  // контраст плашки к своему столбу падал до 1.05:1, и лестница читалась как
-  // простые столбцы. Третьего тона в палитре нет — грань держит линия.
+test("render лестницы: подпись в верхнем углу столбика, рейка на всю высоту", () => {
   const host = fakeHost();
   const spec = { kind: "steps", nodes: [
-    { id: "a", label: "Раз" }, { id: "b", label: "Два" }, { id: "c", label: "Три" }] };
+    { id: "a", label: "Ручные регламенты", value: "Уровень 1" },
+    { id: "b", label: "Автоматизация", value: "Уровень 2" },
+    { id: "c", label: "Единая платформа", value: "Уровень 3", accent: true }] };
   D.render(host, spec);
+  const html = host.innerHTML;
   const pos = D.layoutSteps(spec).nodes;
-  ["b", "c"].forEach((id) => {          // у нижней ступени столба нет — она на полу
-    const y = pos[id].y + pos[id].h / 2;
-    const re = new RegExp('<line[^>]*y1="' + y + '"[^>]*y2="' + y +
-      '"[^>]*stroke="var\\(--fg-muted\\)"');
-    assert.ok(re.test(host.innerHTML), "нет линии проступи у ступени " + id);
+  // Рейка у левого края каждой колонки, от кромки до кромки зоны.
+  ["a", "b", "c"].forEach((id) => {
+    const x = pos[id].x - pos[id].w / 2;
+    const re = new RegExp('<line x1="' + x + '" y1="0" x2="' + x + '" y2="' + H + '"');
+    assert.ok(re.test(html), "нет рейки у колонки " + id);
   });
+  // Подступенков не осталось: столбик стоит на основании, достраивать нечего.
+  assert.ok(!/fill-opacity="0\.45"/.test(html), "вернулся подступенок");
+  // Подпись прижата к верху столбика, а не центрирована в нём.
+  const top = pos.a.y - pos.a.h / 2;
+  assert.ok(html.includes('<foreignObject x="32" y="' + (top + 22) + '"'),
+            "подпись не в верхнем левом углу столбика");
+  assert.ok(html.includes("font-size:36px"), "кегль подписи ступени не 36");
+  // Пометки «Уровень N» — общая строка над полем, у всех одна высота.
+  const caps = [...html.matchAll(/<text x="(\d+)" y="(\d+)" font-size="24" font-weight="700"/g)];
+  assert.strictEqual(caps.length, 3);
+  assert.strictEqual(new Set(caps.map((m) => m[2])).size, 1, "пометки пошли лесенкой");
+  // Акцентная ступень набрана Semibold — единственное небазовое начертание.
+  assert.strictEqual((html.match(/font-weight:600/g) || []).length, 1);
 });
 
 const MIND = { kind: "mindmap", nodes: [
@@ -444,7 +553,33 @@ test("layoutMindmap: центр посередине, ветви через од
   assert.ok(p.r1.x > p.core.x && p.r2.x > p.core.x);  // чётные ветви — вправо
   assert.ok(p.l1.x < p.core.x);                       // нечётные — влево
   assert.ok(p.k.x > p.r1.x);                          // подветвь дальше ветви
-  assert.ok(out.links.every((l) => l.curve === true));
+  /* Ветвь — ломаная из прямых углов, а не безье: правило схем запрещает кривые.
+     Форм две, и обе законны: прямой отрезок, когда ребёнок стоит напротив грани
+     родителя (так все ветви первого уровня выходят из высокого центра), и
+     колено из четырёх точек во всех остальных случаях. */
+  out.links.forEach((l) => {
+    assert.strictEqual(l.curve, undefined);
+    assert.ok(l.points.length === 2 || l.points.length === 4,
+      "ветвь карты — прямая или колено");
+    l.points.slice(1).forEach((p, i) => {
+      const q = l.points[i];
+      assert.ok(p[0] === q[0] || p[1] === q[1], "сегмент ветви наискосок");
+    });
+  });
+  // Ветви первого уровня стоят напротив высокого центра — значит прямые.
+  ["r1", "l1", "r2"].forEach((id) => {
+    const l = out.links.find((v) => v.from === "core" && v.to === id);
+    assert.strictEqual(l.points.length, 2, `ветвь ${id} должна быть прямой`);
+  });
+  // Единственная подветвь наследует высоту родителя — тоже прямая.
+  assert.strictEqual(out.links.find((l) => l.to === "k").points.length, 2);
+  // А вот две подветви развести по высоте без колена нельзя.
+  const forked = D.layoutMindmap({ kind: "mindmap", nodes: [
+    { id: "core", label: "Центр" }, { id: "a", label: "Ветвь" },
+    { id: "x", label: "Раз" }, { id: "y", label: "Два" },
+  ], edges: [{ from: "core", to: "a" }, { from: "a", to: "x" },
+             { from: "a", to: "y" }] });
+  assert.strictEqual(forked.links.find((l) => l.to === "x").points.length, 4);
 });
 
 test("layoutMindmap: узел без связи становится ветвью центра", () => {
@@ -725,9 +860,76 @@ test("render: подписи связей не печатаются одна п�
 
 test("LAYOUTS покрывает весь каталог типов", () => {
   assert.deepStrictEqual(Object.keys(D.LAYOUTS).sort(),
-    ["comparison", "cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",
+    ["cycle", "flowchart", "funnel", "gantt_lite", "hierarchy",
      "hub_spoke", "matrix", "mindmap", "network", "process", "pyramid", "steps",
      "swimlanes", "venn"]);
+});
+
+/* --- правила схем из шапки diagram.js ------------------------------------ */
+
+/* По какой оси тип обязан держать равный шаг между рангами. Пустая строка —
+   тип раскладывается не сеткой, и это осознанно: кольцо, радиус, круги, ось
+   времени. Новая раскладка обязана попасть в этот список — иначе тест упадёт
+   на сверке с LAYOUTS и заставит объявить поведение сетки явно. */
+const GRID_AXES = {
+  flowchart: "xy", process: "xy", steps: "xy", swimlanes: "xy",
+  funnel: "xy", pyramid: "xy", matrix: "xy",
+  hierarchy: "y",            // колонки — слоты листьев, ряды равномерны
+  mindmap: "x",              // наоборот: колонки равномерны, ряды — слоты
+  cycle: "",                 // кольцо: равный шаг по углу, не по координате
+  hub_spoke: "x",            // два ряда подписей по равномерным колонкам
+  venn: "",                  // прямоугольники внахлёст: шаг есть, но ряда нет
+  network: "xy",             // колонка — ранг в потоке, ряд — порядок в ранге
+  gantt_lite: "",            // x — это время
+};
+
+function gridSpec(kind, n) {
+  const nodes = "abcdefghijkl".split("").slice(0, n)
+    .map((id, i) => ({ id, label: "Узел " + (i + 1) }));
+  if (kind === "swimlanes") nodes.forEach((v, i) => { v.lane = ["X", "Y", "Z"][i % 3]; });
+  if (kind === "gantt_lite") nodes.forEach((v, i) => { v.start = i + 1; v.end = i + 2; });
+  return { version: 1, kind, direction: "right", nodes,
+           edges: nodes.slice(1).map((v, i) => ({ from: nodes[i].id, to: v.id })) };
+}
+
+function ranks(nodes, axis) {
+  const vals = [...new Set(Object.values(nodes).map((n) => Math.round(n[axis] * 100) / 100))];
+  return vals.sort((a, b) => a - b);
+}
+
+test("сетка: ранги узлов стоят на равном шаге", () => {
+  assert.deepStrictEqual(Object.keys(GRID_AXES).sort(), Object.keys(D.LAYOUTS).sort(),
+    "новая раскладка не объявила, по какой оси держит сетку");
+  Object.keys(GRID_AXES).forEach((kind) => {
+    GRID_AXES[kind].split("").forEach((axis) => {
+      for (const n of [2, 3, 4, 5, 6, 8, 10, 12]) {
+        const r = ranks(D.LAYOUTS[kind](gridSpec(kind, n)).nodes, axis);
+        if (r.length < 3) continue;          // один ранг или два — шага ещё нет
+        const d = r[1] - r[0];
+        r.slice(1).forEach((v, i) => assert.ok(Math.abs((v - r[i]) - d) < 0.5,
+          `${kind} n=${n}: шаг по ${axis} рваный — ${r.join(" ")}`));
+      }
+    });
+  });
+});
+
+test("стрелки: только прямые отрезки и прямые углы", () => {
+  // Кривых в линиях нет вовсе: ни curve/arc в раскладке, ни наклонного колена.
+  Object.keys(D.LAYOUTS).forEach((kind) => {
+    for (const n of [3, 4, 6, 8]) {
+      (D.LAYOUTS[kind](gridSpec(kind, n)).links || []).forEach((l) => {
+        assert.strictEqual(l.curve, undefined, `${kind}: безье в связи`);
+        assert.strictEqual(l.arc, undefined, `${kind}: дуга в связи`);
+        const p = l.points || [];
+        if (p.length <= 2) return;           // одиночный отрезок может идти косо
+        for (let i = 1; i < p.length; i++) {
+          const dx = Math.abs(p[i][0] - p[i - 1][0]), dy = Math.abs(p[i][1] - p[i - 1][1]);
+          assert.ok(dx < 0.5 || dy < 0.5,
+            `${kind} n=${n}: колено с косым сегментом — ${JSON.stringify(p)}`);
+        }
+      });
+    }
+  });
 });
 
 test("CANVAS синхронизирован со схемой (1800×720)", () => {
@@ -887,9 +1089,10 @@ test("fitFont: длинная подпись ужимается под плаш�
   // swimlanes режет ширину под число колонок: 166×108 — реальный размер из
   // живого прогона, на котором «Развёртывание инфраструктуры» обрезалось.
   const tight = D.fitFont("Развёртывание инфраструктуры", 166, 108);
-  assert.ok(tight < 28, `ожидалось уменьшение кегля, получено ${tight}`);
-  assert.strictEqual(D.fitFont("Сбор данных", 300, 110), 28);
-  assert.strictEqual(D.fitFont("", 40, 20), 28);
+  assert.ok(tight < 24, `ожидалось уменьшение кегля, получено ${tight}`);
+  // 24 — потолок кегля подписи узла (NODE_FS, замер по макетам Figma).
+  assert.strictEqual(D.fitFont("Сбор данных", 300, 110), 24);
+  assert.strictEqual(D.fitFont("", 40, 20), 24);
 });
 
 test("fitFont: слово шире плашки не оставляют крупным", () => {
@@ -997,41 +1200,25 @@ test("render: длинная подпись дорожки не срезаетс
     `подпись дорожки не переносится: ${frag}`);
 });
 
-test("render: подпись пересечения venn не наезжает на подписи кругов", () => {
+test("render: подпись пересечения venn не наезжает на подписи множеств", () => {
   // center_label рисовался голым <text> без габарита: «Планирование маршрута
-  // доставки» растягивалось на 450px при линзе в 180 и ложилось поверх подписей
-  // обоих кругов — читалось месиво из наложенных букв.
-  const host = fakeHost();
-  D.render(host, { kind: "venn",
+  // доставки» растягивалось на 450px при общей части в 180 и ложилось поверх
+  // подписей обоих множеств — читалось месиво из наложенных букв.
+  const spec = { kind: "venn",
     nodes: [{ id: "a", label: "Отдел клиентского сопровождения" },
             { id: "b", label: "Электроэнцефалография пациента" }],
-    meta: { center_label: "Планирование маршрута доставки" } });
+    meta: { center_label: "Планирование маршрута доставки" } };
+  const host = fakeHost();
+  D.render(host, spec);
   assert.ok(!/<text[^>]*>[^<]*Планирование/.test(host.innerHTML),
     "подпись пересечения всё ещё голый <text> без габарита");
   const i = host.innerHTML.indexOf("Планирование");
   const fo = host.innerHTML.lastIndexOf("<foreignObject", i);
   assert.ok(fo >= 0, "подпись пересечения не в foreignObject");
   const w = Number(/width="([\d.]+)"/.exec(host.innerHTML.slice(fo, i))[1]);
-  // линза двух кругов: 2*(r - dx) = 2*(255-165) = 180
-  assert.ok(w > 0 && w <= 180, `подпись пересечения шире линзы: ${w}`);
-});
-
-test("render: заголовок колонки comparison не переезжает разделитель", () => {
-  // Схема разрешает lane до 40 символов, а заголовок рисовался голым
-  // <text font-size="34"> по центру колонки: «Целевая архитектура эксплуатации
-  // ЦОД 2030» разъезжалось на ~870px при колонке в 660 — закрывало пунктирный
-  // разделитель посередине и лезло в чужую половину слайда.
-  const host = fakeHost();
-  const lane = "Целевая архитектура эксплуатации ЦОД 2030";
-  D.render(host, { kind: "comparison",
-    nodes: [{ id: "a", label: "Ручной разбор", lane: "Как сейчас" },
-            { id: "b", label: "Авторазбор", lane: lane }] });
-  assert.ok(!host.innerHTML.includes(lane),
-    "заголовок колонки ушёл в разметку одной строкой");
-  assert.ok(host.innerHTML.includes("Целевая архитектура"), "заголовок пропал");
-  // короткий заголовок остаётся одной строкой на прежней базовой линии
-  assert.ok(/y="64"[^>]*>[^<]*<tspan[^>]*>Как сейчас<\/tspan><\/text>/
-    .test(host.innerHTML), "короткий заголовок колонки тронули зря");
+  const p = D.layoutVenn(spec).nodes;
+  const over = p.a.x + p.a.w / 2 - (p.b.x - p.b.w / 2);   // общая часть пары
+  assert.ok(w > 0 && w <= over, `подпись пересечения шире общей части: ${w}`);
 });
 
 test("render: длинная подпись ребра переносится и сокращается", () => {
@@ -1133,6 +1320,9 @@ test("render: подпись связи внутри дорожки не пря�
 });
 
 test("render: подпись луча хаба остаётся на линии — там просвет шире метки", () => {
+  // Луч — короткая вертикальная стрелка между хабом и подписью ряда. Рядом с
+  // ней нет ни одной плашки (в этой схеме их нет вовсе), значит и уводить
+  // метку некуда: она обязана стоять на своём отрезке.
   const spec = { kind: "hub_spoke",
     nodes: [{ id: "h", label: "Платформа" }, { id: "a", label: "Раз" },
             { id: "b", label: "Два" }, { id: "c", label: "Три" },
@@ -1140,9 +1330,10 @@ test("render: подпись луча хаба остаётся на линии 
     edges: [{ from: "h", to: "b", label: "поставляет" }] };
   const host = fakeHost();
   D.render(host, spec);
-  const hub = D.layoutHubSpoke(spec).nodes.h;
+  const seg = D.layoutHubSpoke(spec).links[0].points;
+  const lo = Math.min(seg[0][1], seg[1][1]), hi = Math.max(seg[0][1], seg[1][1]);
   const y = Number(host.innerHTML.match(/<text[^>]*y="([\d.-]+)"/)[1]);
-  assert.ok(Math.abs(y - hub.y) < 40, `луч без нужды поднят над плашкой: y=${y}`);
+  assert.ok(y >= lo - 14 && y <= hi + 14, `метка ушла с отрезка: y=${y}`);
 });
 
 test("render: у единственного потомка оргсхемы подпись остаётся в просвете", () => {
@@ -1163,7 +1354,7 @@ test("render: у единственного потомка оргсхемы по
   assert.ok(y < L.nodes.d.y - L.nodes.d.h / 2, "подпись заехала на плашку потомка");
 });
 
-test("render: у полос плана прямые углы — как у всех плашек деки", () => {
+test("render: у плашек прямые углы — во всех типах схем", () => {
   // --radius:0 в deck.css заявлен инвариантом бренда, шаблоны графиков пишут
   // rx="0" явно, скругления отвергает и филлер, и vision-QA. Полосы плана были
   // единственным скруглённым элементом движка: рядом с прямоугольными плашками
@@ -1173,10 +1364,16 @@ test("render: у полос плана прямые углы — как у вс�
   const bars = host.innerHTML.split("data-node-id").slice(1);
   bars.forEach((chunk) => assert.ok(!/^[^>]*\brx=/.test(chunk.slice(chunk.indexOf("<rect"))),
     "полоса плана снова скруглена"));
-  // у блок-схемы капсула start/end остаётся — это нотация, а не украшение
-  const fc = fakeHost();
-  D.render(fc, { kind: "flowchart", nodes: [{ id: "a", label: "Старт", shape: "start" }] });
-  assert.ok(/rx="/.test(fc.innerHTML), "капсула терминатора блок-схемы пропала");
+  // Терминаторы блок-схемы были капсулами (rx = h/2). В макетах схем капсул нет
+  // ни у одного типа — проверяем, что скругление не вернулось ни в одну плашку.
+  Object.keys(D.LAYOUTS).forEach((kind) => {
+    const fc = fakeHost();
+    D.render(fc, { kind, nodes: [
+      { id: "a", label: "Старт", shape: "start", lane: "X", start: 1, end: 2 },
+      { id: "b", label: "Финиш", shape: "end", lane: "Y", start: 2, end: 3 }] });
+    fc.innerHTML.split("data-node-id").slice(1).forEach((chunk) =>
+      assert.ok(!/\brx="(?!0")/.test(chunk), `${kind}: плашка снова скруглена`));
+  });
 });
 
 test("render: подпись переносится по словам, а не рвётся посреди слова", () => {
@@ -1250,53 +1447,95 @@ test("layout: одиннадцать лучей hub_spoke не перекрыв�
   assert.deepEqual(boxOverlap(L), [], "лучи внизу эллипса налезли друг на друга");
 });
 
-test("render: подпись поверх заливки берёт контрастный цвет темы", () => {
-  // Хвост серой шкалы в тёмной теме почти сливается с фоном (--chart-4 #525252
-  // против --bg #222), и подпись четвёртой полосы воронки читалась как тень.
-  const host = fakeHost();
-  D.render(host, { kind: "funnel", nodes: [
-    { id: "a", label: "Лонг-лист", value: "34" },
-    { id: "b", label: "Техпроверка", value: "19" },
-    { id: "c", label: "Финпроверка", value: "11" },
-    { id: "d", label: "Допущены к пилотам", value: "4" },
-    { id: "e", label: "Контракты", value: "2", accent: true }] });
-  assert.ok(host.innerHTML.includes("var(--on-chart-4)"),
-    "тёмная полоса без контрастной подписи — текст сливается с заливкой");
-  assert.ok(!host.innerHTML.includes("color:var(--bg)"),
-    "цвет фона в роли подписи не зависит от того, насколько тёмная заливка");
+/* Шкалу --chart-N после сверки с макетами держит один план-график: воронка и
+   пирамида с неё сняты (см. renderFunnel). Оба теста ниже переехали на Гант —
+   поведение проверяется то же самое, просто на единственном его носителе. */
+const ganttRows = (rows) => ({
+  kind: "gantt_lite",
+  nodes: rows.map((r, i) => Object.assign(
+    { id: "g" + i, start: 1, end: 6 }, r)),
 });
 
-test("render: акцент на шкале графиков — ровно одна зелёная плашка", () => {
-  // --accent и --chart-1 — один и тот же зелёный. Галочка «акцент» на первом
-  // узле не меняла ничего вовсе, а на любом другом давала ВТОРУЮ зелёную
-  // плашку: воронка «зелёный / серый / серый / зелёный» читалась как родство
-  // первой ступени и выделенной, которого нет.
-  const greens = (html) =>
-    (html.match(/fill="var\(--(accent|chart-1)\)"/g) || []).length;
+test("render: ни одна схема не берёт хроматическую палитру графиков", () => {
+  // --chart-N кодирует РЯД ДАННЫХ. У узла схемы значения нет, есть роль, и все
+  // макеты держат ряд нейтральным с одним зелёным. Пять работ плана-графика
+  // пятью цветами заявляли, что работы делятся на виды, чего в данных нет.
+  const html = (spec) => { const h = fakeHost(); D.render(h, spec); return h.innerHTML; };
+  const specs = [
+    ganttRows([{ label: "Аудит" }, { label: "Пилот" }, { label: "Запуск", accent: true },
+               { label: "Сопровождение" }]),
+    { kind: "funnel", nodes: [{ id: "a", label: "Лиды" }, { id: "b", label: "Пилоты" },
+                              { id: "c", label: "Сделки", accent: true }] },
+    { kind: "pyramid", nodes: [{ id: "a", label: "Цель" }, { id: "b", label: "Задачи" },
+                               { id: "c", label: "Действия" }] },
+  ];
+  specs.forEach((spec) => {
+    const h = html(spec);
+    assert.ok(!/var\(--chart-\d\)/.test(h), spec.kind + ": снова взял палитру графиков");
+    assert.ok(!/var\(--on-chart-\d\)/.test(h), spec.kind + ": подпись по палитре графиков");
+  });
+});
+
+test("render плана-графика: нейтральные полосы, зелёная ровно одна", () => {
+  const greens = (html) => (html.match(/fill="var\(--accent\)"/g) || []).length;
 
   const host = fakeHost();
-  D.render(host, { kind: "funnel", nodes: [
-    { id: "a", label: "Лиды" }, { id: "b", label: "Квалификация" },
-    { id: "c", label: "Пилоты" }, { id: "d", label: "Сделки", accent: true }] });
-  assert.strictEqual(greens(host.innerHTML), 1, "зелёных плашек должно быть ровно одна");
-  assert.ok(host.innerHTML.includes('fill="var(--accent)"'));
-  assert.ok(!host.innerHTML.includes('fill="var(--chart-1)"'),
-    "шкала при акценте начинается с серого");
+  D.render(host, ganttRows([{ label: "Лиды" }, { label: "Квалификация" },
+    { label: "Пилоты" }, { label: "Сделки", accent: true }]));
+  assert.strictEqual(greens(host.innerHTML), 1, "зелёная полоса должна быть одна");
+  assert.strictEqual((host.innerHTML.match(/fill="var\(--bg-card\)"/g) || []).length, 3);
+  // Текст на зелёном — графитовый, на серых — обычный.
+  assert.ok(host.innerHTML.includes("var(--cl-graphite)"));
 
-  // Акцент на ПЕРВОМ узле теперь виден: он и есть зелёный, остальные серые.
-  const first = fakeHost();
-  D.render(first, { kind: "funnel", nodes: [
-    { id: "a", label: "Лиды", accent: true }, { id: "b", label: "Квалификация" },
-    { id: "c", label: "Сделки" }] });
-  assert.strictEqual(greens(first.innerHTML), 1);
-  assert.ok(first.innerHTML.includes('fill="var(--chart-2)"'));
-
-  // Без акцента шкала прежняя: зелёный-герой на первом сегменте.
+  // Без акцента зелёного нет вовсе: выделять нечего, а «первый = герой» — это
+  // утверждение, которого в данных нет.
   const plain = fakeHost();
-  D.render(plain, { kind: "funnel", nodes: [
-    { id: "a", label: "Лиды" }, { id: "b", label: "Сделки" }] });
-  assert.ok(plain.innerHTML.includes('fill="var(--chart-1)"'));
-  assert.strictEqual(greens(plain.innerHTML), 1);
+  D.render(plain, ganttRows([{ label: "Лиды" }, { label: "Сделки" }]));
+  assert.strictEqual(greens(plain.innerHTML), 0);
+});
+
+test("render воронки: нейтральный ряд светлеет кверху, зелёный ровно один", () => {
+  // В макете ступени не разноцветные, а один --bg-card с подмесом --fg-body:
+  // ряд светлеет вверх от самой тёмной ступени (той, что под зелёной).
+  const host = fakeHost();
+  D.render(host, { kind: "funnel", nodes: [
+    { id: "a", label: "Лонг-лист", value: "12 000" },
+    { id: "b", label: "Техпроверка", value: "3 400" },
+    { id: "c", label: "Финпроверка", value: "1 100" },
+    { id: "d", label: "Контракты", value: "280", accent: true }] });
+  const html = host.innerHTML;
+  assert.ok(!/var\(--chart-\d\)/.test(html), "воронка снова взяла палитру графиков");
+  assert.strictEqual((html.match(/fill="var\(--accent\)"/g) || []).length, 1);
+  // Подмес: три неакцентные ступени дают 0.110 / 0.055 / ничего — сверху темнее.
+  const tints = [...html.matchAll(/fill="var\(--fg-body\)" opacity="([\d.]+)"/g)]
+    .map((m) => Number(m[1]));
+  assert.deepStrictEqual(tints, [0.110, 0.055], "ступеньки тона не те");
+  // Ни одной косой кромки: трапеций у воронки больше нет.
+  assert.ok(!html.includes("<polygon"), "в воронке осталась трапеция");
+  // Числа — одной правой колонкой с выключкой вправо.
+  assert.strictEqual((html.match(/text-anchor="end"/g) || []).length, 4);
+  assert.strictEqual((html.match(/x="1765"/g) || []).length, 4);
+});
+
+test("render пирамиды: один треугольник, ярусы отбиты линиями", () => {
+  // Было: стопка трапеций-плашек со своей заливкой у каждой — «пирамида из
+  // кирпичей». Макет держит монолит с насечками: ярусы — части одного целого.
+  const host = fakeHost();
+  D.render(host, { kind: "pyramid", nodes: [
+    { id: "p1", label: "Видение" }, { id: "p2", label: "Стратегические цели" },
+    { id: "p3", label: "Ключевые инициативы" },
+    { id: "p4", label: "Операционные задачи" }] });
+  const html = host.innerHTML;
+  const tri = html.match(/<polygon points="([^"]+)" fill="var\(--bg-card\)"\/>/);
+  assert.ok(tri, "сплошного треугольника нет");
+  assert.strictEqual(tri[1].split(" ").length, 3, "треугольник не из трёх вершин");
+  // Разделителей на один больше, чем ярусов, и все они короче основания.
+  const cuts = [...html.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)"/g)];
+  assert.strictEqual(cuts.length, 5);
+  cuts.forEach((m) => assert.ok(Number(m[3]) - Number(m[1]) < 1754,
+    "разделитель шире треугольника"));
+  // Подписи крупнее общей двадцатьчетвёрки — это замер макета.
+  assert.ok(html.includes("font-size:32px"), "кегль подписей яруса не 32");
 });
 
 test("layout: стрелки цикла упираются в край плашки, а не внутрь неё", () => {
@@ -1340,7 +1579,7 @@ test("layout: схема стоит по центру холста, а не жм
   assert.ok(raw.x0 - (W - raw.x1) > 300, "сэмпл должен быть несимметричным");
 
   for (const kind of ["mindmap", "cycle", "flowchart", "hierarchy", "network",
-                      "process", "funnel", "pyramid", "hub_spoke", "venn"]) {
+                      "process", "hub_spoke", "venn"]) {
     const spec = kind === "mindmap" ? one : chain(kind, 5);
     const b = bbox(D.placed(spec).nodes);
     assert.ok(Math.abs(b.x0 - (W - b.x1)) <= 2,
@@ -1353,8 +1592,13 @@ test("layout: схема стоит по центру холста, а не жм
 test("layout: схему с фоновой разметкой не центрируем", () => {
   // Оси матрицы, дорожки, сетка Ганта и ступени нарисованы в АБСОЛЮТНЫХ
   // координатах холста: сдвинь узлы — и подпись дорожки уедет от своей полосы.
-  for (const kind of ["matrix", "swimlanes", "gantt_lite", "steps",
-                      "comparison"]) {
+  // Хаб тоже тут: его панель — такая же фоновая разметка во всю зону, а ряды
+  // лучей привязаны к её краям. Воронка и пирамида добавились после сверки с
+  // макетами: у воронки колонка ступеней стоит не по центру холста (справа
+  // отрезана полоса под числа), у пирамиды узлы — это поля подписей внутри
+  // треугольника с абсолютными вершинами.
+  for (const kind of ["matrix", "swimlanes", "gantt_lite", "steps", "hub_spoke",
+                      "funnel", "pyramid"]) {
     const spec = chain(kind, 4);
     assert.deepEqual(D.placed(spec).nodes, D.LAYOUTS[kind](spec).nodes, kind);
   }

@@ -1773,7 +1773,7 @@ const DGM_MAX_NODES = 12, DGM_MAX_EDGES = 20;        // капы схемы (sch
 const DGM_VALUE_KINDS = { funnel: "число", pyramid: "число",
                           gantt_lite: "длительность *", steps: "пометка" };
 // lane у узла: подпись поля зависит от типа
-const DGM_LANE_KINDS = { comparison: "сторона", swimlanes: "исполнитель" };
+const DGM_LANE_KINDS = { swimlanes: "исполнитель" };
 // заголовок списка связей: смысл ребра у типов разный
 const DGM_EDGE_LABEL = {
   hierarchy: "Связи (родитель → подчинённый)",

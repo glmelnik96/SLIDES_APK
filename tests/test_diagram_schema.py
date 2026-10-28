@@ -16,7 +16,7 @@ from htmlslides.diagrams.schema import MAX_CYCLE, MAX_GANTT_ROWS, MAX_STEPS
 def test_available_kinds_all_waves():
     assert AVAILABLE_KINDS == ("flowchart", "process", "cycle", "funnel",
                                "hierarchy", "matrix", "pyramid", "hub_spoke",
-                               "comparison", "venn", "swimlanes", "gantt_lite",
+                               "venn", "swimlanes", "gantt_lite",
                                "mindmap", "network", "steps")
 
 
@@ -39,7 +39,7 @@ def test_sample_spec_unknown_raises():
 
 def test_catalog_for_ui_shape():
     cat = catalog_for_ui()
-    assert len(cat) == 15
+    assert len(cat) == 14
     by_kind = {c["kind"]: c for c in cat}
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
@@ -71,6 +71,16 @@ def test_parse_bad_json_string():
 def test_parse_unknown_kind():
     with pytest.raises(DiagramValidationError):
         parse_diagram({"kind": "sankey", "nodes": [{"id": "a"}]})
+
+
+def test_comparison_kind_is_gone():
+    """Сравнение сторон убрано из схем намеренно: две колонки плашек — это
+    вёрстка слайда (two-col-cards / before-after), а не схема. Тип должен
+    отлетать как незнакомый, иначе старые спеки тихо соберутся снова."""
+    with pytest.raises(DiagramValidationError):
+        parse_diagram({"kind": "comparison",
+                       "nodes": [{"id": "a", "label": "Было", "lane": "X"},
+                                 {"id": "b", "label": "Стало", "lane": "Y"}]})
 
 
 def test_parse_caps_nodes():
@@ -197,21 +207,6 @@ def test_pyramid_min_three():
 def test_hub_spoke_min_three():
     with pytest.raises(DiagramValidationError):
         parse_diagram({"kind": "hub_spoke", "nodes": [{"id": "a"}, {"id": "b"}]})
-
-
-def test_comparison_lane_rules():
-    # без lane — ошибка
-    with pytest.raises(DiagramValidationError) as ei:
-        parse_diagram({"kind": "comparison",
-                       "nodes": [{"id": "a", "lane": "Слева"}, {"id": "b"}]})
-    assert any("lane" in e for e in ei.value.errors)
-    # три стороны — ошибка
-    with pytest.raises(DiagramValidationError) as ei:
-        parse_diagram({"kind": "comparison",
-                       "nodes": [{"id": "a", "lane": "X"},
-                                 {"id": "b", "lane": "Y"},
-                                 {"id": "c", "lane": "Z"}]})
-    assert any("ровно 2 стороны" in e for e in ei.value.errors)
 
 
 def test_venn_two_or_three():

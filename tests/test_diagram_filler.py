@@ -169,19 +169,18 @@ def test_ready_content_of_a_foreign_kind_is_refilled(library):
                         ).content == content
 
 
-def test_edges_in_a_side_by_side_kind_send_the_model_back(library):
-    """Связи у сравнения — это выбранный не тот тип, а не лишний ключ.
+def test_edges_in_a_linkless_kind_send_the_model_back(library):
+    """Связи у бессвязного типа — это выбранный не тот тип, а не лишний ключ.
 
-    Прод-замер (дека «Партнёры», 12 схем): модель брала comparison для
-    процессного раздела, объявляла три перехода — и движок рисовал две колонки
-    плашек без единой стрелки. Связи, ради которых раздел и стал схемой, молча
-    исчезали. Теперь это претензия с ретраем, и в её тексте названы типы, где
-    переходы рисуются."""
+    Прод-замер (дека «Партнёры», 12 схем): модель брала тип, где движок рёбра
+    не рисует вовсе, объявляла переходы — и на слайде оставались плашки без
+    единой стрелки. Связи, ради которых раздел и стал схемой, молча исчезали.
+    Теперь это претензия с ретраем, и в её тексте названы типы, где переходы
+    рисуются."""
     bad = _reply(diagram={
-        "kind": "comparison",
-        "nodes": [{"id": "a", "label": "Заявка", "lane": "Было"},
-                  {"id": "b", "label": "Согласование", "lane": "Было"},
-                  {"id": "c", "label": "Автопроверка", "lane": "Стало"}],
+        "kind": "venn",
+        "nodes": [{"id": "a", "label": "Заявка"},
+                  {"id": "b", "label": "Согласование"}],
         "edges": [{"from": "a", "to": "b"}]})
     client = FakeClient([bad, _reply()])
     out = fill_diagram(client, library, _slide(), deck_title="Дека")
@@ -190,15 +189,15 @@ def test_edges_in_a_side_by_side_kind_send_the_model_back(library):
     assert "flowchart" in claim and "process" in claim
 
 
-def test_side_by_side_without_edges_is_fine(library):
-    """Претензия — именно к связям: честное сравнение проходит с первого раза."""
+def test_linkless_kind_without_edges_is_fine(library):
+    """Претензия — именно к связям: честное множество проходит с первого раза."""
     client = FakeClient([_reply(diagram={
-        "kind": "comparison",
-        "nodes": [{"id": "a", "label": "Своё железо", "lane": "Было"},
-                  {"id": "b", "label": "Оплата по потреблению", "lane": "Стало"}],
+        "kind": "venn",
+        "nodes": [{"id": "a", "label": "Своё железо"},
+                  {"id": "b", "label": "Оплата по потреблению"}],
     })])
     out = fill_diagram(client, library, _slide(), deck_title="Дека")
-    assert json.loads(out.content["diagram"])["kind"] == "comparison"
+    assert json.loads(out.content["diagram"])["kind"] == "venn"
     assert len(client.calls) == 1
 
 

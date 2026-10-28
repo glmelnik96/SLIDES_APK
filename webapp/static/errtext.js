@@ -70,7 +70,7 @@
     network: { min: 3, text: "В графе связей минимум 3 узла" },
   };
   var DGM_EDGE_KINDS = ["flowchart", "hierarchy", "swimlanes", "network", "mindmap"];
-  var DGM_LANE_FIELD = { comparison: "сторона", swimlanes: "исполнитель" };
+  var DGM_LANE_FIELD = { swimlanes: "исполнитель" };
   // Типы, чьи рёбра обязаны складываться в дерево: второе ребро к тому же узлу
   // раскладка молча теряет — связь, заданная автором, просто не появится.
   var DGM_TREE_FIELD = {
@@ -124,8 +124,6 @@
       if (blank.length) {
         out.push("Заполните «" + laneField + "» у узлов " +
                  names(blank.map(function (n) { return n.id; })));
-      } else if (spec.kind === "comparison" && lanes.length !== 2) {
-        out.push("В сравнении ровно 2 стороны — сейчас " + lanes.length);
       } else if (spec.kind === "swimlanes" && (lanes.length < 2 || lanes.length > 5)) {
         out.push("Дорожек должно быть от 2 до 5 — сейчас " + lanes.length);
       }

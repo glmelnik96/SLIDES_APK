@@ -37,6 +37,9 @@ html[data-theme="dark"]{
   --fg-slide-num:#D3D3D3; --bg-card:#383838; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#D3D3D3; --card-label:var(--cl-green);
   --image-bg:var(--cl-blue-lt);
+  /* Точки подложки схемы (замер с макета: #3F3F3F на #222 — чуть светлее
+     плашки --bg-card, чтобы сетка читалась и ПОД плашкой, и рядом с ней). */
+  --dgm-dot:#3F3F3F;
   --chart-2:#989898; --chart-3:#737373; --chart-4:#525252;   /* серые gray3–5 */
   --chart-5:#5D779F; --chart-6:#8372A1;   /* ultramarine/purple приглушённые (хвост) */
   /* Подпись ПОВЕРХ заливки: тёмный хвост шкалы почти сливается с --bg (#525252
@@ -49,6 +52,9 @@ html[data-theme="light"]{
   --fg-slide-num:#000000; --bg-card:#F2F2F2; --accent:var(--cl-green);
   --line:var(--cl-green); --line-frame:#222222; --card-label:#000000;
   --image-bg:var(--cl-blue-lt);
+  /* Светлая тема: та же роль, зеркально — чуть темнее белого фона. Контраст с
+     фоном держим тот же (≈1.15:1), иначе сетка на белом лезет вперёд плашек. */
+  --dgm-dot:#E6E6E6;
   --chart-2:#A6A6A6; --chart-3:#8C8C8C; --chart-4:#737373;   /* серые gray3–5 */
   --chart-5:#9CADCE; --chart-6:#BDB0D2;   /* ultramarine/purple пастельные (хвост) */
   /* См. тёмную тему: пары «заливка → подпись поверх неё». Здесь тёмный только
@@ -323,7 +329,13 @@ html[data-theme="light"] .sr-value{color:var(--fg-body);}
    внутрь SVG viewBox 0 0 1800 720 — холст синхронизирован со схемой
    (diagrams/schema.py CANVAS_W/H). Узлы var(--bg-card)/var(--accent), связи
    var(--fg-muted), воронка var(--chart-1..6) — всё перекрашивается темой. */
-.diagram-host{position:absolute;left:60px;top:300px;width:1800px;height:720px;}
+/* top:240, а не 300. В макетах схем дизайнер работает в полосе y 240…960: туда
+   попадает и подложка с точками, и нижний край контента во всех кадрах. При
+   top:300 зона кончалась на 1020 — в 22 px от копирайта, и схема упиралась в
+   колонтитул. Высота 720 и ширина 1800 прежние (CANVAS_W/H в diagrams/schema.py
+   и W/H в engine/diagram.js), то есть ни одна константа раскладки не меняется —
+   двигается только сама зона. */
+.diagram-host{position:absolute;left:60px;top:240px;width:1800px;height:720px;}
 .diagram-host svg{display:block;width:100%;height:100%;overflow:visible;}
 
 /* ---- donut-chart (не из Figma; бренд-производное SVG-кольцо долей) ----

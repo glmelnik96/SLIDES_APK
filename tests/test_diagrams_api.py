@@ -23,7 +23,7 @@ def H(uid="u1"):
 def test_catalog_lists_all_types_with_availability(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         cat = c.get("/api/diagrams/catalog", headers=H()).json()
-    assert len(cat) == 15
+    assert len(cat) == 14
     by_kind = {t["kind"]: t for t in cat}
     assert by_kind["flowchart"]["available"] is True
     assert by_kind["flowchart"]["display_name"] == "Блок-схема"
