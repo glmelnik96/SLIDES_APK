@@ -6,13 +6,15 @@
   // Порядок групп = порядок в пикере. Макеты, не приписанные ни к одной группе
   // (будущие), падают в «Другие макеты» — каталог расширяем без правок здесь.
   var GROUPS = [
-    ["Обложки и финал", ["cover", "cover-image", "contacts"]],
+    // Порядок титулов = их роль: cover-image — основной, statement — тезисный,
+    // cover — запасной. Разделитель секций и финальный слайд — тот же «каркас».
+    ["Титулы, разделы и финал", ["cover-image", "statement", "statement-green",
+      "cover", "section-hatch", "contacts"]],
     ["Цифры и графики", ["kpi", "stats-row", "bar-chart", "donut-chart",
       "line-chart", "stacked-bar", "kpi-rings"]],
     ["Сравнение и структура", ["before-after", "timeline", "diagram"]],
-    ["Текст и карточки", ["statement", "statement-green", "quote",
-      "service-table", "two-col-cards", "three-col", "grid-2x2",
-      "frames-grid", "blank"]],
+    ["Текст и карточки", ["quote", "service-table", "two-col-cards",
+      "three-col", "grid-2x2", "frames-grid", "blank"]],
   ];
 
   // catalog: [{id, …}] (уже без hidden) → [{label, items}] без пустых групп.
