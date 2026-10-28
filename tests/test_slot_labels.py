@@ -107,7 +107,7 @@ def test_catalog_exposes_display_name():
 def test_catalog_slot_dict_emits_label_and_hint_only_when_set():
     by_id = {c["id"]: c for c in templates_api.catalog()}
     # верхнеуровневый слот с лейблом, без hint → ключ hint отсутствует
-    title = by_id["cover"]["slots"]["title"]
+    title = by_id["cover-image"]["slots"]["title"]
     assert title["label"] == "Заголовок"
     assert "hint" not in title
     # саб-слот с label + hint
@@ -120,7 +120,7 @@ def test_catalog_marks_slots_that_render_filler_when_empty():
     """Пустой текстовый слот рендерится примером — редактор по флагу предупреждает
     перед экспортом. Слоты со своим шаблонным дефолтом не помечаем."""
     by_id = {c["id"]: c for c in templates_api.catalog()}
-    assert by_id["cover"]["slots"]["subtitle"]["filler"] is True
+    assert by_id["statement"]["slots"]["highlight"]["filler"] is True
     assert "filler" not in by_id["cover-image"]["slots"]["image"]   # дефолт в шаблоне
     assert "filler" not in by_id["bar-chart"]["slots"]["bars"]      # список — не рыба
     display = by_id["bar-chart"]["slots"]["bars"]["item_slots"]["display"]

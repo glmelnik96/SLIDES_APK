@@ -289,7 +289,7 @@ async def create_draft(request: Request, user=Depends(get_current_user)
     # «скелет просочился в glass» закрыт явным opt-in).
     if mode == "manual" and bool(data.get("skeleton")):
         plan.slides = [draft.DraftSlide(template_id=tid)
-                       for tid in ("cover", "blank", "contacts")]
+                       for tid in ("cover-image", "blank", "contacts")]
     draft.save_plan(session_id, plan)
     draft_render.render_draft(session_id, plan)   # seed an (empty-state) deck.html
     # Ownership row; status "draft" keeps it out of the runner queue, retention

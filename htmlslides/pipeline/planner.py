@@ -77,15 +77,15 @@ PLANNER_SYSTEM = """\
 Дано: исходный документ и каталог шаблонов слайдов с контрактами слотов.
 Разбей содержание на слайды и верни ТОЛЬКО JSON без пояснений, вида:
 {{"title":"Название деки","slides":[
-  {{"index":1,"type":"title","template_id":"cover","freeform":false,
+  {{"index":1,"type":"title","template_id":"cover-image","freeform":false,
    "content":{{"brief":"конкретные факты и формулировки исходника для этого слайда"}}}}
 ]}}
 
 Правила:
 - Первый слайд — титульный, приоритет: cover-image (первый выбор, работает и без
   картинки — подставится брендовая заставка) → statement/statement-green
-  (акцентная плашка) → cover (крайний запасной). Титульные шаблоны НИГДЕ,
-  кроме первого слайда, не используются.
+  (акцентная плашка). cover не используй: штриховка — стиль разделителя.
+  Титульные шаблоны НИГДЕ, кроме первого слайда, не используются.
 - Начало каждого нового раздела — разделитель section-hatch (запасные для
   разнообразия: section-dots, section-frame). Акцент внутри раздела — quote.
 - template_id строго из каталога; type бери из каталога.
@@ -417,9 +417,10 @@ def _fallback_slide(section: Section, library: TemplateLibrary) -> SlidePlan:
 
 def _cover_slide(doc: InputDoc, library: TemplateLibrary) -> SlidePlan:
     """Титул ставит система (правило 2026-10-27, приоритет cover-image →
-    statement → cover). Детерминированно берём первый приоритет: cover-image
-    работает и без своей картинки — шаблон подставляет брендовую заставку.
-    Плашка-statement и текстовый cover остаются запасными для редактора."""
+    statement). Детерминированно берём первый приоритет: cover-image работает
+    и без своей картинки — шаблон подставляет брендовую заставку.
+    Плашка-statement остаётся запасной для редактора; cover со штриховкой
+    убран из предложений (2026-10-28) — штриховка только у разделителя."""
     spec = library.get("cover-image")
     brief = doc.title or "Cloud.ru"
     return SlidePlan(index=1, type=spec.type, template_id="cover-image",

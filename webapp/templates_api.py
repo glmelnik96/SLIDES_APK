@@ -17,7 +17,10 @@ _NOT_FILLABLE = {"section-dots", "section-frame", "back-cover"}
 # grid-2x2. Файл и id ОСТАВЛЕНЫ — на cards-6 завязан конвейер генерации
 # (slide_types/planner/filler/chat_agent), поэтому не предлагаем руками, но и не
 # скрываем от редактора: слайд такого макета надо уметь назвать и заполнить.
-_HIDDEN_FROM_PICKER = {"cards-6"}
+# cover скрыт по той же схеме (правка 2026-10-28): титул со штриховкой ушёл из
+# предложений — штриховка осталась только у разделителя section-hatch. Старые
+# деки с cover редактор по-прежнему называет и заполняет.
+_HIDDEN_FROM_PICKER = {"cards-6", "cover"}
 
 
 def _slot_dict(spec: SlotSpec, name: str = "") -> dict:

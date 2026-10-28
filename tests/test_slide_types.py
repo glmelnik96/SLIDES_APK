@@ -40,10 +40,12 @@ def test_validate_non_dict_returns_none():
     assert st.validate_fields("title", "nope") is None
 
 
-def test_map_title_to_cover():
+def test_map_title_to_cover_image():
+    # cover (штриховка) убран из предложений 2026-10-28 — титул теперь cover-image,
+    # подзаголовок едет в его слот lead.
     tid, content = st.map_typed("title", {"heading": "Привет", "subtitle": "мир"})
-    assert tid == "cover"
-    assert content == {"title": "Привет", "subtitle": "мир"}
+    assert tid == "cover-image"
+    assert content == {"title": "Привет", "lead": "мир"}
 
 
 def test_map_bullets_to_cards6_drops_empty():

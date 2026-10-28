@@ -80,7 +80,7 @@ class DiagramFields(BaseModel):
 
 # slide_type → (Pydantic model, engine template id)
 _SPECS: dict[str, tuple[type[BaseModel], str]] = {
-    "title":   (TitleFields,   "cover"),
+    "title":   (TitleFields,   "cover-image"),
     "bullets": (BulletsFields, "cards-6"),
     "stats":   (StatsFields,   "stats-row"),
     "two_col": (TwoColFields,  "three-col"),
@@ -185,7 +185,9 @@ def map_typed(slide_type, fields) -> tuple[str | None, dict]:
     if norm is None:
         return None, {}
     if slide_type == "title":
-        return "cover", {"title": norm["heading"], "subtitle": norm["subtitle"]}
+        # cover (штриховка) убран из предложений 2026-10-28 — титул рисует
+        # cover-image; его текст под заголовком живёт в слоте lead.
+        return "cover-image", {"title": norm["heading"], "lead": norm["subtitle"]}
     if slide_type == "bullets":
         cards = [{"text": b} for b in _clean(norm["bullets"])]
         return "cards-6", {"title": norm["heading"], "cards": cards}

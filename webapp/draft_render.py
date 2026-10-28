@@ -44,8 +44,8 @@ def _to_deck_plan(plan: DraftPlan) -> DeckPlan:
     library = TemplateLibrary.load()
     if not plan.slides:
         return DeckPlan(title=plan.title or _EMPTY_TITLE, slides=[
-            SlidePlan(index=1, type="title", template_id="cover",
-                      content={"title": _EMPTY_TITLE, "subtitle": _EMPTY_SUBTITLE})])
+            SlidePlan(index=1, type="title", template_id="cover-image",
+                      content={"title": _EMPTY_TITLE, "lead": _EMPTY_SUBTITLE})])
     slides: list[SlidePlan] = []
     for i, s in enumerate(plan.slides, start=1):
         if s.freeform:

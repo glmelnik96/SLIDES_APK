@@ -185,7 +185,7 @@ def test_create_draft_rejects_bad_mode(monkeypatch, tmp_path):
 
 
 def test_create_draft_skeleton_flag(monkeypatch, tmp_path):
-    """skeleton:true → план сразу с тремя пустыми слайдами cover→blank→contacts.
+    """skeleton:true → план сразу с тремя пустыми слайдами cover-image→blank→contacts.
 
     Флаг шлёт ТОЛЬКО кнопка «Заполнить шаблон» на главной — лечит паралич
     чистого листа. Контент пуст: превью-коэрсия показывает плейсхолдеры."""
@@ -195,7 +195,7 @@ def test_create_draft_skeleton_flag(monkeypatch, tmp_path):
         assert r.status_code == 200
         sid = r.json()["session_id"]
         plan = draft.load_plan(sid)
-        assert [s.template_id for s in plan.slides] == ["cover", "blank", "contacts"]
+        assert [s.template_id for s in plan.slides] == ["cover-image", "blank", "contacts"]
         assert all(not s.filled and not s.content for s in plan.slides)
         # deck.html отрендерен сразу с тремя секциями (DeckPlan-as-truth)
         deck = c.get(f"/api/jobs/{sid}/deck", headers=H())
@@ -230,8 +230,13 @@ def test_templates_catalog(monkeypatch, tmp_path):
         # построить такому слайду форму.
         cards6 = next(t for t in cat if t["id"] == "cards-6")
         assert cards6["hidden"] is True and cards6["display_name"]
-        assert all(not t.get("hidden") for t in cat if t["id"] != "cards-6")
+        # cover (титул со штриховкой) скрыт так же (2026-10-28): штриховка —
+        # стиль разделителя section-hatch, но старые деки с cover редактор
+        # по-прежнему называет и заполняет.
         cover = next(t for t in cat if t["id"] == "cover")
+        assert cover["hidden"] is True and cover["display_name"]
+        assert all(not t.get("hidden") for t in cat
+                   if t["id"] not in ("cards-6", "cover"))
         assert cover["slots"]["title"]["required"] is True
         assert cover["slots"]["title"]["max_chars"] == 20
 
@@ -245,14 +250,14 @@ def test_slide_crud_endpoints(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
         # add
-        r = c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        r = c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                    headers=H())
         assert r.status_code == 200 and len(r.json()["slides"]) == 1
         c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"},
                headers=H())
         # update with valid content
         r = c.put(f"/api/drafts/{sid}/slides/1",
-                  json={"content": {"title": "Привет", "subtitle": "мир"}}, headers=H())
+                  json={"content": {"title": "Привет", "lead": "мир"}}, headers=H())
         assert r.status_code == 200 and r.json()["errors"] == []
         # update with over-limit content → still 200 (soft), but errors reported
         r = c.put(f"/api/drafts/{sid}/slides/1",
@@ -263,10 +268,10 @@ def test_slide_crud_endpoints(monkeypatch, tmp_path):
         assert "<section" in c.get(f"/api/jobs/{sid}/deck", headers=H()).text
         # move 1 -> 2
         r = c.post(f"/api/drafts/{sid}/slides/1/move", json={"to": 2}, headers=H())
-        assert [s["template_id"] for s in r.json()["slides"]] == ["grid-2x2", "cover"]
+        assert [s["template_id"] for s in r.json()["slides"]] == ["grid-2x2", "cover-image"]
         # delete
         r = c.delete(f"/api/drafts/{sid}/slides/1", headers=H())
-        assert [s["template_id"] for s in r.json()["slides"]] == ["cover"]
+        assert [s["template_id"] for s in r.json()["slides"]] == ["cover-image"]
 
 
 def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
@@ -275,7 +280,7 @@ def test_replace_whole_plan_endpoint(monkeypatch, tmp_path):
     deck re-renders from it."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cards-6"}, headers=H())
         # replace the whole plan with a swapped-order, retitled snapshot
         snap = {"title": "Снимок",
@@ -317,7 +322,7 @@ def test_replace_plan_with_unknown_template_is_400_not_500(monkeypatch, tmp_path
     вместо претензии к макету."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         r = c.put(f"/api/drafts/{sid}",
                   json={"title": "t", "slides": [
                       {"template_id": "no-such-template", "content": {}}]},
@@ -326,7 +331,7 @@ def test_replace_plan_with_unknown_template_is_400_not_500(monkeypatch, tmp_path
         assert "no-such-template" in str(r.json()["detail"])
         # прежний план цел
         assert [s["template_id"] for s in
-                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] == ["cover"]
+                c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] == ["cover-image"]
 
 
 def test_replace_plan_with_broken_typed_fields_is_400(monkeypatch, tmp_path):
@@ -356,7 +361,7 @@ def test_failed_render_leaves_plan_and_deck_in_step(monkeypatch, tmp_path):
     """
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"}, headers=H())
         deck_before = c.get(f"/api/jobs/{sid}/deck", headers=H()).text
 
@@ -374,7 +379,7 @@ def test_failed_render_leaves_plan_and_deck_in_step(monkeypatch, tmp_path):
         # план не сдвинулся…
         assert [s["template_id"] for s in
                 c.get(f"/api/drafts/{sid}", headers=H()).json()["slides"]] \
-            == ["cover", "grid-2x2"]
+            == ["cover-image", "grid-2x2"]
         # …и дека осталась ровно той же, что была
         assert c.get(f"/api/jobs/{sid}/deck", headers=H()).text == deck_before
 
@@ -424,9 +429,9 @@ def test_slide_endpoints_validation_and_ownership(monkeypatch, tmp_path):
         assert c.put(f"/api/drafts/{sid}/slides/9", json={"content": {}},
                      headers=H()).status_code == 404
         # cross-user access → 404 (ownership)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         assert c.get(f"/api/drafts/{sid}", headers=H("intruder")).status_code == 404
-        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                       headers=H("intruder")).status_code == 404
 
 
@@ -444,7 +449,7 @@ def test_template_preview_renders_sample_slide(monkeypatch, tmp_path):
 def test_update_slide_fields_endpoint(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         # set typed fields
         r = c.put(f"/api/drafts/{sid}/slides/1/fields",
                   json={"slide_type": "bullets",
@@ -481,7 +486,7 @@ def test_broken_diagram_edit_is_rejected_with_claims(monkeypatch, tmp_path):
     from htmlslides.diagrams import sample_spec
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         good = {"heading": "Как проходит заявка", "diagram": sample_spec("flowchart")}
         assert c.put(f"/api/drafts/{sid}/slides/1/fields",
                      json={"slide_type": "diagram", "fields": good},
@@ -502,7 +507,7 @@ def test_build_guard_ignores_typed_only_deck(monkeypatch, tmp_path):
     # a deck whose only slide is typed has nothing to LLM-build → 400 guard.
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         c.put(f"/api/drafts/{sid}/slides/1/fields",
               json={"slide_type": "title", "fields": {"heading": "H"}}, headers=H())
         assert c.post(f"/api/drafts/{sid}/build", headers=H()).status_code == 400
@@ -514,7 +519,7 @@ def test_build_guard_text_is_honest_about_typed_deck(monkeypatch, tmp_path):
     уезжает пользователю как есть (editor.js addMsg), поэтому обязан быть честным."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         c.put(f"/api/drafts/{sid}/slides/1/fields",
               json={"slide_type": "title", "fields": {"heading": "H"}}, headers=H())
         r = c.post(f"/api/drafts/{sid}/build", headers=H())
@@ -542,7 +547,7 @@ def test_export_of_empty_draft_is_400(monkeypatch, tmp_path):
         assert r.status_code == 400
         assert "нет слайдов" in r.json()["detail"]
         # непустой черновик стартует экспорт как раньше
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         r2 = c.post(f"/api/jobs/{sid}/export/pptx", headers=H())
         assert r2.status_code == 200 and r2.json()["state"] == "running"
 
@@ -571,8 +576,8 @@ def test_add_slide_template_errors_are_specific(monkeypatch, tmp_path):
 def test_inline_html_edit_makes_slide_freeform(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
-        section = ('<section class="slide" data-template="cover">'
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
+        section = ('<section class="slide" data-template="cover-image">'
                    '<h1>Отредактировано вручную</h1></section>')
         r = c.put(f"/api/drafts/{sid}/slides/1/html",
                   json={"html": section}, headers=H())
@@ -597,7 +602,7 @@ def test_prev_layout_travels_with_the_slide(monkeypatch, tmp_path):
     """
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover",
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image",
                                                   "content": {"title": "Обложка"}},
                headers=H())
         c.post(f"/api/drafts/{sid}/slides", json={"template_id": "quote",
@@ -610,7 +615,7 @@ def test_prev_layout_travels_with_the_slide(monkeypatch, tmp_path):
         plan = c.post(f"/api/drafts/{sid}/slides/2/move", json={"to": 1},
                       headers=H()).json()
         assert [s["prev_layout"]["template_id"] for s in plan["slides"]] \
-            == ["quote", "cover"]
+            == ["quote", "cover-image"]
         assert plan["slides"][0]["prev_layout"]["content"] == {"quote": "Цитата"}
 
         # повторная правка уже свободного слайда не затирает исходный макет —
@@ -646,7 +651,7 @@ def test_rebuild_draft_dispatches_htmlpolish(monkeypatch, tmp_path):
         sid = _new_draft(c)
         # empty draft can't be rebuilt
         assert c.post(f"/api/drafts/{sid}/rebuild", headers=H()).status_code == 400
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         r = c.post(f"/api/drafts/{sid}/rebuild", headers=H())
         assert r.status_code == 200 and r.json()["kind"] == "htmlpolish"
         # cross-user can't rebuild
@@ -659,10 +664,10 @@ def test_draft_endpoints_409_after_plan_dropped(monkeypatch, tmp_path):
     silently operate on an empty plan and overwrite the built deck."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         draft.plan_path(sid).unlink()          # what a successful rebuild does
         assert c.get(f"/api/drafts/{sid}", headers=H()).status_code == 409
-        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                       headers=H()).status_code == 409
         assert c.put(f"/api/drafts/{sid}/slides/1", json={"content": {}},
                      headers=H()).status_code == 409
@@ -678,12 +683,12 @@ def test_draft_mutation_blocked_during_rebuild(monkeypatch, tmp_path):
     reads stay allowed."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         monkeypatch.setattr(appmod.runner, "status",
                             lambda s: {"terminal": False} if s == sid else None)
         assert c.put(f"/api/drafts/{sid}/slides/1",
                      json={"content": {"title": "x"}}, headers=H()).status_code == 409
-        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        assert c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                       headers=H()).status_code == 409
         # reads are safe during a rebuild
         assert c.get(f"/api/drafts/{sid}", headers=H()).status_code == 200
@@ -716,7 +721,7 @@ def _assert_russian(text: str):
 def test_draft_error_texts_are_russian(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                headers=H())
         # PUT плана с невалидной формой → «invalid plan»
         r = c.put(f"/api/drafts/{sid}", json={"slides": "nope"}, headers=H())
@@ -761,7 +766,7 @@ def test_missing_session_dir_is_honest_404(monkeypatch, tmp_path):
     import shutil
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                headers=H())
         shutil.rmtree(draft.plan_path(sid).parent)
         r = c.get(f"/api/drafts/{sid}", headers=H())
@@ -778,7 +783,7 @@ def test_post_deck_on_draft_is_refused(monkeypatch, tmp_path):
     деку сюда слать нельзя: честный 409 вместо тихой потери."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"},
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"},
                headers=H())
         r = c.post(f"/api/jobs/{sid}/deck",
                    content="<!DOCTYPE html><html><body>маркер</body></html>",
@@ -792,7 +797,7 @@ def test_deck_single_slide_param(monkeypatch, tmp_path):
     редактора (переработка UX 2026-08-20): 8 тумбов = 8 лёгких документов."""
     with _client(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)
-        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover"}, headers=H())
+        c.post(f"/api/drafts/{sid}/slides", json={"template_id": "cover-image"}, headers=H())
         c.post(f"/api/drafts/{sid}/slides", json={"template_id": "grid-2x2"}, headers=H())
         full = c.get(f"/api/jobs/{sid}/deck", headers=H())
         assert full.status_code == 200 and full.text.count("<section") == 2

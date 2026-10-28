@@ -2862,7 +2862,7 @@ byId("emptySkeleton")?.addEventListener("click", async () => {
   const btn = byId("emptySkeleton");
   btn.disabled = true;
   try {
-    for (const tid of ["cover", "blank", "contacts"]) {
+    for (const tid of ["cover-image", "blank", "contacts"]) {
       const r = await fetch(U(`/api/drafts/${sessionId}/slides`), {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ template_id: tid }),
