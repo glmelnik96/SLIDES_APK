@@ -37,6 +37,11 @@
 
   var W = 1800, H = 720;
 
+  /* Поле подписи внутри габарита узла (labelFO). Вынесено из labelFO, потому что
+     раскладке хаба надо посчитать габарит ОТ желаемой ширины текста, то есть
+     знать это поле заранее. */
+  var LABEL_PAD = 10;
+
   /* Подложка зоны схемы — точечная сетка. Шаг, диаметр и фаза сняты пиксельным
    * замером с нативного рендера макетов, не на глаз. В Figma это растровая
    * картинка, растянутая под 1800×780, поэтому измеренный шаг нецелый (29.44) —
@@ -622,7 +627,14 @@
    * макете они стоят чуть теснее (шаг 492 вместо 600), но там их расставили
    * руками по длине конкретной надписи «Cloud.ru Evolution»; равномерный шаг
    * — правило, которое держится при любом числе лучей и ложится на сетку. */
-  var HUB_FS = 120;          // потолок кегля имени хаба (замер: ~135 по капители)
+  /* Имя хаба тянется ОТ крайней левой стрелки ДО крайней правой: стрелка обязана
+     выходить из слова, а не из воздуха рядом с ним. Поэтому кегль здесь не
+     константа, а следствие — длинное имя набирается мельче, короткое крупнее
+     (см. hubFont). Потолок задаёт высота блока: между концами стрелок
+     (H/2 ± HUB_GAP) всего 220 px, и 200 — всё, что можно занять, не налезая на
+     их хвосты. Короткое имя упрётся в него и до стрелок чуть-чуть не дотянет —
+     это физический предел, а не недоработка подгонки. */
+  var HUB_BOX_H = 200, HUB_FS_MIN = 40;
   var HUB_SPOKE_FS = 28;     // подписи лучей: без плашки, поэтому крупнее NODE_FS
   var HUB_ROW_Y = 105, HUB_ROW_H = 80, HUB_GAP = 110;
 
@@ -630,13 +642,18 @@
     var nodes = spec.nodes;
     var hub = nodes[0], spokes = nodes.slice(1), m = spokes.length;
     var pos = {};
-    pos[hub.id] = { x: W / 2, y: H / 2, w: 1560, h: 140 };
     /* Верхний ряд получает лишний луч при нечётном числе: так ряды отличаются
        максимум на один, а не на половину. Колонки общие для обоих рядов —
        короткий ряд центрируется внутри той же сетки (сдвиг на полколонки),
        иначе при 5 лучах низ прижимался бы влево дырой справа. */
     var top = Math.ceil(m / 2), bottom = m - top, k = Math.max(1, top);
     function colX(i, count) { return (W * (i + (k - count) / 2 + 0.5)) / k; }
+    /* Ширина блока хаба = пролёт между крайними колонками ПЛЮС поля labelFO:
+       строке должен достаться ровно пролёт, тогда её концы придутся на стрелки.
+       На одной колонке пролёта нет (обе стрелки в центре), выравнивать не к
+       чему — тогда даём имени всю панель и упираемся в потолок по высоте. */
+    pos[hub.id] = { x: W / 2, y: H / 2, h: HUB_BOX_H,
+                    w: (k > 1 ? colX(k - 1, k) - colX(0, k) : 1540) + 2 * LABEL_PAD };
     spokes.forEach(function (n, i) {
       var up = i < top;
       var idx = up ? i : i - top;
@@ -1278,6 +1295,57 @@
     return fitFontBox(label, Math.max(24, w - 24), Math.max(24, h - 24), base);
   }
 
+  /* Ширина строки в em'ах по таблице метрик SB Sans Display. Приближение «0.6
+   * кегля на символ» (им живёт fitFont) годится, когда надо лишь понять, влезет
+   * подпись в плашку или нет, но непригодно, когда ширину строки надо ПОПАСТЬ в
+   * заданную: у «Cloud.ru Evolution» реальные 8.84 em против 10.8 по среднему —
+   * промах в 18%, то есть 200 px на имени хаба.
+   *
+   * Таблица снята canvas.measureText по живому шрифту деки и свёрнута в корзины
+   * по сотым em. Сумма ширин символов сходится с измерением строки целиком с
+   * точностью 0.1% на контрольных фразах — кернинга, который стоило бы
+   * учитывать, в шрифте нет. Меряем так, а не канвасом в рантайме, потому что
+   * раскладки гоняются в node --test без DOM, а SVG запекается в сейв: один и
+   * тот же spec обязан дать один и тот же кегль где угодно. */
+  var GLYPH_EM = (function () {
+    var rows = {
+      26: " ", 27: "ij", 29: "I/", 31: ".:", 32: ",;()", 33: "l",
+      34: "!'", 38: "fr", 42: "1", 43: "t-", 45: "J", 47: "sгт«»",
+      48: "з", 49: "z", 50: "cvxyсух", 51: "э", 53: "7ь?", 54: "akав",
+      55: "eечя\"", 56: "235к", 57: "л", 58: "ouГоп", 59: "hnбдн", 60: "bdgpqийрцъ",
+      61: "TZТ", 62: "04689FL+", 63: "Y", 64: "SЗ", 65: "EЕ", 66: "Ь",
+      67: "PР", 68: "VXБХ", 69: "ф", 70: "ABАВУЯмы", 71: "CRСЧ–", 72: "Э",
+      74: "KК", 75: "DGДЪ", 76: "ж", 77: "Л", 79: "Uwю", 80: "ш",
+      81: "HНПЦ", 82: "NИЙщ", 83: "OQО", 88: "m", 89: "%", 90: "Ы",
+      91: "—", 93: "WФ", 94: "MМ", 100: "Ж", 104: "Ш", 105: "Щ",
+      108: "Ю", 124: "№"
+    };
+    var map = {}, k, s, i;
+    for (k in rows) {
+      if (!Object.prototype.hasOwnProperty.call(rows, k)) continue;
+      s = rows[k];
+      for (i = 0; i < s.length; i++) map[s.charAt(i)] = Number(k) / 100;
+    }
+    return map;
+  })();
+  var GLYPH_EM_FALLBACK = 0.6;   // буква вне таблицы (греческая, диакритика)
+
+  /* Неразрывные пробелы (U+00A0 от типографики ассемблера, U+202F) в таблице не
+     лежат, но рисуются шириной обычного пробела — без этой ветки каждый
+     «Cloud.ru Evolution» прибавлял бы 0.6 em вместо 0.26. */
+  var SPACE_RE = /[\s\u00a0\u202f]/;
+
+  function textEm(text) {
+    var s = String(text == null ? "" : text).trim(), sum = 0, i, ch, w;
+    for (i = 0; i < s.length; i++) {
+      ch = s.charAt(i);
+      w = GLYPH_EM[ch];
+      if (w === undefined) w = SPACE_RE.test(ch) ? GLYPH_EM[" "] : GLYPH_EM_FALLBACK;
+      sum += w;
+    }
+    return sum;
+  }
+
   /* Сколько строк займёт подпись при ширине строки perLine (в символах). Слово
    * длиннее строки Chromium РВЁТ (overflow-wrap), то есть оно съедает несколько
    * строк, а не переносится целиком — fitFont такой случай просто пропускает
@@ -1359,9 +1427,18 @@
      чтобы не менять ни байта в SVG у всех остальных схем: редактор запекает
      разметку в deck.html, и лишний атрибут раздул бы диффы на ровном месте. */
   function labelFO(p, n, color, fontSize, align, weight) {
-    var pad = 10;
-    var a = FO_ALIGN[align] || ["center", "center"];
     var fs = fitFont(n.label, p.w, p.h, fontSize);
+    return labelFOAt(p, clampLabel(n.label, p.w, p.h, fs), color, fs, align, weight);
+  }
+
+  /* Тот же вывод, но кегль И текст ОКОНЧАТЕЛЬНЫЕ — без fitFont и без clampLabel.
+     Нужен там, где размер посчитан точной метрикой (имя хаба): обе эти функции
+     меряют по среднему 0.6 em на символ, то есть завышают ширину. fitFont сбил
+     бы честные 135 до 107, а clampLabel на этом же завышении решил бы, что
+     «Cloud.ru Evolution» не влезает, и обрезал его до «Cloud.ru…». */
+  function labelFOAt(p, text, color, fs, align, weight) {
+    var pad = LABEL_PAD;
+    var a = FO_ALIGN[align] || ["center", "center"];
     return '<foreignObject x="' + (p.x - p.w / 2 + pad) + '" y="' + (p.y - p.h / 2 + pad) +
       '" width="' + (p.w - 2 * pad) + '" height="' + (p.h - 2 * pad) + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;' +
@@ -1381,7 +1458,7 @@
          слово (break-word, в отличие от anywhere, intrinsic-размер не уменьшает).
          Слово шире плашки поэтому не переносилось, а вылезало и молча срезалось
          overflow:hidden: «Задание на комплектацию» → «…комплектацис». */
-      'overflow-wrap:break-word;">' + esc(clampLabel(n.label, p.w, p.h, fs)) +
+      'overflow-wrap:break-word;">' + esc(text) +
       "</div></div></foreignObject>";
   }
 
@@ -1853,9 +1930,29 @@
          тёмной панели — подпись исчезла бы. */
       var color = (hub || n.accent) ? "var(--accent)" : "var(--fg-body)";
       parts.push('<g class="dgm-node" data-node-id="' + esc(n.id) + '">' +
-        labelFO(p, n, color, hub ? HUB_FS : fs) + "</g>");
+        (hub ? hubLabel(n, p, color) : labelFO(p, n, color, fs)) + "</g>");
     });
     return parts.join("");
+  }
+
+  /* Кегль имени хаба — из ширины блока, а блок равен пролёту между крайними
+     стрелками, поэтому строка кончается ровно там, где стрелка начинается. */
+  function hubFont(label, p) {
+    var byHeight = Math.floor((p.h - 2 * LABEL_PAD) / 1.16);
+    var em = textEm(label);
+    return em ? Math.min(Math.floor((p.w - 2 * LABEL_PAD) / em), byHeight) : byHeight;
+  }
+
+  /* Ниже HUB_FS_MIN имя в одну строку уже нечитаемо — значит, оно и не должно
+     быть одной строкой. Отдаём такое имя обычному labelFO: тот перенесёт его по
+     словам и, если не влезет даже так, обрежет с многоточием. Точный путь
+     страховки не имеет намеренно — он для имён, которые по метрике ТОЧНО
+     помещаются, и любая «подстраховка» там только портила бы текст. */
+  function hubLabel(n, p, color) {
+    var fs = hubFont(n.label, p);
+    return fs >= HUB_FS_MIN
+      ? labelFOAt(p, String(n.label == null ? "" : n.label).trim(), color, fs)
+      : labelFO(p, n, color, HUB_FS_MIN);
   }
 
   /* Полосы плана-графика красит шкала --chart-N по порядку строк; акцентная
@@ -2309,6 +2406,7 @@
     layoutMindmap: layoutMindmap, layoutNetwork: layoutNetwork,
     laneList: laneList, trimSegment: trimSegment, fitFont: fitFont,
     clampLabel: clampLabel, labelLines: labelLines, wrapLines: wrapLines,
+    textEm: textEm, hubFont: hubFont,
     CANVAS: { W: W, H: H },
   };
 

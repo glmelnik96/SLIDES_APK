@@ -347,6 +347,69 @@ test("layoutHubSpoke: первый узел в центре, лучи вокру
   });
 });
 
+test("textEm: ширина строки совпадает с живым замером шрифта", () => {
+  // эталоны сняты canvas.measureText по SB Sans Display (em на кегль)
+  const REF = { "Cloud.ru Evolution": 8.826, "Cloud.ru": 4.071,
+    "Цифровая трансформация бизнеса": 16.814, "Единая облачная платформа": 13.787,
+    "AI-фабрика Cloud.ru": 9.858 };
+  for (const [s, em] of Object.entries(REF)) {
+    const err = Math.abs(D.textEm(s) - em) / em;
+    assert.ok(err < 0.005, `${s}: ${D.textEm(s)} против ${em} (${(err * 100).toFixed(2)}%)`);
+  }
+  assert.strictEqual(D.textEm(""), 0);
+  // NBSP типографики считается шириной пробела, а не 0.6 em «неизвестного»
+  assert.strictEqual(D.textEm("\u0430\u00a0\u0431"), D.textEm("\u0430 \u0431"));
+});
+
+test("hub_spoke: имя хаба растянуто от крайней левой стрелки до крайней правой", () => {
+  const spokes = (n) => Array.from({ length: n }, (_, i) => ({ id: "s" + i, label: "Луч" }));
+  const box = (label, n) => {
+    const spec = { kind: "hub_spoke", nodes: [{ id: "hub", label }, ...spokes(n)] };
+    const { nodes: pos, links } = D.layoutHubSpoke(spec);
+    const xs = links.map((l) => l.points[0][0]);
+    return { p: pos.hub, span: Math.max(...xs) - Math.min(...xs) };
+  };
+  const LABEL = "Cloud.ru Evolution";
+  for (const n of [4, 6, 8, 11]) {
+    const { p, span } = box(LABEL, n);
+    // блок хаба = пролёт между крайними стрелками плюс поля labelFO
+    assert.strictEqual(p.w - 20, span, `${n} лучей`);
+    const fs = D.hubFont(LABEL, p), w = D.textEm(LABEL) * fs;
+    assert.ok(w <= span, `${n} лучей: строка ${w} шире пролёта ${span}`);
+    /* Либо строка дотянулась до стрелок, либо упёрлась в потолок по высоте —
+       третьего не дано. При 11 лучах пролёт 1500, а в 200 px высоты помещается
+       только 155-й кегль, то есть 1370: это физика блока, а не промах подгонки. */
+    const ceiling = Math.floor((p.h - 20) / 1.16);
+    assert.ok(w > span - 30 || fs === ceiling,
+      `${n} лучей: строка ${w} не дотянула до ${span}, а кегль ${fs} < потолка ${ceiling}`);
+  }
+});
+
+test("hub_spoke: длинное имя мельче короткого, но оба влезают в блок", () => {
+  const spec = (label) => ({ kind: "hub_spoke",
+    nodes: [{ id: "hub", label }, ...["a", "b", "c", "d", "e", "f"].map((id) => ({ id }))] });
+  const fs = (label) => D.hubFont(label, D.layoutHubSpoke(spec(label)).nodes.hub);
+  assert.ok(fs("Cloud.ru") > fs("Cloud.ru Evolution"));
+  assert.ok(fs("Cloud.ru Evolution")
+    > fs("Единая облачная платформа Cloud.ru Evolution"));
+  // потолок — высота блока, иначе короткое имя налезло бы на хвосты стрелок
+  const p = D.layoutHubSpoke(spec("ИТ")).nodes.hub;
+  assert.ok(fs("ИТ") * 1.16 <= p.h - 20);
+});
+
+test("render hub_spoke: имя хаба не обрезано многоточием", () => {
+  // fitFont/clampLabel меряют по среднему 0.6 em и резали «Cloud.ru Evolution»
+  // до «Cloud.ru…» — точный путь обязан отдавать имя целиком
+  const host = fakeHost();
+  D.render(host, { kind: "hub_spoke",
+    nodes: [{ id: "hub", label: "Cloud.ru Evolution", accent: true },
+      ...["a", "b", "c", "d", "e", "f"].map((id) => ({ id, label: "Луч" }))] });
+  const svg = host.innerHTML;
+  assert.ok(svg.includes("Cloud.ru Evolution"));
+  assert.ok(!/Cloud\.ru…/.test(svg));
+  assert.ok(/font-size:135px/.test(svg), "ожидали кегль 135 по пролёту 1200");
+});
+
 test("layoutVenn: прямоугольники внахлёст, метки — в своих полосах", () => {
   const two = { kind: "venn", nodes: [{ id: "v1" }, { id: "v2" }] };
   const p2 = D.layoutVenn(two).nodes;
