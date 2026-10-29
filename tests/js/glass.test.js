@@ -96,7 +96,7 @@ test("status: работа кончилась, остались только в�
   const t = glassStatusText({ filled: 6, total: 8, open: 2, working: false,
                               loopDone: false });
   assert.ok(t.includes("Готово 6 из 8"), t);
-  assert.ok(t.includes("ждёт"), t);
+  assert.ok(t.includes("ждет"), t);
   assert.ok(t.includes("2 вопроса"), t);
 });
 
@@ -196,11 +196,11 @@ test("glassStages: этап «Вопросы» появляется, тольк�
 
 test("glassQuestNote: тихий счётчик вопросов у степпера", () => {
   assert.strictEqual(glassQuestNote(1),
-    "? 1 вопрос — разберём после заполнения");
+    "? 1 вопрос — разберем после заполнения");
   assert.strictEqual(glassQuestNote(2),
-    "? 2 вопроса — разберём после заполнения");
+    "? 2 вопроса — разберем после заполнения");
   assert.strictEqual(glassQuestNote(5),
-    "? 5 вопросов — разберём после заполнения");
+    "? 5 вопросов — разберем после заполнения");
   assert.strictEqual(glassQuestNote(0), "");
 });
 

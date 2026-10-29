@@ -308,7 +308,7 @@ class JobRunner:
         # (e.g. a double-click on rebuild). Starting again would overwrite
         # _futures/_queues for the sid and race two builds over the same files.
         if inp.session_id in self._active:
-            raise CapacityError("эта сборка уже идёт — дождитесь завершения")
+            raise CapacityError("эта сборка уже идет — дождитесь завершения")
         if len(self._active) >= self._max_active:
             raise CapacityError(f"очередь занята: максимум {self._max_active} "
                                 "сборок одновременно, попробуйте позже")
@@ -353,7 +353,7 @@ class JobRunner:
                           # значит «документ слишком большой» — так и говорим.
                           "error": "сборка превысила лимит времени "
                                    f"({self._build_timeout // 60} мин) и была "
-                                   "остановлена. Обычно причина в объёме "
+                                   "остановлена. Обычно причина в объеме "
                                    "исходника — разбейте документ на части "
                                    "и соберите их по отдельности.",
                           # Исключения-причины у таймаута нет (сборку останавливает

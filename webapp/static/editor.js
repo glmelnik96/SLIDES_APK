@@ -58,7 +58,7 @@ function friendlyDetail(detail) {
   if (detail.startsWith("plan:")) return "Продумываю структуру презентации";
   if (detail.startsWith("fill: заполняю")) return "Оформляю слайды";
   if (detail.startsWith("assemble:")) return "Собираю презентацию";
-  if (detail.startsWith("lint:")) return "Проверяю вёрстку";
+  if (detail.startsWith("lint:")) return "Проверяю верстку";
   if (detail.startsWith("vision-qa")) return "Проверяю внешний вид";
   if (detail.startsWith("autofix:")) return "Улучшаю слайды по результатам проверки";
   if (detail.startsWith("done:")) return "Готово";
@@ -108,7 +108,7 @@ async function initEditor() {
     } catch (e) { st = null; }
     if (st && st.status === 404) {
       showTerminal("Презентация не найдена",
-        "Возможно, истёк срок хранения (24 часа) или ссылка устарела.", HOME_LINK);
+        "Возможно, истек срок хранения (24 часа) или ссылка устарела.", HOME_LINK);
       return;
     }
     buildRetries = 0;              // successful probe resets the retry budget
@@ -124,7 +124,7 @@ function waitForBuild() {
   if (buildActions) buildActions.classList.add("hidden");
   if (buildNote) buildNote.textContent =
     "Это занимает несколько секунд — не закрывайте страницу.";
-  buildTitle.textContent = "Презентация ещё собирается…";
+  buildTitle.textContent = "Презентация еще собирается…";
   let done = false;
   const es = new EventSource(U(`/api/jobs/${sessionId}/events`));
   es.onmessage = (e) => {
@@ -216,7 +216,7 @@ function handleFrameLoad(loaded) {
           // подтверждение. Отказ восстанавливает исходный HTML и НЕ синкает.
           if (!draftPlan.slides[i]?.freeform && !freeformConfirmed) {
             const ok = await confirmDialog(
-              "Эта правка не ложится в поля макета, слайд перейдёт в свободный режим: поля формы станут недоступны. Продолжить?",
+              "Эта правка не ложится в поля макета, слайд перейдет в свободный режим: поля формы станут недоступны. Продолжить?",
               "Продолжить", "Отмена");
             if (!ok) { el.innerHTML = orig; return; }
             freeformConfirmed = true;
@@ -397,10 +397,10 @@ function markGlassRibbons(doc) {
     if (!s) return;
     let text = "", bg = "";
     if (s.status === "needs_input" && !s.filled) {
-      text = "ИИ ждёт вашего ответа — вопрос в панели «Пошаговая сборка»";
+      text = "ИИ ждет вашего ответа — вопрос в панели «Пошаговая сборка»";
       bg = "#b45309";
     } else if (s.status === "failed") {
-      text = "Слайд не заполнился — карточка в панели даёт выбрать макет заново";
+      text = "Слайд не заполнился — карточка в панели дает выбрать макет заново";
       bg = "#b91c1c";
     }
     if (!text) return;
@@ -657,10 +657,10 @@ function syncThumbBadges() {
     let cls = "", title = "", mark = "";
     if (ds.status === "needs_input" && !ds.filled) {
       cls = "thumb-quest"; mark = "?";
-      title = "ИИ ждёт вашего ответа по этому слайду";
+      title = "ИИ ждет вашего ответа по этому слайду";
     } else if (ds.status === "failed") {
       cls = "thumb-quest thumb-quest--failed"; mark = "!";
-      title = "Слайд не заполнился — можно выбрать макет ещё раз";
+      title = "Слайд не заполнился — можно выбрать макет еще раз";
     } else if (filling === i + 1) {
       cls = "thumb-quest thumb-quest--filling"; mark = "⟳";
       title = "Слайд сейчас заполняется — подождите";
@@ -768,7 +768,7 @@ function currentDeckHtml() {
   const doc = frame.contentDocument;
   if (!doc || !doc.documentElement) {
     // iframe is mid-reload or not ready — caller must handle this.
-    throw new Error("презентация ещё не загрузилась — подождите секунду");
+    throw new Error("презентация еще не загрузилась — подождите секунду");
   }
   // Strip the editor-only contenteditable attributes we inject at load time so
   // the persisted/downloaded/exported deck stays clean (otherwise a downloaded
@@ -837,7 +837,7 @@ function deckTheme() {
 function syncThemeToggle() {
   if (!themeToggle) return;
   themeToggle.textContent =
-    deckTheme() === "dark" ? "Светлая тема" : "Тёмная тема";
+    deckTheme() === "dark" ? "Светлая тема" : "Темная тема";
   themeToggle.classList.remove("hidden");
 }
 themeToggle?.addEventListener("click", async () => {
@@ -855,7 +855,7 @@ themeToggle?.addEventListener("click", async () => {
       body: JSON.stringify({ theme: next }),
     });
     if (!r.ok) {
-      await alertDialog("Не получилось перекрасить — попробуйте ещё раз");
+      await alertDialog("Не получилось перекрасить — попробуйте еще раз");
       return;
     }
     const data = await r.json();
@@ -946,7 +946,7 @@ async function confirmExportWithPlaceholders() {
   if (!n) return true;
   return confirmDialog(
     `На ${n} ${plural(n, "слайде", "слайдах", "слайдах")} остался пример-текст — ` +
-    `он попадёт в файл. Экспортировать?`,
+    `он попадет в файл. Экспортировать?`,
     "Экспортировать", "Вернуться к заполнению");
 }
 
@@ -1209,7 +1209,7 @@ async function sendChat() {
       appendRetry(thinking);
     } else {
       lastInstruction = "";
-      thinking.textContent = `Слайд ${slideIndex} обновлён.`;
+      thinking.textContent = `Слайд ${slideIndex} обновлен.`;
       pendingGoTo = slideIndex - 1; // show the edited slide, even if user navigated away
       loadDeck(); // reload iframe with the rewritten slide
     }
@@ -1217,7 +1217,7 @@ async function sendChat() {
     thinking.className = "msg err";
     if (timedOut) {
       thinking.textContent =
-        "Правка отменена: превышено время ожидания (5 мин). Попробуйте ещё раз.";
+        "Правка отменена: превышено время ожидания (5 мин). Попробуйте еще раз.";
     } else if (e && e.name === "AbortError") {
       thinking.textContent = "Правка отменена.";
     } else {
@@ -1776,7 +1776,7 @@ const DGM_VALUE_KINDS = { funnel: "число", pyramid: "число",
 const DGM_LANE_KINDS = { swimlanes: "исполнитель" };
 // заголовок списка связей: смысл ребра у типов разный
 const DGM_EDGE_LABEL = {
-  hierarchy: "Связи (родитель → подчинённый)",
+  hierarchy: "Связи (родитель → подчиненный)",
   mindmap: "Ветви (от чего → к чему)",
   network: "Связи (между узлами)",
 };
@@ -2210,7 +2210,7 @@ function syncDgmFit() {
       ? "На слайде подписи всех узлов сократятся многоточием — плашки этого"
         + " размера столько текста не вмещают."
       : `На слайде сократятся многоточием: ${cut.slice(0, 2).map(short).join(", ")}`
-        + (cut.length > 2 ? ` и ещё ${cut.length - 2}` : "")
+        + (cut.length > 2 ? ` и еще ${cut.length - 2}` : "")
         + " — плашки этого размера столько текста не вмещают.";
   }
 }
@@ -2722,7 +2722,7 @@ async function changeTemplate(templateId, dgmKind) {
       wasDiagram ? slide.fields : { heading: content.title || "" });
   }
   await reloadDraft(current);
-  showUndoToast("Макет слайда изменён");
+  showUndoToast("Макет слайда изменен");
 }
 
 // Спрашиваем способ ПОСЛЕ выбора макета: до него вопрос был бы про
@@ -2733,7 +2733,7 @@ async function changeTemplateAsked(templateId, dgmKind) {
   // Пока идёт перезаполнение, менять макет нельзя — и молчать об этом тоже:
   // закрытый оверлеем кадр не объясняет, почему выбор в пикере ничего не сделал.
   if (refillBusy) {
-    await alertDialog("Слайд ещё перезаполняется — дождитесь окончания.");
+    await alertDialog("Слайд еще перезаполняется — дождитесь окончания.");
     return;
   }
   const slide = draftPlan.slides[current];
@@ -2758,7 +2758,7 @@ async function changeTemplateAsked(templateId, dgmKind) {
           ? "Мгновенно: заголовок сохранится, схема встанет образцом — подписи "
             + "узлов и связи вы впишете сами."
           : "Мгновенно: текст переезжает в новый макет как есть. Что в него не "
-            + "помещается, остаётся в черновике и вернётся при обратной смене." },
+            + "помещается, остается в черновике и вернется при обратной смене." },
       { label: "Перезаполнить по документу", value: "refill",
         desc: (brief ? "ИИ перечитает исходный фрагмент документа"
                      : "ИИ перечитает текст слайда")
@@ -2815,7 +2815,7 @@ async function refillTemplate(templateId, dgmKind) {
     setSaveStatus("error");
     let detail = "";
     if (r) { try { detail = (await r.json()).detail || ""; } catch (_) { /* не JSON */ } }
-    await alertDialog(detail || "Не удалось перезаполнить слайд — попробуйте ещё "
+    await alertDialog(detail || "Не удалось перезаполнить слайд — попробуйте еще "
       + "раз или смените макет с переносом текста.");
     return;
   }
@@ -2919,7 +2919,7 @@ async function deleteSlideAt(i) {
   if (!r || !r.ok) { setSaveStatus("error"); return; }
   pushUndo();
   await reloadDraft(Math.max(0, i - 1));
-  showUndoToast(`Слайд ${i + 1} удалён`);
+  showUndoToast(`Слайд ${i + 1} удален`);
 }
 
 /* Плашка «Вернуть» после разрушающего действия. Отмена в редакторе есть (Ctrl+Z),
@@ -3260,7 +3260,7 @@ async function openPicker(onPick, cur) {
   const pickable = pickableTemplates();
   if (!pickable.length) {
     grid.innerHTML = '<p class="picker-empty">Не удалось загрузить макеты — ' +
-      "проверьте соединение и откройте список ещё раз.</p>";
+      "проверьте соединение и откройте список еще раз.</p>";
     return;
   }
   // Тема миниатюр = тема загруженного кадра (как у ярлыка themeToggle):
@@ -3378,7 +3378,7 @@ async function openDiagramPicker(onKind, curKind) {
   if (seq !== pickerSeq) return;
   if (!cat.length) {
     grid.innerHTML = '<p class="picker-empty">Не удалось загрузить типы схем — ' +
-      "проверьте соединение и откройте список ещё раз.</p>";
+      "проверьте соединение и откройте список еще раз.</p>";
     return;
   }
   // Тема миниатюр = тема загруженного кадра (как в пикере макетов).
@@ -3804,7 +3804,7 @@ async function sendAgent() {
   } catch (e) {
     thinking.className = "msg err";
     thinking.textContent = timedOut
-      ? "Превышено время ожидания (5 мин). Попробуйте ещё раз."
+      ? "Превышено время ожидания (5 мин). Попробуйте еще раз."
       : (e && e.name === "AbortError" ? "Отменено."
          : "Ошибка: " + (e && e.message ? e.message : e));
   } finally {
@@ -4377,7 +4377,7 @@ function renderGlassRest() {
     a.target = "_blank";
     a.rel = "noopener";
     a.textContent = "открыть в новой вкладке";
-    note.append(a, ". Эта дека остаётся как есть.");
+    note.append(a, ". Эта дека остается как есть.");
   }
 }
 
@@ -4799,7 +4799,7 @@ async function resumeGlassBuild() {
     if (!r.ok) throw new Error(await r.text());
   } catch (e) {
     if (b) b.disabled = false;
-    alertDialog("Не удалось возобновить сборку — проверьте интернет и попробуйте ещё раз.");
+    alertDialog("Не удалось возобновить сборку — проверьте интернет и попробуйте еще раз.");
     return;
   }
   if (b) b.disabled = false;

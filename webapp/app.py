@@ -193,7 +193,7 @@ async def download_file(name: str,
     if not path.is_file():
         # Файл кладут на прод отдельно (scp в downloads_dir), и его отсутствие —
         # штатная ситуация раскатки, которую увидит обычный человек по ссылке.
-        raise HTTPException(404, "файл ещё не выложен — напишите нам")
+        raise HTTPException(404, "файл еще не выложен — напишите нам")
     return FileResponse(path, filename=name, media_type=mime)
 
 
@@ -503,7 +503,7 @@ async def _draft_or_404(request: Request, session_id: str, user,
         st = runner.status(session_id)
         if st is not None and not st.get("terminal"):
             raise HTTPException(
-                409, "идёт пересборка черновика — дождитесь завершения")
+                409, "идет пересборка черновика — дождитесь завершения")
     return draft.load_plan(session_id)
 
 
@@ -598,7 +598,7 @@ async def replace_draft(session_id: str, request: Request,
     try:
         plan = draft.DraftPlan.model_validate(data)
     except ValidationError:
-        raise HTTPException(400, "план не проходит по форме — обновите страницу и попробуйте ещё раз")
+        raise HTTPException(400, "план не проходит по форме — обновите страницу и попробуйте еще раз")
     # Аудит 2026-08-14 (B-1/B-3): форма плана — не вся правда. Неизвестный
     # template_id раньше доезжал до рендера и падал голым 500 (SlotValidationError
     # не ловился), а битые typed-поля сохранялись молча и рендерились в blank —
@@ -801,7 +801,7 @@ async def improve_draft_slide(session_id: str, index: int, request: Request,
         logger.exception("improve slide failed (session %s, slide %s)",
                          session_id, index)
         raise HTTPException(500, "не удалось улучшить слайд — "
-                                 "попробуйте ещё раз") from exc
+                                 "попробуйте еще раз") from exc
     return JSONResponse(out)
 
 
@@ -1450,7 +1450,7 @@ async def download_export(session_id: str, fmt: str, request: Request,
         raise HTTPException(404, "неизвестный формат экспорта")
     path = exports.registry.path(session_id, fmt)
     if path is None or not path.is_file():
-        raise HTTPException(409, "экспорт ещё не готов")
+        raise HTTPException(409, "экспорт еще не готов")
     return FileResponse(path, filename=meta["download"], media_type=meta["mime"])
 
 

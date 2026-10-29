@@ -184,7 +184,7 @@ def test_the_layout_takes_the_background_of_its_section(deck):
         node = _layouts(deck)[name].find(f"{P}bg//{A}srgbClr")
         return node is not None and node.get("val")
 
-    assert bg("Титул-тезис (зелёный)") == "26D07C"
+    assert bg("Титул-тезис (зеленый)") == "26D07C"
     assert bg("Титул-тезис") == "222222"
 
 

@@ -306,7 +306,7 @@ def test_mindmap_mixed_orphans_rejected():
                                  {"id": "a1", "label": "Раз-один"},
                                  {"id": "b", "label": "Два"}],
                        "edges": [{"from": "a", "to": "a1"}]})
-    assert any("не ведёт ни одно ребро" in e for e in ei.value.errors)
+    assert any("не ведет ни одно ребро" in e for e in ei.value.errors)
 
 
 def test_network_requires_edges():

@@ -103,6 +103,6 @@ def export_pptx(deck_html: Path, out_pptx: Path) -> Path:
             _paste_diagrams(deck_html, out_pptx, diagrams)
         return out_pptx
     except Exception:  # noqa: BLE001 — файл человек получит в любом случае
-        _LOG.warning("pptx: редактируемый экспорт %s не собрался — отдаём "
+        _LOG.warning("pptx: редактируемый экспорт %s не собрался — отдаем "
                      "картинками", deck_html, exc_info=True)
         return export_pictures(deck_html, out_pptx)

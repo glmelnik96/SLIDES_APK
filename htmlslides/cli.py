@@ -26,7 +26,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     build.add_argument("--keep-artifacts", metavar="DIR", default=None,
                        help="сохранить DeckPlan/SlideFill/скриншоты в DIR")
     build.add_argument("--theme", choices=["dark", "light"], default="dark",
-                       help="тема деки (тёмная по умолчанию)")
+                       help="тема деки (темная по умолчанию)")
     args = parser.parse_args(argv)
 
     _load_dotenv()

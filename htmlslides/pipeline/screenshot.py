@@ -71,7 +71,7 @@ _OVERFLOW_JS = """
     window.deck.goTo(si);
     const sb = slide.getBoundingClientRect();
     const scale = sb.width / (slide.offsetWidth || 1920);
-    // bbox блочного элемента не растёт от непереносимого текста (ink overflow),
+    // bbox блочного элемента не растет от непереносимого текста (ink overflow),
     // поэтому правую/нижнюю границы расширяем на scroll-переполнение.
     // Снизу метрики шрифта при line-height 1.0 дают паразитный scrollHeight
     // (порядка +24px у t-kpi-hero) — игнорируем инфляцию меньше 15% высоты строки.
@@ -85,7 +85,7 @@ _OVERFLOW_JS = """
         bottom: r.bottom + (dy > 0.15 * lh ? dy : 0) * scale,
       };
     };
-    // У SVG-элементов className — это SVGAnimatedString, и String() от него даёт
+    // У SVG-элементов className — это SVGAnimatedString, и String() от него дает
     // «[object SVGAnimatedString]». Именно SVG у нас все графики, то есть самое
     // интересное место замера описывалось для vision-QA мусорной строкой.
     const name = el => el.getAttribute('class') || el.tagName;
@@ -94,7 +94,7 @@ _OVERFLOW_JS = """
     // SVG стоит на left:-502px — это кроп из референса, а не поломка. Весь такой
     // декор помечен aria-hidden, контент — никогда. Без этой отсечки ЗДОРОВАЯ дека
     // отдавала vision-QA 4 «вылета за край» (quote и timeline), и модель шла
-    // чинить слайды, с которыми всё в порядке.
+    // чинить слайды, с которыми все в порядке.
     slide.querySelectorAll('*').forEach(el => {
       if (el.closest('[aria-hidden="true"]')) return;
       const r = el.getBoundingClientRect();

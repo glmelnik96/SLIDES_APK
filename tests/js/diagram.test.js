@@ -140,11 +140,15 @@ test("layoutCycle: узлы на эллипсе, старт сверху, лин
   assert.strictEqual(links.length, 4);      // замкнутый круг
   assert.strictEqual(links[3].to, "a");
   // По макету 146:982: ортогональные «колени» вместо дуг, стрелки на обоих
-  // концах, линия 2. Каждый сегмент колена строго горизонтален или вертикален.
+  // концах. Каждый сегмент колена строго горизонтален или вертикален.
+  // Толщину линии цикл БОЛЬШЕ НЕ ЗАДАЁТ: раньше он перебивал общую тройку
+  // своей двойкой «по макету», и на одной деке стрелки выходили разной
+  // толщины. Теперь двойка — общий EDGE_STROKE движка, а не свойство ребра,
+  // поэтому здесь проверяем, что цикл её НЕ переопределяет.
   links.forEach((l) => {
     assert.strictEqual(l.arc, undefined);
     assert.ok(l.both, `${l.from}→${l.to}: нет флага двусторонней стрелки`);
-    assert.strictEqual(l.width, 2);
+    assert.strictEqual(l.width, undefined);
     assert.strictEqual(l.points.length, 3);   // ромб n=4: всегда колено
     for (let i = 1; i < l.points.length; i++) {
       const [p, q] = [l.points[i - 1], l.points[i]];
@@ -1230,14 +1234,24 @@ test("render Венна: палитры графиков нет — множес
   const host = fakeHost();
   D.render(host, { kind: "venn", nodes: [
     { id: "a", label: "Скорость разработки" },
-    { id: "b", label: "Надёжность эксплуатации" }] });
+    { id: "b", label: "Надежность эксплуатации" }] });
   const html = host.innerHTML;
   assert.ok(!/var\(--chart-\d\)/.test(html), "Венн взял палитру графиков");
   assert.ok(!/var\(--on-chart-\d\)/.test(html), "подпись Венна по палитре графиков");
-  // Залита ровно одна рамка, и она нейтральная; вторая — зелёный контур.
-  assert.strictEqual((html.match(/fill="var\(--bg-card\)"/g) || []).length, 1);
-  assert.ok(/fill="none" stroke="var\(--accent\)"/.test(html),
-            "у пересекающего множества нет зелёного контура");
+  // Залиты ОБА множества, и одним тоном. Контурный прямоугольник был бы дырой
+  // в композиции — сквозь него видно фон зоны, и множество читается пустым;
+  // а две РАЗНЫЕ заливки внахлёст дали бы в общей части третий цвет, то есть
+  // сущность, которой в данных нет. Отличаются множества только обводкой.
+  assert.strictEqual((html.match(/fill="var\(--bg-card\)"/g) || []).length, 2,
+                     "залито не два множества");
+  // Без заливки остаётся РОВНО одна рамка — пунктир общей части: сквозь неё
+  // обязаны просвечивать оба множества, иначе это не пересечение, а третья
+  // плашка поверх них.
+  const hollow = html.match(/<rect[^>]*fill="none"[^>]*>/g) || [];
+  assert.strictEqual(hollow.length, 1, "пустых рамок не одна");
+  assert.ok(/stroke-dasharray/.test(hollow[0]), "пустая рамка — не пунктир пересечения");
+  assert.ok(/fill="var\(--bg-card\)" stroke="var\(--accent\)"/.test(html),
+            "у пересекающего множества нет зелёной обводки");
 });
 
 test("render: длинная подпись ребра переносится и сокращается", () => {
@@ -1371,6 +1385,75 @@ test("render: у единственного потомка оргсхемы по
   const y = Number(host.innerHTML.match(/<text[^>]*y="([\d.-]+)"/)[1]);
   assert.ok(y > L.nodes.c.y + L.nodes.c.h / 2, "подпись заехала под плашку родителя");
   assert.ok(y < L.nodes.d.y - L.nodes.d.h / 2, "подпись заехала на плашку потомка");
+});
+
+test("render: толщина связи ОДНА на весь движок", () => {
+  // Цикл задавал ребру width:2 «по макету», остальные типы рисовались тройкой
+  // по умолчанию. На одной деке это давало стрелки разной толщины от слайда к
+  // слайду. Теперь толщина — свойство движка (EDGE_STROKE), а не ребра, и ни
+  // один тип её не переопределяет.
+  const seen = new Set();
+  Object.keys(D.LAYOUTS).forEach((kind) => {
+    const host = fakeHost();
+    D.render(host, { kind, nodes: [
+      { id: "a", label: "Старт", lane: "X", start: 1, end: 2 },
+      { id: "b", label: "Шаг", lane: "Y", start: 2, end: 3 },
+      { id: "c", label: "Финиш", lane: "X", start: 3, end: 4 }],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }] });
+    // <defs> отрезаем: внутри маркера штрих 1 намеренный — markerUnits по
+    // умолчанию strokeWidth, то есть голова масштабируется толщиной линии.
+    const body = host.innerHTML.replace(/<defs>.*?<\/defs>/g, "");
+    for (const m of body.matchAll(/<path [^>]*stroke-width="([\d.]+)"/g)) {
+      seen.add(m[1]);
+    }
+  });
+  assert.deepStrictEqual([...seen], ["2"],
+    "толщина стрелок разошлась по типам: " + [...seen].join(", "));
+});
+
+test("render: точечная подложка стоит не у всех типов", () => {
+  // Сетка читается как пустое поле, по которому плавает фигура, и смысл у неё
+  // есть ровно там, где схема зону не заполняет. У матрицы, Венна, плана и
+  // лестницы плашки занимают всю зону — точки лезут в щели между ними и в
+  // просветы заливок, и подложка превращается в шум поверх геометрии.
+  const WITHOUT = ["matrix", "venn", "gantt_lite", "steps"];
+  Object.keys(D.LAYOUTS).forEach((kind) => {
+    const host = fakeHost();
+    D.render(host, { kind, nodes: [
+      { id: "a", label: "Первый", lane: "X", start: 1, end: 2 },
+      { id: "b", label: "Второй", lane: "Y", start: 2, end: 3 }] });
+    const has = /class="dgm-grid"/.test(host.innerHTML);
+    assert.strictEqual(has, WITHOUT.indexOf(kind) === -1,
+      kind + (has ? ": подложка лишняя" : ": подложка пропала"));
+  });
+});
+
+test("layoutNetwork: колена разных узлов не сливаются в одну линию", () => {
+  // Все колена одного просвета вставали на его середину, и огрызки разных
+  // связей встречались в одной точке. На выборке каталога это рисовало
+  // соединение, которого в данных нет: «Каталог услуг → Базы данных» шёл
+  // вправо и вверх, «Биллинг → Очередь событий» — вверх и вправо, а читалось
+  // как сплошная стрелка «Каталог услуг → Очередь событий».
+  const spec = { kind: "network", nodes: [
+    { id: "api", label: "API" }, { id: "cat", label: "Каталог" },
+    { id: "bill", label: "Биллинг" }, { id: "db", label: "БД" },
+    { id: "que", label: "Очередь" }],
+    edges: [{ from: "api", to: "cat" }, { from: "api", to: "bill" },
+            { from: "cat", to: "db" }, { from: "bill", to: "db" },
+            { from: "bill", to: "que" }] };
+  const { links } = D.layoutNetwork(spec);
+  // Вертикальная полоса колена — своя у каждого ИСТОЧНИКА: веер из одного узла
+  // по общему стволу двусмысленности не создаёт (видно, что всё идёт от него),
+  // а стволы разных узлов обязаны разойтись.
+  const lane = {};
+  links.filter((l) => l.points.length === 4).forEach((l) => {
+    (lane[l.from] = lane[l.from] || new Set()).add(l.points[1][0]);
+  });
+  Object.keys(lane).forEach((from) => assert.strictEqual(lane[from].size, 1,
+    from + ": веер из одного узла разъехался по разным полосам"));
+  const xs = Object.keys(lane).map((k) => [...lane[k]][0]);
+  assert.strictEqual(new Set(xs).size, xs.length,
+    "колена разных узлов встали на одну полосу");
 });
 
 test("render: у плашек прямые углы — во всех типах схем", () => {
@@ -1552,27 +1635,30 @@ test("render воронки: ступени по шкале, геометрия 
 });
 
 test("render пирамиды: ярусы по шкале, силуэт треугольника и насечки", () => {
-  // Ярус красит шкала, но ярусы режутся по кромкам ОДНОГО треугольника: их
-  // полосы стыкуются встык, без щелей и ступенек по контуру, а насечки
-  // остаются макетными. «Пирамида из кирпичей» — это когда у яруса своя
-  // плашка со своей геометрией; здесь геометрия общая.
+  // Пирамида — ОДНА однотонная фигура: ярус задаётся насечкой, а не цветом.
+  // Шкалу --chart-N здесь пробовали, каждому ярусу свой тон, и это сломало
+  // фигуру дважды: однотонный силуэт макета превратился в стопку трапеций, а
+  // полосы рисовались от первой насечки, а не от вершины, — остриё просто не
+  // выводилось, и верх выходил срезанным. Тест держит оба свойства.
   const host = fakeHost();
   D.render(host, { kind: "pyramid", nodes: [
     { id: "p1", label: "Видение" }, { id: "p2", label: "Стратегические цели" },
     { id: "p3", label: "Ключевые инициативы" },
     { id: "p4", label: "Операционные задачи" }] });
   const html = host.innerHTML;
-  // Четыре яруса — четыре трапеции по шкале, с --chart-1 (акцента нет).
-  const bands = [...html.matchAll(/<polygon points="([^"]+)" fill="var\(--chart-(\d)\)"\/>/g)];
-  assert.strictEqual(bands.length, 4, "ярусов-полос не четыре");
-  assert.deepStrictEqual(bands.map((m) => m[2]), ["1", "2", "3", "4"],
-                         "ярусы не по порядку шкалы");
-  // Стык без щели: низ каждой полосы совпадает с верхом следующей.
-  const edge = (pts, which) => pts.split(" ")[which].split(",")[1];
-  for (let i = 1; i < bands.length; i++) {
-    assert.strictEqual(edge(bands[i - 1][1], 2), edge(bands[i][1], 0),
-                       "между ярусами " + i + " и " + (i + 1) + " щель");
-  }
+  assert.ok(!/var\(--chart-\d\)/.test(html), "пирамида взяла палитру графиков");
+  // Фигура ровно одна, и она треугольник: три вершины, остриё на оси.
+  const polys = [...html.matchAll(/<polygon points="([^"]+)" fill="([^"]+)"\/>/g)];
+  assert.strictEqual(polys.length, 1, "пирамида не одной фигурой");
+  assert.strictEqual(polys[0][2], "var(--bg-card)", "заливка пирамиды не нейтральная");
+  const pts = polys[0][1].split(" ").map((s) => s.split(",").map(Number));
+  assert.strictEqual(pts.length, 3, "силуэт не треугольник");
+  assert.strictEqual(pts[0][0], 900, "остриё не на оси зоны");
+  // Вписана в область паттерна: вершина на верхней кромке зоны, основание на
+  // нижней. Раньше основание стояло на 750 при холсте 720 и фигуру срезало.
+  assert.strictEqual(pts[0][1], 0, "вершина не на верхней кромке зоны");
+  assert.strictEqual(pts[1][1], 720, "основание не на нижней кромке зоны");
+  assert.strictEqual(pts[2][1], 720, "основание не на нижней кромке зоны");
   // Разделителей на один больше, чем ярусов, и все они короче основания.
   const cuts = [...html.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)"/g)];
   assert.strictEqual(cuts.length, 5);
@@ -1580,6 +1666,24 @@ test("render пирамиды: ярусы по шкале, силуэт треу
     "разделитель шире треугольника"));
   // Подписи крупнее общей двадцатьчетвёрки — это замер макета.
   assert.ok(html.includes("font-size:32px"), "кегль подписей яруса не 32");
+});
+
+test("render пирамиды: акцентный ярус зелёный, и только он", () => {
+  // Единственное исключение из однотонности — ярус, помеченный accent. Это не
+  // градация ряда, а указатель «вот этот уровень», и работает он только пока
+  // остальные ярусы нейтральны.
+  const host = fakeHost();
+  D.render(host, { kind: "pyramid", nodes: [
+    { id: "p1", label: "Видение" },
+    { id: "p2", label: "Цели", accent: true },
+    { id: "p3", label: "Задачи" }] });
+  const html = host.innerHTML;
+  const polys = [...html.matchAll(/<polygon points="([^"]+)" fill="([^"]+)"\/>/g)];
+  assert.strictEqual(polys.length, 2, "кроме силуэта и акцента есть ещё полосы");
+  assert.strictEqual(polys[0][2], "var(--bg-card)");
+  assert.strictEqual(polys[1][2], "var(--accent)");
+  assert.strictEqual((html.match(/var\(--accent\)/g) || []).length, 1,
+                     "зелёного на схеме больше одного");
 });
 
 test("layout: стрелки цикла упираются в край плашки, а не внутрь неё", () => {

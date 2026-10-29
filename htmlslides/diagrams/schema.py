@@ -184,7 +184,7 @@ class _BaseSpec(BaseModel):
         lone = [n.id for n in self.nodes if n.id not in linked]
         if not lone:
             return []
-        return ["узлы вне схемы — к ним не ведёт ни одно ребро: "
+        return ["узлы вне схемы — к ним не ведет ни одно ребро: "
                 + ", ".join(repr(i) for i in lone[:5])]
 
 
@@ -404,7 +404,7 @@ class MindmapSpec(_BaseSpec):
             errors.append("mindmap требует минимум 3 узла (центр и две ветви)")
         if any(e.to == self.nodes[0].id for e in self.edges):
             errors.append(f"центр карты {self.nodes[0].id!r} не может быть "
-                          "подветвью — ребро ведёт в него")
+                          "подветвью — ребро ведет в него")
         return errors
 
 

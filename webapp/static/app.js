@@ -30,7 +30,7 @@ const STAGE_LABEL = {
 // One-line "what's happening now" in plain language, expanded so the user knows
 // roughly how long each phase takes and that waiting is normal.
 const STAGE_HINT = {
-  queued: "Сборка скоро начнётся — вы в очереди.",
+  queued: "Сборка скоро начнется — вы в очереди.",
   parsing: "Читаю ваш документ.",
   classifying: "Продумываю структуру презентации — это один из самых долгих шагов (до пары минут).",
   designing: "Оформляю слайды по очереди. Каждый слайд модель пишет отдельно, поэтому это занимает время.",
@@ -55,7 +55,7 @@ function friendlyDetail(detail) {
   if (detail.startsWith("plan:")) return "Продумываю структуру презентации";
   if (detail.startsWith("fill: заполняю")) return "Оформляю слайды";
   if (detail.startsWith("assemble:")) return "Собираю презентацию";
-  if (detail.startsWith("lint:")) return "Проверяю вёрстку";
+  if (detail.startsWith("lint:")) return "Проверяю верстку";
   if (detail.startsWith("vision-qa")) return "Проверяю внешний вид";
   if (detail.startsWith("autofix:")) return "Улучшаю слайды по результатам проверки";
   if (detail.startsWith("done:")) return "Готово";
@@ -156,11 +156,11 @@ function retentionLeft(it) {
   const t = jobTime(it.created_at);
   if (t == null) return "";
   const ms = t + retHours() * 3600e3 - Date.now();
-  if (ms <= 0) return "срок хранения истёк";
+  if (ms <= 0) return "срок хранения истек";
   const mins = Math.floor(ms / 60000);
   if (mins < 1) return "удаляется";
-  if (mins < 60) return `хранится ещё ${mins} мин`;
-  return `хранится ещё ${Math.floor(mins / 60)} ч`;
+  if (mins < 60) return `хранится еще ${mins} мин`;
+  return `хранится еще ${Math.floor(mins / 60)} ч`;
 }
 
 /* ============================================================================
@@ -277,14 +277,14 @@ function cardMeta(it) {
   const ttl = esc(retentionLeft(it));
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
-    const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идёт сборка";
+    const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идет сборка";
     const seg = [esc(detail), pct + "%"];
     const est = estSegment(it);
     if (est) seg.push(est);
     return seg.join(SEP);
   }
   if (it.state === "queued") {
-    const seg = ["скоро начнётся"];
+    const seg = ["скоро начнется"];
     const est = estSegment(it);
     if (est) seg.push(est);
     return seg.join(SEP);
@@ -484,7 +484,7 @@ async function retryBuild(id, btn) {
     r = await fetch(U(`/api/jobs/${id}/retry`), { method: "POST" });
   } catch (e) {
     launchError("Не удалось перезапустить сборку",
-      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте ещё раз.</p>");
+      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте еще раз.</p>");
     if (btn) { btn.disabled = false; btn.textContent = prev; }
     return;
   }
@@ -546,7 +546,7 @@ $("#clear").onclick = async () => {
   if (!doomed) return;                       // чистить нечего — молчим
   const what = doomed + " " + plural(doomed, "работу", "работы", "работ");
   const keep = feedActive
-    ? " Идущая сборка останется — её очистка не трогает." : "";
+    ? " Идущая сборка останется — ее очистка не трогает." : "";
   if (!(await askConfirm(
     `Очистить историю? Это удалит ${what} — и готовые деки, и черновики — `
     + `без возможности вернуть.${keep}`, "Очистить"))) return;
@@ -580,8 +580,8 @@ async function createJob(opts) {
     const age = typeof checkedAgo === "function" ? checkedAgo(mhAgeSec()) : "";
     launchError("Сервис ИИ сейчас недоступен",
       `<p>Не отвечают ни основная, ни резервная модель${age ? ` (проверено ${esc(age)})` : ""} — ` +
-      `сборка, скорее всего, оборвётся. Можно подождать пару минут или запустить сейчас.</p>` +
-      `<p><button type="button" class="t-btn" id="forceCreate">Всё равно запустить</button></p>`);
+      `сборка, скорее всего, оборвется. Можно подождать пару минут или запустить сейчас.</p>` +
+      `<p><button type="button" class="t-btn" id="forceCreate">Все равно запустить</button></p>`);
     const f = $("#forceCreate");
     if (f) f.onclick = () => createJob({ force: true });
     loadModelHealth();          // заодно перепроверяем — данные явно устарели
@@ -608,7 +608,7 @@ async function createJob(opts) {
     // Аудит 2026-08-14 (D-4): без catch обрыв сети оставлял кнопку «Собрать»
     // выключенной навсегда и молчал — путь загрузки вставал колом.
     launchError("Не удалось запустить сборку",
-      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте ещё раз.</p>");
+      "<p>Похоже, пропала связь с сервером — проверьте интернет и попробуйте еще раз.</p>");
     setStartEnabled(true);
     return;
   }
@@ -794,7 +794,7 @@ function tickHeartbeat() {
   const silent = Math.round((Date.now() - lastEventAt) / 1000);
   if (silent >= STALL_SECONDS) {
     hb.classList.add("stale");
-    const where = STAGE_HINT[currentStage] || "идёт долгий шаг модели.";
+    const where = STAGE_HINT[currentStage] || "идет долгий шаг модели.";
     hb.textContent = `Обрабатываю уже ${clock} — это нормально: ${where}`;
   } else {
     hb.classList.remove("stale");
@@ -813,7 +813,7 @@ function paintCard(id) {
   const it = feedItemById.get(id);
   if (it) updateCard(card, it);
   const stageEl = card.querySelector(".work__logstage");
-  if (stageEl) stageEl.textContent = STAGE_LABEL[currentStage] || currentStage || "Идёт сборка";
+  if (stageEl) stageEl.textContent = STAGE_LABEL[currentStage] || currentStage || "Идет сборка";
 }
 
 function streamProgress(sessionId, kind, initial) {
@@ -904,7 +904,7 @@ async function startDraft(mode, btn) {
   } catch (e) {
     btn.disabled = false;
     btn.classList.add("is-error");  // Г§6 — ошибка одета в danger, не в акцент
-    btn.textContent = "Ошибка, попробуйте ещё раз";
+    btn.textContent = "Ошибка, попробуйте еще раз";
     setTimeout(() => { btn.classList.remove("is-error"); btn.textContent = prev; }, 4000);
   }
 }

@@ -90,7 +90,7 @@ async def test_worker_exception_emits_failed(monkeypatch, caplog):
     assert ev["stage"] == "failed"
     # Г§8 — the user sees a calm Russian line; the raw exception (with its class and
     # text) stays in the server log, not in the user-facing error field.
-    assert ev["error"] == "Внутренняя ошибка сборки — попробуйте ещё раз"
+    assert ev["error"] == "Внутренняя ошибка сборки — попробуйте еще раз"
     assert "kaboom" in caplog.text
 
 

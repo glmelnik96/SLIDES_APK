@@ -106,7 +106,7 @@ def rewrite_slide(deck_html: str, slide_index: int, instruction: str,
         retry = messages + [
             {"role": "assistant", "content": reply},
             {"role": "user", "content":
-                "В ответе должен быть РОВНО ОДИН завершённый <section> — только "
+                "В ответе должен быть РОВНО ОДИН завершенный <section> — только "
                 "редактируемый слайд, не вся дека. Верни ТОЛЬКО его."},
         ]
         reply = client.chat(retry, max_tokens=_MAX_TOKENS)
@@ -115,7 +115,7 @@ def rewrite_slide(deck_html: str, slide_index: int, instruction: str,
         retry = messages + [
             {"role": "assistant", "content": reply},
             {"role": "user", "content":
-                "В ответе запрещённые приёмы (style=/i/em/u/script/тени/градиенты/"
+                "В ответе запрещенные приемы (style=/i/em/u/script/тени/градиенты/"
                 "скругления). Перепиши без них, верни ТОЛЬКО <section>...</section>."},
         ]
         reply = client.chat(retry, max_tokens=_MAX_TOKENS)
