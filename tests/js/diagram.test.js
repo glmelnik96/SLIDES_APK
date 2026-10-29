@@ -1221,6 +1221,25 @@ test("render: подпись пересечения venn не наезжает �
   assert.ok(w > 0 && w <= over, `подпись пересечения шире общей части: ${w}`);
 });
 
+test("render Венна: палитры графиков нет — множества не упорядочены", () => {
+  // Исключение из «ряды красит --chart-N»: шкала кодирует ПОРЯДОК, а множества
+  // Венна не упорядочены. Практика: залитое первое множество занимает половину
+  // зоны, и --chart-1 делал пол-схемы сплошным зелёным полем при правиле «один
+  // акцент на слайд», а серый хвост шкалы в контурах остальных на тёмном фоне
+  // не читался. Держим макет: нейтральная заливка + зелёный контур.
+  const host = fakeHost();
+  D.render(host, { kind: "venn", nodes: [
+    { id: "a", label: "Скорость разработки" },
+    { id: "b", label: "Надёжность эксплуатации" }] });
+  const html = host.innerHTML;
+  assert.ok(!/var\(--chart-\d\)/.test(html), "Венн взял палитру графиков");
+  assert.ok(!/var\(--on-chart-\d\)/.test(html), "подпись Венна по палитре графиков");
+  // Залита ровно одна рамка, и она нейтральная; вторая — зелёный контур.
+  assert.strictEqual((html.match(/fill="var\(--bg-card\)"/g) || []).length, 1);
+  assert.ok(/fill="none" stroke="var\(--accent\)"/.test(html),
+            "у пересекающего множества нет зелёного контура");
+});
+
 test("render: длинная подпись ребра переносится и сокращается", () => {
   // Схема разрешает подписи рёбер до 60 символов, а рисовались они голым <text>
   // без переноса: «Согласование условий договора» растягивалось на пол-холста
@@ -1456,47 +1475,62 @@ const ganttRows = (rows) => ({
     { id: "g" + i, start: 1, end: 6 }, r)),
 });
 
-test("render: ни одна схема не берёт хроматическую палитру графиков", () => {
-  // --chart-N кодирует РЯД ДАННЫХ. У узла схемы значения нет, есть роль, и все
-  // макеты держат ряд нейтральным с одним зелёным. Пять работ плана-графика
-  // пятью цветами заявляли, что работы делятся на виды, чего в данных нет.
+test("render: ряды красит палитра графиков, зелёный в ряду ровно один", () => {
+  // --chart-N кодирует РЯД: у воронки, пирамиды и плана-графика узлы и есть
+  // ряд. Инвариант палитры — --accent и --chart-1 это ОДИН зелёный, поэтому
+  // при проставленном акценте остальные узлы начинают шкалу с серого
+  // (--chart-2): двух зелёных на схеме не бывает.
   const html = (spec) => { const h = fakeHost(); D.render(h, spec); return h.innerHTML; };
   const specs = [
     ganttRows([{ label: "Аудит" }, { label: "Пилот" }, { label: "Запуск", accent: true },
                { label: "Сопровождение" }]),
     { kind: "funnel", nodes: [{ id: "a", label: "Лиды" }, { id: "b", label: "Пилоты" },
                               { id: "c", label: "Сделки", accent: true }] },
-    { kind: "pyramid", nodes: [{ id: "a", label: "Цель" }, { id: "b", label: "Задачи" },
-                               { id: "c", label: "Действия" }] },
   ];
   specs.forEach((spec) => {
     const h = html(spec);
-    assert.ok(!/var\(--chart-\d\)/.test(h), spec.kind + ": снова взял палитру графиков");
-    assert.ok(!/var\(--on-chart-\d\)/.test(h), spec.kind + ": подпись по палитре графиков");
+    assert.ok(/var\(--chart-\d\)/.test(h), spec.kind + ": палитра графиков не вернулась");
+    assert.ok(/var\(--on-chart-\d\)/.test(h), spec.kind + ": подпись не по палитре");
+    // Зелёный ровно один — акцентный; шкала у остальных стартует с серого.
+    assert.strictEqual((h.match(/var\(--accent\)/g) || []).length, 1,
+                       spec.kind + ": зелёных не один");
+    assert.ok(!/var\(--chart-1\)/.test(h),
+              spec.kind + ": при акценте шкала обязана начинаться с --chart-2");
   });
+  // Без акцента шкала идёт с самого начала — первый узел зелёный (--chart-1),
+  // а отдельного var(--accent) в разметке нет: это тот же цвет под другим именем.
+  const plain = html({ kind: "funnel", nodes: [
+    { id: "a", label: "Лиды" }, { id: "b", label: "Сделки" }] });
+  assert.ok(/var\(--chart-1\)/.test(plain), "без акцента шкала не с начала");
+  assert.strictEqual((plain.match(/var\(--accent\)/g) || []).length, 0);
 });
 
-test("render плана-графика: нейтральные полосы, зелёная ровно одна", () => {
+test("render плана-графика: полосы по шкале, зелёная ровно одна", () => {
   const greens = (html) => (html.match(/fill="var\(--accent\)"/g) || []).length;
 
   const host = fakeHost();
   D.render(host, ganttRows([{ label: "Лиды" }, { label: "Квалификация" },
     { label: "Пилоты" }, { label: "Сделки", accent: true }]));
-  assert.strictEqual(greens(host.innerHTML), 1, "зелёная полоса должна быть одна");
-  assert.strictEqual((host.innerHTML.match(/fill="var\(--bg-card\)"/g) || []).length, 3);
-  // Текст на зелёном — графитовый, на серых — обычный.
-  assert.ok(host.innerHTML.includes("var(--cl-graphite)"));
+  const html = host.innerHTML;
+  assert.strictEqual(greens(html), 1, "зелёная полоса должна быть одна");
+  // Три неакцентные работы идут по шкале подряд, начиная с серого --chart-2.
+  assert.deepStrictEqual(
+    [...html.matchAll(/<rect [^>]*fill="var\(--chart-(\d)\)"/g)].map((m) => m[1]),
+    ["2", "3", "4"], "полосы не по порядку шкалы");
+  // Подпись внутри полосы лежит поверх заливки — цвет диктует --on-chart-N.
+  assert.ok(/var\(--on-chart-\d\)/.test(html), "подпись в полосе не по палитре");
 
-  // Без акцента зелёного нет вовсе: выделять нечего, а «первый = герой» — это
-  // утверждение, которого в данных нет.
+  // Без акцента зелёного-как-accent нет: шкала просто идёт с --chart-1, то есть
+  // с того же зелёного. Отдельного «героя» схема не назначает.
   const plain = fakeHost();
   D.render(plain, ganttRows([{ label: "Лиды" }, { label: "Сделки" }]));
   assert.strictEqual(greens(plain.innerHTML), 0);
+  assert.ok(/var\(--chart-1\)/.test(plain.innerHTML));
 });
 
-test("render воронки: нейтральный ряд светлеет кверху, зелёный ровно один", () => {
-  // В макете ступени не разноцветные, а один --bg-card с подмесом --fg-body:
-  // ряд светлеет вверх от самой тёмной ступени (той, что под зелёной).
+test("render воронки: ступени по шкале, геометрия макетная", () => {
+  // Цвет ступеней вернулся к шкале --chart-N, но геометрия осталась из макета:
+  // прямоугольники вместо трапеций и числа отдельной правой колонкой.
   const host = fakeHost();
   D.render(host, { kind: "funnel", nodes: [
     { id: "a", label: "Лонг-лист", value: "12 000" },
@@ -1504,12 +1538,12 @@ test("render воронки: нейтральный ряд светлеет кв
     { id: "c", label: "Финпроверка", value: "1 100" },
     { id: "d", label: "Контракты", value: "280", accent: true }] });
   const html = host.innerHTML;
-  assert.ok(!/var\(--chart-\d\)/.test(html), "воронка снова взяла палитру графиков");
+  assert.deepStrictEqual(
+    [...html.matchAll(/<rect [^>]*fill="var\(--chart-(\d)\)"/g)].map((m) => m[1]),
+    ["2", "3", "4"], "ступени не по порядку шкалы");
   assert.strictEqual((html.match(/fill="var\(--accent\)"/g) || []).length, 1);
-  // Подмес: три неакцентные ступени дают 0.110 / 0.055 / ничего — сверху темнее.
-  const tints = [...html.matchAll(/fill="var\(--fg-body\)" opacity="([\d.]+)"/g)]
-    .map((m) => Number(m[1]));
-  assert.deepStrictEqual(tints, [0.110, 0.055], "ступеньки тона не те");
+  // Подмеса-тонирования больше нет: цвет ступени задаёт шкала целиком.
+  assert.ok(!/fill="var\(--fg-body\)" opacity=/.test(html), "вернулся подмес тона");
   // Ни одной косой кромки: трапеций у воронки больше нет.
   assert.ok(!html.includes("<polygon"), "в воронке осталась трапеция");
   // Числа — одной правой колонкой с выключкой вправо.
@@ -1517,18 +1551,28 @@ test("render воронки: нейтральный ряд светлеет кв
   assert.strictEqual((html.match(/x="1765"/g) || []).length, 4);
 });
 
-test("render пирамиды: один треугольник, ярусы отбиты линиями", () => {
-  // Было: стопка трапеций-плашек со своей заливкой у каждой — «пирамида из
-  // кирпичей». Макет держит монолит с насечками: ярусы — части одного целого.
+test("render пирамиды: ярусы по шкале, силуэт треугольника и насечки", () => {
+  // Ярус красит шкала, но ярусы режутся по кромкам ОДНОГО треугольника: их
+  // полосы стыкуются встык, без щелей и ступенек по контуру, а насечки
+  // остаются макетными. «Пирамида из кирпичей» — это когда у яруса своя
+  // плашка со своей геометрией; здесь геометрия общая.
   const host = fakeHost();
   D.render(host, { kind: "pyramid", nodes: [
     { id: "p1", label: "Видение" }, { id: "p2", label: "Стратегические цели" },
     { id: "p3", label: "Ключевые инициативы" },
     { id: "p4", label: "Операционные задачи" }] });
   const html = host.innerHTML;
-  const tri = html.match(/<polygon points="([^"]+)" fill="var\(--bg-card\)"\/>/);
-  assert.ok(tri, "сплошного треугольника нет");
-  assert.strictEqual(tri[1].split(" ").length, 3, "треугольник не из трёх вершин");
+  // Четыре яруса — четыре трапеции по шкале, с --chart-1 (акцента нет).
+  const bands = [...html.matchAll(/<polygon points="([^"]+)" fill="var\(--chart-(\d)\)"\/>/g)];
+  assert.strictEqual(bands.length, 4, "ярусов-полос не четыре");
+  assert.deepStrictEqual(bands.map((m) => m[2]), ["1", "2", "3", "4"],
+                         "ярусы не по порядку шкалы");
+  // Стык без щели: низ каждой полосы совпадает с верхом следующей.
+  const edge = (pts, which) => pts.split(" ")[which].split(",")[1];
+  for (let i = 1; i < bands.length; i++) {
+    assert.strictEqual(edge(bands[i - 1][1], 2), edge(bands[i][1], 0),
+                       "между ярусами " + i + " и " + (i + 1) + " щель");
+  }
   // Разделителей на один больше, чем ярусов, и все они короче основания.
   const cuts = [...html.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)"/g)];
   assert.strictEqual(cuts.length, 5);
