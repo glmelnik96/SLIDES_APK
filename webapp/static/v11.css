@@ -1,20 +1,34 @@
 /* ============================================================================
-   КАНОН v11 «ПОРТАЛ» — фундамент платформы Cloud.ru Design.
-   Источник: Brand_Image_site/gateway/static/app.css. Блоки взяты КАК ЕСТЬ:
-   токены, шторка, живой чертёж, каркас инструмента (рельс 264 + рама ленты),
-   кирпич .t-btn, плитка работы, лайтбокс, тогл-строка сценария, поля формы,
-   дропзона, служебные строки, подвал и оба медиазапроса.
+   ФУНДАМЕНТ ИНТЕРФЕЙСА /slides — «HUB LIGHT».
+   Источник истины: Figma, файл ENAvkdpfb4VAEekD4qD631 «Marina's space»,
+   страница Slides APK, фрейм Foundations (node 4783:107). Имена переменных
+   совпадают с именами переменных в Figma дословно (--color-*, --radius-*,
+   --space-*, --shadow-*): это не стилистика, а единственный способ сверять
+   макет с кодом глазами, без таблицы соответствий в голове.
 
-   Единственные отступления от исходника:
-   • пути к шрифтам относительные («fonts/…»), а не «/static/fonts/…»: под-
-     приложение живёт за шлюзом на /slides, и абсолютный путь увёл бы за него;
-   • выброшена раскладка ЛЕНДИНГА (.lp-stage/.lp-rows/.lp-row и хореография
-     появления) — её место здесь заняла бы работа;
-   • выброшена админка и «базовая карточка» v5 — в /slides их нет.
+   ЧТО ЗДЕСЬ ПРОИЗОШЛО. До 2026-11-02 этот файл был вендорной копией тёмного
+   канона v11 «Портал» (Brand_Image_site/gateway/static/app.css): чернила
+   #0A0C0B, один зелёный акцент, прямые углы, никаких тéней, разделитель —
+   inset-хайрлайн. Продукт переведён на светлую тему Hub Light, у которой свои
+   радиусы, тени и роли цвета, поэтому связь «правь только вслед за каноном»
+   разорвана СОЗНАТЕЛЬНО: вверх этот файл больше не мержится. Тёмной остаётся
+   только сама дека — htmlslides/engine/deck.css и топптх живут отдельно и
+   этого слоя не видят.
 
-   Правь этот файл только вслед за каноном. Всё, что специфично для /slides,
-   живёт в styles.css и НАСЛЕДУЕТ отсюда — обратного направления нет.
-   Канон целиком — docs/DESIGN_CANON_v11.md в репозитории Brand_Image_site.
+   Отступления от макета, оставленные намеренно:
+   • пути к шрифтам относительные («fonts/…»): подприложение живёт за шлюзом
+     на /slides, и абсолютный путь увёл бы за него;
+   • Figma просит «SB Sans Text Mono», в репозитории есть только «SB Sans Cond
+     Mono». Моно в Hub Light почти не используется (служебный слой переезжает
+     в Label/Body обычным регистром), поэтому подменяем узким — заметно это
+     лишь там, откуда моно ещё не ушёл.
+
+   ПЕРЕХОДНЫЙ СЛОЙ --lp-*. Старые имена канона живут в 444 местах трёх файлов.
+   Переименовывать их все одним коммитом — значит на один шаг потерять
+   возможность смотреть на результат. Поэтому --lp-* ниже переопределены как
+   ПСЕВДОНИМЫ ролей Hub, и вся существующая разметка немедленно показывает
+   светлую тему. Псевдонимы временные: экран за экраном правила переезжают на
+   --color-*, и когда последняя ссылка уйдёт, блок псевдонимов удаляется.
    ============================================================================ */
 @font-face { font-family: "SB Sans Text"; font-weight: 400; font-style: normal; font-display: swap;
   src: url("fonts/sb-sans-text-400.woff2") format("woff2"); }
@@ -43,33 +57,113 @@ body { margin: 0; font-family: var(--font-text); line-height: 1.5;
 h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
 [hidden] { display: none !important; }
 
-/* ===== Токены v11 ============================================================
-   Чернила + свет и ОДИН акцент. Зелёный потрачен ровно на две вещи: шторку и
-   отметку выбранного. Всё остальное — нейтральная лестница серых.
+/* ===== Токены Hub Light =====================================================
+   Переменные объявлены в :root, а не на body.v11: тему видят и узлы вне body
+   (:root-уровень нужен, например, для ::backdrop и для прокрутки), а главное —
+   значение токена не должно зависеть от того, успел ли скрипт навесить класс.
+   Значения — ровно те, что в Figma/Foundations; комментарий у строки объясняет
+   РОЛЬ, а не цвет: роль — это то, что нельзя посмотреть в пипетке.
+   ========================================================================== */
+:root {
+  /* Поверхности. Четыре ступени от белого листа до нажатой кнопки; ни одна из
+     них не «серый фон», каждая закреплена за состоянием. */
+  --color-bg-canvas: #ffffff;   /* лист: страница, карточка, выпадающий слой */
+  --color-bg-subtle: #fafafa;   /* подложка целой полосы — отделяет, не делит */
+  --color-bg-muted: #f6f6f6;    /* вложенный блок: цитата, превью, чертёж */
+  --color-bg-control: #f0f0f0;  /* заливка органа: вторичная кнопка, поле */
+  --color-bg-hover: #e4e4e4;    /* тот же орган под курсором */
+
+  /* Границы. В Hub Light разделитель — настоящая линия, а не inset-хайрлайн:
+     у блоков появились радиусы, и тень-внутрь по скруглению не идёт. */
+  --color-border-default: #e0e0e0;  /* покой */
+  --color-border-strong: #d1d1d1;   /* курсор, выбранное, активное */
+
+  /* Текст. Лестница из трёх ступеней + инверсия. Проверено к --color-bg-canvas:
+     primary 15.9:1, secondary 7.6:1, muted 5.0:1 — все три выше AA. */
+  --color-text-primary: #222222;
+  --color-text-secondary: #525252;
+  --color-text-muted: #717171;
+  --color-text-inverse: #ffffff;
+
+  /* Акцент. Бренд развёрнут в четыре роли: заливка, её ховер, мягкая плашка и
+     текст поверх мягкой плашки. Сам #26d07c как ЦВЕТ ТЕКСТА на белом даёт
+     1.9:1 — поэтому для подписей есть отдельный --color-accent-text. */
+  --color-accent-default: #26d07c;
+  --color-accent-hover: #1fb86e;
+  --color-accent-subtle: #e5fbef;
+  --color-accent-text: #27704b;
+
+  /* Состояния. В тёмном каноне красного не было вовсе и ошибку метили
+     приглушённым зелёным; на светлой теме это читалось «всё хорошо». */
+  --color-state-danger: #be3e27;
+  --color-state-warning: #e8a33d;
+
+  /* Затемнение под модальным слоем. В Figma отдельной переменной нет — фреймы
+     лайтбокса нарисованы поверх уже затемнённого экрана. Берём --color-text-
+     primary с прозрачностью: так подложка модалки остаётся того же семейства,
+     что и буквы, и не отдаёт синевой, как чистый чёрный. Прежние .93 были
+     рассчитаны на тёмную тему, где подложка почти непрозрачна; на светлой это
+     гасило страницу в чёрный лист — модалка переставала читаться слоем. */
+  --color-scrim: rgba(34, 34, 34, .45);
+
+  --radius-sm: 8px;   --radius-md: 10px;  --radius-lg: 12px;
+  --radius-xl: 16px;  --radius-full: 999px;
+
+  --space-xs: 4px;   --space-sm: 8px;   --space-md: 12px;  --space-lg: 16px;
+  --space-xl: 24px;  --space-2xl: 32px; --space-3xl: 48px; --space-4xl: 64px;
+
+  /* Hub/Shadow/MD — единственная тень системы: 0 4 12 при #00000014.
+     Поднимает слой над листом (подсказка, выпадающий список, лайтбокс) и
+     больше ни для чего не применяется: тень на кнопке вернула бы объём,
+     которого в Hub нет. */
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
+}
+
+/* ===== Переходные псевдонимы --lp-* =========================================
+   Соответствие выведено из разбора ВСЕХ 444 ссылок по свойству, в котором
+   токен стоит, — не по похожести цвета. Там, где у старого имени роль была
+   одна, псевдоним точен; где роль двоилась, двойственность снята правкой
+   самих правил, и это помечено ниже.
    ========================================================================== */
 body.v11 {
-  --lp-ink: #0A0C0B;          /* чернила */
-  --lp-text: #F2F5F4;         /* свет */
-  --lp-soft: #C6CECB;         /* описания: свет − 15%, всё ещё контраст */
-  --lp-muted: #97A29E;        /* служебный слой; 6.8:1 к --lp-ink — AA с запасом */
-  --lp-line: #0F1312;         /* чертёж: чернила + свет ~2.5% */
-  --lp-line-2: #1E2523;       /* хайрлайн рамок и подчёркиваний */
-  --lp-hi: #B7BFBC;           /* инверсия под курсором: серая, не белая */
-  /* Обводка «тоньше хайрлайна». Тоньше 1px линию не сделать, поэтому «тоньше»
-     здесь — прозрачнее: тот же ключ, приглушённый. Ею же метятся ошибки:
-     красного в палитре v11 нет. */
-  --lp-edge: rgba(63, 182, 124, .2);
-  /* Ключ приглушён на 30% по насыщенности от брендового #26D07C: тёмная
-     страница поднимает воспринимаемую яркость, и на чистом бренде шторка
-     читалась подсветкой, а не плашкой. */
-  --lp-key: #3FB67C;
-  --lp-key-ink: #222222;      /* текст на акценте */
+  /* Фон 33 раза — лист. Плюс 12 раз как ЦВЕТ: это ровно одна фигура
+     «инверсия под курсором» (background: --lp-hi; color: --lp-ink). В Hub
+     ховер не инвертирует, поэтому все 12 мест переведены на
+     --color-text-primary вручную, и у --lp-ink осталась одна роль. */
+  --lp-ink: var(--color-bg-canvas);
+  --lp-text: var(--color-text-primary);   /* цвет 41 раз */
+  --lp-soft: var(--color-text-secondary); /* цвет 41 раз, других ролей нет */
+  --lp-muted: var(--color-text-muted);    /* цвет 59 раз, других ролей нет */
+  --lp-line: var(--color-bg-muted);       /* фон 6 раз: заливка чертежа */
+  /* Хайрлайн: 48 раз в box-shadow как граница, 4 раза фоном дорожки прогресса
+     и точки-индикатора. Цвет границы в роли дорожки работает и на светлом. */
+  --lp-line-2: var(--color-border-default);
+  --lp-hi: var(--color-bg-hover);
+  /* --lp-edge УДАЛЁН, псевдонима ему нет. Это был самый перегруженный токен
+     канона: «обводка тоньше хайрлайна» в 25 местах означала одновременно
+     выбранное, фокус поля, идущую работу, предупреждение и сбой — потому что
+     в тёмной теме красного не было вовсе и все пять состояний метились одним
+     приглушённым зелёным. Любой псевдоним покрасил бы четыре роли из пяти
+     неверно: выбранный слайд стал бы красным. Поэтому все 25 мест разведены
+     по настоящим ролям Hub вручную — accent-default на выбранное и фокус,
+     state-danger на сбой, state-warning на предупреждение, border-strong на
+     «заметнее соседей, но ничего не сигналит», border-default на разделитель. */
+  --lp-key: var(--color-accent-default);
+  /* Текст на акценте. В Figma у Primary-кнопки подпись ТЁМНАЯ (#222), а не
+     белая: зелёный Hub светлый, и белое по нему даёт 1.8:1. Совпадает
+     значением со старым токеном — единственный цвет, переживший смену темы. */
+  --lp-key-ink: var(--color-text-primary);
+  /* Чернила чертежа в виде «r,g,b» — grid.js подмешивает к ним альфу (0.038 в
+     покое, до 0.21 под курсором) и потому не может взять готовый hex. Одна и
+     та же величина, записанная дважды, — цена того, что canvas складывает цвет
+     строкой; других таких мест в системе нет. */
+  --lp-grid-rgb: 34, 34, 34;
   --lp-cell: 24px;            /* шаг сетки — модуль всей системы */
   --lp-row: 96px;             /* четыре ячейки */
   --lp-ease: cubic-bezier(.645,.045,.355,1);   /* sui.io, easeInOutCubic */
   --lp-ease-bar: cubic-bezier(.77,0,.175,1);   /* Heimdall, easeInOutQuart */
-  background: var(--lp-ink);
-  color: var(--lp-text);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
 }
 
 /* ===== Шторка ================================================================
@@ -93,9 +187,28 @@ body.v11 .topbar {
   width: max-content; max-width: calc(100% - 24px); margin: 0 auto;
   display: flex; align-items: center; gap: 0;
   height: auto; padding: 4px; border-bottom: 0;
-  background: var(--lp-key); color: var(--lp-key-ink);
-  clip-path: inset(0);
-  transition: top .4s var(--lp-ease-bar), clip-path .7s var(--lp-ease-bar);
+  /* ПЛАШКА БОЛЬШЕ НЕ ЗЕЛЁНАЯ. В тёмном каноне сплошной акцент во всю шторку
+     был единственным цветным пятном на чернилах и работал меткой бренда. На
+     белом листе та же заливка превращается в зелёную планку поперёк экрана:
+     она перетягивает внимание с дверей и нарушает правило, записанное здесь же
+     у --color-accent-default, — акцент метит ОДНО действие, иначе он перестаёт
+     значить что-либо. Шторка становится тем, чем она и является в Hub, —
+     плавающей карточкой: лист, хайрлайн, тень слоя. Акцент внутри остаётся
+     ровно в двух местах: подчёркивание текущего раздела и кнопка входа/выхода.
+
+     Хайрлайн берём inset-тенью, а не border: рамка добавила бы по пикселю с
+     каждой стороны и сломала бы арифметику 4+27+4=35, на которой держится вся
+     высота шторки. Обе тени живут в одном свойстве — внешняя поднимает
+     карточку над листом, внутренняя рисует край. */
+  border-radius: var(--radius-full);
+  background: var(--color-bg-canvas); color: var(--color-text-primary);
+  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--color-border-default);
+  /* clip-path: inset(0) снят намеренно. Он был вписан под сплошную заливку и
+     ничего не обрезал (ролл подписи клипует сама ссылка своим overflow), зато
+     теперь обрезал бы внешнюю тень по краю плашки — карточка лишилась бы
+     подъёма ровно в том свойстве, ради которого её переделали. Переход по нему
+     был вхолостую: значение не менялось ни одним правилом и ни одним скриптом. */
+  transition: top .4s var(--lp-ease-bar);
 }
 body.v11.lp-tuck .topbar { top: -88px; }
 body.v11 .topbar .brand { display: none; }
@@ -105,10 +218,13 @@ body.v11 .topnav { min-width: 0; gap: 0; padding-left: 0; }
 body.v11 .topnav__link { position: relative; border-radius: 0;
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
   letter-spacing: .09em; text-transform: uppercase; white-space: nowrap;
-  color: rgba(34, 34, 34, .82); padding: 8px 12px; text-decoration: none;
+  /* rgba(34,34,34,.82) был «чернила, приглушённые на зелёном». Плашка стала
+     листом — приглушение выражает та же лестница текста, что и везде. */
+  color: var(--color-text-secondary); padding: 8px 12px; text-decoration: none;
   transition: color .2s var(--lp-ease); }
 body.v11 .topnav__link:hover,
-body.v11 .topnav__link.is-active { background: transparent; color: var(--lp-key-ink); }
+body.v11 .topnav__link.is-active { background: transparent;
+  color: var(--color-text-primary); }
 
 /* Ролл подписи: две копии текста, вторая — псевдоэлемент, поэтому в разметке
    хватило data-t. Правило включается только при наличии атрибута: пункт без
@@ -118,30 +234,41 @@ body.v11 .topnav__link[data-t]::before,
 body.v11 .topnav__link[data-t]::after {
   content: attr(data-t); position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  color: rgba(34, 34, 34, .82);
+  color: var(--color-text-secondary);
   transition: transform .34s var(--lp-ease-bar), color .2s var(--lp-ease); }
 body.v11 .topnav__link[data-t]::after { transform: translateY(101%); }
 body.v11 .topnav__link[data-t]:hover::before { transform: translateY(-101%); }
-body.v11 .topnav__link[data-t]:hover::after { transform: none; color: var(--lp-key-ink); }
+body.v11 .topnav__link[data-t]:hover::after { transform: none;
+  color: var(--color-text-primary); }
 body.v11 .topnav__link[data-t].is-active::before,
-body.v11 .topnav__link[data-t].is-active::after { color: var(--lp-key-ink); }
-body.v11 .topnav__link[data-t].is-active { box-shadow: inset 0 -1px 0 var(--lp-key-ink); }
+body.v11 .topnav__link[data-t].is-active::after { color: var(--color-text-primary); }
+/* Текущий раздел метит АКЦЕНТ, а не чернила. На зелёной плашке подчёркивание
+   обязано было быть тёмным — другого контраста там не нашлось. На листе акцент
+   свободен, и это одно из двух мест, где он вообще остался в шторке: подпись
+   читается чернилами, «вы здесь» говорит зелёная черта под ней. */
+body.v11 .topnav__link[data-t].is-active {
+  box-shadow: inset 0 -2px 0 var(--color-accent-default); }
 
 /* 12px здесь + 12px внутреннего отступа кнопки = те же 24px, что между
    пунктами меню. */
 body.v11 .topbar__auth { margin-left: 0; gap: 12px; padding-left: 12px; }
 body.v11:not(.is-auth) .topbar__auth { padding-left: 0; }
 body.v11 .topbar__user { font-family: var(--font-mono); font-size: 11px;
-  letter-spacing: .05em; color: rgba(34, 34, 34, .82); }
+  letter-spacing: .05em; color: var(--color-text-secondary); }
 body.v11 .topbar .login,
-body.v11 .logout-form button { border: 0; border-radius: 0; padding: 8px 16px;
+body.v11 .logout-form button { border: 0; border-radius: var(--radius-md); padding: 8px 16px;
   cursor: pointer; text-decoration: none;
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
   letter-spacing: .09em; text-transform: uppercase;
-  background: var(--lp-key-ink); color: var(--lp-key);
+  /* Единственное действие шторки — обычная Primary-кнопка Hub: акцент заливкой,
+     подпись чернилами. Раньше было наоборот (чернильная плашка с зелёной
+     подписью) — это работало как «вырез» в сплошном зелёном поле, а на листе
+     читалось чёрной кляксой в правом углу белой карточки. */
+  background: var(--color-accent-default); color: var(--color-text-primary);
   transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
 body.v11 .topbar .login:hover,
-body.v11 .logout-form button:hover { background: var(--lp-text); color: var(--lp-key-ink); }
+body.v11 .logout-form button:hover { background: var(--color-accent-hover);
+  color: var(--color-text-primary); }
 
 /* ===== Живой чертёж ==========================================================
    Два исполнения одного чертежа. Базовое — фоновые градиенты: они есть всегда,
@@ -211,20 +338,25 @@ body.is-tool h1 { position: absolute; width: 1px; height: 1px; margin: -1px;
 
 /* ===== §8.1 Кирпич: прямоугольник, хайрлайн, моно-капс ===== */
 body.is-tool .t-btn { display: inline-block; height: 24px; cursor: pointer;
-  border: 0; border-radius: 0; padding: 6px 12px;
+  border: 0; border-radius: var(--radius-sm); padding: 6px 12px;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
   font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
   text-decoration: none; white-space: nowrap;
   transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
               box-shadow .2s var(--lp-ease); }
-body.is-tool .t-btn:hover { background: var(--lp-hi); color: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-hi); }
+/* Ховер НЕ инвертирует. В тёмном каноне кирпич под курсором выворачивался
+   наизнанку (светлая плашка, чернильная подпись) — на светлой теме выворот
+   некуда делать: лист уже белый. Hub вместо этого углубляет заливку органа на
+   одну ступень и оставляет подпись на месте. */
+body.is-tool .t-btn:hover { background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 body.is-tool .t-btn--key { background: var(--lp-key); color: var(--lp-key-ink);
   box-shadow: inset 0 0 0 1px var(--lp-key); }
-body.is-tool .t-btn--key:hover { background: var(--lp-text); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-text); }
-body.is-tool .t-btn--on { color: var(--lp-text); box-shadow: inset 0 0 0 1px var(--lp-edge); }
+body.is-tool .t-btn--key:hover { background: var(--color-accent-hover); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--color-accent-hover); }
+body.is-tool .t-btn--on { color: var(--lp-text); box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 body.is-tool .t-btn:disabled { opacity: .4; cursor: default; }
 
 /* ===== §8.7 Рама ленты =====
@@ -294,13 +426,13 @@ body.is-tool .t-btn:disabled { opacity: .4; cursor: default; }
 body.is-tool .lightbox { position: fixed; inset: 0; z-index: 70; display: flex;
   align-items: center; justify-content: center; padding: 24px; }
 body.is-tool .lightbox__backdrop { position: absolute; inset: 0;
-  background: rgba(10, 12, 11, .93); }
+  background: var(--color-scrim); }
 body.is-tool .lightbox__panel { position: relative; display: grid;
   grid-template-columns: 1fr 264px; gap: 24px; align-items: start;
   width: min(1176px, 100%); padding: 24px; background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 body.is-tool .lightbox__panel img { display: block; width: 100%;
-  max-height: calc(100vh - 96px); object-fit: contain; border-radius: 0; }
+  max-height: calc(100vh - 96px); object-fit: contain; border-radius: var(--radius-lg); }
 body.is-tool .lightbox__side { display: flex; flex-direction: column; gap: 24px;
   max-height: calc(100vh - 96px); overflow: auto; }
 .lb-bar { display: flex; gap: 12px; }
@@ -328,11 +460,12 @@ body.is-tool .scen-card { position: relative; overflow: hidden; display: block;
   width: 100%; height: 48px; text-align: left;
   font: inherit; cursor: pointer; border: 0; border-radius: 0; padding: 0 12px;
   background: var(--lp-ink); color: var(--lp-text);
-  box-shadow: inset 0 1px 0 var(--lp-edge);
+  box-shadow: inset 0 1px 0 var(--color-border-default);
   transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
-body.is-tool .scen-card:last-child { box-shadow: inset 0 1px 0 var(--lp-edge),
-  inset 0 -1px 0 var(--lp-edge); }
-body.is-tool .scen-card:hover { background: var(--lp-hi); color: var(--lp-ink); }
+body.is-tool .scen-card:last-child { box-shadow: inset 0 1px 0 var(--color-border-default),
+  inset 0 -1px 0 var(--color-border-default); }
+body.is-tool .scen-card:hover { background: var(--color-bg-hover);
+  color: var(--color-text-primary); }
 /* Выбранное метим планкой, а не инверсией: инверсия занята ховером, и если
    красить ею же выбранное, при наведении на соседнюю строку подсвечены две. */
 body.is-tool .scen-card.is-active::before { content: ""; position: absolute;
@@ -355,9 +488,8 @@ body.is-tool .scen-card__title { min-width: 0; font-size: 13px; font-weight: 600
   line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.is-tool .scen-card__tag { flex: none; font-family: var(--font-mono);
   font-weight: 700; font-size: 11px; line-height: 18px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-key);
+  text-transform: uppercase; color: var(--color-accent-text);
   transition: color .25s var(--lp-ease); }
-body.is-tool .scen-card:hover .scen-card__tag { color: var(--lp-ink); }
 body.is-tool .scen-card__desc { opacity: 0; font-size: 12px; line-height: 18px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: transform .3s var(--lp-ease), opacity .2s var(--lp-ease); }
@@ -389,7 +521,7 @@ body.is-tool .gen-form .field-label { padding: 0 12px; font-family: var(--font-m
 body.is-tool .gen-form select,
 body.is-tool .gen-form input[type="text"],
 body.is-tool .gen-form textarea { font: inherit; font-size: 13px; line-height: 24px;
-  padding: 12px; border: 0; border-radius: 0; background: var(--lp-ink);
+  padding: 12px; border: 0; border-radius: var(--radius-sm); background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); color: var(--lp-text);
   transition: box-shadow .2s var(--lp-ease); }
 /* 48 = 24 + 12 + 12 у селекта; 96 = три строки по 24 плюс те же 12 и 12. */
@@ -399,19 +531,19 @@ body.is-tool .gen-form textarea { height: 96px; resize: none; }
 body.is-tool .gen-form select:focus,
 body.is-tool .gen-form input[type="text"]:focus,
 body.is-tool .gen-form textarea:focus { outline: none;
-  box-shadow: inset 0 0 0 1px var(--lp-edge); }
+  box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 body.is-tool .gen-form select { appearance: none; -webkit-appearance: none; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397A29E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
 body.is-tool .gen-form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
 body.is-tool .gen-form__grid > label + label { margin-left: -1px; }
 body.is-tool .gen-form button[type="submit"] { height: 48px; cursor: pointer;
-  border: 0; border-radius: 0;
+  border: 0; border-radius: var(--radius-md);
   padding: 12px; background: var(--lp-key); color: var(--lp-key-ink);
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
   letter-spacing: .09em; text-transform: uppercase;
   transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
-body.is-tool .gen-form button[type="submit"]:hover { background: var(--lp-text); }
+body.is-tool .gen-form button[type="submit"]:hover { background: var(--color-accent-hover); }
 body.is-tool .gen-form button[type="submit"]:disabled { opacity: .4; cursor: default; }
 
 /* ===== §8.2 Чипы и сегменты встык ============================================
@@ -430,13 +562,23 @@ body.is-tool .chip, body.is-tool .seg__btn { flex: 1 1 0; min-width: 0;
   transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
               box-shadow .2s var(--lp-ease); }
 body.is-tool .chip + .chip, body.is-tool .seg__btn + .seg__btn { margin-left: -1px; }
-/* Выбранное — ключевой цвет заливкой. Обводка --lp-edge в ряду встык не
-   читается вовсе. С ховером не спорит — тот светлый. */
+/* Выбранное — ЗАЛИВКА, иначе никак: обводка в ряду встык не читается вовсе,
+   соседние рамки стоят вплотную и лишний контур теряется в них. Но заливка
+   теперь мягкая, а не сплошной акцент.
+
+   Почему. Сплошным зелёным метится ДЕЙСТВИЕ — «Выйти», «Сохранить», «Пройти
+   опрос». Чип — не действие, а состояние списка: «показаны все». На чернилах
+   разница была незаметна, акцент там вообще единственный цвет; на листе два
+   десятка зелёных плашек возвращают ровно ту болезнь, от которой --lp-edge
+   развели по ролям, — акцент перестаёт значить «нажми сюда». Пара
+   accent-subtle + accent-text для этого и заведена: плашка того же семейства,
+   голосом тише кнопки, подпись на ней даёт 6.1:1. */
 body.is-tool .chip.is-active, body.is-tool .seg__btn.is-active { z-index: 1;
-  background: var(--lp-key); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-key); }
-body.is-tool .chip:hover, body.is-tool .seg__btn:hover { z-index: 2; background: var(--lp-hi);
-  color: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-hi); }
+  background: var(--color-accent-subtle); color: var(--color-accent-text);
+  box-shadow: inset 0 0 0 1px var(--color-accent-default); }
+body.is-tool .chip:hover, body.is-tool .seg__btn:hover { z-index: 2;
+  background: var(--color-bg-hover); color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 
 /* ===== §8.4 Галочка — тот же кирпич 24px, что чипы =====
    align-items: flex-start, потому что пояснение стоит отдельной строкой под
@@ -449,7 +591,8 @@ body.is-tool .check-row { display: flex; flex-direction: row; align-items: flex-
   letter-spacing: 0; text-transform: none; color: var(--lp-soft); }
 body.is-tool .check-row .muted { display: block; font-size: 12px; }
 body.is-tool .check-row input[type="checkbox"] { appearance: none; -webkit-appearance: none;
-  width: 24px; height: 24px; margin: 0; flex: none; cursor: pointer; border-radius: 0;
+  width: 24px; height: 24px; margin: 0; flex: none; cursor: pointer;
+  border-radius: var(--radius-sm);
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   transition: background .2s var(--lp-ease); }
 body.is-tool .check-row input[type="checkbox"]:checked { background: var(--lp-key);
@@ -465,7 +608,7 @@ body.is-tool .muted { color: var(--lp-muted); font-size: 13px; }
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
   letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted);
   transition: box-shadow .2s var(--lp-ease), color .2s var(--lp-ease); }
-.dropzone:hover, .dropzone.is-drag { box-shadow: inset 0 0 0 1px var(--lp-edge);
+.dropzone:hover, .dropzone.is-drag { box-shadow: inset 0 0 0 1px var(--color-accent-default);
   color: var(--lp-soft); }
 .dropzone b { color: var(--lp-text); font-weight: 700; }
 .dropzone__hint { color: var(--lp-muted); }
@@ -476,15 +619,16 @@ body.is-tool .status { margin-top: 24px; padding: 12px;
   box-shadow: inset 0 0 0 1px var(--lp-line-2); font-family: var(--font-mono);
   font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
   text-transform: uppercase; color: var(--lp-soft); }
-/* Ошибка метится обводкой --lp-edge и более светлым текстом. Красного в
-   палитре v11 нет — и заводить его нельзя. */
-body.is-tool .status--error { box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+/* Ошибка метится --color-state-danger. Прежний запрет «красного в палитре нет
+   и заводить его нельзя» снят вместе с тёмной темой: он держался на том, что
+   на чернилах плотность обводки видна, — на белом листе нет. */
+body.is-tool .status--error { box-shadow: inset 0 0 0 1px var(--color-state-danger); color: var(--lp-text); }
 /* Подвал инструмента упирается в раму ленты, поэтому отступ сверху обязателен:
    две ячейки над строкой и две под ней. */
 body.is-tool .lp-foot { gap: 12px 24px; padding: 48px var(--page-pad); }
 body.is-tool .session-banner { display: flex; flex-direction: column; align-items: flex-start;
   gap: 12px; margin: 0 0 24px; padding: 12px; background: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-edge); font-size: 12px; line-height: 24px;
+  box-shadow: inset 0 0 0 1px var(--color-border-strong); font-size: 12px; line-height: 24px;
   color: var(--lp-text); }
 
 /* ===== Доступность: видимый фокус при навигации с клавиатуры ===== */

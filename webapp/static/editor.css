@@ -14,25 +14,23 @@
    • всё кратно 6, блоки и зазоры — 12/24/48/96;
    • два регистра не смешиваются: служебный слой — моно-капс 11/700/.09em,
      содержательный — обычный SB Sans Text с интерлиньяжем 24;
-   • красного и жёлтого нет вовсе: и ошибка, и предупреждение метятся
-     --lp-edge и более светлым текстом;
+   • ошибка — --color-state-danger, предупреждение — --color-state-warning;
+     прежнее правило «красного и жёлтого нет вовсе» снято вместе с тёмной темой:
+     на светлом листе одна обводка на пять состояний не различима;
    • под курсором меняются только transform/opacity, высота — никогда.
    ============================================================================ */
 
 /* Класс-близнец атрибута [hidden] из канона: editor.js прячет узлы именно им. */
 .hidden { display: none !important; }
 
-/* ===== Правка палитры под инструмент ========================================
-   ОСОЗНАННОЕ ОТСТУПЛЕНИЕ ОТ КАНОНА, повторённое из slides.css дословно.
-   Дублирование намеренное: редактор не подключает slides.css, а обе страницы
-   обязаны говорить на одном языке — иначе переход с витрины в редактор читался
-   бы сменой продукта. Разъяснение, почему хайрлайн канона поднят, — в шапке
-   соответствующего блока slides.css; менять значения нужно в обоих файлах. */
-body.v11 { --lp-line-2: #2C3532; --sl-surface: #181D1B;
-  /* Полюса сведены ровно теми же значениями, что на витрине: чернила подняты,
-     свет приспущен. У редактора этажей нет, но переход «витрина → редактор»
-     идёт в один клик, и разная чернота фона читалась бы сменой продукта. */
-  --lp-ink: #141817; --lp-text: #E3E8E6; --lp-soft: #B3BCB8; --lp-hi: #AAB4B0; }
+/* ===== Местные переменные редактора =========================================
+   ПАЛИТРЫ ЗДЕСЬ БОЛЬШЕ НЕТ. Раньше в этом месте лежала копия блока «правка
+   палитры под инструмент» из slides.css — дословная, потому что редактор не
+   подключает slides.css, а обе страницы обязаны говорить на одном языке.
+   Дубль и был главным риском: значения жили в двух файлах и расходились при
+   любой односторонней правке. Светлая тема снимает его целиком — весь цвет
+   приходит из v11.css, и переопределять его здесь запрещено. */
+body.v11 { --sl-surface: var(--color-bg-muted); }
 
 /* ===== Стол: три колонки, страница не прокручивается ========================
    Редактор — не документ, а рабочее место: прокручиваются колонки, а не окно.
@@ -63,26 +61,27 @@ body.is-editor .tool { min-height: 0; flex: 1 1 auto; }
    размера в каноне смысла не имеют — кирпич один, 24px, и «маленького» кирпича
    не бывает; они остаются пустыми именами, чтобы разметку не переписывать. */
 body.is-tool .btn { display: inline-flex; align-items: center; justify-content: center;
-  height: 24px; cursor: pointer; border: 0; border-radius: 0; padding: 6px 12px;
+  height: 24px; cursor: pointer; border: 0; border-radius: var(--radius-sm); padding: 6px 12px;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
   font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
   text-decoration: none; white-space: nowrap;
   transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
               box-shadow .2s var(--lp-ease); }
-body.is-tool .btn:hover { background: var(--lp-hi); color: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-hi); }
+body.is-tool .btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 body.is-tool .btn:disabled { opacity: .4; cursor: default; }
 body.is-tool .btn:disabled:hover { background: var(--lp-ink); color: var(--lp-soft);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 body.is-tool .btn-accent { background: var(--lp-key); color: var(--lp-key-ink);
   box-shadow: inset 0 0 0 1px var(--lp-key); }
-body.is-tool .btn-accent:hover { background: var(--lp-text); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-text); }
+body.is-tool .btn-accent:hover { background: var(--color-accent-hover); color: var(--lp-key-ink);
+  box-shadow: inset 0 0 0 1px var(--color-accent-hover); }
 /* «Остановить» и «идёт экспорт» — не беда и не тревога, поэтому не цвет, а
-   обводка --lp-edge: кирпич заметнее соседей, но ничего не сигналит. */
+   обводка --color-border-strong: кирпич заметнее соседей, но ничего не
+   сигналит. Красный тут был бы ложью: «идёт работа» — это не сбой. */
 body.is-tool .btn-stop, body.is-tool .btn.is-busy {
-  box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+  box-shadow: inset 0 0 0 1px var(--color-border-strong); color: var(--lp-text); }
 body.is-tool .btn.is-busy { cursor: default; }
 body.is-tool .btn.is-ready { background: var(--lp-key); color: var(--lp-key-ink);
   box-shadow: inset 0 0 0 1px var(--lp-key); }
@@ -112,10 +111,10 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   height: 96px; padding: 12px; cursor: pointer; background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-line-2);
   transition: box-shadow .2s var(--lp-ease); }
-.thumb:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
+.thumb:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 /* Текущий слайд метим планкой ключевого цвета — тем же приёмом, что канон
    метит выбранную тогл-строку. Заливкой красить нельзя: она занята ховером. */
-.thumb.active { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.thumb.active { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .thumb.active::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
   width: 6px; background: var(--lp-key); }
 .thumb-prev { position: relative; flex: none; width: 128px; height: 72px;
@@ -126,7 +125,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   justify-content: center; }
 .thumb-num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
   line-height: 24px; letter-spacing: .09em; color: var(--lp-muted); }
-.thumb.active .thumb-num { color: var(--lp-key); }
+.thumb.active .thumb-num { color: var(--color-accent-text); }
 .thumb-title { font-size: 12px; line-height: 24px; color: var(--lp-soft);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 /* Крестик и рукоятка — те же 24×24, что крестик плитки в ленте главной. */
@@ -159,7 +158,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   color: var(--lp-key-ink); font-family: var(--font-mono); font-weight: 700;
   font-size: 11px; line-height: 24px; pointer-events: none; }
 .thumb-quest--failed, .thumb-quest--filling { background: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
+  box-shadow: inset 0 0 0 1px var(--color-state-danger); color: var(--lp-text); }
 /* Ряд «Действия со слайдами»: шаг 44 на борде = кирпич 36 + зазор 8. Зазор
    взят меньше модуля (12) потому, что это ОДНА группа действий, а не три
    независимые кнопки ряда; 12 разносил их в три отдельных органа.
@@ -183,12 +182,12 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    inset: собственное содержимое кадра закрыло бы внутреннюю тень. Размер он,
    в отличие от border, не меняет — модуль цел. */
 #frameWrap iframe { aspect-ratio: 16 / 9; width: min(100%, calc(100cqh * 16 / 9));
-  height: auto; max-height: 100%; border: 0; border-radius: 0;
+  height: auto; max-height: 100%; border: 0; border-radius: var(--radius-lg);
   background: var(--lp-line); box-shadow: 0 0 0 1px var(--lp-line-2); }
 
 /* Шторка сборки поверх сцены: слова по центру, никакого стекла и размытия. */
 .build-overlay { position: absolute; inset: 0; z-index: 5; display: grid;
-  place-items: center; background: rgba(10, 12, 11, .93); }
+  place-items: center; background: var(--color-scrim); }
 .build-overlay__card { display: flex; flex-direction: column; align-items: center;
   gap: 12px; padding: 24px; text-align: center; }
 .build-overlay__title { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
@@ -261,26 +260,30 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   color: var(--lp-muted); }
 .field input, .field textarea, .field select, .field-input, .chat-input textarea,
 .glass-q__input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
-  line-height: 24px; padding: 12px; border: 0; border-radius: 0;
+  line-height: 24px; padding: 12px; border: 0; border-radius: var(--radius-sm);
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-text); transition: box-shadow .2s var(--lp-ease); }
 .field input, .field select, .field-input { height: 48px; }
 .field textarea, .chat-input textarea, .glass-q__input { height: 96px; resize: none; }
 .field input:focus, .field textarea:focus, .field select:focus, .field-input:focus,
 .chat-input textarea:focus, .glass-q__input:focus { outline: none;
-  box-shadow: inset 0 0 0 1px var(--lp-edge); }
+  box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .field input:disabled, .field textarea:disabled { opacity: .4; cursor: default; }
 .field select { appearance: none; -webkit-appearance: none; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397A29E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center; padding-right: 30px; }
-/* Ошибка поля — та же обводка --lp-edge, что у фокуса: другого способа метить
-   поле в палитре без красного нет, а спутать их нельзя — фокус ровно один. */
+/* Ошибка поля — обводка --color-state-danger. В тёмном каноне её метили той же
+   приглушённой обводкой, что и фокус, потому что красного в палитре не было;
+   это держалось только на том, что фокус ровно один, и первое же поле с
+   ошибкой рядом с полем в фокусе читалось двумя фокусами. Hub различает их
+   цветом. Перебор символов — тоже ошибка, а не предупреждение: пока счётчик
+   красный, черновик не сохраняется, — поэтому состояния делят одну обводку. */
 .field-error input, .field-error textarea,
-.dgm-node-row--over input[data-dgm="label"] { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.dgm-node-row--over input[data-dgm="label"] { box-shadow: inset 0 0 0 1px var(--color-state-danger); }
 .field-hint { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
   line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
   color: var(--lp-muted); font-variant-numeric: tabular-nums; }
-.field-hint--error, .field-hint--over { color: var(--lp-text); }
+.field-hint--error, .field-hint--over { color: var(--color-state-danger); }
 .field-list, .field-lines, .field-card { display: flex; flex-direction: column; gap: 12px; }
 .field-row { display: flex; flex-direction: column; gap: 12px; }
 .field-item { display: flex; gap: 12px; align-items: center; }
@@ -305,7 +308,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    и своя синева — второй акцент на странице. Квадрат тот же, что у .check-row
    канона, и ровно в высоту строки: 24 внутри 24. */
 .dgm-acc input { appearance: none; -webkit-appearance: none; width: 24px; height: 24px;
-  margin: 0; flex: none; cursor: pointer; border-radius: 0; background: var(--lp-ink);
+  margin: 0; flex: none; cursor: pointer; border-radius: var(--radius-sm);
+  background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-line-2);
   transition: background .2s var(--lp-ease); }
 .dgm-acc input:checked { background: var(--lp-key); box-shadow: inset 0 0 0 1px var(--lp-key);
@@ -315,7 +319,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .dgm-move .item-move + .item-move { margin-left: -1px; }
 /* Претензии к схеме: и наша проверка, и отказ сервера — один тон. Разница
    читается словами внутри, а не цветом рамки: жёлтого в палитре нет. */
-.dgm-claims { padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-edge);
+.dgm-claims { padding: 12px; box-shadow: inset 0 0 0 1px var(--color-state-warning);
   font-size: 12px; line-height: 24px; color: var(--lp-soft); }
 .dgm-claims-head { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
   line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
@@ -340,7 +344,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .msg.user { align-self: flex-end; background: var(--lp-key); color: var(--lp-key-ink); }
 .msg.bot { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-soft); }
-.msg.err { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--lp-edge);
+.msg.err { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--color-state-danger);
   color: var(--lp-text); }
 .chat-empty { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
 .chat-input { flex: none; display: flex; flex-direction: column; gap: 12px;
@@ -365,10 +369,24 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    интерлиньяж 24, ширина 264 верхней границей, текст переносится.
    Прямые углы и волосяная обводка вместо «среднего радиуса и тени» из макета:
    радиусов и теней в системе нет (§9 — вид берем от main). */
+/* Подсказка — единственный компонент, который в Figma описан целиком (node
+   4890:5391), поэтому сверено дословно: лист --color-bg-canvas, настоящая
+   граница 1px --color-border-default, радиус --radius-md, подпись Body/S
+   13/18 в --color-text-secondary и Hub/Shadow/MD.
+
+   Граница тут border, а не inset-хайрлайн, в отличие от всего остального в
+   этом файле: подсказка — ПЛАВАЮЩИЙ слой, и под ней лежит чужой фон. Тень
+   рисуется наружу от box-model, а inset-хайрлайн — внутрь по padding-box, и
+   на скруглённом углу они расходились бы на пиксель. С border оба контура
+   считаются от одной рамки. 1px при этом съедает ширину, поэтому
+   box-sizing: border-box — он приходит из `*` в шапке канона, но для
+   fixed-узла с max-width это существенно, и напоминание уместно. */
 .tip { position: fixed; z-index: 90; max-width: 264px; padding: 10px 12px;
-  text-align: left; background: var(--lp-line); color: var(--lp-soft);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  font-family: var(--font-text); font-size: 12px; line-height: 24px;
+  box-sizing: border-box; text-align: left;
+  background: var(--color-bg-canvas); color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  font-family: var(--font-text); font-size: 13px; line-height: 18px;
   pointer-events: none; }
 .tip[hidden] { display: none; }
 
@@ -425,11 +443,11 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
   gap: 24px; align-content: start; }
 .picker-item { position: relative; display: flex; flex-direction: column;
-  text-align: left; padding: 0; border: 0; border-radius: 0; cursor: pointer;
+  text-align: left; padding: 0; border: 0; border-radius: var(--radius-lg); cursor: pointer;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-text); font: inherit;
   transition: box-shadow .2s var(--lp-ease); }
-.picker-item:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
+.picker-item:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 /* Кадр макета вписан по высоте, а не по ширине: подрезать превью слайда нельзя,
    именно по нему макет и выбирают. 144 = шесть ячеек. */
 .picker-prev { position: relative; width: 100%; height: 144px; flex: none;
@@ -448,7 +466,7 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
   letter-spacing: .09em; text-transform: uppercase;
   color: var(--lp-key-ink); background: var(--lp-key); }
-.picker-item--current { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.picker-item--current { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .picker-meta { display: flex; flex-direction: column; padding: 12px; }
 .picker-id { font-size: 13px; font-weight: 600; line-height: 24px; }
 .picker-intent { font-size: 12px; line-height: 24px; color: var(--lp-soft); }
@@ -475,7 +493,7 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 /* ===== Бренд-диалог (замена нативных alert/confirm) =========================
    z-index 80: диалог перекрывает и пикер (70), и экран сборки (60). */
 .dialog { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center;
-  padding: 24px; background: rgba(10, 12, 11, .93); }
+  padding: 24px; background: var(--color-scrim); }
 .dialog-card { width: min(432px, 100%); display: flex; flex-direction: column;
   gap: 24px; padding: 24px; background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
@@ -514,12 +532,12 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-overlay__stepper { display: flex; justify-content: center; gap: 24px;
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
   letter-spacing: .09em; text-transform: uppercase; }
-.glo-stage--done { color: var(--lp-key); }
+.glo-stage--done { color: var(--color-accent-text); }
 .glo-stage--active { color: var(--lp-text); }
 .glo-stage--todo { color: var(--lp-muted); opacity: .6; }
 .glass-overlay__quest { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
   line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--lp-key); white-space: nowrap; }
+  color: var(--color-accent-text); white-space: nowrap; }
 /* Полоса прогресса — те же 2px, что у плитки работы в ленте. Это единственная
    толщина индикатора в системе, и второй заводить нельзя. */
 .glass-bar { height: 2px; background: var(--lp-line-2); overflow: hidden; }
@@ -536,15 +554,17 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   transform: translateY(-50%); height: 2px; }
 .glass-overlay__tele { display: flex; justify-content: center; gap: 24px;
   min-height: 24px; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
-/* Сбой — не красный: обводка --lp-edge и более светлый текст. */
+/* Сбой метим --color-state-danger. В тёмном каноне красного не было вовсе и
+   сбой отличался от нормы только плотностью обводки — на светлой теме такую
+   разницу не видно, и «не собралось» молча читалось как «собралось». */
 .glass-overlay__err { display: flex; align-items: center; gap: 12px; padding: 12px;
-  box-shadow: inset 0 0 0 1px var(--lp-edge); font-size: 13px; line-height: 24px;
+  box-shadow: inset 0 0 0 1px var(--color-state-danger); font-size: 13px; line-height: 24px;
   color: var(--lp-text); }
 .glass-overlay__center { flex: 1 1 auto; min-height: 0; display: flex; gap: 24px; }
 .glass-overlay__stagebox { flex: 1 1 auto; min-width: 0; display: flex;
   flex-direction: column; gap: 12px; }
 .glass-overlay__stagebox iframe { flex: 1 1 auto; width: 100%; min-height: 0;
-  border: 0; border-radius: 0; background: var(--lp-line);
+  border: 0; border-radius: var(--radius-lg); background: var(--lp-line);
   box-shadow: 0 0 0 1px var(--lp-line-2); }
 .glass-overlay__cap { text-align: center; font-family: var(--font-mono);
   font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
@@ -598,10 +618,10 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-q { display: flex; flex-direction: column; gap: 12px; padding: 12px;
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 /* Осечка заполнения — не вопрос: карточку метит та же обводка, что ошибку. */
-.glass-q--failed { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.glass-q--failed { box-shadow: inset 0 0 0 1px var(--color-state-danger); }
 .glass-q__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .glass-q__num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-key); }
+  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--color-accent-text); }
 .glass-q--failed .glass-q__num { color: var(--lp-text); }
 .glass-q__topic { font-size: 13px; font-weight: 600; line-height: 24px; color: var(--lp-text); }
 .glass-q__excerpt { margin: 0; padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2);
@@ -618,11 +638,11 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-chips { display: flex; flex-direction: column; gap: 12px; }
 /* Кандидат — строка 96: кадр 72 в поле 12, ровно как миниатюра слайда. */
 .glass-chip { display: flex; align-items: center; gap: 12px; height: 96px; padding: 12px;
-  cursor: pointer; text-align: left; border: 0; border-radius: 0; font: inherit;
+  cursor: pointer; text-align: left; border: 0; border-radius: var(--radius-lg); font: inherit;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-text); transition: box-shadow .2s var(--lp-ease); }
-.glass-chip:hover { box-shadow: inset 0 0 0 1px var(--lp-hi); }
-.glass-chip.is-picked { box-shadow: inset 0 0 0 1px var(--lp-edge); }
+.glass-chip:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+.glass-chip.is-picked { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .glass-chip__prev { position: relative; flex: none; width: 128px; height: 72px;
   overflow: hidden; background: var(--lp-line); pointer-events: none; }
 .glass-chip__prev iframe { position: absolute; top: 0; left: 0; width: 1920px;
@@ -654,9 +674,10 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
   letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
 .glo-cell--queued { opacity: .55; }
-.glo-cell--filling, .glo-cell--quest, .glo-cell--failed {
-  box-shadow: inset 0 0 0 1px var(--lp-edge); }
-.glo-cell--quest .glo-cell__mark { color: var(--lp-key); }
+.glo-cell--filling { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+.glo-cell--quest { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
+.glo-cell--failed { box-shadow: inset 0 0 0 1px var(--color-state-danger); }
+.glo-cell--quest .glo-cell__mark { color: var(--color-accent-text); }
 .glo-cell--ready { cursor: pointer; }
 .glo-cell--ready iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
 .glo-cell__label { max-width: 100%; padding: 0 6px; text-align: center;
