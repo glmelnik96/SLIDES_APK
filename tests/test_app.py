@@ -149,6 +149,27 @@ def test_index_has_prompt_lightbox(monkeypatch, tmp_path):
         assert html.index('id="promptBox"') < html.index('id="skillDownload"')
 
 
+def test_index_has_images_fork(monkeypatch, tmp_path):
+    """Экран 03 — развилка, а не предупреждение с одной кнопкой «понятно».
+
+    Ключевой кирпич надет на «Заменить файл», и это не оформление: дека из
+    документа, где суть на схемах, выйдет пустой по содержанию, так что
+    рекомендуемая дорога — вернуться и описать картинки текстом. Если ключ
+    переедет на «Собрать без картинок», экран начнёт звать туда, куда сам же
+    отговаривает идти, — поэтому проверяем классы, а не только наличие кнопок.
+
+    Заголовок обязан быть пустым: число в него кладёт askImages() из ответа
+    сервера, и зашитое в разметку «3 картинки» соврёт на любом другом файле.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/").text
+        assert 'id="imagesBox"' in html
+        assert '<h2 class="fork-title" id="imagesTitle"></h2>' in html
+        assert 'class="t-btn" id="imagesGo"' in html
+        assert 'class="t-btn t-btn--key" id="imagesSwap"' in html
+        assert "Картинки я не читаю" in html
+
+
 def test_download_skill_requires_auth(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/downloads/cloud-ru-slides.skill").status_code == 401

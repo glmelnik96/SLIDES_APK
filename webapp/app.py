@@ -943,12 +943,48 @@ async def _count_glass_build(request: Request, session_id: str, user,
         logger.warning("glass usage log failed (session %s)", session_id,
                        exc_info=True)
 
+def _plural_ru(n: int, one: str, few: str, many: str) -> str:
+    """Русская плюрализация: «1 картинка», «2 картинки», «5 картинок».
+
+    Правила те же, что у plural() в errtext.js. Держим копию на сервере, а не
+    собираем строку на клиенте, потому что detail ответа 409 читают и те, кто
+    зовёт API без нашего фронта.
+    """
+    m10, m100 = n % 10, n % 100
+    if m10 == 1 and m100 != 11:
+        return one
+    if 2 <= m10 <= 4 and not 12 <= m100 <= 14:
+        return few
+    return many
+
+
+def _count_images(source: Path) -> int:
+    """Сколько картинок в документе — тем же парсером, что и сборка.
+
+    Число уходит человеку в вопрос «В документе N картинок», поэтому считать
+    его приблизительно нельзя: пересчёт по media-частям внутри zip дал бы
+    другое число (туда попадают иконки темы, превью и звук), и предупреждение
+    разошлось бы с тем, что на самом деле потеряется.
+
+    Модуль импортируем целиком и зовём атрибут — чтобы monkeypatch в тестах
+    (htmlslides.parsers.base.parse_file) действовал и здесь.
+    """
+    from htmlslides.parsers import base as _parsers_base
+    doc = _parsers_base.parse_file(source)
+    return sum(1 for sec in doc.sections
+               for block in sec.blocks if block.kind == "image")
+
+
 @app.post("/api/drafts/{session_id}/glass/start")
 async def glass_start(session_id: str, request: Request,
                       file: UploadFile = File(...),
+                      confirm_images: str = Form(""),
                       user=Depends(get_current_user)) -> JSONResponse:
     """Документ → прозрачный аутлайн (обложка + слайд на раздел с кандидатами
-    макета и вопросами ИИ). Быстрый: parse + лёгкий скоринг, без заполнения."""
+    макета и вопросами ИИ). Быстрый: parse + лёгкий скоринг, без заполнения.
+
+    `confirm_images` — ответ на развилку экрана 03 (см. ниже): пустое значение
+    означает «человек ещё не знает про картинки»."""
     from webapp import glass
     plan = await _draft_or_404(request, session_id, user, mutate=True)
     if plan.slides:
@@ -981,6 +1017,33 @@ async def glass_start(session_id: str, request: Request,
         raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
     dest = session_dir(session_id) / f"input{suffix}"
     dest.write_bytes(raw)
+
+    # ===== Экран 03 · «В документе есть картинки» (борд 4823:1886) ==========
+    # Картинки сервис не читает: со схемы или графика смысл не снимется, и дека
+    # из документа, где вся суть на иллюстрациях, выйдет пустой по содержанию.
+    # Сказать об этом ПОСЛЕ разбора — значит дать человеку досидеть до конца и
+    # только тогда узнать, что собирали не из того.
+    #
+    # Это развилка, а не предупреждение: «Собрать без картинок» шлёт тот же
+    # запрос с confirm_images, «Заменить файл» открывает выбор заново. Поэтому
+    # ответ 409, а не 400, — запрос правильный, не хватает решения.
+    #
+    # Разбор ради счёта лишний (start_glass разберёт ещё раз) — это миллисекунды
+    # на фоне скоринга. Ошибку разбора глотаем: настоящую диагностику даст
+    # start_glass строкой ниже, и ронять запуск на вспомогательном счётчике
+    # нельзя. Молчать при сбое счёта безопаснее, чем спрашивать наугад.
+    if not confirm_images.strip():
+        try:
+            images = await run_in_threadpool(_count_images, dest)
+        except Exception:  # noqa: BLE001 — счётчик не вправе ронять запуск
+            images = 0
+        if images:
+            return JSONResponse(status_code=409, content={
+                "images": images,
+                "detail": f"в документе {images} "
+                          f"{_plural_ru(images, 'картинка', 'картинки', 'картинок')}",
+            })
+
     try:
         # Имя файла автора передаём отдельно: dest — это всегда `input.<ext>`,
         # и у документа без титульного текста обложка выходила с «INPUT».

@@ -983,6 +983,92 @@ def test_glass_start_validation(monkeypatch, tmp_path):
                       ).status_code == 404
 
 
+_IMG_DOC = ("# Т\n\nтекст раздела\n\n![схема](a.png)\n\n"
+            "## Второй\n\nещё текст\n\n![график](b.png)\n").encode()
+
+
+def test_glass_start_asks_about_images_once(monkeypatch, tmp_path):
+    """Экран 03: документ с картинками не стартует молча.
+
+    Картинки сервис не читает, и дека из документа, где суть на схемах, выйдет
+    пустой по содержанию. Сказать об этом ПОСЛЕ разбора — значит дать человеку
+    досидеть до редактора и только там узнать, что собирали не из того.
+
+    409, а не 400: запрос правильный, не хватает решения. В теле — число, его
+    показывает заголовок развилки, поэтому проверяем именно число, а не факт
+    отказа: «В документе 7 картинок» на двух картинках хуже, чем молчание.
+    """
+    with _client_app(monkeypatch, tmp_path) as c:
+        started = []
+        monkeypatch.setattr(glass, "start_glass",
+                            lambda sid, src, *, origin_name=None:
+                            started.append(sid) or _plan_of(sid))
+
+        sid = _new_draft(c)
+        r = c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                   files={"file": ("doc.md", _IMG_DOC, "text/markdown")})
+        assert r.status_code == 409, r.text
+        assert r.json()["images"] == 2
+        assert "2 картинки" in r.json()["detail"]
+        assert not started, "сборка пошла, не спросив"
+
+        # «Собрать без картинок» — тот же запрос с флагом, развилки больше нет
+        r = c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                   data={"confirm_images": "1"},
+                   files={"file": ("doc.md", _IMG_DOC, "text/markdown")})
+        assert r.status_code == 200, r.text
+        assert started == [sid]
+
+
+def test_glass_start_does_not_ask_without_images(monkeypatch, tmp_path):
+    """Общий случай — документ без картинок — проходит без лишнего экрана."""
+    with _client_app(monkeypatch, tmp_path) as c:
+        monkeypatch.setattr(glass, "start_glass",
+                            lambda sid, src, *, origin_name=None: _plan_of(sid))
+        sid = _new_draft(c)
+        r = c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                   files={"file": ("doc.md", "# Т\n\nтекст".encode(),
+                                   "text/markdown")})
+        assert r.status_code == 200, r.text
+
+
+def test_glass_start_survives_broken_counter(monkeypatch, tmp_path):
+    """Счётчик картинок — вспомогательный, и ронять запуск он не вправе.
+
+    Настоящую диагностику сломанного документа даст start_glass строкой ниже;
+    если споткнуться здесь, человек получит 500 вместо внятного «не удалось
+    разобрать» — и на ровном месте, из-за подсчёта, который ничего не решает.
+    """
+    import webapp.app as _webapp_app
+
+    def _boom(source):
+        raise RuntimeError("парсер лёг")
+    monkeypatch.setattr(_webapp_app, "_count_images", _boom)
+    with _client_app(monkeypatch, tmp_path) as c:
+        monkeypatch.setattr(glass, "start_glass",
+                            lambda sid, src, *, origin_name=None: _plan_of(sid))
+        sid = _new_draft(c)
+        r = c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                   files={"file": ("doc.md", _IMG_DOC, "text/markdown")})
+        assert r.status_code == 200, r.text
+
+
+def test_plural_ru_matches_the_client():
+    """Те же правила, что у plural() в errtext.js: 1 / 2–4 / 5–20 и подростки."""
+    from webapp.app import _plural_ru
+    say = lambda n: f"{n} {_plural_ru(n, 'картинка', 'картинки', 'картинок')}"
+    assert [say(n) for n in (1, 2, 5, 11, 14, 21, 102, 115)] == [
+        "1 картинка", "2 картинки", "5 картинок", "11 картинок", "14 картинок",
+        "21 картинка", "102 картинки", "115 картинок"]
+
+
+def _plan_of(session_id):
+    plan = draft.DraftPlan(title="Т", slides=[
+        draft.DraftSlide(template_id="cover", filled=True)])
+    draft.save_plan(session_id, plan)
+    return plan
+
+
 def test_glass_step_and_answer_endpoints(monkeypatch, tmp_path):
     with _client_app(monkeypatch, tmp_path) as c:
         sid = _new_draft(c)

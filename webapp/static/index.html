@@ -321,6 +321,34 @@
       </div>
     </div>
   </div>
+
+  <!-- Экран 03 (борд 4823:1886). Встаёт между «Собрать» и редактором, когда
+       сервер насчитал в документе картинки. Это единственное место, где можно
+       успеть: раньше — мы ещё не видели файла, позже — человек уже в
+       редакторе и собирал не из того.
+
+       Развилка, а не предупреждение с одной кнопкой «понятно»: обе дороги
+       рабочие, и ключевым кирпичом одета ВТОРАЯ — «Заменить файл». Дека из
+       документа, где вся суть на схемах, выйдет пустой по содержанию, и
+       правильный ответ почти всегда «вернуться и описать картинки текстом».
+       «Собрать без картинок» остаётся обычным кирпичом: так можно, но это
+       осознанная уступка, а не рекомендация.
+
+       Заголовок пустой — число приходит от сервера (см. askImages в app.js). -->
+  <div class="lightbox" id="imagesBox" hidden>
+    <div class="lightbox__backdrop" data-close></div>
+    <div class="lightbox__panel lightbox__panel--fork" role="dialog" aria-modal="true"
+         aria-labelledby="imagesTitle" aria-describedby="imagesText">
+      <h2 class="fork-title" id="imagesTitle"></h2>
+      <p class="ask-text" id="imagesText">Картинки я не читаю — смысл со схем и
+         графиков потеряется. Опишите их текстом в документе или добавьте в
+         редакторе.</p>
+      <div class="ask-row">
+        <button type="button" class="t-btn" id="imagesGo">Собрать без картинок</button>
+        <button type="button" class="t-btn t-btn--key" id="imagesSwap">Заменить файл</button>
+      </div>
+    </div>
+  </div>
 </section>
 </main>
 

@@ -882,21 +882,50 @@ async function createGlass() {
     });
     if (!r.ok) throw new Error("не удалось создать черновик");
     const { session_id } = await r.json();
-    const fd = new FormData();
-    fd.append("file", selectedFile);
+
+    // Отправка документа. Тело ответа разбираем здесь же и отдаём наружу:
+    // прочитать его можно ровно один раз, а заглянуть в него надо и развилке
+    // про картинки (поле images), и обработчику ошибки (поле detail).
+    //
     // Старт — parse-only (без LLM): обычно секунды даже на больших документах.
     // Таймаут — от повисшего коннекта: без него кнопка «раскладывала» вечно.
-    const ctl = new AbortController();
-    const tmr = setTimeout(() => ctl.abort(), 180000);
-    let g;
-    try {
-      g = await fetch(U(`/api/drafts/${session_id}/glass/start`),
-                      { method: "POST", body: fd, signal: ctl.signal });
-    } finally { clearTimeout(tmr); }
+    async function send(confirmed) {
+      const fd = new FormData();
+      fd.append("file", selectedFile);
+      if (confirmed) fd.append("confirm_images", "1");
+      const ctl = new AbortController();
+      const tmr = setTimeout(() => ctl.abort(), 180000);
+      let res;
+      try {
+        res = await fetch(U(`/api/drafts/${session_id}/glass/start`),
+                          { method: "POST", body: fd, signal: ctl.signal });
+      } finally { clearTimeout(tmr); }
+      let body = null;
+      if (!res.ok) {
+        try { body = JSON.parse(await res.text()); } catch (e) { body = null; }
+      }
+      return { ok: res.ok, status: res.status, body };
+    }
+
+    let g = await send(false);
+    // Экран 03. На 409 сервер отвечает и «черновик не пуст» — различаем по
+    // полю images, а не по коду: у развилки оно есть, у отказа его нет.
+    const images = (g.status === 409 && g.body
+                    && typeof g.body.images === "number") ? g.body.images : 0;
+    if (images > 0) {
+      // Пока человек думает, подпись кнопки возвращаем: «Раскладываю…» на
+      // замершей кнопке под открытым диалогом обещает работу, которой нет.
+      btn.textContent = prevLabel;
+      if (!await askImages(images)) {         // «Заменить файл»
+        setStartEnabled(true);
+        fileInput.click();  // пустой черновик остаётся — он ничего не держит
+        return;
+      }
+      btn.textContent = "Раскладываю на слайды…";
+      g = await send(true);
+    }
     if (!g.ok) {
-      let detail = "";
-      try { detail = JSON.parse(await g.text()).detail; } catch (e) { detail = ""; }
-      throw new Error(detail || "не удалось разобрать документ");
+      throw new Error((g.body && g.body.detail) || "не удалось разобрать документ");
     }
     location.href = U(`/editor?session=${session_id}&mode=manual&glass=1`);
     return; // уходим со страницы — кнопку не воскрешаем
@@ -1211,6 +1240,42 @@ function askConfirm(text, okLabel) {
     document.addEventListener("keydown", onKey);
     // Фокус на отказ: у необратимого действия по умолчанию выбран выход.
     cancel.focus();
+  });
+}
+
+/* Экран 03 · «В документе N картинок» (борд 4823:1886).
+   Promise<boolean>: true — «Собрать без картинок», false — «Заменить файл».
+
+   Отдельный лайтбокс, а не askConfirm: у того одна строка текста и общий
+   заголовок-вопрос, а здесь заголовок несёт ЧИСЛО, и число — главное, что
+   человек сверит с документом.
+
+   Esc и клик по фону считаем отказом, то есть «Заменить файл». Трактовать
+   молчание как «собирай без картинок» нельзя: случайный Esc тогда запускал бы
+   сборку, про которую уже сказано, что она потеряет смысл. Отказ же всего
+   лишь возвращает к выбору файла — ничего не потеряно. */
+const _imagesBox = $("#imagesBox");
+function askImages(n) {
+  return new Promise((resolve) => {
+    if (!_imagesBox) { resolve(false); return; }  // разметки нет — не собираем
+    const go = $("#imagesGo"), swap = $("#imagesSwap");
+    $("#imagesTitle").textContent =
+      `В документе ${n} ${plural(n, "картинка", "картинки", "картинок")}`;
+    function close(val) {
+      document.removeEventListener("keydown", onKey);
+      _imagesBox.removeEventListener("click", onClick);
+      _imagesBox.hidden = true;
+      resolve(val);
+    }
+    function onKey(e) { if (e.key === "Escape") close(false); }
+    function onClick(e) {
+      if (e.target === go) close(true);
+      else if (e.target === swap || e.target.closest("[data-close]")) close(false);
+    }
+    _imagesBox.hidden = false;
+    _imagesBox.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKey);
+    swap.focus();   // фокус на рекомендованной дороге
   });
 }
 
