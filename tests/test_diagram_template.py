@@ -20,7 +20,9 @@ def _plan(diagram_json: str) -> DeckPlan:
 def test_library_has_diagram_template():
     spec = TemplateLibrary.load().get("diagram")
     assert spec.display_name == "Схема"
-    assert spec.slots["title"].required
+    # Заголовок с 2026-11-02 необязателен (MD §3) — пустой не блокирует сборку.
+    # Сами ДАННЫЕ схемы обязательны и дальше: без них рисовать нечего.
+    assert not spec.slots["title"].required
     assert spec.slots["diagram"].required
     assert spec.slots["diagram"].max_chars == 8000
 

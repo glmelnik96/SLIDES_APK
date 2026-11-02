@@ -112,10 +112,29 @@ def test_render_empty_draft_shows_placeholder_deck(monkeypatch, tmp_path):
 
 def test_render_partial_required_slots_use_placeholder(monkeypatch, tmp_path):
     monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
-    # cover.title is required but empty → must still render (placeholder), no raise
+    # Незаполненный слайд (filled=False) со пустым content → слоты берут пример
+    # из каталога (sample=not filled), секция собирается, raise не летит.
     p = draft.DraftPlan(slides=[draft.DraftSlide(template_id="cover", content={})])
     html = draft_render.render_draft("sid", p).read_text("utf-8")
     assert html.count("<section") == 1
+
+
+def test_render_filled_slide_with_empty_title_renders(monkeypatch, tmp_path):
+    """MD 2026-11-02, §3: пустой заголовок не блокирует сборку и не подменяется.
+
+    До этой правки title был required, и у ЗАПОЛНЕННОГО слайда пустой заголовок
+    получал пример из каталога: в панели пусто, а на слайде чужой текст. Теперь
+    слот необязателен — в разметку уходит пустая строка. Сама разметка при этом
+    не ветвится (шаблон печатает h3 всегда), поэтому дерево слайда то же: ключ
+    таблицы геометрии не меняется, и слайд не теряется в PPTX.
+    """
+    monkeypatch.setenv("SLIDESBOT_WORKDIR", str(tmp_path / "sessions"))
+    p = draft.DraftPlan(slides=[draft.DraftSlide(
+        template_id="kpi", filled=True,
+        content={"title": "", "kpis": [{"value": "12", "desc": "клиентов"}]})])
+    html = draft_render.render_draft("sid", p).read_text("utf-8")
+    assert html.count("<section") == 1
+    assert '<h3 class="content-head-title t-head-42" data-slot="title"></h3>' in html
 
 
 def test_render_clamps_overlong_text_and_lists(monkeypatch, tmp_path):
@@ -237,7 +256,11 @@ def test_templates_catalog(monkeypatch, tmp_path):
         assert cover["hidden"] is True and cover["display_name"]
         assert all(not t.get("hidden") for t in cat
                    if t["id"] not in ("cards-6", "cover"))
-        assert cover["slots"]["title"]["required"] is True
+        # Контракт слота едет в редактор целиком — на нем стоит форма. С
+        # 2026-11-02 (MD §3) заголовок необязателен: звездочку в панели рисует
+        # этот самый флаг, и прятать ее в вебе, оставив required в данных,
+        # значило бы врать форме и ловить отказ сервера уже при сохранении.
+        assert cover["slots"]["title"]["required"] is False
         assert cover["slots"]["title"]["max_chars"] == 20
 
 

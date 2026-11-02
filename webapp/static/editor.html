@@ -39,13 +39,49 @@
   <!-- ===== Левый рельс: лента слайдов ===== -->
   <aside class="rail rail--edit" id="thumbsRail">
     <p class="field-label">Слайды</p>
-    <!-- Две подписи: на узком экране рельс сжимается до 96px, и полная в кирпич
-         не влезает — там же, где миниатюры теряют названия, кнопка переходит
-         на короткую. Обрезать подпись нельзя: «обавить слайд» читается сбоем. -->
-    <button class="btn addslide hidden" id="addSlide" aria-label="Добавить слайд"
-            title="Новый слайд встанет сразу после текущего"><span
-      class="addslide__full">Добавить слайд</span><span
-      class="addslide__short" aria-hidden="true">+ слайд</span></button>
+    <!-- Ряд «Действия со слайдами» (борд 4892:5392): три равнозначные иконочные
+         кнопки 36×24 с шагом 44. Подписей нет намеренно — текстовые в колонку 264
+         не помещаются (144 + 125 + 8 = 277 > 264), а обрезанная подпись читается
+         сбоем. Отсюда же снята прежняя пара подписей «Добавить слайд» / «+ слайд»
+         под брейкпоинт 1280: иконка влезает в рельс любой ширины.
+         Имя каждой кнопки живет в aria-label, подробность — в data-tip (§5).
+         Глифы — Lucide (plus, copy, undo-2) в боксе 12×12: viewBox 24 при
+         width 12 дает обводку 2.6/2 = 1.3 px, как просит набор Icon S (§7). -->
+    <div class="slide-acts hidden" id="slideActs" role="group"
+         aria-label="Действия со слайдами">
+      <button class="btn btn-icon" id="addSlide" type="button"
+              aria-label="Добавить слайд"
+              data-tip="Добавлю пустой слайд после текущего">
+        <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+             stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M5 12h14"/><path d="M12 5v14"/>
+        </svg>
+      </button>
+      <button class="btn btn-icon" id="dupSlide" type="button"
+              aria-label="Дублировать слайд"
+              data-tip="Скопирую текущий слайд вместе с текстом">
+        <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+             stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <rect x="8" y="8" width="14" height="14" rx="2"/>
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+        </svg>
+      </button>
+      <!-- Отмена стоит здесь, а не в шапке сцены: так на борде (4895:7218).
+           Действие структурное, как и два соседних, — его место в одном ряду
+           с ними, а не среди экспорта и сохранения. -->
+      <button class="btn btn-icon" id="undoBtn" type="button"
+              aria-label="Отменить" disabled
+              data-tip="Отменю последнее действие со слайдами">
+        <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+             stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="M9 14 4 9l5-5"/>
+          <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>
+        </svg>
+      </button>
+    </div>
     <div id="thumbs"></div>
   </aside>
 
@@ -263,7 +299,12 @@
 <script src="/static/ascii.js"></script>
 <script src="/static/picker_groups.js"></script>
 <script src="/static/slotmap.js"></script>
+<!-- Ховер-подсказки (§5). Подключаем ДО editor.js: тот пересобирает панель и
+     ленту через innerHTML, а подсказка слушает document — порядок важен только
+     для доступности window.Tooltip к моменту mount. -->
+<script src="/static/tooltip.js"></script>
 <script src="/static/diagram_editor.js"></script>
 <script src="/static/editor.js"></script>
+<script>window.Tooltip && Tooltip.mount(document, window);</script>
 </body>
 </html>

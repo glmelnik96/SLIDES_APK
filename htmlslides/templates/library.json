@@ -8,7 +8,7 @@
       "display_name": "Обложка",
       "intent": "Титульный слайд, ЗАПАСНОЙ вариант 3 (правило 2026-10-27: приоритет титулов cover-image → statement → cover): огромный заголовок капсом, короткий подзаголовок и штриховка внизу.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 20, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 20, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 90, "label": "Подзаголовок"}
       }
     },
@@ -19,7 +19,7 @@
       "display_name": "Обложка с картинкой",
       "intent": "Титульный слайд, ПЕРВЫЙ приоритет (правило 2026-10-27): H1 слева и 3D-иллюстрация справа; без своей картинки подставляется брендовая заставка — подходит для любой деки.",
       "slots": {
-        "title": {"kind": "text", "required": true,  "max_chars": 40, "label": "Заголовок"},
+        "title": {"kind": "text", "required": false, "max_chars": 40, "label": "Заголовок"},
         "lead":  {"kind": "text", "required": false, "max_chars": 88, "label": "Вводный текст"},
         "image": {"kind": "text", "required": false, "label": "Иллюстрация", "hint": "Ссылка на картинку; если реальной ссылки нет — оставь слот ПУСТЫМ (подставится брендовая заставка), URL не выдумывай"}
       }
@@ -53,7 +53,7 @@
       "display_name": "Контакты",
       "intent": "Финальный контактный слайд: призыв к действию и контакты на фирменном зеленом фоне.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 20, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 20, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 60, "label": "Подзаголовок"}
       }
     },
@@ -72,7 +72,7 @@
       "display_name": "KPI",
       "intent": "Две гигантские метрики: подходит для слайда с ключевыми цифрами (выручка, рост, объем), у каждой единица измерения и короткое описание.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "kpis":     {"kind": "list", "required": true, "max_items": 2, "label": "Метрики",
                      "item_max_chars": 60,
@@ -90,7 +90,7 @@
       "display_name": "Ряд метрик",
       "intent": "Слайд «в цифрах»: ключевые метрики крупными числами, до 2 независимых рядов. Ряд 1 (stats) — обязательный, до 4 метрик; ряд 2 (stats2) — необязательный, до 4 метрик. Меньше метрик в ряду → шире ячейка и больше места под текст (ряд из 1 метрики занимает всю ширину). Бери, когда нужно показать несколько показателей с акцентом на цифру.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "stats":    {"kind": "list", "required": true, "max_items": 4, "label": "Метрики",
                      "item_max_chars": 210,
@@ -115,7 +115,7 @@
       "display_name": "Столбчатая диаграмма",
       "intent": "Гистограмма-сравнение: 3–6 величин горизонтальными барами разной длины (доли, рост по годам, сравнение тарифов/сервисов). Бери, когда числа нужно ВИЗУАЛЬНО сравнить столбиками, а не просто перечислить.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "bars":     {"kind": "list", "required": true, "max_items": 6, "label": "Категории",
                      "item_max_chars": 60,
@@ -133,7 +133,7 @@
       "display_name": "Кольцевая диаграмма",
       "intent": "Кольцевая диаграмма долей: 2–5 сегментов как части целого (структура нагрузок, распределение бюджета/трафика, доли продуктов). Бери, когда показываешь СОСТАВ или доли от 100%.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "segments": {"kind": "list", "required": true, "max_items": 5, "label": "Сегменты", "hint": "Доли, в сумме 100%",
                      "item_max_chars": 48,
@@ -151,7 +151,7 @@
       "display_name": "Линейный график",
       "intent": "Линейный график динамики: одна метрика во времени (выручка/пользователи/нагрузка по годам или кварталам), 2–8 точек. Бери, когда показываешь ТРЕНД или рост/падение во времени.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "points":   {"kind": "list", "required": true, "max_items": 8, "label": "Точки", "hint": "Значения по времени, слева направо",
                      "item_max_chars": 32,
@@ -169,7 +169,7 @@
       "display_name": "Составные бары",
       "intent": "Гориз. составные бары: состав (2–4 части) по нескольким категориям, каждый бар = 100%. Бери для структуры по группам (распределение бюджета/нагрузки по командам и т.п.).",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "legend":   {"kind": "list", "required": true, "max_items": 4, "label": "Легенда", "hint": "Названия частей по порядку",
                      "item_max_chars": 24,
@@ -194,7 +194,7 @@
       "display_name": "KPI-кольца",
       "intent": "Кольца прогресса: 2–4 показателя в процентах (покрытие, аптайм, готовность, выполнение). Бери, когда метрики — это доли выполнения/достижения цели.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "rings":    {"kind": "list", "required": true, "max_items": 4, "label": "Кольца",
                      "item_max_chars": 48,
@@ -212,7 +212,7 @@
       "display_name": "До / после",
       "intent": "Сравнение «было → стало»: два состояния одной трансформации со стрелкой и опциональной дельтой. Бери для эффекта «до/после» внедрения. delta — КОРОТКАЯ метрика-итог в чипе у стрелки (напр. «−80% времени», «×3 скорость»), НЕ фраза.",
       "slots": {
-        "title":        {"kind": "text", "required": true,  "max_chars": 54,  "label": "Заголовок"},
+        "title":        {"kind": "text", "required": false, "max_chars": 54,  "label": "Заголовок"},
         "subtitle":     {"kind": "text", "required": false, "max_chars": 70,  "label": "Подзаголовок"},
         "before_label": {"kind": "text", "required": true,  "max_chars": 24,  "label": "Заголовок «было»"},
         "before_text":  {"kind": "text", "required": true,  "max_chars": 200, "label": "Текст «было»"},
@@ -228,7 +228,7 @@
       "display_name": "Таблица услуг",
       "intent": "Карточка одного сервиса: иллюстрация продукта слева и таблица из 3 нумерованных преимуществ справа.",
       "slots": {
-        "title":        {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":        {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle":     {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "service_name": {"kind": "text", "required": true,  "max_chars": 40, "label": "Название сервиса"},
         "service_desc": {"kind": "text", "required": false, "max_chars": 30, "label": "Краткое описание"},
@@ -258,7 +258,7 @@
       "display_name": "Таймлайн",
       "intent": "Таймлайн/этапы: до 5 строк-вех слева и крупная иллюстрация справа, для дорожной карты или последовательности шагов.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "items":    {"kind": "list", "required": true, "max_items": 5, "label": "Этапы",
                      "item_max_chars": 60,
@@ -274,7 +274,7 @@
       "display_name": "Две карточки",
       "intent": "Две карточки-папки рядом: когда нужно сопоставить или раскрыть две темы заголовком и абзацем текста.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "cards":    {"kind": "list", "required": true, "max_items": 2, "label": "Карточки",
                      "item_max_chars": 540,
@@ -291,7 +291,7 @@
       "display_name": "Три колонки",
       "intent": "Три текстовые колонки с разделителями: для трех параллельных идей или аспектов сплошным текстом без карточек. Для тарифов/планов/именованных опций бери cards-6.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "columns":  {"kind": "list", "required": true, "max_items": 3, "label": "Колонки",
                      "item_max_chars": 440,
@@ -308,7 +308,7 @@
       "display_name": "Сетка плашек",
       "intent": "Динамическая сетка плашек С ЗАЛИВКОЙ: 1–3 ряда, в каждом 1–5 плашек. Та же гибкая структура, что frames-grid, но плашки залиты фоном с зазором, а не обведены контуром. Бери, когда набор равнозначных блоков нужно разложить заливочной сеткой, а число плашек и рядов заранее не фиксировано. Раскладывай по 2–3 плашки в ряд для баланса.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "row1": {"kind": "list", "required": true, "max_items": 5, "label": "Плашки",
                  "item_max_chars": 180,
@@ -337,7 +337,7 @@
       "display_name": "Шесть карточек",
       "intent": "Сетка 3×2 карточек-плиток (3–6 штук): для коротких пунктов, фич, сервисов, а также тарифов / планов / пакетов / вариантов выбора. Предпочитай этот шаблон вместо three-col, когда нужен карточный вид.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "cards":    {"kind": "list", "required": true, "max_items": 6, "label": "Карточки",
                      "item_max_chars": 180,
@@ -354,7 +354,7 @@
       "display_name": "Сетка рамок",
       "intent": "Динамическая сетка рамок: 1–3 ряда, в каждом 1–5 рамок. Рамки ужимаются при добавлении и растягиваются при удалении на всю ширину и высоту ряда. Бери, когда набор равнозначных блоков нужно разложить гибкой сеткой, а число ячеек и рядов заранее не фиксировано.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "row1": {"kind": "list", "required": true, "max_items": 5, "label": "Рамки",
                  "item_max_chars": 180,
@@ -416,7 +416,7 @@
       "display_name": "Пустой",
       "intent": "Пустой контентный слайд: только шапка (заголовок и подзаголовок) и свободная зона под произвольный контент.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 60, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 60, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"}
       }
     },
@@ -427,7 +427,7 @@
       "display_name": "Схема",
       "intent": "Схема связей и структуры: блок-схема процесса с ветвлениями, этапы, цикл, воронка, оргсхема. Бери, когда важна СТРУКТУРА и связи между элементами (кто за кем, кто кому подчинен), а не числа. Слот diagram — строгий JSON DiagramSpec, рисует детерминированный движок.",
       "slots": {
-        "title":    {"kind": "text", "required": true,  "max_chars": 54, "label": "Заголовок"},
+        "title":    {"kind": "text", "required": false, "max_chars": 54, "label": "Заголовок"},
         "subtitle": {"kind": "text", "required": false, "max_chars": 70, "label": "Подзаголовок"},
         "diagram":  {"kind": "text", "required": true,  "max_chars": 8000, "label": "Данные схемы", "hint": "JSON DiagramSpec — заполняется пикером типов/ИИ, не руками"}
       }

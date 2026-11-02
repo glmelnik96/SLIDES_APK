@@ -86,6 +86,18 @@ body.is-tool .btn-stop, body.is-tool .btn.is-busy {
 body.is-tool .btn.is-busy { cursor: default; }
 body.is-tool .btn.is-ready { background: var(--lp-key); color: var(--lp-key-ink);
   box-shadow: inset 0 0 0 1px var(--lp-key); }
+/* Иконочный кирпич: 36×24 (борд 4892:5392). Высота — та же, что у текстового,
+   ширина фиксированная, поля сняты: иконка центруется сама, а padding 12 от
+   текстового кирпича растянул бы ряд до 60 на кнопку. */
+body.is-tool .btn-icon { width: 36px; flex: none; padding: 0; }
+/* Глиф наследует цвет кирпича — значит, сам переворачивается на ховере и
+   глушится у disabled вместе с ним, отдельных правил не нужно. */
+.ico { flex: none; display: block; }
+/* Кирпич с подписью И иконкой («Сменить макет слайда» ⓘ): иконка прижата к
+   правому краю подписи через зазор 6 — половина модуля. Полного зазора 12
+   здесь нет намеренно: иконка относится к ЭТОЙ подписи, и при 12 она читалась
+   отдельным элементом ряда. */
+body.is-tool .btn.has-ico { gap: 6px; }
 /* Текстовая ссылка внутри служебной строки: единственное подчёркивание в UI. */
 body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointer;
   font: inherit; color: var(--lp-text); text-decoration: underline;
@@ -148,10 +160,13 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   font-size: 11px; line-height: 24px; pointer-events: none; }
 .thumb-quest--failed, .thumb-quest--filling { background: var(--lp-ink);
   box-shadow: inset 0 0 0 1px var(--lp-edge); color: var(--lp-text); }
-.addslide { width: 100%; }
-/* Полная подпись — на широком рельсе; короткая ждёт брейкпоинта 1280 (см. конец
-   файла), где рельс ужимается до 96px и полная перестаёт помещаться. */
-.addslide__short { display: none; }
+/* Ряд «Действия со слайдами»: шаг 44 на борде = кирпич 36 + зазор 8. Зазор
+   взят меньше модуля (12) потому, что это ОДНА группа действий, а не три
+   независимые кнопки ряда; 12 разносил их в три отдельных органа.
+   Прежняя кнопка «Добавить слайд» занимала всю ширину рельса и имела две
+   подписи под брейкпоинт 1280 — иконочный ряд влезает в рельс любой ширины,
+   поэтому и .addslide*, и обе подмены подписи ушли вместе с ней. */
+.slide-acts { display: flex; gap: 8px; }
 
 /* ===== Сцена: единственная рама редактора и единственный чертёж =============
    Тот же рецепт, что рама ленты на главной (§8.7): поле 24, хайрлайн по
@@ -336,16 +351,26 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .chat-input.is-disabled textarea, .chat-input.is-disabled .btn { opacity: .4;
   pointer-events: none; }
 
-/* Тултип «почему нельзя». Всплывает без сдвига чего-либо (::after поверх), сам
-   на модуле: поле 12, интерлиньяж 24, отбивка 12 — и прямые углы, как везде. */
-[data-tip] { position: relative; }
-[data-tip]:hover::after { content: attr(data-tip); position: absolute; z-index: 60;
-  left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%);
-  width: max-content; max-width: 264px; padding: 12px; text-align: left;
-  background: var(--lp-line); color: var(--lp-soft);
+/* ===== Подсказка (MD 2026-11-02, §5) =======================================
+   Один узел на документ, рисует tooltip.js; здесь только вид и слой.
+
+   Был чисто css-овый вариант: [data-tip]:hover::after внутри самого триггера.
+   Он не годится ни по одному пункту §5 — не вызывается с клавиатуры, не держит
+   задержку, всегда встает сверху. И главное: ::after лежал ВНУТРИ триггера, а
+   у левого рельса overflow: hidden auto — подсказка кнопки в рельсе обрезалась
+   бы кромкой колонки. Поэтому position: fixed и узел в body.
+
+   Карточка на модуле: поле 12 по горизонтали, 10 по вертикали (§5 просит
+   именно эту пару — 12/12 давали бы 44 высоты вместо 36 у строки в 24),
+   интерлиньяж 24, ширина 264 верхней границей, текст переносится.
+   Прямые углы и волосяная обводка вместо «среднего радиуса и тени» из макета:
+   радиусов и теней в системе нет (§9 — вид берем от main). */
+.tip { position: fixed; z-index: 90; max-width: 264px; padding: 10px 12px;
+  text-align: left; background: var(--lp-line); color: var(--lp-soft);
   box-shadow: inset 0 0 0 1px var(--lp-line-2);
   font-family: var(--font-text); font-size: 12px; line-height: 24px;
   pointer-events: none; }
+.tip[hidden] { display: none; }
 
 /* ===== Живой аутлайн (режим чата) ========================================== */
 .outline { flex: none; display: flex; flex-direction: column; gap: 12px;
@@ -699,10 +724,16 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   .thumb-prev, .thumb-title, .thumbs-hint, .thumb-grip { display: none; }
   .thumb { height: 48px; justify-content: center; }
   .rail--edit > .field-label { text-align: center; padding: 0; }
-  /* Кирпич не переносит и не сжимает текст: в 74px полная подпись выезжала
-     за обводку и читалась «обавить слайд». Меняем подпись, а не размер. */
-  .addslide__full { display: none; }
-  .addslide__short { display: inline; }
+  /* Рельс здесь 96, а ряд действий — 124 (36×3 + 8×2). Переносим: ужимать
+     кирпич нельзя — иконка 12 в боксе меньше 36 теряет поля и липнет к
+     обводке, а срезать третью кнопку значит отнять отмену на узком экране.
+     Ширину зажимаем в 80 (36 + 8 + 36) и центруем сам БЛОК, а кнопки внутри
+     кладём от левого края. justify-content: center давал лесенку: во второй
+     строке кнопка одна, и центровалась она по шву между первыми двумя. Так
+     «отменить» встаёт ровно под «+», а группа остаётся по центру рельса —
+     как и миниатюры с подписью на этом же брейкпоинте. */
+  .slide-acts { flex-wrap: wrap; justify-content: flex-start;
+    width: 80px; margin-inline: auto; }
 }
 @media (max-width: 860px) {
   /* Стол разворачивается в столбик: сцена сверху, рельсы под ней. Страница при
@@ -715,10 +746,13 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   .thumb-prev, .thumb-title { display: flex; }
   .thumb { height: 96px; justify-content: flex-start; }
   .rail--edit > .field-label { text-align: left; padding: 0 12px; }
-  /* Рельс снова во всю ширину — полная подпись возвращается (правило 1280
-     продолжает действовать и здесь, поэтому его нужно отменять явно). */
-  .addslide__full { display: inline; }
-  .addslide__short { display: none; }
+  /* Рельс снова во всю ширину — ряд действий возвращается в строку и к левому
+     краю (правило 1280 продолжает действовать и здесь, отменяем явно). */
+  /* Рельс снова во всю ширину — возвращаем ряд в одну строку. width/margin
+     гасим явно: правило 1280 действует и здесь (860 < 1280), а зажатые 80px
+     обрезали бы третью кнопку при nowrap. */
+  .slide-acts { flex-wrap: nowrap; justify-content: flex-start;
+    width: auto; margin-inline: 0; }
   #thumbs { flex-direction: row; flex-wrap: wrap; }
   .thumb { width: 264px; }
   .glass-overlay { padding: 24px; }

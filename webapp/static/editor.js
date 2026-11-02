@@ -724,6 +724,10 @@ function goTo(i) {
   // Persist any pending edit to the slide we're leaving BEFORE switching, so the
   // debounced save can't fire later against the new slide (data loss / misroute).
   if (mode === "manual" && i !== current) flushPendingSave();
+  // Уход со слайда закрывает серию его текстовых правок (см. pushTextUndo).
+  // Строго ПОСЛЕ flushPendingSave: тот досохраняет правку и должен попасть
+  // в ещё открытую серию, а не завести ей второй снимок.
+  if (i !== current) textRunIdx = -1;
   current = Math.max(0, Math.min(slides.length - 1, i));
   // Keep the post-reload target aligned with the slide actually shown. Each save
   // calls loadDeck(), whose iframe onload runs goTo(pendingGoTo); if pendingGoTo
@@ -741,7 +745,14 @@ function goTo(i) {
   });
   // Only rebuild the form when the shown slide changed — NOT on the preview
   // reloads that follow each save (those would wipe focus and in-progress rows).
-  if (mode === "manual" && builtFormFor !== current) renderBuilderForm();
+  if (mode === "manual" && builtFormFor !== current) {
+    renderBuilderForm();
+    // §1: добавили или скопировали слайд — курсор сразу в «Заголовок», чтобы
+    // не искать поле мышью. Флаг одноразовый: обычное листание фокус не крадет,
+    // иначе стрелки «вверх/вниз» переставали листать после первого нажатия.
+    if (focusTitleAfterForm) { focusTitleAfterForm = false; focusFirstField(); }
+  }
+  if (mode === "manual") syncHistoryButtons();
   // Контекст слайда рядом с чатом — в режимах, где формы слотов нет.
   if (mode !== "manual") renderChatContext();
 }
@@ -1239,7 +1250,7 @@ chatText.addEventListener("keydown", (e) => {
 
 // Правки/сборка слайдов через чат — фича в разработке. Оставляем панель видимой,
 // но неинтерактивной: серые контролы, курсор-стоп и дружелюбная подсказка при
-// наведении (см. [data-tip] в styles.css). Идемпотентно — можно звать повторно.
+// наведении (data-tip, компонент tooltip.js). Идемпотентно — можно звать повторно.
 const CHAT_EDIT_DISABLED = true;
 const CHAT_DEV_TIP =
   "Чат-ассистент пока на стажировке 🙂";
@@ -1426,6 +1437,32 @@ function tplOf(id) { return catalog.find((t) => t.id === id); }
 // построить ему форму. Предлагать их в пикере при этом нельзя.
 function pickableTemplates() { return catalog.filter((t) => !t.hidden); }
 
+/* Кнопка смены макета (MD 2026-11-02, §4; борд 4823:1920 — подпись «Сменить
+   макет слайда», иконка info справа внутри кнопки).
+
+   Зачем иконка. Смена макета — единственное действие в панели, которое меняет
+   не текст, а раскладку, и часть правок пользователя при этом не переносится.
+   Раньше об этом сообщал только диалог ПОСЛЕ выбора — то есть предупреждение
+   приходило, когда решение уже принято.
+
+   Подсказка называет исход («текст перенесу», «колонки собьются»), а не
+   механизм, и дает оба факта: что уцелеет и что сломается (§6).
+
+   data-tip-place="above" — под кнопкой сразу идет поле «Заголовок», и
+   подсказка его перекрывала: место снизу формально есть, но занято смыслом. */
+const TPL_TIP = "Текст не потеряется — перенесу его в новый макет. Разбивка "
+  + "по колонкам собьется, поправьте ее вручную.";
+
+function changeTplBtnHtml() {
+  return `<button type="button" class="btn btn-ghost btn-sm has-ico" id="changeTpl"`
+    + ` data-tip="${TPL_TIP}" data-tip-place="above">Сменить макет слайда`
+    + `<svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"`
+    + ` stroke="currentColor" stroke-width="2.6" stroke-linecap="round"`
+    + ` stroke-linejoin="round" aria-hidden="true" focusable="false">`
+    + `<circle cx="12" cy="12" r="10"/><path d="M12 17v-5"/>`
+    + `<path d="M12 7h.01"/></svg></button>`;
+}
+
 function renderBuilderForm() {
   const form = byId("builderForm");
   const tplBox = byId("builderTpl");
@@ -1506,7 +1543,7 @@ function renderBuilderForm() {
   const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
   tplBox.innerHTML =
     `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
-    `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
+    changeTplBtnHtml();
   byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplateAsked(tid, kind),
                                                { id: slide.template_id });
 
@@ -1815,7 +1852,7 @@ function renderDiagramPanel(slide) {
   tplBox.innerHTML =
     `<span class="tpl-name">Схема: ${t0 ? t0.display_name : spec.kind || ""}</span>` +
     `<button type="button" class="btn btn-ghost btn-sm" id="changeDgmKind">Сменить тип</button>` +
-    `<button type="button" class="btn btn-ghost btn-sm" id="changeTpl">Сменить макет</button>`;
+    changeTplBtnHtml();
   if (!t0) fetchDgmCatalog().then(() => {   // имя типа догружаем при первом заходе
     const t = dgmType(spec.kind);
     const nameEl = tplBox.querySelector(".tpl-name");
@@ -1849,7 +1886,7 @@ function renderDiagramPanel(slide) {
   }, spec.kind);
 
   form.innerHTML = "";
-  form.appendChild(dgmTextField("Заголовок *", "heading", f.heading, 54, true));
+  form.appendChild(dgmTextField("Заголовок", "heading", f.heading, 54));
   form.appendChild(dgmTextField("Подзаголовок", "subtitle", f.subtitle, 70));
 
   // Подписи, специфичные для типа (meta) — matrix: оси, venn: пересечение
@@ -1971,7 +2008,7 @@ function dgmResetLayoutButton() {
   return reset;
 }
 
-function dgmTextField(labelText, key, value, max, required) {
+function dgmTextField(labelText, key, value, max) {
   const wrap = document.createElement("div");
   wrap.className = "field";
   const label = document.createElement("label");
@@ -1984,23 +2021,12 @@ function dgmTextField(labelText, key, value, max, required) {
   el.addEventListener("input", scheduleSave);
   wrap.appendChild(el);
   wrap.appendChild(charCounter(el, max));
-  // Пустое обязательное поле схема принимает, а шаблон подставляет вместо него
-  // пример («ЗАГОЛОВОК СЛАЙДА»): в панели пусто, на слайде — чужой текст. На
-  // обычных слайдах об этом говорит серверная проверка; здесь её нет — говорим
-  // сами, тем же текстом (errtext: missing_required).
-  if (required) {
-    const msg = document.createElement("div");
-    msg.className = "field-hint field-hint--error";
-    msg.textContent = errText("missing_required");
-    const upd = () => {
-      const empty = !el.value.trim();
-      wrap.classList.toggle("field-error", empty);
-      msg.hidden = !empty;
-    };
-    el.addEventListener("input", upd);
-    upd();
-    wrap.appendChild(msg);
-  }
+  // Проверки «заголовок обязателен» здесь больше нет (MD 2026-11-02, §3). Раньше
+  // пустой заголовок схемы подсвечивался ошибкой, потому что шаблон подставлял
+  // вместо него пример («ЗАГОЛОВОК СЛАЙДА») — в панели пусто, на слайде чужой
+  // текст. Теперь слот title не required, и у заполненного слайда пустой
+  // заголовок рендерится пустым (draft_render: sample=not filled), так что
+  // подставлять нечего и ругаться не на что.
   return wrap;
 }
 
@@ -2502,6 +2528,7 @@ function scheduleSave() {
   clearTimeout(putTimer);
   clearTimeout(saveRetryTimer); // свежий ввод отменяет незавершённую цепочку ретраев
   putTimer = setTimeout(() => saveCurrentSlide(0), 600);
+  syncHistoryButtons();   // есть что отменять уже с первого нажатия
 }
 
 // Run any pending debounced save NOW. Must be called before leaving the current
@@ -2576,6 +2603,11 @@ async function saveCurrentSlide(attempt = 0) {
   // До перезаписи: это ровно то, что сейчас нарисовано в превью — по нему patchPreviewText
   // и решает, можно ли обойтись точечной правкой вместо перезагрузки всей деки.
   const shownContent = slide.content;
+  // Снимок ДО оптимистичной перезаписи (MD §2): структурные действия кладут его
+  // после успеха сервера, а здесь — до, потому что локально правка уже
+  // применена и при неудаче PUT остаётся в плане (её чинит цепочка ретраев).
+  // Отменять надо именно то, что человек видит.
+  pushTextUndo(idx, shownContent);
   slide.content = content; // optimistic local update
   setSaveStatus(attempt ? "retrying" : "saving");
   let r;
@@ -2849,11 +2881,95 @@ function addSlideViaPicker() {
     pushUndo();
     // Мастер «Схема»: сразу материализуем выбранный тип примером (typed-поля).
     if (dgmKind) await applyDiagramKind(at, dgmKind, null);
+    focusTitleAfterForm = true;
     await reloadDraft(at - 1); // переходим на только что добавленный слайд
   });
 }
 byId("addSlide")?.addEventListener("click", addSlideViaPicker);
 byId("builderAdd")?.addEventListener("click", addSlideViaPicker);
+
+/* ---- дублирование слайда (MD 2026-11-02, §2) ---------------------------
+   Отдельной ручки «скопируй слайд» у сервера нет, и заводить ее ради одной
+   кнопки незачем: PUT /api/drafts/{sid} принимает план целиком и валидирует
+   каждый слайд, а копия валидного слайда валидна по построению.
+
+   Копируем через JSON — глубоко. Поверхностный срез делил бы с оригиналом
+   content/fields: правка заголовка на копии переписывала бы и исходный слайд.
+
+   Снимок в undo кладем ПОСЛЕ успешного PUT (как в addSlideViaPicker): иначе
+   отвалившаяся сеть оставляла бы в истории шаг, которого не было, и первая
+   «отмена» откатывала бы предыдущее действие пользователя. */
+async function duplicateSlide() {
+  const btn = byId("dupSlide");
+  if (!isDraft || !draftPlan.slides || !draftPlan.slides.length) return;
+  if (btn && btn.disabled) return;
+  if (btn) btn.disabled = true;
+  try {
+    await flushPendingSave(); // копируем то, что человек видит, а не версию до правки
+    const plan = snapshotPlan();
+    const src = plan.slides[current];
+    if (!src) return;
+    plan.slides.splice(current + 1, 0, JSON.parse(JSON.stringify(src)));
+    let r;
+    try {
+      r = await fetch(U(`/api/drafts/${sessionId}`), {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(plan),
+      });
+    } catch (_) { r = null; }
+    if (!r || !r.ok) { setSaveStatus("error"); return; }
+    pushUndo();            // draftPlan здесь еще прежний — снимок «до копии»
+    draftPlan = await r.json();
+    focusTitleAfterForm = true;
+    await reloadDraft(current + 1);
+  } finally { if (btn) btn.disabled = false; }
+}
+byId("dupSlide")?.addEventListener("click", duplicateSlide);
+// Кнопка ↺ (борд 4895:7218). Отмена сама досохраняет недобитую правку и сама
+// решает, есть ли что откатывать, — обработчику остается её позвать.
+byId("undoBtn")?.addEventListener("click", () => undo());
+
+/* Кнопка «Отменить» неактивна, когда отменять нечего. Без этого она выглядела
+   рабочей и на пустой истории: нажатие ничего не делало, и человек решал, что
+   отмена в сервисе сломана. Подсказку на disabled-кнопке браузер показывает
+   (data-tip ловится делегированием на document), поэтому причина читается. */
+function syncHistoryButtons() {
+  const u = byId("undoBtn");
+  // putTimer != null — текст набран, но снимок ещё не в стеке (debounce 600 мс).
+  // Кнопка обязана быть активной уже сейчас: сам undo() досохранит правку,
+  // прежде чем откатывать. Иначе первые полсекунды после набора отмена
+  // выглядела недоступной ровно там, где она нужнее всего.
+  if (u) u.disabled = !(undoStack.length || putTimer != null);
+  // Дублировать нечего, пока в деке нет слайдов (пустой черновик).
+  const d = byId("dupSlide");
+  if (d) d.disabled = !(isDraft && draftPlan.slides && draftPlan.slides.length);
+}
+
+/* §1: после добавления и дублирования фокус уходит в первое поле формы —
+   «Заголовок». Форма пересобирается не здесь, а в goTo по onload превью,
+   поэтому передаем намерение флагом, а не прямым focus(): в момент вызова
+   полей нового слайда в DOM еще нет. */
+let focusTitleAfterForm = false;
+
+function focusFirstField() {
+  const f = byId("builderForm");
+  if (!f) return;
+  const el = f.querySelector("input:not([type=hidden]):not([disabled]), textarea");
+  if (el) el.focus();
+}
+
+// Клавиатура §1. Берем e.code (как в отмене ниже) — раскладка не важна.
+// Cmd/Ctrl+D в браузере — «добавить закладку», Cmd/Ctrl+Enter в части
+// браузеров отправляет форму: оба дефолта гасим.
+document.addEventListener("keydown", (e) => {
+  if (mode !== "manual") return;
+  if (!(e.metaKey || e.ctrlKey)) return;
+  if (e.code !== "KeyD" && e.code !== "Enter" && e.code !== "NumpadEnter") return;
+  if (e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  if (e.code === "KeyD") duplicateSlide();
+  else addSlideViaPicker();
+});
 // Пустой конструктор: «Начать со структуры» ставит три слайда разом (обложка →
 // пустой → контакты) теми же POST, что одиночное добавление, — undo и
 // перерисовка работают штатно. Тот же скелет сервер даёт при входе с главной
@@ -3132,13 +3248,18 @@ function moveThumbDom(from, to0) {
   });
 }
 
-/* ---- отмена/повтор структурных действий (Cmd/Ctrl+Z, Shift+Z / Ctrl+Y) ----
-   Снимок всего плана кладётся в стек ПЕРЕД каждым структурным изменением
-   (добавить / удалить / переместить / сменить макет). Отмена восстанавливает
-   снимок целиком через PUT /api/drafts/{sid}. Набор текста в полях сюда не
-   входит — там работает встроенная отмена браузера, поэтому обработчик
-   пропускает нажатия, когда фокус в поле ввода. История живёт в открытой
-   вкладке (перезагрузку страницы не переживает). */
+/* ---- отмена/повтор (Cmd/Ctrl+Z, Shift+Z / Ctrl+Y, кнопка ↺ в ряду действий)
+   Снимок всего плана кладётся в стек ПЕРЕД каждым изменением (добавить /
+   дублировать / удалить / переместить / сменить макет / правка текста). Отмена
+   восстанавливает снимок целиком через PUT /api/drafts/{sid}. История живёт в
+   открытой вкладке (перезагрузку страницы не переживает).
+
+   Правка текста попала в историю 2026-11-02 (MD §2): раньше её тут не было, и
+   отмена работала только на структуре. Внутри поля отмену по-прежнему отдаём
+   браузеру — он откатывает по символам, и это лучше; но кнопка ↺ и Cmd+Z с
+   фокусом ВНЕ поля теперь откатывают и набранный текст, иначе кнопка врала:
+   выглядела активной после правки заголовка и откатывала не её, а предыдущее
+   структурное действие. */
 const HISTORY_CAP = 50;
 let undoStack = [];
 let redoStack = [];
@@ -3150,10 +3271,38 @@ function pushUndo() {
   undoStack.push(snapshotPlan());
   if (undoStack.length > HISTORY_CAP) undoStack.shift();
   redoStack = []; // новое действие обнуляет ветку повтора
+  textRunIdx = -1; // структурное действие закрывает серию текстовых правок
+  syncHistoryButtons();
+}
+
+/* Серия текстовых правок одного слайда = ОДИН шаг истории.
+   Автосейв срабатывает через 600 мс после последнего нажатия, поэтому абзац,
+   набранный с паузами на размышление, дал бы десяток снимков, и чтобы вернуть
+   заголовок пришлось бы жать ↺ десять раз, каждый раз перезагружая превью.
+   Серия закрывается уходом на другой слайд (goTo) и любым структурным
+   действием (pushUndo) — то есть ровно там, где человек считает правку
+   законченной.
+
+   `before` — content слайда ДО правки (shownContent в saveCurrentSlide): в сам
+   снимок кладём его, потому что snapshotPlan() зовётся уже после того, как
+   форма собрала новое содержимое. */
+let textRunIdx = -1;
+
+function pushTextUndo(idx, before) {
+  if (textRunIdx === idx) return;        // снимок начала серии уже в стеке
+  const snap = snapshotPlan();
+  if (!snap.slides || !snap.slides[idx]) return;
+  snap.slides[idx].content = JSON.parse(JSON.stringify(before || {}));
+  undoStack.push(snap);
+  if (undoStack.length > HISTORY_CAP) undoStack.shift();
+  redoStack = [];
+  textRunIdx = idx;
+  syncHistoryButtons();
 }
 
 async function applyPlan(snapshot) {
   clearTimeout(putTimer); putTimer = null; // снимок заменяет план целиком
+  textRunIdx = -1;  // откат закрывает серию: следующая правка — новый шаг
   let r;
   try {
     r = await fetch(U(`/api/drafts/${sessionId}`), {
@@ -3169,9 +3318,14 @@ async function applyPlan(snapshot) {
 }
 
 async function undo() {
-  if (historyBusy || !undoStack.length) return;
+  if (historyBusy) return;
   historyBusy = true;
   try {
+    // Недосохранённая правка (debounce 600 мс) в историю ещё не попала. Без
+    // этого ↺ сразу после набора откатывал ПРЕДЫДУЩЕЕ действие, а набранный
+    // текст оставался на месте — со стороны автора «отмена отменила не то».
+    await flushPendingSave();
+    if (!undoStack.length) return;
     const prev = undoStack[undoStack.length - 1];
     const cur = snapshotPlan();
     if (await applyPlan(prev)) {
@@ -3179,7 +3333,7 @@ async function undo() {
       redoStack.push(cur);
       if (redoStack.length > HISTORY_CAP) redoStack.shift();
     }
-  } finally { historyBusy = false; }
+  } finally { historyBusy = false; syncHistoryButtons(); }
 }
 
 async function redo() {
@@ -3193,7 +3347,7 @@ async function redo() {
       undoStack.push(cur);
       if (undoStack.length > HISTORY_CAP) undoStack.shift();
     }
-  } finally { historyBusy = false; }
+  } finally { historyBusy = false; syncHistoryButtons(); }
 }
 
 // Горячие клавиши только в черновике (ручной/чат‑режим); в собранной деке плана
@@ -3444,7 +3598,10 @@ async function applyDiagramKind(index1, kind, prev) {
 
 async function initDraftBuilder() {
   if (mode === "manual") {
-    byId("addSlide")?.classList.remove("hidden");
+    // Показываем всю группу действий (+ / дублировать / отменить), а не одну
+    // кнопку: на борде (4892:5392) это один блок над лентой.
+    byId("slideActs")?.classList.remove("hidden");
+    syncHistoryButtons();
     byId("builder")?.classList.remove("hidden");
     await ensureCatalog();   // тот же промис, что ждёт клик по «+ Добавить слайд»
     fetchDgmCatalog(); // типы схем — заранее: имя типа в панели, пикер без ожидания
