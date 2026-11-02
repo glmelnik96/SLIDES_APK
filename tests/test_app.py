@@ -84,12 +84,18 @@ def test_editor_in_app_links_carry_gateway_prefix():
 def test_index_has_two_entry_cards(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
-        # two equal entry zones: upload (glass build) + manual constructor;
-        # the chat teaser card is gone from the page entirely (2026-08-21)
-        assert 'id="uploadFlow"' in html and 'id="createGlass"' in html and 'id="drop"' in html
+        # Верхний этаж главной (борд 4823:1818) — одна дорога: дропзона со
+        # своим «Выбрать файл» и кнопка сборки. Ручной конструктор остался
+        # вторым, подчинённым входом — inline-ссылкой, а не равной картой.
+        # Чат-карта-завлекалка с главной убрана целиком (2026-08-21).
+        assert 'id="drop"' in html and 'id="dropPick"' in html
+        assert 'id="createGlass"' in html
         assert 'id="create"' not in html
         assert 'id="openManual"' in html
         assert 'id="openChat"' not in html
+        # Нижний этаж — лента работ: плашка идущей сборки и потолок списка.
+        # Оба узла рисует app.js, и без них карточки некуда складывать.
+        assert 'id="buildPlate"' in html and 'id="feedMore"' in html
 
 
 def test_index_has_survey_banner(monkeypatch, tmp_path):
@@ -117,18 +123,30 @@ def test_index_has_survey_banner(monkeypatch, tmp_path):
     assert 'id="surveyLater"' in html, "отказаться от опроса стало нечем"
 
 
-def test_index_has_prep_cards(monkeypatch, tmp_path):
-    """Интро несёт карточку промпта для LLM (копирование + раскрываемый текст,
-    запрет LLM-приписок) и ссылку на скилл В ОПИСАНИИ сверху («тут соберёте в
-    сервисе, а со скиллом — сами»), выше зоны загрузки."""
+def test_index_has_prompt_lightbox(monkeypatch, tmp_path):
+    """Экран 02 «Как подготовить документ» — лайтбокс, а не голый <pre>.
+
+    Три инварианта, которые легко потерять правкой разметки:
+    1) инструкция из трёх шагов стоит ПЕРЕД текстом промпта — иначе человек
+       снова встречает простыню на 2.5 тысячи знаков без объяснения, что с ней
+       делать;
+    2) сам промпт на месте вместе с двумя пунктами, из-за которых он
+       переписывался (потолок разделов и запрет LLM-приписок);
+    3) ссылка на скилл живёт ВНУТРИ лайтбокса — вторая дорога подготовки рядом
+       с первой, а не над дропзоной, где её встречал тот, кто ещё не понял,
+       зачем готовить документ.
+    """
     with _client(monkeypatch, tmp_path) as c:
         html = c.get("/").text
-        assert 'id="copyPrompt"' in html and 'id="promptText"' in html
+        assert 'id="promptBox"' in html and 'id="promptText"' in html
+        assert 'id="promptTitle"' in html and "Как подготовить документ" in html
+        assert html.count('class="lb-step"') == 3
+        assert html.index('class="lb-steps"') < html.index('id="promptText"')
+        assert 'id="copyPrompt"' in html
         assert "только сам markdown" in html  # пункт «без сообщений от нейронки»
         assert "10–20 разделов" in html
-        # скилл — ссылка в верхнем описании, до точек входа
         assert 'id="skillDownload"' in html
-        assert html.index('id="skillDownload"') < html.index('id="uploadFlow"')
+        assert html.index('id="promptBox"') < html.index('id="skillDownload"')
 
 
 def test_download_skill_requires_auth(monkeypatch, tmp_path):

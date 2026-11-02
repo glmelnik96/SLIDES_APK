@@ -453,10 +453,19 @@ body.is-tool .lightbox { position: fixed; inset: 0; z-index: 70; display: flex;
   align-items: center; justify-content: center; padding: 24px; }
 body.is-tool .lightbox__backdrop { position: absolute; inset: 0;
   background: var(--color-scrim); }
+/* Панель — КАРТОЧКА Hub Light: лист, хайрлайн, радиус 16, тень MD (борд
+   4823:1982). Тёмный канон рисовал её прямоугольным куском чернил без
+   радиуса и без тени: на тёмной странице слой отделяла сама светимость, и
+   этого хватало. На белом листе белая панель без тени и радиуса сливается
+   с затемнением в одну плоскость — модалка перестаёт читаться СЛОЕМ, и
+   остаётся непонятным, что страница под ней жива и ждёт.
+   Хайрлайн берём inset-тенью, а не border: иначе рамка добавила бы по
+   пикселю к 864 и сломала бы арифметику 24+814+24. */
 body.is-tool .lightbox__panel { position: relative; display: grid;
   grid-template-columns: 1fr 264px; gap: 24px; align-items: start;
   width: min(1176px, 100%); padding: 24px; background: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--lp-line-2); }
 body.is-tool .lightbox__panel img { display: block; width: 100%;
   max-height: calc(100vh - 96px); object-fit: contain; border-radius: var(--radius-lg); }
 body.is-tool .lightbox__side { display: flex; flex-direction: column; gap: 24px;

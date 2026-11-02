@@ -23,7 +23,10 @@ INDEX = Path(__file__).resolve().parents[1] / "webapp" / "static" / "index.html"
 
 def _prompt() -> str:
     page = INDEX.read_text(encoding="utf-8")
-    body = re.search(r'<pre class="lb-pre" id="promptText">(.*?)</pre>', page, re.S)
+    # Атрибуты <pre> не перечисляем: у поля промпта их уже четыре (класс, id,
+    # tabindex, role с aria-labelledby), и порядок у них никакой роли не
+    # играет. Якорь — только id="promptText".
+    body = re.search(r'<pre[^>]*\bid="promptText"[^>]*>(.*?)</pre>', page, re.S)
     assert body, "в index.html нет #promptText"
     return html.unescape(body.group(1))
 

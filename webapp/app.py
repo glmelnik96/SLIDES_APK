@@ -311,6 +311,55 @@ def _plan_title(session_id: str) -> str | None:
         return None
 
 
+# Сколько слайдов в работе. Это главный факт строки на главной (борд 4823:1818:
+# «12 слайдов · хранится ещё 18 ч»): срок хранения отвечает, сколько работа ещё
+# проживёт, а размер — что это вообще за работа. Без него строки отличались
+# только именем файла.
+#
+# Правда лежит в разных местах по видам работ. У черновика это plan.json
+# (DeckPlan-as-truth), у собранной деки плана уже нет — он снимается при сборке
+# (см. комментарий у /api/drafts/{id}/build), и считать приходится по deck.html.
+# Поэтому сначала план, потом дека: порядок, а не вид работы, — список
+# смешанный, и вид в нём меняется по ходу жизни одной и той же сессии.
+_SLIDES_CACHE: dict[str, tuple[float, int, int]] = {}
+
+
+def _deck_slides(session_id: str) -> int | None:
+    """Счёт слайдов по deck.html, с памятью по (mtime, размер).
+
+    Файл деки — сотни килобайт, а лента главной опрашивается раз в две секунды
+    и на каждой работе: без памяти один открытый список перечитывал бы мегабайты
+    в секунду. Ключ — отпечаток файла, а не время жизни записи: правка слайда
+    меняет mtime, и счёт пересчитывается сразу, а холостой поллинг файла не
+    касается вовсе.
+    """
+    path = deck_edit.deck_path(session_id)
+    try:
+        st = path.stat()
+    except OSError:                      # деки ещё (или уже) нет
+        _SLIDES_CACHE.pop(session_id, None)
+        return None
+    hit = _SLIDES_CACHE.get(session_id)
+    if hit is not None and hit[0] == st.st_mtime and hit[1] == st.st_size:
+        return hit[2]
+    try:
+        n = deck_edit.count_slides(path.read_text("utf-8"))
+    except OSError:                      # гонка с уборкой по сроку хранения
+        return None
+    _SLIDES_CACHE[session_id] = (st.st_mtime, st.st_size, n)
+    return n
+
+
+def _job_slides(session_id: str) -> int | None:
+    try:
+        plan = draft.load_plan(session_id)
+    except Exception:  # noqa: BLE001 — нет плана или он битый → смотрим деку
+        plan = None
+    if plan is not None and plan.slides:
+        return len(plan.slides)
+    return _deck_slides(session_id)
+
+
 @app.get("/api/drafts")
 async def list_drafts(request: Request,
                       user=Depends(get_current_user)) -> JSONResponse:
@@ -321,11 +370,13 @@ async def list_drafts(request: Request,
     работа в ленте читалась «Без названия» даже после полной сборки."""
     async with request.app.state.sessionmaker() as s:
         jobs = await jobs_repo.list_drafts_for_user(s, user.id)
-    titles = await run_in_threadpool(
-        lambda: {j.session_id: _plan_title(j.session_id) for j in jobs})
+    meta = await run_in_threadpool(
+        lambda: {j.session_id: (_plan_title(j.session_id),
+                                _job_slides(j.session_id)) for j in jobs})
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode,
-         "display_name": titles.get(j.session_id),
+         "display_name": meta.get(j.session_id, (None, None))[0],
+         "slides": meta.get(j.session_id, (None, None))[1],
          "created_at": j.created_at.isoformat() if j.created_at else None}
         for j in jobs
     ])
@@ -1460,16 +1511,27 @@ async def get_history(request: Request,
     async with request.app.state.sessionmaker() as s:
         jobs = await jobs_repo.list_for_user(s, user.id)
 
-    def _draft_title(j) -> str | None:
-        """Deck name for constructor/chat drafts (plan.title); None for uploads
-        so the client falls back to the source filename."""
-        return _plan_title(j.session_id) if j.kind == "draft" else None
+    def _meta(j) -> tuple[str | None, int | None]:
+        """Имя и размер работы — обе величины с диска, поэтому читаются вместе.
+
+        Имя: plan.title для черновиков конструктора/чата; None для загрузок,
+        чтобы клиент подставил имя исходного файла.
+        Размер: число слайдов (борд 4823:1818) — считается для любой работы.
+        """
+        return (_plan_title(j.session_id) if j.kind == "draft" else None,
+                _job_slides(j.session_id))
+
+    # Чтение с диска на каждую работу — в пул: обработчик асинхронный, и
+    # синхронный stat/read в нём вставал бы поперёк цикла событий.
+    metas = await run_in_threadpool(
+        lambda: {j.session_id: _meta(j) for j in jobs})
 
     return JSONResponse([
         {"id": j.session_id, "mode": j.mode, "kind": j.kind,
          "source_filename": j.source_filename, "status": j.status,
          "error": j.error,
-         "display_name": _draft_title(j),
+         "display_name": metas.get(j.session_id, (None, None))[0],
+         "slides": metas.get(j.session_id, (None, None))[1],
          "created_at": j.created_at.isoformat() if j.created_at else None,
          # Расход прогона для строки статистики (None у старых строк и исходов
          # без LLM — фронт просто не рисует соответствующие части).

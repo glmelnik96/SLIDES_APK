@@ -84,11 +84,51 @@ function setStartEnabled(on) {
   });
 }
 
+/* Дропзона говорит двумя строками (борд 4823:1807 / 4823:2081), и обе меняются
+   вместе: верхняя называет то, что лежит внутри, нижняя его уточняет, а кирпич
+   справа — глагол, которым это меняют.
+
+     пусто:   «Перетащите файл или выберите» / «.md · .txt · .docx · .pptx»
+              кирпич «Выбрать файл»
+     выбран:  «Итоги_квартала.pptx»          / «2,4 МБ · PowerPoint»
+              кирпич «Заменить файл»
+
+   Одно и то же место, разный смысл — и ни одной строки, которая осталась бы
+   висеть от прошлого состояния. Прежняя редакция писала в верхнюю строку
+   «Файл: имя.pptx», а перечень форматов под ней не трогала вовсе: после выбора
+   .pptx дропзона продолжала перечислять, что умеет читать, — то есть отвечала
+   на вопрос, который человек уже закрыл. */
+const FILE_KIND = {
+  ".md": "Markdown", ".txt": "Текст",
+  ".docx": "Word", ".pptx": "PowerPoint",
+};
+// Размер округляем до десятых и только в МБ/КБ: «2 458 912 байт» — не ответ на
+// вопрос «не слишком ли он большой», а «2,4 МБ» — ответ.
+function fileSize(bytes) {
+  if (!(bytes > 0)) return "";
+  if (bytes < 1024 * 1024)
+    return Math.max(1, Math.round(bytes / 1024)).toLocaleString("ru-RU") + " КБ";
+  return (bytes / (1024 * 1024)).toLocaleString("ru-RU", {
+    minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " МБ";
+}
+function fileKind(name) {
+  const m = String(name).match(/\.[a-z0-9]+$/i);
+  return (m && FILE_KIND[m[0].toLowerCase()]) || "";
+}
+function dropSay(name, hint, pick) {
+  $("#dropText").textContent = name;
+  const h = $("#dropHint");
+  if (h) h.textContent = hint;
+  const p = $("#dropPick");
+  if (p) p.textContent = pick;
+}
+
 function resetFile() {
   selectedFile = null;
   fileInput.value = "";
   drop.classList.remove("has-file");
-  $("#dropText").textContent = "Перетащите файл или выберите";
+  dropSay("Перетащите файл или выберите", ".md · .txt · .docx · .pptx",
+          "Выбрать файл");
   setStartEnabled(false);
   const hint = $("#createHint");        // Г§7 — объясняем, чего не хватает
   if (hint) hint.hidden = false;
@@ -97,7 +137,11 @@ function resetFile() {
 function setFile(file) {
   selectedFile = file;
   drop.classList.add("has-file");
-  $("#dropText").textContent = "Файл: " + file.name;
+  // Размер и вид — через точку-разделитель, как в мете работы: одна и та же
+  // строка-перечисление на странице набирается одним приёмом.
+  dropSay(file.name,
+          [fileSize(file.size), fileKind(file.name)].filter(Boolean).join(" · "),
+          "Заменить файл");
   setStartEnabled(true);
   const hint = $("#createHint");        // Г§7 — файл выбран → причина исчезла
   if (hint) hint.hidden = true;
@@ -172,15 +216,29 @@ function retentionLeft(it) {
    в DOM keyed-реконсиляцией (чтобы поллинг не стирал раскрытый лог активной
    сборки и не мигал).
    ============================================================================ */
-const CHIPS = [
-  { key: "all", label: "Все" },
-  { key: "work", label: "В работе" },   // running + queued
-  { key: "draft", label: "Черновики" },
-  { key: "done", label: "Готовые" },
-  { key: "fail", label: "Ошибки" },     // failed + cancelled
-];
-let activeFilter = "all";
-let feedTotal = 0;                       // всего карточек (до фильтра) — для empty-state
+/* СЕГМЕНТНИКА ФИЛЬТРОВ ЗДЕСЬ БОЛЬШЕ НЕТ. На его месте стояли пять чипов встык
+   («Все · В работе · Черновики · Готовые · Ошибки»), и снят он по трём
+   причинам, каждой из которых хватило бы по отдельности:
+
+   • в Foundations Hub Light (4783:107) сегментного контрола не существует —
+     собирать его пришлось бы из кирпичей, то есть выдумывать компонент, чтобы
+     повторить экран, которого на борде нет;
+   • фильтр по состоянию отвечал на вопрос, которого у человека нет. Список
+     отсортирован так, что идущая сборка всегда первая, а черновики — выше
+     готовых; «показать только ошибки» нужно, когда работ сотни, а их тут
+     максимум столько, сколько влезло в сутки хранения;
+   • пять чипов с числами читались пятью кнопками и перетягивали внимание
+     с самих работ — на борде шапка раздела несёт ровно один орган, и это
+     очистка истории.
+
+   Вместо фильтра борд (4879:5145) даёт ПОТОЛОК СПИСКА и ссылку «Все
+   презентации (7)». Отдельной страницы списка в сервисе нет и заводить её
+   незачем — лента и есть список, поэтому ссылка разворачивает хвост на месте.
+   Потолок 4: два ряда по две карточки, то есть ровно столько, сколько видно
+   в кадре вместе с шапкой раздела. */
+const FEED_CAP = 4;
+let feedExpanded = false;                // развёрнут ли хвост списка
+let feedTotal = 0;                       // всего карточек — для empty-state и потолка
 let feedActive = 0;                      // из них идущих (running+queued) — их очистка не трогает
 const feedCards = new Map();             // id -> элемент карточки (реконсиляция)
 const feedItemById = new Map();          // id -> нормализованный элемент данных (для live-перерисовки)
@@ -213,6 +271,7 @@ function normActive(a) {
 function normHistory(h) {
   return {
     id: h.id, mode: h.mode, source_filename: h.source_filename, display_name: h.display_name,
+    slides: h.slides ?? null,
     state: h.status, active: false, ts: h.created_at ? Date.parse(h.created_at) : 0,
     created_at: h.created_at, error: h.error, kind: h.kind,
     in_tokens: h.in_tokens, out_tokens: h.out_tokens, cost_rub: h.cost_rub, duration_ms: h.duration_ms,
@@ -221,18 +280,11 @@ function normHistory(h) {
 function normDraft(d) {
   return {
     id: d.id, mode: d.mode, source_filename: null, display_name: d.display_name || null, state: "draft",
+    slides: d.slides ?? null,
     active: false, ts: d.created_at ? Date.parse(d.created_at) : 0, created_at: d.created_at, kind: "draft",
   };
 }
 
-function inFilter(state, key) {
-  if (key === "all") return true;
-  if (key === "work") return state === "running" || state === "queued";
-  if (key === "draft") return state === "draft";
-  if (key === "done") return state === "done";
-  if (key === "fail") return state === "failed" || state === "cancelled";
-  return true;
-}
 // Активные сверху (running перед queued), остальное — по времени убыванием.
 function feedSort(a, b) {
   const ga = a.active ? 0 : 1, gb = b.active ? 0 : 1;
@@ -269,12 +321,32 @@ function estSegment(it) {
   if (!e) return "";
   return e.warn ? `<span class="est-warn">${esc(e.text)}</span>` : esc(e.text);
 }
-// Инструмент вернулся первым сегментом меты: марки в углу плитки больше нет —
-// плитки больше нет вообще, работа теперь строка, и назвать инструмент негде.
+/* Мета работы. Борд (4823:1820) задаёт её дословно: «12 слайдов · хранится ещё
+   18 ч» — РАЗМЕР работы и её ОСТАТОК ЖИЗНИ, в этом порядке.
+
+   Размер стоит первым не по алфавиту. Без него строки готовых работ отличались
+   друг от друга только именем файла: «Из файла · хранится еще 18 ч» писалось
+   под каждой, то есть мета ничего не говорила о самой работе. Число слайдов —
+   единственный факт, который отвечает «что это вообще за дека»; он приходит
+   полем slides из /api/history и /api/drafts (см. _job_slides в app.py).
+
+   Инструмент («Из файла», «Конструктор», «Чат-ассистент») съехал в хвост.
+   Он был первым сегментом, пока у работы не было ни превью, ни размера, —
+   теперь кадр деки отвечает «откуда она» быстрее любой подписи, а имя
+   инструмента интересно только тогда, когда в списке лежат работы из разных.
+
+   Расход прогона (длительность, токены, цена) остаётся в хвосте готовой
+   работы: это не про деку, а про прогон, и читают его единицы. */
+function slidesSeg(it) {
+  const n = it.slides;
+  if (!(n > 0)) return "";
+  return n + " " + plural(n, "слайд", "слайда", "слайдов");
+}
 function cardMeta(it) {
   const SEP = `<span class="sep">·</span>`;
   const tool = esc(toolTitle(it.mode));
   const ttl = esc(retentionLeft(it));
+  const sl = slidesSeg(it);
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
     const detail = liveDetail[it.id] || STAGE_LABEL[it.stage] || "Идет сборка";
@@ -290,32 +362,47 @@ function cardMeta(it) {
     return seg.join(SEP);
   }
   if (it.state === "done") {
-    const seg = [tool];
+    const seg = [];
+    if (sl) seg.push(sl);               // борд: размер работы — первым
     if (ttl) seg.push(ttl);
+    seg.push(tool);
     // v5 запретил emoji: пиктограммы ⏱/↓ заменены словами-подписями
     if (it.duration_ms != null) seg.push(`за ${histDur(it.duration_ms)}`);
     if (it.out_tokens != null) seg.push(`${histInt(it.out_tokens)} токенов`);
     if (it.cost_rub != null) seg.push(`<span class="cost">≈ ${histRub(it.cost_rub)}</span>`);
     return seg.join(SEP);
   }
-  if (it.state === "draft") return [tool, ttl].filter(Boolean).join(SEP);
+  if (it.state === "draft") return [sl, ttl, tool].filter(Boolean).join(SEP);
   if (it.state === "failed") return [`<span class="err">${esc(it.error || "Ошибка сборки")}</span>`, ttl].filter(Boolean).join(SEP);
   if (it.state === "cancelled") return ["Остановлено вручную", ttl].filter(Boolean).join(SEP);
   return "";
 }
-// Кнопки карточки — только на реально существующие эндпоинты (без «мёртвых»):
-// готовая → «Открыть» (редактор); черновик → «Продолжить» + «Удалить»;
-// сбой/отмена черновика → то же; сбой загрузки → «Повторить» (снова через загрузку);
-// активная → «Остановить».
+/* Действия работы. Борд (4823:1819) ставит три кирпича: «Скачать» ·
+   «Посмотреть» · «Редактировать» — и это ровно те три вещи, которые с готовой
+   декой делают. Прежняя редакция давала одну кнопку «Открыть» в редактор, то
+   есть на любой вопрос отвечала «идите править»: чтобы просто скачать файл,
+   надо было сначала войти в редактор и найти там меню экспорта.
+
+   Разница между «Посмотреть» и «Редактировать» — это разница экранов 05 и 06
+   на борде: просмотр листает деку и ничего не меняет, редактор открывает
+   рельс, пикер макетов и агента. Один адрес, разный режим (&view=1), — экран
+   05 как отдельный маршрут появится вместе со своей задачей, и до тех
+   пор оба кирпича честно ведут в один редактор.
+
+   Три кирпича только у ГОТОВОЙ работы. У идущей сборки действие одно —
+   остановить; у черновика — продолжить; у сорванной — повторить. Рисовать там
+   «Скачать» значило бы обещать файл, которого нет. */
 function cardActions(it) {
   if (it.state === "running" || it.state === "queued")
     return `<button type="button" class="t-btn" data-stop="${it.id}">Остановить</button>`;
   if (it.state === "done")
-    return `<a class="t-btn t-btn--key" href="${U(`/editor?session=${it.id}`)}">Открыть</a>`;
-  // Удаление черновика живёт в углу плитки (.work__del), поэтому текстовой
+    return `<button type="button" class="t-btn" data-dl="${it.id}">Скачать</button>` +
+      `<a class="t-btn" href="${U(`/editor?session=${it.id}&view=1`)}">Посмотреть</a>` +
+      `<a class="t-btn" href="${U(`/editor?session=${it.id}`)}">Редактировать</a>`;
+  // Удаление черновика живёт отдельной кнопкой (.work__del), поэтому текстовой
   // кнопки «Удалить» здесь больше нет — иначе одно действие стояло бы дважды.
   if (isDraftLike(it))
-    return `<a class="t-btn t-btn--key" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>`;
+    return `<a class="t-btn" href="${U(`/editor?session=${it.id}&mode=${it.mode}`)}">Продолжить</a>`;
   if (it.state === "failed" || it.state === "cancelled")
     return `<button type="button" class="t-btn" data-retry="${it.id}">Повторить</button>`;
   return "";
@@ -323,6 +410,38 @@ function cardActions(it) {
 function isDraftLike(it) {
   return it.state === "draft" ||
     ((it.state === "failed" || it.state === "cancelled") && it.kind === "draft");
+}
+
+/* ---- кадр деки в карточке (борд 4823:1818, превью 192×108) -----------------
+   Деку рисует настоящий iframe на /api/jobs/{sid}/deck?slide=1 — тот же адрес,
+   которым живут миниатюры рельса в редакторе. Второго пути отрисовки слайда
+   в сервисе нет, и заводить его нельзя: витрина и редактор обязаны показывать
+   одно и то же, иначе кадр на главной врёт о содержимом файла.
+
+   Кадр есть только у ГОТОВОЙ работы. У черновика deck.html — заглушка
+   «Добавьте слайд», у идущей сборки его ещё нет, у сорванной не будет. Во всех
+   этих случаях на месте кадра стоит пустой прямоугольник заливки: надпись
+   «нет превью» сообщала бы об ошибке там, где её нет.
+
+   src проставляется ОДИН РАЗ на карточку и только когда он меняется: лента
+   опрашивается раз в две секунды, и переприсваивание src на каждом тике
+   перезагружало бы по iframe'у на каждую работу — страница мигала бы декой
+   дважды в секунду. Отсюда и dataset.src как память о том, что уже загружено. */
+function deckFrame(prev, it) {
+  const want = it.state === "done" ? U(`/api/jobs/${it.id}/deck?slide=1`) : "";
+  if (prev.dataset.src === want) return;
+  prev.dataset.src = want;
+  prev.classList.toggle("work__prev--blank", !want);
+  if (!want) { prev.innerHTML = ""; return; }
+  const f = document.createElement("iframe");
+  // Кадр — картинка, а не документ: ни скриптов, ни навигации внутри него
+  // не нужно, и выключены они до загрузки, а не после.
+  f.setAttribute("sandbox", "");
+  f.setAttribute("loading", "lazy");
+  f.setAttribute("tabindex", "-1");
+  f.setAttribute("aria-hidden", "true");
+  f.src = want;
+  prev.replaceChildren(f);
 }
 
 function updateCard(card, it) {
@@ -333,12 +452,13 @@ function updateCard(card, it) {
   card.classList.toggle("work--failed", it.state === "failed" || it.state === "cancelled");
   const np = nameParts(it);
   const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
+  deckFrame(card.querySelector(".work__prev"), it);
   card.querySelector(".work__cap").innerHTML =
     `${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}`;
   card.querySelector(".work__state").textContent = stateLine(it);
   card.querySelector(".work__meta").innerHTML = cardMeta(it);
-  // Крестик и полоска живут в хвосте строки вместе с действием: угла, в который
-  // их вешала плитка, у строки нет.
+  // Крестик и полоска живут в ряду действий: угла, в который их вешала плитка,
+  // у карточки с радиусом нет — кнопка села бы на скругление.
   card.querySelector(".work__acts").innerHTML =
     cardActions(it) +
     (isDraftLike(it)
@@ -356,12 +476,6 @@ function updateCard(card, it) {
   }
 }
 
-function renderChips(counts) {
-  $("#feedChips").innerHTML = CHIPS.map((c) =>
-    `<button type="button" class="chip${activeFilter === c.key ? " is-active" : ""}" data-filter="${c.key}">` +
-    `${c.label} <span class="n">${counts[c.key] || 0}</span></button>`).join("");
-}
-
 function renderFeed(items) {
   const feed = $("#feed");
   feedItemById.clear();
@@ -375,11 +489,18 @@ function renderFeed(items) {
       card = document.createElement("article");
       card.className = "work";
       card.dataset.id = it.id;
+      // Кадр деки — слева, текст работы — справа (борд 4823:1818). Состояние,
+      // мета и действия лежат внутри текстовой половины: это всё ответы на
+      // «что с этой работой», и они обязаны стоять под её именем, а не
+      // разбегаться по карточке.
       card.innerHTML =
-        `<p class="work__cap"></p>` +
-        `<p class="work__state"></p>` +
-        `<p class="work__meta"></p>` +
-        `<div class="work__acts"></div>` +
+        `<div class="work__prev work__prev--blank"></div>` +
+        `<div class="work__text">` +
+          `<p class="work__cap"></p>` +
+          `<p class="work__state"></p>` +
+          `<p class="work__meta"></p>` +
+          `<div class="work__acts"></div>` +
+        `</div>` +
         `<div class="work__log">` +
           `<div class="work__logstage"></div>` +
           `<div class="work__hb"></div>` +
@@ -413,33 +534,63 @@ async function loadFeed() {
   for (const a of active) byId.set(a.session_id, normActive(a));  // живая запись перекрывает
   const items = [...byId.values()];
   feedTotal = items.length;
-  const counts = { all: items.length, work: 0, draft: 0, done: 0, fail: 0 };
-  for (const it of items) {
-    if (it.state === "running" || it.state === "queued") counts.work++;
-    else if (it.state === "draft") counts.draft++;
-    else if (it.state === "done") counts.done++;
-    else if (it.state === "failed" || it.state === "cancelled") counts.fail++;
-  }
-  feedActive = counts.work;
-  renderChips(counts);
+  feedActive = items.filter(
+    (it) => it.state === "running" || it.state === "queued").length;
   items.sort(feedSort);
-  renderFeed(items.filter((it) => inFilter(it.state, activeFilter)));
+  // Потолок списка. Идущие сборки в него не упираются НИКОГДА: плашка выше
+  // обещает «она первая в списке», и спрятать её под «Все презентации» значило
+  // бы соврать. Поэтому режется только хвост из неактивных.
+  renderFeed(feedExpanded ? items
+    : items.slice(0, Math.max(FEED_CAP, feedActive)));
+  updateBuildPlate(items);
   updateEmptyState();
 }
 
-// Рама ленты не прячется никогда: она и есть поверхность страницы, а пустоту
-// внутри неё держит живой чертёж. Меняются только счётчик и одна служебная
-// строка на месте первого ряда плиток.
+/* Плашка идущей сборки (борд 4857:6876). Показывается по факту активных работ,
+   а не по факту нажатия кнопки: сборка могла быть запущена в другой вкладке
+   или пережить перезагрузку страницы, и в обоих случаях человек должен увидеть,
+   что она идёт.
+
+   Слово про количество во множественном числе собирается, а не дописывается
+   строкой: «Собираю 2 презентации» и «Собираю 5 презентаций» — разные падежи,
+   и на тройке «презентации» верно случайно. */
+function updateBuildPlate(items) {
+  const plate = $("#buildPlate");
+  if (!plate) return;
+  const n = items.filter(
+    (it) => it.state === "running" || it.state === "queued").length;
+  plate.hidden = n === 0;
+  if (!n) return;
+  const txt = $("#buildPlateText");
+  if (!txt) return;
+  txt.textContent = n === 1
+    ? "Собираю презентацию — она первая в списке"
+    : `Собираю ${n} ${plural(n, "презентацию", "презентации", "презентаций")}` +
+      " — они первые в списке";
+}
+
+/* Пустая лента, подвал про хранение и ссылка «Все презентации».
+
+   Ссылка знает ДВА числа и показывает оба по очереди: свёрнутая говорит, сколько
+   работ всего («Все презентации (7)» — борд 4823:1822), развёрнутая предлагает
+   вернуть потолок («Свернуть»). Прятать её, когда работ ровно по потолку, тоже
+   обязательно: «Все презентации (4)» под списком из четырёх работ — обещание
+   без содержания. */
 function updateEmptyState() {
   const shown = $("#feed").children.length;
-  const cnt = $("#feedCount");
-  if (cnt) cnt.textContent = feedTotal;
   const empty = $("#feedEmpty");
   empty.hidden = shown > 0;
-  empty.textContent = feedTotal === 0
-    ? "Презентаций пока нет"
-    : "В этой категории пока пусто";
+  empty.textContent = "Презентаций пока нет";
   $("#feedFoot").hidden = feedTotal === 0;
+
+  const more = $("#feedMore");
+  if (!more) return;
+  const cap = Math.max(FEED_CAP, feedActive);
+  more.hidden = feedTotal <= cap;
+  more.setAttribute("aria-expanded", feedExpanded ? "true" : "false");
+  const label = $("#feedMoreLabel");
+  if (label) label.textContent = feedExpanded
+    ? "Свернуть список" : `Все презентации (${feedTotal})`;
 }
 
 /* ---- действия над карточками (делегирование на #feed) ---- */
@@ -506,6 +657,74 @@ async function retryBuild(id, btn) {
   $("#result").hidden = true;
   streamProgress(session_id, kind);
 }
+
+/* «Скачать» на карточке (борд 4823:1819). Формат ровно один — PPTX, и выбора
+   здесь нет сознательно. Меню форматов остаётся в редакторе (4823:1903), где
+   шапка для него и нарисована; на карточке шириной 552 пикселя третий контрол
+   со своей раскрывашкой встал бы в спор с «Посмотреть» и «Редактировать», а
+   витрина — место, где решают «этот файл или не этот», не «pptx или zip».
+   Кому нужны картинки — путь через «Редактировать» на один клик длиннее.
+
+   Цикл тот же, что в editor.js (setupExport): POST ставит рендер, опрос раз в
+   1.5 секунды читает {state}, готовый файл уезжает скрытым <a download> — без
+   навигации, чтобы вкладка не моргала и карточка не перерисовывалась под
+   рукой. Кнопка на всё это время становится отчётом о работе: «Готовлю
+   PPTX…» — это и статус, и блокировка повторного запуска.
+
+   Параллельные скачивания разных работ не мешают друг другу: состояние живёт
+   в замыкании на кнопке, а не в модуле. Но повторный клик по ТОЙ ЖЕ кнопке
+   отсекается через _dlBusy — после loadFeed() кнопка может быть уже другим
+   DOM-узлом, и флаг на элементе не спас бы. */
+const _dlBusy = new Set();
+async function downloadDeck(id, btn) {
+  if (_dlBusy.has(id)) return;
+  const label = (text) => { if (btn) btn.textContent = text; };
+  const release = (text) => {
+    _dlBusy.delete(id);
+    if (btn) { btn.disabled = false; btn.textContent = text; }
+  };
+  _dlBusy.add(id);
+  if (btn) { btn.disabled = true; }
+  label("Готовлю PPTX…");
+
+  let r;
+  try {
+    r = await fetch(U(`/api/jobs/${id}/export/pptx`), { method: "POST" });
+  } catch (e) {
+    release("Ошибка — повторить");
+    return;
+  }
+  if (!r.ok) { release("Ошибка — повторить"); return; }
+
+  const poller = setInterval(poll, 1500);
+  poll();
+
+  async function poll() {
+    let p;
+    try {
+      p = await fetch(U(`/api/jobs/${id}/export/pptx`));
+    } catch (e) { return; }            // моргнула сеть — продолжаем опрос
+    if (!p.ok) { clearInterval(poller); release("Ошибка — повторить"); return; }
+    const { state } = await p.json();
+    if (state === "ready") {
+      clearInterval(poller);
+      // Файл отдаём ДО возврата подписи: иначе между «готово» и стартом
+      // загрузки кнопка секунду выглядит нажимаемой, и второй клик успевает
+      // поставить второй рендер.
+      const a = document.createElement("a");
+      a.href = U(`/api/jobs/${id}/export/pptx/file`);
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      release("Скачать");
+    } else if (state === "error") {
+      clearInterval(poller);
+      release("Ошибка — повторить");
+    }
+  }
+}
+
 function toggleCard(id) {
   const card = feedCards.get(id);
   if (!card) return;
@@ -526,14 +745,21 @@ $("#feed").addEventListener("click", (e) => {
   if (delEl) { e.stopPropagation(); deleteDraft(delEl.dataset.del, delEl); return; }
   const retryEl = e.target.closest("[data-retry]");
   if (retryEl) { e.stopPropagation(); retryBuild(retryEl.dataset.retry, retryEl); return; }
+  const dlEl = e.target.closest("[data-dl]");
+  if (dlEl) { e.stopPropagation(); downloadDeck(dlEl.dataset.dl, dlEl); return; }
   if (e.target.closest("a, button")) return;          // ссылки/кнопки работают сами
   const card = e.target.closest(".work.is-expandable");
   if (card) toggleCard(card.dataset.id);
 });
-$("#feedChips").addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-filter]");
-  if (!chip || chip.dataset.filter === activeFilter) return;
-  activeFilter = chip.dataset.filter;
+
+/* «Все презентации (7)» / «Свернуть список» — потолок ленты, а не переход.
+   Перерисовку делает loadFeed, а не локальная правка DOM: список к этому
+   моменту мог измениться (сборка кончилась, работа истекла по сроку), и
+   показать развёрнутым устаревший срез значило бы соврать ровно в тот момент,
+   когда человек попросил показать всё. */
+const _feedMore = $("#feedMore");
+if (_feedMore) _feedMore.addEventListener("click", () => {
+  feedExpanded = !feedExpanded;
   loadFeed();
 });
 
@@ -909,33 +1135,6 @@ async function startDraft(mode, btn) {
   }
 }
 
-// Двери — раскрывающиеся строки, и открыта всегда одна. Два выдвинутых ящика
-// разом вернули бы на страницу два равных блока — ровно то, ради ухода от чего
-// карточки и убирались. Обе строки при этом остаются равновесными: открытость —
-// состояние, а не ранг, размер и кегль у них одинаковые.
-// Раскрытие анимировано, и делает это ОДИН класс is-open: высота ящика едет
-// от 0fr к 1fr в CSS. Атрибут hidden здесь ставить нельзя — display: none
-// обрывает переход, и первое раскрытие происходило бы скачком. Запрет канона
-// «высоту под курсором не менять» не нарушен: ящик ездит по клику.
-// Черновик конструктора появляется только по явному нажатию кнопки в панели:
-// когда кликабельной была вся карточка, черновики плодились от случайного клика.
-const _rows = $("#startRows");
-function setDoor(row, open) {
-  const hit = row.querySelector(".row__hit");
-  const panel = row.querySelector(".row__panel");
-  if (!hit || !panel) return;
-  row.classList.toggle("is-open", open);
-  hit.setAttribute("aria-expanded", open ? "true" : "false");
-}
-if (_rows) _rows.addEventListener("click", (e) => {
-  const hit = e.target.closest(".row__hit");
-  if (!hit) return;
-  const row = hit.closest(".row");
-  const willOpen = !row.classList.contains("is-open");
-  _rows.querySelectorAll(".row").forEach((r) => setDoor(r, false));
-  if (willOpen) setDoor(row, true);
-});
-
 // Форму отправляет только наш обработчик: без этого Enter в поле перезагружал
 // бы страницу и терял выбранный файл.
 const _startForm = $("#startForm");
@@ -950,7 +1149,7 @@ if (_openManual) _openManual.addEventListener("click", () => {
 });
 
 // Возврат по Back из bfcache мог оставить кнопку залипшей на «Создаю…»/disabled — сбрасываем.
-const _OPEN_LABEL = { openManual: "Открыть конструктор" };
+const _OPEN_LABEL = { openManual: "Соберите вручную на макетах" };
 window.addEventListener("pageshow", () => {
   Object.entries(_OPEN_LABEL).forEach(([id, label]) => {
     const b = $("#" + id);
@@ -960,15 +1159,16 @@ window.addEventListener("pageshow", () => {
   loadFeed();  // возврат по Back мог создать/удалить сборку или черновик — обновляем
 });
 
-/* ===== Интро: карточки подготовки исходника (промпт / скилл) ===== */
+/* ===== Экран 02 · Как подготовить документ ===== */
 // Ссылка на .skill живёт в HTML без префикса — доклеиваем gateway-префикс, как
 // у всех остальных URL (иначе на проде /downloads уйдёт мимо /slides).
+// Сама ссылка переехала с главной в подвал лайтбокса: скилл — вторая дорога
+// подготовки документа, и место ей там, где про подготовку и рассказывают.
 const _skillLink = $("#skillDownload");
 if (_skillLink) _skillLink.href = U("/downloads/cloud-ru-slides.skill");
 
-// Промпт — длинный документ, и в служебной строке ему не место: он открывается
-// лайтбоксом. Копирование при этом осталось прямо в строке — чаще промпт
-// копируют не читая.
+// Экран 02 целиком — лайтбокс: заголовок, три шага, поле промпта и кнопка
+// копирования. Открывает его «этот промпт» в подзаголовке главной.
 const _promptBox = $("#promptBox");
 function setPromptBox(open) {
   if (!_promptBox) return;
@@ -1014,14 +1214,23 @@ function askConfirm(text, okLabel) {
   });
 }
 
+/* «Копировать промпт» — шаг 1 инструкции, и кнопка стоит в подвале того же
+   лайтбокса (борд 4823:2000). Отчёт о копировании делает сама кнопка на две
+   секунды: отдельной служебной строки здесь нет и заводить её незачем —
+   в модалке на 864 пикселя подпись под кнопкой некуда поставить, не сдвинув
+   содержимое.
+   Отказ clipboard API (не secure context) не прячем за «Не вышло» молча:
+   текст промпта уже на экране в поле выше, и выделить его руками можно —
+   поэтому ставим фокус в поле, откуда работает Ctrl+A. */
 const _copyPrompt = $("#copyPrompt");
 if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
-  const text = $("#promptText").textContent.trim();
+  const pre = $("#promptText");
+  const text = pre.textContent.trim();
   let ok = true;
   try { await navigator.clipboard.writeText(text); }
-  catch { ok = false; }  // clipboard API требует secure context — фолбэк: показать текст
-  _copyPrompt.textContent = ok ? "Скопировано" : "Не вышло";
-  if (!ok) setPromptBox(true);   // фолбэк: показываем текст, копируйте руками
+  catch { ok = false; }
+  _copyPrompt.textContent = ok ? "Скопировано" : "Выделите текст сами";
+  if (!ok) pre.focus();
   setTimeout(() => { _copyPrompt.textContent = "Копировать промпт"; }, 2000);
 });
 
