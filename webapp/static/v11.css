@@ -92,6 +92,13 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
   --color-accent-hover: #1fb86e;
   --color-accent-subtle: #e5fbef;
   --color-accent-text: #27704b;
+  /* Заливка ВЫБРАННОЙ строки списка. В Figma у неё нет семантического имени:
+     на экране 06 (4823:1896) дизайнер берёт её прямо из палитры — «Main
+     colors/Green main 50», #D4F6E5. Это не придирка к оттенку: accent-subtle
+     (#e5fbef) отличается от белого листа на полтора процента яркости, и на
+     строке высотой 79 такая заливка не читается выбором вовсе. Отдельное имя
+     нужно, чтобы следующий список не начал подбирать зелёный на глаз. */
+  --color-accent-row: #d4f6e5;
 
   /* Состояния. В тёмном каноне красного не было вовсе и ошибку метили
      приглушённым зелёным; на светлой теме это читалось «всё хорошо». */
@@ -331,33 +338,52 @@ body.is-tool main { position: relative; flex: 1 0 auto; display: flex;
   position: sticky; top: 96px;
   max-height: calc(100vh - 144px); overflow: hidden auto;
   scrollbar-width: thin; }
-/* Заголовок страницы дублировал пункт меню и с экрана снят. В разметке
-   остаётся: без h1 страница теряет корень структуры для скринридера. */
-body.is-tool h1 { position: absolute; width: 1px; height: 1px; margin: -1px;
-  padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Текст, который нужен скринридеру и не нужен глазу. Рецепт один на платформу:
+   1×1 с clip-path, а не display: none и не visibility: hidden — те снимают узел
+   и с дерева доступности тоже, то есть делают ровно противоположное.
+   Заголовок страницы дублировал пункт меню и с экрана снят; в разметке
+   остаётся, потому что без h1 страница теряет корень структуры. */
+body.is-tool h1, .visually-hidden { position: absolute; width: 1px; height: 1px;
+  margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%);
+  white-space: nowrap; }
 
-/* ===== §8.1 Кирпич: прямоугольник, хайрлайн, моно-капс ===== */
-body.is-tool .t-btn { display: inline-block; height: 24px; cursor: pointer;
+/* ===== §8.1 Кирпич — компонент «Кирпич · Hub Light» (Figma 4872:5146) ========
+   ПОДПИСЬ БОЛЬШЕ НЕ МОНО-КАПС. Прежний кирпич был белой плашкой с хайрлайном
+   и надписью «СКАЧАТЬ» моно-капсом 11/.09em — рисунок тёмного канона, где
+   обводка была единственным способом отделить орган от чернильного фона.
+   На листе Hub отделять нечем и нечего: орган отличается ЗАЛИВКОЙ (#f0f0f0 —
+   --color-bg-control), а обводки у него нет вовсе. Регистр тоже падает до
+   обычного: моно-капс сжимает «Сменить цветовую схему» до нечитаемой ленты
+   заглавных, и на борде такой подписи нет ни на одном экране.
+   Арифметика та же, что была, — высота ровно 24: 6 + 12 (line-height) + 6.
+   Зазор 6 — для иконки Icon S 12×12 слева или справа от подписи; он объявлен
+   здесь, а не отдельным модификатором, потому что у кирпича без иконки
+   схлопывается сам собой. */
+body.is-tool .t-btn { display: inline-flex; align-items: center;
+  justify-content: center; gap: 6px; height: 24px; cursor: pointer;
   border: 0; border-radius: var(--radius-sm); padding: 6px 12px;
-  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  background: var(--color-bg-control); box-shadow: none;
+  color: var(--color-text-primary); font-family: var(--font-text); font-weight: 600;
+  font-size: 12px; line-height: 12px; letter-spacing: 0; text-transform: none;
   text-decoration: none; white-space: nowrap;
-  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
-              box-shadow .2s var(--lp-ease); }
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease); }
 /* Ховер НЕ инвертирует. В тёмном каноне кирпич под курсором выворачивался
    наизнанку (светлая плашка, чернильная подпись) — на светлой теме выворот
    некуда делать: лист уже белый. Hub вместо этого углубляет заливку органа на
    одну ступень и оставляет подпись на месте. */
-body.is-tool .t-btn:hover { background: var(--color-bg-hover);
-  color: var(--color-text-primary);
-  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
-body.is-tool .t-btn--key { background: var(--lp-key); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-key); }
-body.is-tool .t-btn--key:hover { background: var(--color-accent-hover); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--color-accent-hover); }
-body.is-tool .t-btn--on { color: var(--lp-text); box-shadow: inset 0 0 0 1px var(--color-accent-default); }
+body.is-tool .t-btn:hover { background: var(--color-bg-hover); }
+body.is-tool .t-btn--key { background: var(--lp-key); color: var(--lp-key-ink); }
+body.is-tool .t-btn--key:hover { background: var(--color-accent-hover);
+  color: var(--lp-key-ink); }
+/* Включённое состояние — заливка accent-subtle с подписью accent-text, тем же
+   приёмом, что чип и сегмент. Обводка ключевого цвета, которая стояла здесь
+   раньше, теперь значит другое: в Hub рамкой метят ВЫБОР в списке, а не
+   нажатое состояние органа, и два смысла на одном рисунке не уживаются. */
+body.is-tool .t-btn--on { background: var(--color-accent-subtle);
+  color: var(--color-accent-text); }
+body.is-tool .t-btn--on:hover { background: var(--color-accent-subtle); }
 body.is-tool .t-btn:disabled { opacity: .4; cursor: default; }
+body.is-tool .t-btn:disabled:hover { background: var(--color-bg-control); }
 
 /* ===== §8.7 Рама ленты =====
    Лента — единственная рама на странице, и внутри неё единственный чертёж.
@@ -548,22 +574,36 @@ body.is-tool .gen-form button[type="submit"]:disabled { opacity: .4; cursor: def
 
 /* ===== §8.2 Чипы и сегменты встык ============================================
    Те же кирпичики, что кнопки действий, но стоят встык: это один
-   переключатель, а не несколько независимых кнопок. Стык держим на -1px,
-   иначе соседние рамки сложились бы в двойную линию. */
+   переключатель, а не несколько независимых кнопок.
+
+   Hub Light. В Foundations (4783:107) сегмента нет вовсе — значит, собираем
+   его из кирпича 4872:5146 и не выдумываем третий облик: заливка bg-control,
+   SB Sans Text Semibold 12/12, высота 24. Моно-капса в системе тоже нет: во
+   всей шкале типографики единственный моноширинный стиль — Hub/Mono/S 12/16,
+   и он заведён под имена токенов, а не под подписи кнопок.
+
+   Обводку сняли вслед за кирпичом. Она была нужна, пока фон сегментов был
+   цветом листа и без рамки ряд не читался как орган; на заливке bg-control
+   орган виден сам, а выбранный сегмент в любом случае окрашен — то есть шов
+   между сегментами есть всегда. Заодно ушёл стык на -1px: складывать в
+   двойную линию больше нечего. Скругляем только внешние углы ряда, чтобы
+   группа выглядела одним кирпичом, а не тремя. */
 .chip-row { display: flex; flex-wrap: nowrap; gap: 0; }
 .seg { display: flex; gap: 0; }
 body.is-tool .chip, body.is-tool .seg__btn { flex: 1 1 0; min-width: 0;
   position: relative; height: 24px; cursor: pointer; border: 0;
-  border-radius: 0; padding: 6px; background: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  border-radius: 0; padding: 6px 12px; background: var(--color-bg-control);
+  color: var(--color-text-secondary);
+  font-family: var(--font-text); font-weight: 600; font-size: 12px;
+  line-height: 12px; letter-spacing: 0; text-transform: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
-              box-shadow .2s var(--lp-ease); }
-body.is-tool .chip + .chip, body.is-tool .seg__btn + .seg__btn { margin-left: -1px; }
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease); }
+body.is-tool .chip:first-child, body.is-tool .seg__btn:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+body.is-tool .chip:last-child, body.is-tool .seg__btn:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 /* Выбранное — ЗАЛИВКА, иначе никак: обводка в ряду встык не читается вовсе,
-   соседние рамки стоят вплотную и лишний контур теряется в них. Но заливка
+   соседние плашки стоят вплотную и лишний контур теряется в них. Но заливка
    теперь мягкая, а не сплошной акцент.
 
    Почему. Сплошным зелёным метится ДЕЙСТВИЕ — «Выйти», «Сохранить», «Пройти
@@ -574,11 +614,13 @@ body.is-tool .chip + .chip, body.is-tool .seg__btn + .seg__btn { margin-left: -1
    accent-subtle + accent-text для этого и заведена: плашка того же семейства,
    голосом тише кнопки, подпись на ней даёт 6.1:1. */
 body.is-tool .chip.is-active, body.is-tool .seg__btn.is-active { z-index: 1;
-  background: var(--color-accent-subtle); color: var(--color-accent-text);
-  box-shadow: inset 0 0 0 1px var(--color-accent-default); }
+  background: var(--color-accent-subtle); color: var(--color-accent-text); }
 body.is-tool .chip:hover, body.is-tool .seg__btn:hover { z-index: 2;
-  background: var(--color-bg-hover); color: var(--color-text-primary);
-  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+  background: var(--color-bg-hover); color: var(--color-text-primary); }
+/* Наведение на уже выбранный сегмент возвращало его в серый — то есть ровно
+   снимало единственную метку выбора. Оставляем акцентную пару. */
+body.is-tool .chip.is-active:hover, body.is-tool .seg__btn.is-active:hover {
+  background: var(--color-accent-subtle); color: var(--color-accent-text); }
 
 /* ===== §8.4 Галочка — тот же кирпич 24px, что чипы =====
    align-items: flex-start, потому что пояснение стоит отдельной строкой под

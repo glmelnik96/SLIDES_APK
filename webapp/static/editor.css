@@ -52,39 +52,38 @@ body.is-editor .tool { min-height: 0; flex: 1 1 auto; }
 /* Поле под полосу — только левому рельсу: правая панель сама не прокручивается
    (прокрутку забирает .builder внутри), и зазор там оказался бы двойным. */
 #thumbsRail { scrollbar-gutter: stable; padding-right: 12px; }
-.rail--edit > .field-label { flex: none; padding: 0 12px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+/* Подписи рельса здесь больше нет: на борде лента — это только слайды, и
+   «СЛАЙДЫ» моно-капсом над ними было подписью к единственному содержимому
+   колонки. Узел остался в разметке под .visually-hidden (экран без него
+   теряет имя раздела для скринридера), а оформление ему теперь не нужно —
+   своё padding: 0 12px это правило навязывало даже скрытому узлу и раздувало
+   его до 24px по ширине. */
 
 /* ===== Кирпич: тот же орган, что .t-btn канона ==============================
    editor.js раздаёт .btn/.btn-ghost/.btn-sm/.btn-accent/.btn-stop. Модификаторы
    размера в каноне смысла не имеют — кирпич один, 24px, и «маленького» кирпича
    не бывает; они остаются пустыми именами, чтобы разметку не переписывать. */
 body.is-tool .btn { display: inline-flex; align-items: center; justify-content: center;
-  height: 24px; cursor: pointer; border: 0; border-radius: var(--radius-sm); padding: 6px 12px;
-  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  color: var(--lp-soft); font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
+  gap: 6px; height: 24px; cursor: pointer; border: 0; border-radius: var(--radius-sm);
+  padding: 6px 12px; background: var(--color-bg-control); box-shadow: none;
+  color: var(--color-text-primary); font-family: var(--font-text); font-weight: 600;
+  font-size: 12px; line-height: 12px; letter-spacing: 0; text-transform: none;
   text-decoration: none; white-space: nowrap;
-  transition: background .2s var(--lp-ease), color .2s var(--lp-ease),
-              box-shadow .2s var(--lp-ease); }
-body.is-tool .btn:hover { background: var(--color-bg-hover); color: var(--color-text-primary);
-  box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease); }
+body.is-tool .btn:hover { background: var(--color-bg-hover); }
 body.is-tool .btn:disabled { opacity: .4; cursor: default; }
-body.is-tool .btn:disabled:hover { background: var(--lp-ink); color: var(--lp-soft);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-body.is-tool .btn-accent { background: var(--lp-key); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-key); }
-body.is-tool .btn-accent:hover { background: var(--color-accent-hover); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--color-accent-hover); }
+body.is-tool .btn:disabled:hover { background: var(--color-bg-control); }
+body.is-tool .btn-accent { background: var(--lp-key); color: var(--lp-key-ink); }
+body.is-tool .btn-accent:hover { background: var(--color-accent-hover);
+  color: var(--lp-key-ink); }
 /* «Остановить» и «идёт экспорт» — не беда и не тревога, поэтому не цвет, а
-   обводка --color-border-strong: кирпич заметнее соседей, но ничего не
-   сигналит. Красный тут был бы ложью: «идёт работа» — это не сбой. */
+   заливка на ступень глубже: кирпич заметнее соседей, но ничего не сигналит.
+   Красный тут был бы ложью: «идёт работа» — это не сбой. Прежняя обводка
+   --color-border-strong ушла вместе с обводкой самого кирпича. */
 body.is-tool .btn-stop, body.is-tool .btn.is-busy {
-  box-shadow: inset 0 0 0 1px var(--color-border-strong); color: var(--lp-text); }
+  background: var(--color-bg-hover); color: var(--color-text-primary); }
 body.is-tool .btn.is-busy { cursor: default; }
-body.is-tool .btn.is-ready { background: var(--lp-key); color: var(--lp-key-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-key); }
+body.is-tool .btn.is-ready { background: var(--lp-key); color: var(--lp-key-ink); }
 /* Иконочный кирпич: 36×24 (борд 4892:5392). Высота — та же, что у текстового,
    ширина фиксированная, поля сняты: иконка центруется сама, а padding 12 от
    текстового кирпича растянул бы ряд до 60 на кнопку. */
@@ -92,47 +91,65 @@ body.is-tool .btn-icon { width: 36px; flex: none; padding: 0; }
 /* Глиф наследует цвет кирпича — значит, сам переворачивается на ховере и
    глушится у disabled вместе с ним, отдельных правил не нужно. */
 .ico { flex: none; display: block; }
-/* Кирпич с подписью И иконкой («Сменить макет слайда» ⓘ): иконка прижата к
-   правому краю подписи через зазор 6 — половина модуля. Полного зазора 12
-   здесь нет намеренно: иконка относится к ЭТОЙ подписи, и при 12 она читалась
-   отдельным элементом ряда. */
-body.is-tool .btn.has-ico { gap: 6px; }
+/* .has-ico остался именем без правил: зазор 6 между подписью и иконкой Icon S
+   теперь объявлен у самого кирпича (так в компоненте 4872:5146), и у кирпича
+   без иконки он схлопывается сам. Класс не удалён — его ставит editor.js. */
 /* Текстовая ссылка внутри служебной строки: единственное подчёркивание в UI. */
 body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointer;
   font: inherit; color: var(--lp-text); text-decoration: underline;
   text-underline-offset: 2px; }
 
-/* ===== Лента миниатюр ======================================================
-   Строка 96 = поле 12 + кадр 72 + поле 12. Кадр 128×72 — те же 16:9, что у
-   деки; подпись рядом, а не под кадром: в колонке 264 ряд читается короче
-   столбика и вдвое экономит прокрутку. */
-#thumbs { display: flex; flex-direction: column; gap: 12px; }
+/* «На главную» (Figma 4823:1917): кирпич над колонками, в верхнем поле
+   страницы. Абсолют — чтобы не отнимать высоту у стола: у main сверху поле 96,
+   кирпич встаёт в него, как на борде (top 32). Левый край — по рельсу (48). */
+.page-home { position: absolute; top: 32px; left: var(--page-pad); z-index: 10; }
+
+/* ===== Лента миниатюр · «Слайд в ленте» (Figma 4823:1895) ===================
+   Строка 79 = поле 8 + кадр 63 + поле 8, боковые поля 12, зазор до подписи 12.
+   Кадр 112×63 — те же 16:9, что у деки; подпись рядом, а не под кадром: в
+   колонке 264 ряд читается короче столбика и вдвое экономит прокрутку.
+   ОБВОДКИ У СТРОКИ НЕТ. Раньше каждая миниатюра стояла в собственной рамке, и
+   лента из двенадцати слайдов превращалась в двенадцать коробок. В Hub рамка
+   есть только у КАДРА — он картинка и ему нужна кромка; сама строка живёт на
+   листе и проявляется только под курсором и в выборе. */
+#thumbs { display: flex; flex-direction: column; gap: 8px; }
 .thumb { position: relative; display: flex; align-items: center; gap: 12px;
-  height: 96px; padding: 12px; cursor: pointer; background: var(--lp-ink);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  transition: box-shadow .2s var(--lp-ease); }
-.thumb:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
-/* Текущий слайд метим планкой ключевого цвета — тем же приёмом, что канон
-   метит выбранную тогл-строку. Заливкой красить нельзя: она занята ховером. */
-.thumb.active { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
-.thumb.active::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-  width: 6px; background: var(--lp-key); }
-.thumb-prev { position: relative; flex: none; width: 128px; height: 72px;
-  overflow: hidden; pointer-events: none; background: var(--lp-line); }
+  padding: 8px 12px; cursor: pointer; background: none;
+  border-radius: var(--radius-md); box-shadow: none;
+  transition: background .2s var(--lp-ease); }
+.thumb:hover { background: var(--color-bg-muted); }
+/* Текущий слайд метим ЗАЛИВКОЙ, а не обводкой: на борде (4823:1896) выбранная
+   строка — сплошной зелёный лист с теми же скруглениями. Прежняя планка 6px у
+   левого края снята вместе с обводкой — заливка уже отвечает «этот». */
+.thumb.active, .thumb.active:hover { background: var(--color-accent-row); }
+.thumb-prev { position: relative; flex: none; width: 112px; height: 63px;
+  overflow: hidden; pointer-events: none; background: var(--lp-line);
+  box-shadow: inset 0 0 0 1px var(--color-border-default); }
 .thumb-prev iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
-  border: 0; transform: scale(0.0667); transform-origin: top left; }
+  border: 0; transform: scale(0.0583); transform-origin: top left; }
+/* Номер и название — две строки с зазором 2: это одна подпись, а не два поля
+   формы, и модульные 12 разнесли бы их в разные органы. */
 .thumb-cap { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
-  justify-content: center; }
-.thumb-num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; color: var(--lp-muted); }
-.thumb.active .thumb-num { color: var(--color-accent-text); }
-.thumb-title { font-size: 12px; line-height: 24px; color: var(--lp-soft);
+  gap: 2px; justify-content: center; }
+.thumb-num { font-size: 13px; line-height: 18px; color: var(--lp-muted); }
+.thumb-title { font-size: 13px; line-height: 20px; color: var(--lp-soft);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-/* Крестик и рукоятка — те же 24×24, что крестик плитки в ленте главной. */
+/* Выбранная строка: название выходит из secondary в primary — так на борде
+   (4823:1896), и так правильно, заливка уже подняла строку, подписи осталось
+   догнать её по весу. 13.7:1 на d4f6e5, с запасом.
+   Номер борд оставляет приглушённым, и вот здесь мы с ним расходимся: #717171
+   на #d4f6e5 даёт 4.21:1 — ниже порога AA для текста 13px. Берём accent-text
+   из той же пары Hub: 5.17:1, цвет семейству зелёной строки родной. */
+.thumb.active .thumb-title { color: var(--color-text-primary); }
+.thumb.active .thumb-num { color: var(--color-accent-text); }
+/* Крестик и рукоятка — те же 24×24, что крестик плитки в ленте главной.
+   Скругление у них своё, не строки: кнопка 24×24 с радиусом 10 выглядит
+   почти кругом, поэтому берём --radius-sm. */
 .thumb-del, .thumb-grip { position: absolute; top: 0; width: 24px; height: 24px;
   z-index: 2; display: grid; place-items: center; padding: 0; border: 0;
-  background: var(--lp-ink); color: var(--lp-muted); cursor: pointer;
-  font-family: var(--font-mono); font-size: 11px; line-height: 24px; opacity: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-control); color: var(--lp-muted); cursor: pointer;
+  font-size: 12px; line-height: 24px; opacity: 0;
   transition: opacity .2s var(--lp-ease), background .2s var(--lp-ease),
               color .2s var(--lp-ease); }
 .thumb-del { right: 0; }
@@ -141,23 +158,24 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .thumb-del:hover { background: var(--lp-key); color: var(--lp-key-ink); }
 .thumb[draggable="true"] { cursor: grab; }
 .thumb.dragging { opacity: .5; }
-/* Место вставки — планка ключевого цвета по кромке, к которой встанет слайд. */
-.thumb.drop-before { box-shadow: inset 0 0 0 1px var(--lp-line-2), inset 0 2px 0 var(--lp-key); }
-.thumb.drop-after { box-shadow: inset 0 0 0 1px var(--lp-line-2), inset 0 -2px 0 var(--lp-key); }
-.thumbs-hint { padding: 0 12px; font-size: 12px; line-height: 24px; color: var(--lp-muted); }
+/* Место вставки — планка ключевого цвета по кромке, к которой встанет слайд.
+   Обводки по периметру здесь больше нет: у строки её нет и в покое. */
+.thumb.drop-before { box-shadow: inset 0 2px 0 var(--lp-key); }
+.thumb.drop-after { box-shadow: inset 0 -2px 0 var(--lp-key); }
+.thumbs-hint { padding: 0 12px; font-size: 13px; line-height: 18px; color: var(--lp-muted); }
 .thumbs-hint .only-coarse { display: none; }
 @media (pointer: coarse) {
   .thumb-grip { display: grid; opacity: 1; }
   .thumbs-hint .only-fine { display: none; }
   .thumbs-hint .only-coarse { display: inline; }
 }
-/* Метка «слайд ждёт ответа» — квадрат 24×24 у верхней кромки кадра. Круга нет:
-   углы в системе прямые. Осечка метится тем же квадратом, но обводкой. */
+/* Метка «слайд ждёт ответа» — плашка 24×24 у нижней кромки строки. Осечка
+   метится той же плашкой, но белой с обводкой тревоги. */
 .thumb-quest { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px;
-  display: grid; place-items: center; background: var(--lp-key);
-  color: var(--lp-key-ink); font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; pointer-events: none; }
-.thumb-quest--failed, .thumb-quest--filling { background: var(--lp-ink);
+  display: grid; place-items: center; border-radius: var(--radius-sm);
+  background: var(--lp-key); color: var(--lp-key-ink); font-weight: 600;
+  font-size: 12px; line-height: 24px; pointer-events: none; }
+.thumb-quest--failed, .thumb-quest--filling { background: var(--color-bg-canvas);
   box-shadow: inset 0 0 0 1px var(--color-state-danger); color: var(--lp-text); }
 /* Ряд «Действия со слайдами»: шаг 44 на борде = кирпич 36 + зазор 8. Зазор
    взят меньше модуля (12) потому, что это ОДНА группа действий, а не три
@@ -167,23 +185,89 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    поэтому и .addslide*, и обе подмены подписи ушли вместе с ней. */
 .slide-acts { display: flex; gap: 8px; }
 
-/* ===== Сцена: единственная рама редактора и единственный чертёж =============
-   Тот же рецепт, что рама ленты на главной (§8.7): поле 24, хайрлайн по
-   периметру, isolation обязательна — чертёж лежит на z-index: -1. */
+/* ===== Сцена (Figma 4823:1892, колонка «Сцена») =============================
+   РАМЫ У СЦЕНЫ БОЛЬШЕ НЕТ. Прежде это была плитка с полем 24 и хайрлайном по
+   периметру — рецепт рамы ленты. В тёмном каноне рама была необходима: слайд
+   тоже чернильный, и без обводки сцена сливалась с фоном страницы. На листе
+   Hub тёмный слайд отделяется от белого листа сам, а рама вокруг него стала
+   второй границей вокруг того же предмета. Борд рисует колонку без рамы:
+   шапка, слайд 768×432, листание — три блока с шагом 24 и больше ничего.
+   Поле 24 ушло вместе с рамой: слайд теперь ровно по ширине колонки, как на
+   борде, и это единственный способ получить честные 768.
+   isolation и position остаются: на них держатся чертёж (z-index: -1) и
+   шторка сборки. */
 .stage { position: relative; isolation: isolate; overflow: hidden; min-width: 0;
-  min-height: 0; display: flex; flex-direction: column; padding: 24px;
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.stage__head { flex: none; align-items: center; gap: 12px; }
-.stage__back { flex: none; }
-.stage__acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 12px; }
+  min-height: 0; display: flex; flex-direction: column; }
+/* Шапка сцены (4823:1903): группа имени слева, группа действий справа, хайрлайн
+   по низу. align-items: center, а не baseline канона: справа кирпичи 24, и по
+   базовой линии они повисали бы выше имени работы. */
+.stage__head { flex: none; align-items: center; gap: 24px; }
+.stage__name { min-width: 0; display: flex; align-items: baseline; gap: 16px; }
+/* Имя работы и служебная строка — один кегль Display 20/24 (борд), различаются
+   только цветом. Это не заголовок страницы: h1 у инструмента скрыт, а здесь
+   подпись предмета, с которым человек работает. */
+.stage__meta, .stage__title { margin: 0; font-family: var(--font-display);
+  font-weight: 400; font-size: 20px; line-height: 24px; letter-spacing: -0.1px; }
+.stage__meta { flex: none; color: var(--lp-muted); }
+/* Длинное имя обрезаем многоточием, а не переносим: вторая строка подняла бы
+   шапку и уронила слайд. Группа действий справа при этом не сжимается. */
+.stage__title { min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--color-text-primary); }
+.stage__title:empty { display: none; }
+/* nowrap вместо прежнего wrap: переносить теперь нечего — три кирпича экспорта
+   свёрнуты в меню «Скачать», и строка действий заведомо встаёт в одну. */
+.stage__acts { flex: none; margin-left: auto; display: flex; flex-wrap: nowrap;
+  gap: 12px; }
 #frameWrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex;
   align-items: center; justify-content: center; container-type: size; }
-/* Слайд держим строго 16:9 и вписываем в сцену. Хайрлайн у iframe внешний, а не
-   inset: собственное содержимое кадра закрыло бы внутреннюю тень. Размер он,
-   в отличие от border, не меняет — модуль цел. */
+/* Слайд держим строго 16:9 и вписываем в сцену. Ни скругления, ни обводки:
+   на борде (4823:1892) слайд — прямоугольник 768×432 заливкой #222. Скругление
+   тут было бы прямой неправдой про продукт: дека экспортируется с прямыми
+   углами, и превью обещало бы углы, которых в файле нет. */
 #frameWrap iframe { aspect-ratio: 16 / 9; width: min(100%, calc(100cqh * 16 / 9));
-  height: auto; max-height: 100%; border: 0; border-radius: var(--radius-lg);
-  background: var(--lp-line); box-shadow: 0 0 0 1px var(--lp-line-2); }
+  height: auto; max-height: 100%; border: 0; border-radius: 0;
+  background: var(--lp-line); box-shadow: none; }
+
+/* Листание (4823:1910): кирпич — номер — кирпич, шаг 16, по центру под слайдом.
+   Шаг до слайда — ячейка 24, как и у шапки сверху. */
+.pager { flex: none; display: flex; align-items: center; justify-content: center;
+  gap: 16px; margin-top: 24px; }
+.pager__num { margin: 0; font-size: 13px; line-height: 18px; color: var(--lp-soft);
+  font-variant-numeric: tabular-nums; }
+/* Деку из одного слайда листать некуда — ряд прячется целиком, а не гасит
+   кирпичи: два мёртвых органа и «1 / 1» между ними не сообщают ничего. */
+.pager.hidden { display: none; }
+
+/* ===== Меню «Скачать» (Figma 4823:1903) ====================================
+   Выпадающий слой — тот же лист, что у тултипа и лайтбокса: белая плашка,
+   хайрлайн, radius 10, тень MD. Формат внутри меню — не кирпич: кирпич значит
+   «орган интерфейса», а здесь строка выбора, и три кирпича столбиком читались
+   бы тремя разными действиями вместо одного с тремя исходами. */
+/* display: flex, а не block по умолчанию: кирпич внутри — inline-flex, и как
+   строчный бокс он тянул за собой место под нижний выносной элемент. Обёртка
+   выходила 26px вместо 24 и поднимала весь ряд действий над высотой кирпича. */
+.dl { position: relative; flex: none; display: flex; }
+.dl__menu { position: absolute; z-index: 40; top: calc(100% + 6px); right: 0;
+  min-width: 192px; display: flex; flex-direction: column; padding: 6px;
+  background: var(--color-bg-canvas); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--color-border-default); }
+.dl__item { display: block; width: 100%; box-sizing: border-box; cursor: pointer;
+  border: 0; border-radius: var(--radius-sm); padding: 6px 12px; background: none;
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--color-text-primary);
+  text-align: left; text-decoration: none; white-space: nowrap;
+  transition: background .2s var(--lp-ease); }
+.dl__item:hover { background: var(--color-bg-control); }
+/* «Готовлю PNG… ~10–20 сек» — строка занята делом: заливка показывает, что
+   кликать по ней второй раз незачем. */
+.dl__item.is-busy, .dl__item.is-busy:hover { background: var(--color-bg-control);
+  cursor: default; }
+/* Рендер готов — файл уже уехал в загрузки сам (poll качает без второго клика).
+   Заливка нужна ровно для повторного скачивания: строка помнит, что для неё
+   рендерить больше нечего. */
+.dl__item.is-ready { background: var(--color-accent-subtle);
+  color: var(--color-accent-text); }
+.dl__item:disabled { opacity: .4; cursor: default; }
 
 /* Шторка сборки поверх сцены: слова по центру, никакого стекла и размытия. */
 .build-overlay { position: absolute; inset: 0; z-index: 5; display: grid;
@@ -200,8 +284,11 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 /* ===== Правая панель: содержание слайда ===================================== */
 .rpanel { display: flex; flex-direction: column; gap: 24px; }
 .rpanel-tabs { flex: none; }
+/* Недоступная вкладка — тот же серый сегмент, что в покое, только подпись
+   уходит в muted и курсор говорит «нельзя». Обводку сняли вслед за §8.2: в
+   ряду встык на заливке bg-control её больше нет ни у одного состояния. */
 .rpanel-tab.is-disabled, .rpanel-tab.is-disabled:hover { cursor: not-allowed;
-  background: var(--lp-ink); color: var(--lp-muted); box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+  background: var(--color-bg-control); color: var(--lp-muted); box-shadow: none; }
 /* scrollbar-gutter + поле справа — обязательная пара для КАЖДОЙ прокручиваемой
    колонки. Без них полоса встаёт вплотную к тексту и рамкам полей: зазора нет
    ни пикселя, и ползунок читается наездом на содержимое. stable держит место
@@ -210,24 +297,53 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   gap: 24px; overflow: hidden auto; scrollbar-width: thin;
   scrollbar-gutter: stable; padding-right: 12px; }
 
-/* Строка автосейва — служебный слой: состояние читается словами, поэтому цветом
-   различать нечего. Строка ровно 24, чтобы форма ниже не подпрыгивала. */
-.builder-head { flex: none; display: flex; justify-content: flex-end; min-height: 24px; }
-.save-status { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--lp-muted); opacity: 0; transition: opacity .3s var(--lp-ease); }
-.save-status--saving, .save-status--retrying { opacity: 1; }
-.save-status--saved { opacity: 1; color: var(--lp-soft); }
-.save-status--error, .save-status--invalid { opacity: 1; color: var(--lp-text); }
-.save-status .btn-link { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; }
+/* ===== Автосохранение (Figma 4823:1914) =====================================
+   Точка 6px и подпись, по центру под сценой, внизу страницы. Абсолют, а не
+   строка в потоке: подпись не должна отнимать высоту у колонок — на борде она
+   стоит в нижнем поле страницы, в тех же 48, что уже заложены у main снизу.
+   Прежняя строка висела в шапке формы справа и была моно-капсом с opacity 0
+   в покое: о том, что работа сохраняется сама, человек узнавал только в
+   полторы секунды после правки. */
+.autosave { position: absolute; left: 0; right: 0; bottom: 24px;
+  display: flex; justify-content: center; pointer-events: none; }
+.save-status { display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted);
+  pointer-events: auto; }
+/* До первого сейва сообщать нечего — точка без подписи читалась бы индикатором
+   неизвестного состояния. */
+.save-status:empty { display: none; }
+/* Точка — ЕДИНСТВЕННОЕ место, где состояние сейва различается цветом; слова
+   рядом говорят то же самое, поэтому красить ещё и текст значит повторяться.
+   Исключение — ошибка: там текст поднимается до основного, потому что это уже
+   не отчёт о фоновой работе, а просьба вмешаться. */
+.save-status::before { content: ""; flex: none; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--color-border-strong);
+  transition: background .2s var(--lp-ease); }
+.save-status--saved::before { background: var(--color-accent-default); }
+.save-status--error::before, .save-status--invalid::before {
+  background: var(--color-state-danger); }
+.save-status--error, .save-status--invalid { color: var(--color-text-primary); }
 
-/* Макет слайда: подпись занимает всю строку, кирпичи встают под ней рядом —
-   в колонке 264 «Схема: Блок-схема» и две кнопки в один ряд не помещаются. */
-.builder-tpl { flex: none; display: flex; flex-wrap: wrap; gap: 12px;
-  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.tpl-name { flex: 1 0 100%; font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--lp-soft); }
+/* Ряд макета (Figma 4823:1919). На борде в нём только кирпич «Сменить макет
+   слайда», прижатый к правому краю колонки. Имя макета («Макет: Обложка»)
+   борд не показывает, но из кода оно не снято: без него ряд спрашивает
+   «сменить на что?» и не отвечает, с чего меняем, — а имя макета определяет,
+   какие поля вообще есть в форме ниже. Поэтому ряд собран как шапка: имя
+   слева, действие справа. Хайрлайна и поля снизу больше нет — ряд уже отделён
+   от формы зазором 24 правой панели, а линия добавляла второе разделение.
+
+   Столбик, а не строка: в 264px имя макета и кирпич рядом не встают никогда
+   («Макет: Обложка с картинкой» — около 170px, кирпич — около 150), и
+   space-between с переносом клал кирпич на вторую строку ВЛЕВО, то есть ровно
+   против борда. Разложив явно, получаем ту же картинку, что на 4823:1919:
+   кирпич прижат вправо, а имя стоит над ним полноширинной служебной строкой —
+   как подпись поля ниже, с той же гарнитурой 13/18 и тем же приглушённым
+   цветом. */
+.builder-tpl { flex: none; display: flex; flex-direction: column;
+  align-items: flex-end; gap: 6px; }
+.tpl-name { align-self: stretch; min-width: 0; font-size: 13px; line-height: 18px;
+  color: var(--lp-muted); }
 
 /* Контекст слайда над формой: читать — не править, поэтому отдельная рамка. */
 .builder-ctx { flex: none; display: flex; flex-direction: column; gap: 12px;
@@ -254,20 +370,42 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 /* Пустая подписка всё равно съедала бы зазор в 12 и уводила блок с модуля. */
 .improve-note:empty { display: none; }
 
-.field { display: flex; flex-direction: column; gap: 12px; }
-.field > label, .field-cap { font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 12px; letter-spacing: .09em; text-transform: uppercase;
-  color: var(--lp-muted); }
+/* ===== Поле — компонент «Поле» (Figma 4823:1921) ============================
+   Два этажа с шагом 6: шапка (имя слева, счётчик справа) и ввод. Прежний шаг
+   был 12, и подпись висела от своего поля на том же расстоянии, что соседние
+   поля друг от друга, — пара читалась не как одно поле, а как две строки. */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; }
+/* Имя поля — обычный текст 13/18, не метка: «Заголовок», «Подзаголовок» —
+   это слова, и капсом они превращались в телеграфную ленту. Регулярный вес:
+   полужирным в Hub выделены команды (кирпичи), а имя поля — не команда. */
+.field > label, .field-head > label, .field-cap { font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 18px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-muted); }
+/* Счётчик в шапке: «16 / 40». tabular-nums обязателен — без него строка
+   дёргается на каждом набранном символе. */
+.field-count { flex: none; font-size: 13px; line-height: 18px; color: var(--lp-muted);
+  font-variant-numeric: tabular-nums; }
+.field-count--over { color: var(--color-state-danger); }
+/* Ввод: белый лист в рамке, radius 10 (борд). Рамка — настоящий border, а не
+   inset-тень: в Hub у поля есть граница, и тень-подделка не наследовала бы
+   border-radius при переходе цвета. */
 .field input, .field textarea, .field select, .field-input, .chat-input textarea,
 .glass-q__input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
-  line-height: 24px; padding: 12px; border: 0; border-radius: var(--radius-sm);
-  background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  color: var(--lp-text); transition: box-shadow .2s var(--lp-ease); }
+  line-height: 24px; padding: 12px; border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md); background: var(--color-bg-canvas);
+  box-shadow: none; color: var(--color-text-primary);
+  transition: border-color .2s var(--lp-ease); }
 .field input, .field select, .field-input { height: 48px; }
 .field textarea, .chat-input textarea, .glass-q__input { height: 96px; resize: none; }
+/* Фокус — та же рамка ключевым цветом плюс второй пиксель тенью: одного
+   перекрашенного пикселя на белом листе глазом не найти, а менять ширину
+   border нельзя — поле прыгало бы на фокусе. */
 .field input:focus, .field textarea:focus, .field select:focus, .field-input:focus,
 .chat-input textarea:focus, .glass-q__input:focus { outline: none;
-  box-shadow: inset 0 0 0 1px var(--color-accent-default); }
+  border-color: var(--color-accent-default);
+  box-shadow: 0 0 0 1px var(--color-accent-default); }
 .field input:disabled, .field textarea:disabled { opacity: .4; cursor: default; }
 .field select { appearance: none; -webkit-appearance: none; cursor: pointer;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397A29E' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
@@ -279,9 +417,11 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    цветом. Перебор символов — тоже ошибка, а не предупреждение: пока счётчик
    красный, черновик не сохраняется, — поэтому состояния делят одну обводку. */
 .field-error input, .field-error textarea,
-.dgm-node-row--over input[data-dgm="label"] { box-shadow: inset 0 0 0 1px var(--color-state-danger); }
-.field-hint { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.dgm-node-row--over input[data-dgm="label"] { border-color: var(--color-state-danger); }
+/* Подсказка и предупреждение под полем — тот же текст 13/18, что имя поля:
+   это одна и та же служебная речь. */
+.field-hint { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 18px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .field-hint--error, .field-hint--over { color: var(--color-state-danger); }
 .field-list, .field-lines, .field-card { display: flex; flex-direction: column; gap: 12px; }
@@ -706,34 +846,29 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   font-size: 12px; letter-spacing: 0; text-transform: none; }
 /* Фразы служебного слоя: заголовок сборки, шапка плана, подпись пустого
-   стекла, вопрос лайтбокса, имя инструмента в шапке работы. Все — предложения
-   или их части, ни одно не метка. Интерлиньяж не трогаем: модуль 24 держит
-   раскладку, регистр её не касается. */
-#modeBadge, .build-overlay__title, .outline-head,
+   стекла, вопрос лайтбокса. Все — предложения или их части, ни одно не метка.
+   Интерлиньяж не трогаем: модуль 24 держит раскладку, регистр её не касается.
+   #modeBadge из списка ушёл: служебная строка работы теперь живёт в шапке
+   сцены и набрана Display 20/24 вместе с именем деки (см. .stage__meta). */
+.build-overlay__title, .outline-head,
 .glass-overlay__cap, .lb-counter {
   font-family: var(--font-text); font-weight: 600; font-size: 13px;
   letter-spacing: 0; text-transform: none; }
-/* Имя инструмента стоит в одной строке с кирпичами шапки, у которых
-   интерлиньяж 12: 13px в него не помещается и роняет базовую линию
-   относительно соседей. Здесь тот же кегль, что у кирпича. */
-#modeBadge { font-size: 12px; }
 /* Пустое стекло — не заголовок, а пояснение: полужирный тут лишний. */
 .glass-overlay__cap { font-weight: 400; color: var(--lp-muted); }
-/* «Макет: Обложка» — метка со значением. Моно остаётся ради колонки (имена
-   макетов встают одно под другим), капс снят: имя макета — слово. */
-.tpl-name { font-size: 12px; letter-spacing: .02em; text-transform: none; }
-/* Подсказки под полями и всё, чем инструмент объясняется: «По умолчанию —
-   изображение из шаблона», «3 из 6 — предел этого макета», «Правка не
-   сохранена — схема не сходится», «? 2 вопроса — разберём после заполнения»,
-   «Откроется выбор: блок-схема, воронка…». Это предложения целиком, и капса
-   в них было больше, чем во всех метках вместе взятых. Кегль 12: подсказка
-   стоит под полем и не должна спорить с его подписью. */
-.field-hint, .save-status, .dgm-claims-head, .picker-more,
+/* Подсказки и всё, чем инструмент объясняется: «3 из 6 — предел этого макета»,
+   «? 2 вопроса — разберём после заполнения», «Откроется выбор: блок-схема,
+   воронка…». Это предложения целиком, и капса в них было больше, чем во всех
+   метках вместе взятых.
+   .field-hint и .save-status из списка ушли: у них теперь свой кегль 13/18 и
+   13/24 прямо в базовых правилах — они больше не исключения из моно-капса, а
+   полноценные компоненты борда («Поле» 4823:1921, «Автосохранение» 4823:1914). */
+.dgm-claims-head, .picker-more,
 .glass-overlay__quest, .builder-ctx__sec > summary {
   font-family: var(--font-text); font-weight: 400; font-size: 12px;
   letter-spacing: 0; text-transform: none; }
 /* «Повторить» внутри строки сейва — команда, а не часть сообщения. */
-.save-status .btn-link { font-size: 12px; letter-spacing: 0; text-transform: none; }
+.save-status .btn-link { font-size: 13px; letter-spacing: 0; text-transform: none; }
 
 /* ===== Узкий экран и режим без движения =====================================
    Стоят В КОНЦЕ файла, а не рядом со своими правилами: специфичность у них та
@@ -744,7 +879,6 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   .tool__grid--edit { grid-template-columns: 96px minmax(0, 1fr) var(--rail-w); }
   .thumb-prev, .thumb-title, .thumbs-hint, .thumb-grip { display: none; }
   .thumb { height: 48px; justify-content: center; }
-  .rail--edit > .field-label { text-align: center; padding: 0; }
   /* Рельс здесь 96, а ряд действий — 124 (36×3 + 8×2). Переносим: ужимать
      кирпич нельзя — иконка 12 в боксе меньше 36 теряет поля и липнет к
      обводке, а срезать третью кнопку значит отнять отмену на узком экране.
@@ -763,10 +897,15 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   body.is-editor main { height: auto; min-height: 100dvh; }
   .tool__grid--edit { grid-template-columns: 1fr; height: auto; }
   .stage { order: -1; height: 72vw; }
+  /* Страница снова прокручивается, и абсолютам у её краёв места нет: «На
+     главную» уехало бы под сцену, а строка сейва — на середину длинной
+     страницы. Оба возвращаются в поток, первым и последним блоком. */
+  .page-home { position: static; top: auto; left: auto; align-self: flex-start;
+    margin-bottom: 24px; }
+  .autosave { position: static; bottom: auto; padding-top: 24px; }
   .rail--edit { overflow: visible; max-height: none; }
   .thumb-prev, .thumb-title { display: flex; }
   .thumb { height: 96px; justify-content: flex-start; }
-  .rail--edit > .field-label { text-align: left; padding: 0 12px; }
   /* Рельс снова во всю ширину — ряд действий возвращается в строку и к левому
      краю (правило 1280 продолжает действовать и здесь, отменяем явно). */
   /* Рельс снова во всю ширину — возвращаем ряд в одну строку. width/margin

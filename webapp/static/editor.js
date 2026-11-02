@@ -256,6 +256,7 @@ function handleFrameLoad(loaded) {
   markGlassRibbons(doc);
   syncThumbs();
   goTo(Math.min(pendingGoTo, slides.length - 1));
+  syncDeckTitle(doc);
   markPlaceholders(); // К§3 — пометить пустые слоты после рендера превью
   syncThemeToggle();  // ярлык перекраса — по теме только что загруженного кадра
   // К§6 — показать подготовленный буфер, спрятать прежний (без чёрного кадра).
@@ -269,6 +270,29 @@ function handleFrameLoad(loaded) {
 }
 frameA.addEventListener("load", () => handleFrameLoad(frameA));
 frameB.addEventListener("load", () => handleFrameLoad(frameB));
+
+/* Имя работы в шапке сцены (Figma 4823:1903). До этого редактора имя деки не
+   показывал вовсе: в шапке стоял только режим («Конструктор»), и человек с
+   тремя черновиками в истории не мог отличить открытый от остальных — имя
+   жило только в списке работ, откуда он ушёл.
+
+   Правда об имени в двух местах, и это не дубль, а два разных вида работы:
+   у черновика имя — поле plan.json (его же отдаёт /api/drafts), у собранной
+   деки плана нет вовсе, и имя живёт в <title> самого deck.html. Берём то,
+   которое есть; если нет ни одного — узел прячется (.stage__title:empty), а
+   не показывает «Без названия»: выдуманная подпись хуже отсутствующей. */
+function syncDeckTitle(doc) {
+  const el = document.getElementById("deckTitle");
+  if (!el) return;
+  let name = isDraft ? (draftPlan || {}).title : "";
+  if (!name && doc) name = (doc.title || "").trim();
+  name = (name || "").trim();
+  // Безымянная дека собирается с <title>Презентация</title> (assembler.py) —
+  // это заглушка, а не имя. Рядом с «Готовая презентация» слева она читалась
+  // бы как эхо режима и сообщала бы ноль.
+  if (name === "Презентация") name = "";
+  el.textContent = name;
+}
 
 // Persist an in-place edit of draft slide `i` (0-based) as a freeform slide.
 let draftHtmlSaving = false;
@@ -516,6 +540,13 @@ function scheduleBuiltDeckSave() {
   }, 800);
 }
 
+// Номер слайда в ленте — всегда в две цифры (борд 4823:1895: 01, 02, … 07).
+// Ноль здесь не украшение: номера стоят столбиком друг под другом, и без него
+// «9» и «10» начинаются с разной ширины, отчего колонка номеров едет. В
+// листании под сценой (4823:1910) борд, наоборот, пишет «2 / 12» без нуля —
+// там номер один и выравнивать его не с чем.
+function thumbNo(i) { return String(i + 1).padStart(2, "0"); }
+
 function buildThumbs() {
   const box = document.getElementById("thumbs");
   box.innerHTML = "";
@@ -545,7 +576,7 @@ function buildThumbs() {
     cap.className = "thumb-cap";
     const num = document.createElement("span");
     num.className = "thumb-num";
-    num.textContent = i + 1;
+    num.textContent = thumbNo(i);
     cap.appendChild(num);
     const titleText = (s.querySelector("h1,h2,h3,[data-slot=title]")?.textContent || "").trim();
     if (titleText) {
@@ -755,7 +786,33 @@ function goTo(i) {
   if (mode === "manual") syncHistoryButtons();
   // Контекст слайда рядом с чатом — в режимах, где формы слотов нет.
   if (mode !== "manual") renderChatContext();
+  syncPager();
 }
+
+/* Листание под сценой (Figma 4823:1910). Номер здесь — не дубль номера на
+   миниатюре: миниатюра отвечает «который из видимых», а эта строка — «который
+   из всех», и на деке из двадцати слайдов активная миниатюра в видимой части
+   колонки может не стоять вовсе.
+   Края не зацикливаются — краевой кирпич гаснет. Зацикливание на листании
+   презентации читается сбоем: «следующий» после последнего слайда не бывает. */
+function syncPager() {
+  const nav = byId("pager");
+  if (!nav) return;
+  const n = slides.length;
+  // Деку из одного слайда листать некуда, и «1 / 1» между двумя мёртвыми
+  // кирпичами не сообщает ничего — ряд уходит целиком.
+  nav.classList.toggle("hidden", n < 2);
+  if (n < 2) return;
+  const num = byId("pagerNum");
+  if (num) num.textContent = `${current + 1} / ${n}`;
+  const prev = byId("prevSlide"), next = byId("nextSlide");
+  if (prev) prev.disabled = current <= 0;
+  if (next) next.disabled = current >= n - 1;
+}
+// document.getElementById, а не byId: тот объявлен const ниже по файлу, и в
+// код, который исполняется при загрузке модуля, он попадает в TDZ.
+document.getElementById("prevSlide")?.addEventListener("click", () => goTo(current - 1));
+document.getElementById("nextSlide")?.addEventListener("click", () => goTo(current + 1));
 
 // Листание слайдов стрелками с самой страницы редактора: ↑/← — предыдущий,
 // ↓/→ — следующий. У превью (iframe) свой обработчик — он срабатывает, когда
@@ -804,20 +861,22 @@ async function saveDeck(silent) {
   return r.ok;
 }
 
-document.getElementById("save").onclick = async () => {
-  // D-1 (аудит 2026-08-14): без catch обрыв сети в fetch давал unhandled
-  // rejection — кнопка молчала вместо «Ошибка» (автосейв ниже уже был защищён).
-  let ok = false;
-  // 1-3 (аудит раунда 2, 2026-08-15): у черновика правда — plan.json, POST
-  // целой деки сервер теперь отвергает (409); раньше он «сохранял» HTML,
-  // который молча откатывала первая же правка формы. Кнопка добирает
-  // несохранённый дебаунс-ввод per-slide сейвом.
-  try {
-    if (isDraft) { await flushPendingSave(); ok = true; }
-    else ok = await saveDeck();
-  } catch (e) { ok = false; }
-  flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
-};
+/* КИРПИЧА «Сохранить» БОЛЬШЕ НЕТ. На борде (4823:1892) его нет ни в шапке
+   сцены, ни где-либо ещё: внизу страницы стоит только строка автосохранения
+   (4823:1914). Кнопка и прежде не умела ничего сверх автосейва — у черновика
+   она дёргала тот же flushPendingSave(), у собранной деки тот же saveDeck(),
+   который и так зовётся на каждую правку. Её настоящей работой было
+   ОБЕЩАНИЕ: «нажми — и правка точно уехала». Обещание теперь держит строка
+   автосохранения, поэтому исход обоих сейвов идёт в неё, а не вспышкой на
+   кнопке (см. setSaveStatus в saveDeckEdit ниже).
+   Один случай кнопка закрывала собой по-настоящему: уход со страницы внутри
+   дебаунса ввода. Его закрывает pagehide — и честнее, чем кнопка, потому что
+   не требует помнить о ней. */
+window.addEventListener("pagehide", () => {
+  // Без await: обработчик выгрузки синхронный, ждать здесь нельзя.
+  // flushPendingSave сам отправляет запрос — браузер доносит его в полёте.
+  try { if (isDraft) flushPendingSave(); } catch (_) {}
+});
 
 // Автосейв правки на слайде собранной деки (у черновика своя ветка — plan.json).
 // Строго по очереди: дека уходит целиком, поэтому один повтор после текущего
@@ -831,15 +890,28 @@ async function saveDeckEdit() {
     ok = await saveDeck();
   } catch (_) { ok = false; } finally {
     deckEditSaving = false;
-    flash(document.getElementById("save"), ok ? "Сохранено" : "Ошибка");
+    // Исход правки собранной деки — в ту же строку автосохранения, что у
+    // черновика. Раньше здесь была вспышка на кнопке «Сохранить», и состояние
+    // «не сохранилось» жило полторы секунды, после чего кнопка возвращала
+    // прежнюю подпись и о потере правки никто больше не сообщал.
+    setSaveStatus(ok ? "saved" : "error");
     if (deckEditPending) { deckEditPending = false; await saveDeckEdit(); }
   }
 }
 
 // Перекрас деки (тёмная ↔ светлая). Тема — атрибут data-theme на <html> деки:
 // сервер флипает его в deck.html (и в plan.json у черновика), все токены deck.css
-// пересчитываются сами, экспорт перерендерит из deck.html. Ярлык кнопки — ЦЕЛЬ
-// («Светлая тема» = во что перекрасим), синкается с темой загруженного кадра.
+// пересчитываются сами, экспорт перерендерит из deck.html.
+//
+// Ярлык кнопки постоянный — «Сменить цветовую схему», как на борде 4823:1903.
+// Раньше он был целью («Светлая тема» = во что перекрасим) и переписывался при
+// каждой загрузке кадра. Бегающий ярлык в ряду действий читается плохо: сосед
+// слева и справа стоят на месте, а эта кнопка то длиннее, то короче, и ряд
+// дёргается на ровном месте. Хуже — ярлык-цель двусмысленный: «Светлая тема»
+// одинаково похоже и на «сейчас светлая», и на «сделать светлой». Цель уехала
+// в подсказку, где на неё есть место и где фраза договаривается до конца;
+// tooltip.js читает data-tip в момент наведения, так что менять атрибут здесь
+// достаточно.
 const themeToggle = document.getElementById("themeToggle");
 function deckTheme() {
   const t = frame.contentDocument?.documentElement?.getAttribute("data-theme");
@@ -847,8 +919,9 @@ function deckTheme() {
 }
 function syncThemeToggle() {
   if (!themeToggle) return;
-  themeToggle.textContent =
-    deckTheme() === "dark" ? "Светлая тема" : "Темная тема";
+  themeToggle.setAttribute("data-tip", deckTheme() === "dark"
+    ? "Перекрашу все слайды в светлую тему. Содержание не меняется."
+    : "Перекрашу все слайды в тёмную тему. Содержание не меняется.");
   themeToggle.classList.remove("hidden");
 }
 themeToggle?.addEventListener("click", async () => {
@@ -886,9 +959,20 @@ themeToggle?.addEventListener("click", async () => {
 // "Готовлю…" pill → poll until ready → the control becomes an active "Скачать…"
 // button that downloads the finished file. No blind wait, download only when ready.
 // Ч§9 — один глагол «Скачать» на все три формата; busy честно объясняет задержку.
+/* Подписи строк в меню «Скачать». Слово «Скачать» из них ушло: оно теперь
+   стоит один раз — на кирпиче, который это меню открывает. Внутри меню каждая
+   строка называет не действие, а ФОРМАТ, и «Скачать PPTX / Скачать PNG (ZIP)»
+   читалось тремя разными действиями вместо одного с тремя исходами.
+   Расширение в скобках — не украшение: «PowerPoint» и «Картинки» говорят, чем
+   файл открывать, а «.pptx» и «.zip» — что именно прилетит в загрузки.
+   idle === ready намеренно: готовый рендер скачивается сам (см. poll), и
+   отдельная подпись «готово» жила бы доли секунды. Готовность показывает
+   заливка строки (.dl__item.is-ready). */
 const EXPORT_LABEL = {
-  png: { idle: "Скачать PNG (ZIP)", busy: "Готовлю PNG… ~10–20 сек", ready: "Скачать PNG (ZIP)" },
-  pptx: { idle: "Скачать PPTX", busy: "Готовлю PPTX… ~10–20 сек", ready: "Скачать PPTX" },
+  png: { idle: "Картинки PNG (.zip)", busy: "Готовлю PNG… ~10–20 сек",
+         ready: "Картинки PNG (.zip)" },
+  pptx: { idle: "PowerPoint (.pptx)", busy: "Готовлю PPTX… ~10–20 сек",
+          ready: "PowerPoint (.pptx)" },
 };
 
 // Any deck edit invalidates a finished (or in-flight) export — a "Скачать" pill
@@ -1034,6 +1118,69 @@ htmlLink?.addEventListener("click", async (e) => {
   e.preventDefault();
   if (await confirmExportWithPlaceholders()) location.href = htmlLink.href;
 });
+
+/* Меню «Скачать» (Figma 4823:1903). Открывается и закрывается только здесь —
+   сами строки форматов о меню не знают и остались теми же обработчиками, что
+   висели на кирпичах в шапке.
+
+   Меню НЕ закрывается по клику внутри: строка «Готовлю PPTX… ~10–20 сек» —
+   это отчёт о работе, и закрыть меню значит спрятать его. Закрывают клик
+   снаружи, Esc и выбор формата, который уже готов (файл уехал, смотреть
+   больше нечего — за это отвечает triggerDownload, см. ниже).
+
+   Esc и клик снаружи слушаем на документе и ТОЛЬКО пока меню открыто: висеть
+   постоянно этим обработчикам незачем, а Esc в редакторе занят диалогами. */
+(function initDownloadMenu() {
+  const wrap = document.getElementById("dl");
+  const btn = document.getElementById("dlBtn");
+  const menu = document.getElementById("dlMenu");
+  if (!wrap || !btn || !menu) return;
+
+  // Клик по самой деке до документа страницы не доходит: слайд живёт в iframe,
+  // и события мыши остаются внутри него. Половина сцены под меню — это именно
+  // дека, так что без этого меню не закрывалось бы по клику по слайду. Кадры
+  // свои, с того же источника (syncDeckTitle читает их document), но на всякий
+  // случай оборачиваем в try: недоступный contentDocument не должен ронять
+  // открытие меню.
+  function frameDocs() {
+    const out = [];
+    document.querySelectorAll("#frameWrap iframe").forEach((f) => {
+      try { if (f.contentDocument) out.push(f.contentDocument); } catch (_) {}
+    });
+    return out;
+  }
+  // Клик внутри кадра — всегда «снаружи» меню: своего содержимого у деки с
+  // меню нет, wrap.contains про чужой документ ничего сказать не может.
+  function onFrameDown() { close(); }
+
+  function close() {
+    menu.classList.add("hidden");
+    btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("pointerdown", onOutside, true);
+    document.removeEventListener("keydown", onEsc, true);
+    frameDocs().forEach((d) => d.removeEventListener("pointerdown", onFrameDown, true));
+  }
+  function onOutside(e) { if (!wrap.contains(e.target)) close(); }
+  function onEsc(e) {
+    if (e.key !== "Escape") return;
+    e.stopPropagation();   // диалогам этот Esc уже не нужен — он закрыл меню
+    close();
+    btn.focus();
+  }
+  function open() {
+    menu.classList.remove("hidden");
+    btn.setAttribute("aria-expanded", "true");
+    document.addEventListener("pointerdown", onOutside, true);
+    document.addEventListener("keydown", onEsc, true);
+    frameDocs().forEach((d) => d.addEventListener("pointerdown", onFrameDown, true));
+  }
+  btn.addEventListener("click", () => {
+    if (menu.classList.contains("hidden")) open(); else close();
+  });
+  // «Исходный HTML» — единственная строка, которая уводит со страницы сразу:
+  // рендерить нечего, отчёта о работе не будет, держать меню открытым незачем.
+  document.getElementById("html")?.addEventListener("click", close);
+})();
 
 // Подпись возвращаем ту, что была ДО первой вспышки: два срабатывания подряд
 // (двойной клик по «Сохранить», автосейв следом за ручным) запоминали уже
@@ -1586,9 +1733,16 @@ function imageFileToDataURL(file, maxW, quality) {
 function renderSlot(name, spec, value) {
   const wrap = document.createElement("div");
   wrap.className = "field";
+  /* Шапка поля — компонент «Поле» (Figma 4823:1921): одна строка, слева имя,
+     справа счётчик «16 / 40». Раньше счётчик стоял ПОД вводом отдельной
+     строкой, и у поля было три этажа вместо двух; на борде он живёт в шапке,
+     потому что это характеристика поля, а не сообщение о вводе. */
+  const head = document.createElement("div");
+  head.className = "field-head";
   const label = document.createElement("label");
   label.textContent = (spec.label || name) + (spec.required ? " *" : "");  // К§2: рус. лейбл, фолбэк на id
-  wrap.appendChild(label);
+  head.appendChild(label);
+  wrap.appendChild(head);
   if (spec.hint) {
     const hint = document.createElement("div");
     hint.className = "field-hint";
@@ -1674,7 +1828,7 @@ function renderSlot(name, spec, value) {
     el.dataset.kind = "text";
     el.addEventListener("input", scheduleSave);
     wrap.appendChild(el);
-    if (spec.max_chars) wrap.appendChild(charCounter(el, spec.max_chars));
+    if (spec.max_chars) charCounter(el, spec.max_chars, head, wrap);
   } else if (spec.kind === "list") {
     const list = document.createElement("div");
     list.className = "field-list";
@@ -1786,18 +1940,31 @@ function hint(text) {
 // Живой счётчик «M/N» для текстового поля: тот же узел, что hint(), но обновляется
 // на ввод и краснеет (.field-hint--over) при переполнении M > max. maxLength обычно
 // не даёт превысить руками — красный нужен для значений, пришедших из плана.
-function charCounter(el, max) {
-  const h = hint("");
+/* Счётчик символов живёт в ДВУХ местах, и это не дубль.
+   Число «16 / 40» — в шапке поля (борд 4823:1921): характеристика поля,
+   она нужна ДО ввода, чтобы человек знал, сколько у него места.
+   Предупреждение «на слайде обрежется» — под вводом, и только при переливе:
+   это уже событие, а не характеристика, и в шапке строка 264px его не держит
+   («16 / 40 — на слайде обрежется» переносится и ломает ряд с именем поля).
+   Красного числа одного мало: сервер режет текст ЖЁСТКО по символу, человек
+   видит на слайде обрубок посреди слова и не связывает его со счётчиком. */
+function charCounter(el, max, head, wrap) {
+  const c = document.createElement("span");
+  c.className = "field-count";
+  head.appendChild(c);
+  const over = hint("");
+  over.classList.add("field-hint--over", "hidden");
+  wrap.appendChild(over);
   const upd = () => {
     const n = (el.value || "").length;
-    // Красного числа мало: сервер режет текст ЖЁСТКО по символу, и человек видит
-    // на слайде обрубок посреди слова, не связывая его со счётчиком.
-    h.textContent = n > max ? `${n}/${max} — на слайде обрежется` : `${n}/${max}`;
-    h.classList.toggle("field-hint--over", n > max);
+    c.textContent = `${n} / ${max}`;
+    c.classList.toggle("field-count--over", n > max);
+    over.textContent = n > max ? "На слайде обрежется" : "";
+    over.classList.toggle("hidden", n <= max);
   };
   el.addEventListener("input", upd);
   upd();
-  return h;
+  return c;
 }
 
 /* ---- панель диаграммного слайда (узлы/связи; drag — на самом слайде) ---- */
@@ -2011,16 +2178,21 @@ function dgmResetLayoutButton() {
 function dgmTextField(labelText, key, value, max) {
   const wrap = document.createElement("div");
   wrap.className = "field";
+  // Та же шапка поля, что у слотов макета (борд 4823:1921): имя слева,
+  // счётчик справа. Поле схемы — то же поле, отдельного рисунка у него нет.
+  const head = document.createElement("div");
+  head.className = "field-head";
   const label = document.createElement("label");
   label.textContent = labelText;
-  wrap.appendChild(label);
+  head.appendChild(label);
+  wrap.appendChild(head);
   const el = document.createElement("input");
   el.maxLength = max;
   el.value = value == null ? "" : String(value);
   el.dataset.dgm = key;
   el.addEventListener("input", scheduleSave);
   wrap.appendChild(el);
-  wrap.appendChild(charCounter(el, max));
+  charCounter(el, max, head, wrap);
   // Проверки «заголовок обязателен» здесь больше нет (MD 2026-11-02, §3). Раньше
   // пустой заголовок схемы подсвечивался ошибкой, потому что шаблон подставлял
   // вместо него пример («ЗАГОЛОВОК СЛАЙДА») — в панели пусто, на слайде чужой
@@ -2649,10 +2821,18 @@ async function saveCurrentSlide(attempt = 0) {
   setSaveStatusRetry();
 }
 
-// Индикатор автосейва в шапке формы: «Сохранение…» → «Сохранено ✓» → «Не сохранено».
-// Успех мягко гаснет через 1.6с; процесс/ошибка висят до следующего сейва. Узел
-// #saveStatus живёт в .builder-head, который не перестраивается renderBuilderForm,
-// поэтому статус переживает пересборку формы.
+/* Строка автосохранения — компонент «Автосохранение» (Figma 4823:1914): точка
+   6px + подпись, внизу страницы под сценой. Узел #saveStatus живёт в обёртке
+   .autosave, которая не перестраивается renderBuilderForm, поэтому статус
+   переживает пересборку формы.
+
+   «СОХРАНЕНО» БОЛЬШЕ НЕ ГАСНЕТ. Прежние 1.6с были попыткой не мешать: статус
+   стоял в шапке формы, среди полей, и там действительно мешал. На борде строка
+   стоит отдельно под сценой и показана ПОСТОЯННО — потому что её сообщение не
+   «только что сохранилось», а «эта работа сохраняется сама». Гаснущая надпись
+   отвечала на вопрос «уехала ли правка» только те полторы секунды, пока человек
+   смотрел в другое место; пустое место после неё не отвечает ни на что.
+   className заменяется целиком намеренно — состояние одно, не набор. */
 let saveStatusTimer = null;
 function setSaveStatus(state) {
   const el = byId("saveStatus");
@@ -2660,12 +2840,6 @@ function setSaveStatus(state) {
   clearTimeout(saveStatusTimer);
   el.textContent = SAVE_STATUS[state] || "";
   el.className = "save-status save-status--" + state;
-  if (state === "saved") {
-    saveStatusTimer = setTimeout(() => {
-      el.textContent = "";
-      el.className = "save-status";
-    }, 1600);
-  }
 }
 
 // К§5 — терминальный статус после исчерпания ретраев: красный текст + кликабельное
@@ -3240,7 +3414,7 @@ function moveThumbDom(from, to0) {
   [...box.querySelectorAll(".thumb")].forEach((t, i) => {
     t.dataset.index = i;
     const num = t.querySelector(".thumb-num");
-    if (num) num.textContent = i + 1;
+    if (num) num.textContent = thumbNo(i);
     if (i >= lo && i <= hi) {
       const ifr = t.querySelector("iframe");
       if (ifr) ifr.src = U(`/api/jobs/${sessionId}/deck?t=${deckT}&editor=1&slide=${i + 1}`);
