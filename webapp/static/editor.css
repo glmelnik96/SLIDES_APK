@@ -274,8 +274,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   place-items: center; background: var(--color-scrim); }
 .build-overlay__card { display: flex; flex-direction: column; align-items: center;
   gap: 12px; padding: 24px; text-align: center; }
-.build-overlay__title { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.build-overlay__title { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-text); }
 .build-overlay__sub { font-size: 13px; line-height: 24px; color: var(--lp-soft); }
 .build-overlay__note { max-width: 432px; font-size: 12px; line-height: 24px;
   color: var(--lp-muted); }
@@ -349,13 +349,25 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .builder-ctx { flex: none; display: flex; flex-direction: column; gap: 12px;
   padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 .builder-ctx__sec > summary { cursor: pointer; list-style: none; user-select: none;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .builder-ctx__sec > summary::-webkit-details-marker { display: none; }
 .builder-ctx__sec > summary:hover { color: var(--lp-text); }
+/* Строки внутри — РАЗНЫЕ куски слайда: заголовок, подзаголовок, подписи узлов
+   схемы. Каждая приходит отдельным <p>, и до этой правки они стояли вплотную
+   (margin: 0, ни зазора, ни отбивки), то есть слипались в один абзац:
+   «Платформа Cloud.ru для командМасштабируйте возможности бизнеса в облаке».
+   Читалось это как опечатка в самой деке — человек шёл искать потерянный
+   пробел в слайде, которого там нет.
+
+   Зазор у списка, а не отступ у абзаца: блок — перечень кусков, и расстояние
+   между ними принадлежит перечню. У абзаца отступ снизу сложился бы с
+   padding прокрутки и оставил бы под последней строкой лишний воздух. */
 .builder-ctx__body { margin-top: 12px; max-height: 240px; overflow: auto;
+  display: flex; flex-direction: column; gap: 12px;
   scrollbar-width: thin; scrollbar-gutter: stable; padding-right: 12px; }
-.builder-ctx__body p { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-soft); }
+.builder-ctx__body p { margin: 0; font-size: 13px; line-height: 20px;
+  color: var(--lp-soft); }
 
 /* Арифметика формы — канонная: подпись 12 + зазор 12 + контрол 48/96, зазор
    между блоками 24. Любая комбинация блоков садится на модуль сама. */
@@ -429,8 +441,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .field-item { display: flex; gap: 12px; align-items: center; }
 .field-item input { flex: 1 1 auto; min-width: 0; }
 .item-num { flex: none; min-width: 12px; text-align: right;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .item-del, .item-move { flex: none; padding: 6px; }
 .item-move:disabled { opacity: .4; cursor: default; }
 .field-file-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -442,8 +454,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .dgm-edge-label { flex: 0 1 34%; }
 .dgm-val { flex: 0 0 72px; }
 .dgm-acc { display: inline-flex; align-items: center; gap: 6px; flex: none; cursor: pointer;
-  user-select: none; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+  user-select: none; font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 /* Единственная галочка редактора. Нативную оставить нельзя: у неё свои скруглени
    и своя синева — второй акцент на странице. Квадрат тот же, что у .check-row
    канона, и ровно в высоту строки: 24 внутри 24. */
@@ -461,8 +473,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    читается словами внутри, а не цветом рамки: жёлтого в палитре нет. */
 .dgm-claims { padding: 12px; box-shadow: inset 0 0 0 1px var(--color-state-warning);
   font-size: 12px; line-height: 24px; color: var(--lp-soft); }
-.dgm-claims-head { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.dgm-claims-head { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-text); }
 .dgm-claims ul { margin: 0; padding-left: 18px; }
 
 /* ===== Чат-панель ========================================================== */
@@ -471,8 +483,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    модуля (шапка выходила 126 вместо 96). */
 .chat-head { flex: none; display: flex; flex-direction: column; gap: 12px;
   padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.chat-head h3 { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+.chat-head h3 { margin: 0; font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-text); }
 .chat-head p { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-soft); }
 /* «в разработке» — не статус-плашка, а оговорка в той же строке: цвет тише,
    рамки нет. Плашка добавила бы второй акцент там, где акцент один. */
@@ -489,8 +501,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .chat-empty { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
 .chat-input { flex: none; display: flex; flex-direction: column; gap: 12px;
   padding-top: 12px; box-shadow: inset 0 1px 0 var(--lp-line-2); }
-.chat-target { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.chat-target { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .chat-input.is-disabled { cursor: not-allowed; }
 .chat-input.is-disabled textarea, .chat-input.is-disabled .btn { opacity: .4;
   pointer-events: none; }
@@ -533,20 +545,21 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 /* ===== Живой аутлайн (режим чата) ========================================== */
 .outline { flex: none; display: flex; flex-direction: column; gap: 12px;
   padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.outline-head { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.outline-head { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .outline-list { list-style: none; margin: 0; padding: 0 12px 0 0; display: flex;
   flex-direction: column; gap: 12px; max-height: 40vh; overflow: auto;
   scrollbar-width: thin; scrollbar-gutter: stable; }
 .outline-list li { display: flex; align-items: center; gap: 12px; font-size: 13px;
   line-height: 24px; color: var(--lp-soft); }
 .outline-num { flex: none; min-width: 12px; text-align: right;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; color: var(--lp-muted); }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .outline-label { flex: 1 1 auto; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.outline-badge { flex: none; padding: 0 6px; font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-muted);
+.outline-badge { flex: none; padding: 0 6px; font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 24px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-muted);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 .outline-badge.is-ready, .outline-badge.is-typed { color: var(--lp-key-ink);
   background: var(--lp-key); box-shadow: none; }
@@ -598,27 +611,28 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   object-fit: contain; display: block; }
 /* Номер по каталогу и метка «сейчас» — квадраты 24 у кромок кадра. */
 .picker-num { position: absolute; right: 0; top: 0; z-index: 2; padding: 0 6px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; color: var(--lp-key-ink); background: var(--lp-key);
+  font-family: var(--font-text); font-weight: 500; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; font-variant-numeric: tabular-nums;
+  color: var(--lp-key-ink); background: var(--lp-key);
   opacity: 0; transition: opacity .2s var(--lp-ease); }
 .picker-item:hover .picker-num { opacity: 1; }
 .picker-cur { position: absolute; left: 0; top: 0; z-index: 2; padding: 0 6px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase;
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none;
   color: var(--lp-key-ink); background: var(--lp-key); }
 .picker-item--current { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .picker-meta { display: flex; flex-direction: column; padding: 12px; }
 .picker-id { font-size: 13px; font-weight: 600; line-height: 24px; }
 .picker-intent { font-size: 12px; line-height: 24px; color: var(--lp-soft); }
-.picker-code, .picker-more { font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.picker-code, .picker-more { font-family: var(--font-text); font-weight: 400;
+  font-size: 13px; line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); }
 .picker-badge { display: inline-block; margin-left: 6px; padding: 0 6px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted);
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted);
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.picker-group { grid-column: 1 / -1; font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.picker-group { grid-column: 1 / -1; font-family: var(--font-text); font-weight: 400;
+  font-size: 13px; line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); }
 .picker-empty { grid-column: 1 / -1; margin: 0; padding: 48px 0; text-align: center;
   font-size: 13px; line-height: 24px; color: var(--lp-soft); }
@@ -626,8 +640,8 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .picker-item--soon { opacity: .4; cursor: default; }
 .picker-item--soon:hover { box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 .picker-item--soon .picker-prev { display: grid; place-items: center; }
-.picker-soon { padding: 0 12px; font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.picker-soon { padding: 0 12px; font-family: var(--font-text); font-weight: 400;
+  font-size: 13px; line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); box-shadow: inset 0 0 0 1px var(--lp-line-2); }
 
 /* ===== Бренд-диалог (замена нативных alert/confirm) =========================
@@ -670,13 +684,13 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-overlay__side { display: flex; align-items: center; gap: 12px; }
 .glass-overlay__side--right { justify-content: flex-end; }
 .glass-overlay__stepper { display: flex; justify-content: center; gap: 24px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase; }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; }
 .glo-stage--done { color: var(--color-accent-text); }
 .glo-stage--active { color: var(--lp-text); }
 .glo-stage--todo { color: var(--lp-muted); opacity: .6; }
-.glass-overlay__quest { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.glass-overlay__quest { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--color-accent-text); white-space: nowrap; }
 /* Полоса прогресса — те же 2px, что у плитки работы в ленте. Это единственная
    толщина индикатора в системе, и второй заводить нельзя. */
@@ -706,9 +720,9 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-overlay__stagebox iframe { flex: 1 1 auto; width: 100%; min-height: 0;
   border: 0; border-radius: var(--radius-lg); background: var(--lp-line);
   box-shadow: 0 0 0 1px var(--lp-line-2); }
-.glass-overlay__cap { text-align: center; font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-muted); }
+.glass-overlay__cap { text-align: center; font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 24px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-muted); }
 /* Скелет заполняемого слайда — место под контент, а не декор.
    Три вещи стоят одной колонкой шириной с каркас деки: доля готовности, имя
    слайда и сам каркас. Колонка узкая и стоит по центру панели, а внутри неё
@@ -760,8 +774,8 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 /* Осечка заполнения — не вопрос: карточку метит та же обводка, что ошибку. */
 .glass-q--failed { box-shadow: inset 0 0 0 1px var(--color-state-danger); }
 .glass-q__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.glass-q__num { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--color-accent-text); }
+.glass-q__num { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--color-accent-text); }
 .glass-q--failed .glass-q__num { color: var(--lp-text); }
 .glass-q__topic { font-size: 13px; font-weight: 600; line-height: 24px; color: var(--lp-text); }
 .glass-q__excerpt { margin: 0; padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2);
@@ -791,9 +805,9 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glass-chip__row { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .glass-chip__name { min-width: 0; font-size: 13px; line-height: 24px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.glass-chip__cur { flex: none; font-style: normal; font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-muted); }
+.glass-chip__cur { flex: none; font-style: normal; font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 24px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-muted); }
 .glass-chip__gist { font-size: 12px; line-height: 24px; color: var(--lp-muted);
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
 /* Отметка выбора — квадрат 24, залитый ключом. Круга в системе нет. */
@@ -811,8 +825,8 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glo-cell { position: relative; flex: 0 0 128px; height: 72px; overflow: hidden;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 6px; background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .glo-cell--queued { opacity: .55; }
 .glo-cell--filling { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
 .glo-cell--quest { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
@@ -823,52 +837,34 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .glo-cell__label { max-width: 100%; padding: 0 6px; text-align: center;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* ===== ТРЕТИЙ РЕГИСТР: где кончается моно-капс ==============================
-   Правило целиком повторяет slides.css и заведено там же по той же причине:
-   канон делит текст на содержательный и служебный, а в инструменте служебным
-   оказывается всё, что не заголовок, — и узкий капс уезжает набирать целые
-   фразы. Граница проходит не по слою, а по тому, ЧТО ДЕЛАЕТ строка: метка
-   (называет, считает, помечает; примерно до 12 знаков) остаётся моно-капсом,
-   фраза и команда уходят в SB Sans Text прямым регистром.
+/* ===== ТРЕТЬЕГО РЕГИСТРА БОЛЬШЕ НЕТ ========================================
+   Здесь стоял блок, который отвоёвывал у моно-капса фразы и команды и оставлял
+   ему «метки до двенадцати знаков». Компромисс был честный, пока канон был
+   тёмный: в нём узкий капс — отдельный служебный голос, и спор шёл только
+   о границе. Hub Light этого голоса не знает вовсе. Борд 4823:1892 показывает
+   панель редактора целиком, и там моно-капса нет ни в одной строке: подписи
+   полей («Заголовок», «Колонка 1 · текст»), счётчики («16 / 40»), шапка
+   раздела («Исходный текст раздела»), строка сейва («Сохранено») — всё это
+   SB Sans Text обычным регистром.
 
-   Дублирование намеренное: editor.html не подключает slides.css, а витрина и
-   редактор обязаны говорить одним голосом — иначе переход из одного в другой
-   читался бы сменой продукта. Менять правило нужно в обоих файлах.
+   Поэтому граница снята не сдвигом, а отменой: 32 правила в v11.css и
+   editor.css переведены с моно 700/11/.09em/caps на текст 400/13/0/none, и
+   отдельный блок-исключение стал не нужен — исключать больше не из чего.
+
+   Что это стоило. Моно-капс умел одну вещь, которую обычный регистр не умеет:
+   мгновенно помечать строку как служебную, не читая её. Эту работу в Hub
+   делают цвет (text-muted) и размер (13 против 16 у содержательного текста) —
+   слабее, но не менее внятно, и ценой того, что служебные подписи стали
+   читаться как слова, а не как ленты заглавных.
    ========================================================================== */
-/* Кирпич называет действие: «Улучшить этот слайд», «Остановить сборку»,
-   «Сменить макет» — это команды, а команда должна читаться словом. Кегль 12,
-   а не 13: кирпич высотой 24 рассчитан на 11px, и 13 встаёт вплотную
-   к обводке. Полужирный отделяет действие от подписи рядом с ним.
-
-   Имена форматов («HTML») правило захватывает вместе с остальными намеренно:
-   они стоят в одном ряду со «Скачать PPTX» и «Сохранить», и два регистра
-   в одной строке кирпичей читались бы поломкой, а не смыслом. */
+/* Кирпич — единственное, что из прежнего блока пережило отмену: кегль 12,
+   а не общие 13, и полужирный. Причина не в регистре, а в размере органа:
+   кирпич высотой 24 рассчитан на мелкую подпись, 13 встаёт в нём вплотную
+   к краю. Полужирный отделяет команду от подписи рядом с ней. */
 body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
   font-size: 12px; letter-spacing: 0; text-transform: none; }
-/* Фразы служебного слоя: заголовок сборки, шапка плана, подпись пустого
-   стекла, вопрос лайтбокса. Все — предложения или их части, ни одно не метка.
-   Интерлиньяж не трогаем: модуль 24 держит раскладку, регистр её не касается.
-   #modeBadge из списка ушёл: служебная строка работы теперь живёт в шапке
-   сцены и набрана Display 20/24 вместе с именем деки (см. .stage__meta). */
-.build-overlay__title, .outline-head,
-.glass-overlay__cap, .lb-counter {
-  font-family: var(--font-text); font-weight: 600; font-size: 13px;
-  letter-spacing: 0; text-transform: none; }
 /* Пустое стекло — не заголовок, а пояснение: полужирный тут лишний. */
 .glass-overlay__cap { font-weight: 400; color: var(--lp-muted); }
-/* Подсказки и всё, чем инструмент объясняется: «3 из 6 — предел этого макета»,
-   «? 2 вопроса — разберём после заполнения», «Откроется выбор: блок-схема,
-   воронка…». Это предложения целиком, и капса в них было больше, чем во всех
-   метках вместе взятых.
-   .field-hint и .save-status из списка ушли: у них теперь свой кегль 13/18 и
-   13/24 прямо в базовых правилах — они больше не исключения из моно-капса, а
-   полноценные компоненты борда («Поле» 4823:1921, «Автосохранение» 4823:1914). */
-.dgm-claims-head, .picker-more,
-.glass-overlay__quest, .builder-ctx__sec > summary {
-  font-family: var(--font-text); font-weight: 400; font-size: 12px;
-  letter-spacing: 0; text-transform: none; }
-/* «Повторить» внутри строки сейва — команда, а не часть сообщения. */
-.save-status .btn-link { font-size: 13px; letter-spacing: 0; text-transform: none; }
 
 /* ===== Экран 05 · Просмотр (борд 4823:2002) =================================
    Одна колонка вместо трёх. Это и есть разница между экранами 05 и 06: в

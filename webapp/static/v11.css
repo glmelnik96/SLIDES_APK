@@ -38,9 +38,13 @@
   src: url("fonts/sb-sans-display-400.woff2") format("woff2"); }
 @font-face { font-family: "SB Sans Display"; font-weight: 500 700; font-style: normal; font-display: swap;
   src: url("fonts/sb-sans-display-600.woff2") format("woff2"); }
-/* Узкий моноширинный — служебный слой: нумерация, микролейблы, подписи полей.
-   Только капсом и только на мелком кегле; тело текста остаётся SB Sans Text.
-   Без этих двух файлов весь служебный слой падает в Verdana. */
+/* Узкий моноширинный. В тёмном каноне он держал весь служебный слой —
+   нумерацию, микролейблы, подписи полей, — и всегда капсом. В Hub Light у него
+   не осталось ни одной работы: борд 4823:1892 набирает служебный слой тем же
+   SB Sans Text обычным регистром (см. «ТРЕТЬЕГО РЕГИСТРА БОЛЬШЕ НЕТ» в
+   editor.css). Шрифт пока подключён и переменная объявлена: в разметке деки и
+   в чертежах моно ещё встречается, и выдёргивать файлы из-под них этим
+   проходом нельзя. Если последняя ссылка уйдёт — уйдут и эти два @font-face. */
 @font-face { font-family: "SB Sans Cond Mono"; font-weight: 400; font-style: normal; font-display: swap;
   src: url("fonts/sb-sans-cond-mono-400.woff2") format("woff2"); }
 @font-face { font-family: "SB Sans Cond Mono"; font-weight: 500 700; font-style: normal; font-display: swap;
@@ -313,8 +317,8 @@ body.v11 .logout-form button:hover { background: var(--color-bg-hover);
 /* ===== Подвал: служебная строка вместо отдельной секции ===== */
 .lp-foot { display: flex; flex-wrap: wrap; justify-content: center;
   align-items: baseline; gap: 8px 18px; margin: 0; padding: 0 32px 32px;
-  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+  font-family: var(--font-text); font-size: 13px; line-height: 1.5;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .lp-foot a { color: var(--lp-text); text-decoration: none; border-bottom: 1px solid var(--lp-line-2); }
 .lp-foot a:hover { border-bottom-color: var(--lp-text); }
 
@@ -411,22 +415,22 @@ body.is-tool .t-btn:disabled:hover { background: var(--color-bg-control); }
 /* Шапка ленты — ровно ячейка текста плюс ячейка отступа до линии: 12 + 12. */
 .feed__head { display: flex; align-items: baseline; gap: 24px; margin: 0 0 24px;
   padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.feed__title { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-soft); }
+.feed__title { margin: 0; font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 12px; letter-spacing: 0; text-transform: none; color: var(--lp-soft); }
 /* Своей линии у поиска нет: строку уже подчёркивает шапка. Линия появляется на
    фокусе — и тогда она ключевого цвета. */
 .feed__search { margin-left: auto; width: 192px; border: 0; border-radius: 0; padding: 0;
   background: var(--lp-ink); box-shadow: none;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-text); }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-text); }
 .feed__search::placeholder { color: var(--lp-muted); }
 .feed__search:focus { outline: none; box-shadow: inset 0 -1px 0 var(--lp-key); }
 .feed__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(192px, 1fr));
   gap: 24px; }
 /* Пустая лента — ОДНА строка на месте первого ряда плиток, а не текст,
    висящий посреди пустого прямоугольника. Свободную площадь держит чертёж. */
-.feed__empty, .feed__foot { margin: 0; font-family: var(--font-mono); font-weight: 700;
-  font-size: 11px; line-height: 24px; letter-spacing: .09em; text-transform: uppercase;
+.feed__empty, .feed__foot { margin: 0; font-family: var(--font-text); font-weight: 400;
+  font-size: 13px; line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); }
 .feed__foot { margin-top: 24px; }
 
@@ -446,8 +450,8 @@ body.is-tool .t-btn:disabled:hover { background: var(--color-bg-control); }
   transition: opacity .2s var(--lp-ease), background .2s var(--lp-ease), color .2s var(--lp-ease); }
 .work:hover .work__del, .work__del:focus-visible { opacity: 1; }
 .work__del:hover { background: var(--lp-key); color: var(--lp-key-ink); }
-.work__state { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); line-height: 24px; }
+.work__state { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted); line-height: 24px; }
 .work--failed .work__state { color: var(--lp-text); }
 .work__acts { display: flex; flex-wrap: wrap; gap: 12px; }
 /* Единственное бесконечное движение системы: оно означает работу, а не
@@ -489,13 +493,13 @@ body.is-tool .lightbox__side { display: flex; flex-direction: column; gap: 24px;
 .lb-bar { display: flex; gap: 12px; }
 .lb-bar .t-btn { padding: 6px 12px; }
 .lb-bar .lightbox__close { margin-left: auto; }
-.lb-counter { font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 24px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.lb-counter { font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .lb-caption { font-size: 13px; line-height: 24px; color: var(--lp-soft); }
 .lb-actions { display: flex; flex-direction: column; gap: 24px; }
 .lb-group { display: flex; flex-direction: column; gap: 12px; }
-.lb-group__label { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 11px;
-  line-height: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+.lb-group__label { margin: 0; font-family: var(--font-text); font-weight: 400; font-size: 13px;
+  line-height: 12px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .lb-group__row { display: flex; flex-wrap: wrap; gap: 12px; }
 
 /* ===== §8.6 Тогл-строка: строка лендинга, повёрнутая в вертикаль =============
@@ -537,9 +541,9 @@ body.is-tool .scen-card__head { display: flex; align-items: baseline; gap: 12px;
   justify-content: space-between; }
 body.is-tool .scen-card__title { min-width: 0; font-size: 13px; font-weight: 600;
   line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body.is-tool .scen-card__tag { flex: none; font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 18px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--color-accent-text);
+body.is-tool .scen-card__tag { flex: none; font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 18px; letter-spacing: 0;
+  text-transform: none; color: var(--color-accent-text);
   transition: color .25s var(--lp-ease); }
 body.is-tool .scen-card__desc { opacity: 0; font-size: 12px; line-height: 18px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -561,14 +565,14 @@ body.is-tool .scen-card:focus-visible .scen-card__desc { opacity: 1;
 .gen-form { display: flex; flex-direction: column; gap: 24px; }
 body.is-tool .gen-form__tail { display: flex; flex-direction: column; gap: 24px; }
 body.is-tool .gen-form label { display: flex; flex-direction: column; gap: 12px;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 12px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted); }
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 12px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 body.is-tool .gen-form .field-group { display: flex; flex-direction: column; gap: 12px; }
 /* Боковой отступ подписи равен отступу текста в тогл-строках и в полях:
    контролы упираются в края рельса, текст — никогда. */
-body.is-tool .gen-form .field-label { padding: 0 12px; font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 12px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-muted); }
+body.is-tool .gen-form .field-label { padding: 0 12px; font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 12px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-muted); }
 body.is-tool .gen-form select,
 body.is-tool .gen-form input[type="text"],
 body.is-tool .gen-form textarea { font: inherit; font-size: 13px; line-height: 24px;
@@ -591,8 +595,8 @@ body.is-tool .gen-form__grid > label + label { margin-left: -1px; }
 body.is-tool .gen-form button[type="submit"] { height: 48px; cursor: pointer;
   border: 0; border-radius: var(--radius-md);
   padding: 12px; background: var(--lp-key); color: var(--lp-key-ink);
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase;
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none;
   transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
 body.is-tool .gen-form button[type="submit"]:hover { background: var(--color-accent-hover); }
 body.is-tool .gen-form button[type="submit"]:disabled { opacity: .4; cursor: default; }
@@ -672,8 +676,8 @@ body.is-tool .muted { color: var(--lp-muted); font-size: 13px; }
 .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0; height: 96px; padding: 12px; text-align: center; cursor: pointer;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 24px;
-  letter-spacing: .09em; text-transform: uppercase; color: var(--lp-muted);
+  font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
+  letter-spacing: 0; text-transform: none; color: var(--lp-muted);
   transition: box-shadow .2s var(--lp-ease), color .2s var(--lp-ease); }
 .dropzone:hover, .dropzone.is-drag { box-shadow: inset 0 0 0 1px var(--color-accent-default);
   color: var(--lp-soft); }
@@ -683,9 +687,9 @@ body.is-tool .muted { color: var(--lp-muted); font-size: 13px; }
 
 /* ===== §8.10 Сноски рельса и служебная строка статуса ===== */
 body.is-tool .status { margin-top: 24px; padding: 12px;
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); font-family: var(--font-mono);
-  font-weight: 700; font-size: 11px; line-height: 24px; letter-spacing: .09em;
-  text-transform: uppercase; color: var(--lp-soft); }
+  box-shadow: inset 0 0 0 1px var(--lp-line-2); font-family: var(--font-text);
+  font-weight: 400; font-size: 13px; line-height: 24px; letter-spacing: 0;
+  text-transform: none; color: var(--lp-soft); }
 /* Ошибка метится --color-state-danger. Прежний запрет «красного в палитре нет
    и заводить его нельзя» снят вместе с тёмной темой: он держался на том, что
    на чернилах плотность обводки видна, — на белом листе нет. */
