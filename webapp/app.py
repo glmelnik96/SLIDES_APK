@@ -214,6 +214,7 @@ async def download_file(name: str,
 @app.post("/api/jobs")
 async def create_job(request: Request, mode: str = Form(...),
                      file: UploadFile = File(...),
+                     confirm_images: str = Form(""),
                      user=Depends(get_current_user)) -> JSONResponse:
     from schemas.session import Mode, SessionInput
     if mode not in _ALLOWED:
@@ -235,6 +236,34 @@ async def create_job(request: Request, mode: str = Form(...),
     from htmlslides.parsers.base import decode_smart as _decode_smart
     if not raw.strip() or (suffix in (".md", ".txt") and not _decode_smart(raw).strip()):
         raise HTTPException(400, "файл пустой — загрузите документ с содержимым")
+
+    # Развилка про картинки (экран 03 борда) — та же, что у glass/start: HTML-дека
+    # картинки из документа не переносит, и про потерю надо предупредить ДО
+    # постановки в очередь. 409 с полем images — вопрос, а не отказ: «Собрать
+    # без картинок» шлёт тот же запрос с confirm_images=1, «Заменить файл»
+    # открывает выбор заново.
+    #
+    # Счёт — до создания SessionInput: отказ от сборки не должен оставлять
+    # осиротевший каталог сессии, поэтому документ считаем во временном файле.
+    # Ошибку счёта глотаем — настоящую диагностику даст сама сборка, и ронять
+    # запуск на вспомогательном счётчике нельзя.
+    if not confirm_images.strip():
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tf:
+            tf.write(raw)
+            tmp = Path(tf.name)
+        try:
+            images = await run_in_threadpool(_count_images, tmp)
+        except Exception:  # noqa: BLE001 — счётчик не вправе ронять запуск
+            images = 0
+        finally:
+            tmp.unlink(missing_ok=True)
+        if images:
+            return JSONResponse(status_code=409, content={
+                "images": images,
+                "detail": f"в документе {images} "
+                          f"{_plural_ru(images, 'картинка', 'картинки', 'картинок')}",
+            })
 
     inp = SessionInput(user_id=user.id, chat_id=0, progress_message_id=0,
                        mode=Mode(mode), input_s3_key=None,

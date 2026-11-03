@@ -76,9 +76,10 @@ let selectedFile = null;
 const drop = $("#drop");
 const fileInput = $("#file");
 
-// Старт один — стеклянная сборка (точный перенос уходит в createJob по галочке).
+// Старт один — автоматическая сборка: кнопка ведёт в createJob и оставляет
+// человека на главной (канон борда 01 → 01b, подпись 4823:2073).
 function setStartEnabled(on) {
-  ["#createGlass"].forEach((sel) => {
+  ["#createBuild"].forEach((sel) => {
     const b = $(sel);
     if (b) b.disabled = !on;
   });
@@ -299,17 +300,22 @@ function feedSort(a, b) {
 // Состояние — строка служебного слоя, а не цветная пилюля: цвет в v11 один,
 // и он потрачен на акцент. Отличает состояния текст, а прогресс — полоска 2px.
 const STATE_LABEL = {
-  running: "В работе",
+  running: "Собирается",
   queued: "В очереди",
   done: "Готово",
   draft: "Черновик",
   failed: "Ошибка",
   cancelled: "Отменено",
 };
+// Идущая сборка подписана глаголом борда: чип на плитке (4823:2091) говорит
+// «Собирается · 7 из 12». Счёт слайдов здесь не показываем честно: прогресс
+// идёт через несколько стадий (структура, заполнение, проверка), и «N из M»
+// верен только внутри стадии заполнения — он и так виден в мете карточки
+// («Оформляю слайд 4 из 5»). Сквозная правда — процент.
 function stateLine(it) {
   if (it.state === "running") {
     const pct = Math.max(it.pct || 0, livePct[it.id] || 0);
-    return `В работе · ${pct}%`;
+    return `Собирается · ${pct}%`;
   }
   return STATE_LABEL[it.state] || "";
 }
@@ -391,7 +397,13 @@ function cardMeta(it) {
 
    Три кирпича только у ГОТОВОЙ работы. У идущей сборки действие одно —
    остановить; у черновика — продолжить; у сорванной — повторить. Рисовать там
-   «Скачать» значило бы обещать файл, которого нет. */
+   «Скачать» значило бы обещать файл, которого нет.
+
+   Сознательное расхождение с бордом: подпись плитки (4823:1938) рисует у идущей
+   сборки «Паузу», а у остановленной — «Продолжить». Бэкенд паузу не умеет:
+   /api/jobs/{id}/cancel убивает прогон, «Повторить» запускает его заново с
+   нуля. Кнопка «Пауза», которая на деле убивает сборку, — обман, поэтому
+   остаёмся при честных «Остановить»/«Повторить», пока в движке нет resume. */
 function cardActions(it) {
   if (it.state === "running" || it.state === "queued")
     return `<button type="button" class="t-btn" data-stop="${it.id}">Остановить</button>`;
@@ -800,6 +812,7 @@ async function autoResumeActive() {
 async function createJob(opts) {
   if (!selectedFile) return;
   const force = !!(opts && opts.force);
+  const confirmImages = !!(opts && opts.confirmImages);
   // Сервис ИИ лежал на момент последней пробы — предупреждаем, но не запрещаем:
   // состояние могло измениться за секунды, и решать должен пользователь.
   if (!force && mhData && mhData.state === "down") {
@@ -809,7 +822,7 @@ async function createJob(opts) {
       `сборка, скорее всего, оборвется. Можно подождать пару минут или запустить сейчас.</p>` +
       `<p><button type="button" class="t-btn" id="forceCreate">Все равно запустить</button></p>`);
     const f = $("#forceCreate");
-    if (f) f.onclick = () => createJob({ force: true });
+    if (f) f.onclick = () => createJob({ force: true, confirmImages });
     loadModelHealth();          // заодно перепроверяем — данные явно устарели
     return;
   }
@@ -826,6 +839,7 @@ async function createJob(opts) {
   const fd = new FormData();
   fd.append("mode", MODE);
   fd.append("file", selectedFile);
+  if (confirmImages) fd.append("confirm_images", "1");
   setStartEnabled(false);
   let res;
   try {
@@ -839,16 +853,30 @@ async function createJob(opts) {
     return;
   }
   if (!res.ok) {
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (e) { parsed = null; }
+    // Развилка про картинки (экран 03 борда, 4823:1843). 409 с полем images —
+    // не отказ, а вопрос: HTML-дека картинки из документа не переносит, и
+    // сервер ждёт решения. «Собрать без картинок» повторяет запрос с
+    // confirm_images=1 (стрелка борда ведёт в 01b — остаёмся на главной),
+    // «Заменить файл» открывает выбор заново. Различаем по полю, а не по
+    // коду: другие 409 поля images не несут.
+    if (res.status === 409 && parsed && typeof parsed.images === "number"
+        && parsed.images > 0) {
+      setStartEnabled(true);
+      if (await askImages(parsed.images)) createJob({ force, confirmImages: true });
+      else fileInput.click();
+      return;
+    }
     // Surface the failure in the #result panel (own visual system, SB Sans),
     // not a native alert. 429 = queue full; 400 already carries a Russian
     // detail; anything else falls back to raw text in a collapsed <details>.
-    const text = await res.text();
     let body;
     if (res.status === 429) {
       body = "<p>Очередь занята — дождитесь завершения текущих сборок.</p>";
     } else {
-      let detail = "";
-      try { detail = JSON.parse(text).detail; } catch (e) { detail = ""; }
+      const detail = parsed && parsed.detail ? parsed.detail : "";
       body = detail
         ? `<p>${esc(detail)}</p>`
         : `<details><summary>Детали</summary><pre>${esc(text)}</pre></details>`;
@@ -863,81 +891,13 @@ async function createJob(opts) {
   resetFile();                            // дропзона свободна — можно готовить следующую
 }
 // Стрелка, а не сама функция: onclick передал бы MouseEvent в opts.
-$("#createGlass").onclick = () => createGlass();
-
-/* ---- пошаговая сборка: черновик + /glass/start → редактор со степпером ---- */
-let glassStarting = false;
-async function createGlass() {
-  if (!selectedFile || glassStarting) return;
-  glassStarting = true;
-  const btn = $("#createGlass");
-  // Кнопка снова обычная — одна строка подписи, поэтому и подменяем её целиком.
-  const prevLabel = btn.textContent;
-  setStartEnabled(false);
-  btn.textContent = "Раскладываю на слайды…";
-  try {
-    const r = await fetch(U("/api/drafts"), {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "manual" }),
-    });
-    if (!r.ok) throw new Error("не удалось создать черновик");
-    const { session_id } = await r.json();
-
-    // Отправка документа. Тело ответа разбираем здесь же и отдаём наружу:
-    // прочитать его можно ровно один раз, а заглянуть в него надо и развилке
-    // про картинки (поле images), и обработчику ошибки (поле detail).
-    //
-    // Старт — parse-only (без LLM): обычно секунды даже на больших документах.
-    // Таймаут — от повисшего коннекта: без него кнопка «раскладывала» вечно.
-    async function send(confirmed) {
-      const fd = new FormData();
-      fd.append("file", selectedFile);
-      if (confirmed) fd.append("confirm_images", "1");
-      const ctl = new AbortController();
-      const tmr = setTimeout(() => ctl.abort(), 180000);
-      let res;
-      try {
-        res = await fetch(U(`/api/drafts/${session_id}/glass/start`),
-                          { method: "POST", body: fd, signal: ctl.signal });
-      } finally { clearTimeout(tmr); }
-      let body = null;
-      if (!res.ok) {
-        try { body = JSON.parse(await res.text()); } catch (e) { body = null; }
-      }
-      return { ok: res.ok, status: res.status, body };
-    }
-
-    let g = await send(false);
-    // Экран 03. На 409 сервер отвечает и «черновик не пуст» — различаем по
-    // полю images, а не по коду: у развилки оно есть, у отказа его нет.
-    const images = (g.status === 409 && g.body
-                    && typeof g.body.images === "number") ? g.body.images : 0;
-    if (images > 0) {
-      // Пока человек думает, подпись кнопки возвращаем: «Раскладываю…» на
-      // замершей кнопке под открытым диалогом обещает работу, которой нет.
-      btn.textContent = prevLabel;
-      if (!await askImages(images)) {         // «Заменить файл»
-        setStartEnabled(true);
-        fileInput.click();  // пустой черновик остаётся — он ничего не держит
-        return;
-      }
-      btn.textContent = "Раскладываю на слайды…";
-      g = await send(true);
-    }
-    if (!g.ok) {
-      throw new Error((g.body && g.body.detail) || "не удалось разобрать документ");
-    }
-    location.href = U(`/editor?session=${session_id}&mode=manual&glass=1`);
-    return; // уходим со страницы — кнопку не воскрешаем
-  } catch (e) {
-    launchError("Не удалось начать пошаговую сборку",
-      `<p>${esc(e && e.message ? e.message : String(e))}</p>`);
-    setStartEnabled(true);
-    btn.textContent = prevLabel;
-  } finally {
-    glassStarting = false;
-  }
-}
+// Канон борда (стрелка 4823:2053, подпись 4823:2073): «Собрать презентацию»
+// запускает автоматическую сборку и ОСТАВЛЯЕТ человека на главной — плашка
+// и плитка с прогрессом появляются первыми в «Ваших презентациях» (экран 01b).
+// Прежний маршрут уводил в редактор со стеклянным степпером, то есть ровно
+// «выбрасывал на процесс сборки»; степпер остался машинерией черновиков и
+// с главной больше не достижим.
+$("#createBuild").onclick = () => createJob();
 
 /* ---- доступность сервиса ИИ (плашка над кнопками старта) ---- */
 // Пробы стоят вызовов к провайдеру, поэтому в фоне не поллим: спрашиваем при
@@ -1111,9 +1071,10 @@ function streamProgress(sessionId, kind, initial) {
       currentSession = null;
       delete livePct[sessionId];
       delete liveDetail[sessionId];
-      // Готовая дека — сразу в редактор; сбой/отмена — остаёмся, карточка сама
-      // перерисуется в терминальное состояние следующим поллингом.
-      if (ev.stage === "done") { location.href = U(`/editor?session=${sessionId}`); return; }
+      // Любой терминал — остаёмся на главной (канон борда, подпись 4823:2073:
+      // «После „Собрать презентацию" человек остаётся на главной»). Готовая дека
+      // не уводит в редактор: плитка сама перерисуется в готовое состояние с
+      // кнопками «Скачать · Посмотреть · Редактировать» следующим loadFeed().
       loadFeed();
     }
   };

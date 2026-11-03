@@ -90,7 +90,7 @@ def test_index_has_two_entry_cards(monkeypatch, tmp_path):
         # вторым, подчинённым входом — inline-ссылкой, а не равной картой.
         # Чат-карта-завлекалка с главной убрана целиком (2026-08-21).
         assert 'id="drop"' in html and 'id="dropPick"' in html
-        assert 'id="createGlass"' in html
+        assert 'id="createBuild"' in html
         assert 'id="create"' not in html
         assert 'id="openManual"' in html
         assert 'id="openChat"' not in html
@@ -366,6 +366,36 @@ def test_create_job_starts_runner_html_only(monkeypatch, tmp_path):
         assert r.json()["kind"] == "html"
         assert started["mode"] == "htmlnew"
         assert started["user"] is not None
+
+
+def test_create_job_asks_about_images_once(monkeypatch, tmp_path):
+    """Развилка про картинки (экран 03 борда) стоит и на /api/jobs.
+
+    Канон борда ведёт «Собрать презентацию» прямо в автоматическую сборку
+    (01 → 03 → 01b), поэтому вопрос «в документе N картинок» задаёт сам
+    /api/jobs — ДО постановки в очередь, как glass/start у черновиков. 409,
+    а не 400: запрос правильный, не хватает решения; «Собрать без картинок» —
+    тот же запрос с confirm_images=1.
+    """
+    _no_run(monkeypatch)
+    started = []
+    monkeypatch.setattr(appmod.runner, "start",
+                        lambda inp, **kw: started.append(inp.session_id)
+                        or asyncio.Queue())
+    doc = ("# Т\n\nтекст раздела\n\n![схема](a.png)\n\n"
+           "## Второй\n\nещё текст\n\n![график](b.png)\n").encode()
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.post("/api/jobs", data={"mode": "htmlnew"},
+                   files={"file": ("doc.md", doc, "text/markdown")}, headers=H())
+        assert r.status_code == 409, r.text
+        assert r.json()["images"] == 2
+        assert "2 картинки" in r.json()["detail"]
+        assert not started, "сборка пошла, не спросив"
+
+        r = c.post("/api/jobs", data={"mode": "htmlnew", "confirm_images": "1"},
+                   files={"file": ("doc.md", doc, "text/markdown")}, headers=H())
+        assert r.status_code == 200, r.text
+        assert len(started) == 1
 
 
 def test_create_job_reports_section_count(monkeypatch, tmp_path):
