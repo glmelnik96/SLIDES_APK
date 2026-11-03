@@ -254,18 +254,19 @@ body.v11.is-tool label.drop.has-file { border-style: solid; }
    флексе с длинным именем файла слева он сжимался до эллипсиса. */
 .drop__pick { flex: none; }
 
-/* ===== Строка запуска (борд 4823:1812) =====================================
-   Кнопка прижата к правому краю колонки, подсказка «чего не хватает» — слева
-   от неё в той же строке. Причина отказа обязана быть видна там же, где отказ:
-   в прежней редакции она стояла над кнопкой и читалась подписью к ней, а не
-   ответом на «почему нельзя».
-
-   margin-left: auto на кнопке, а не justify-content: flex-end на строке:
-   подсказка при этом остаётся на своём месте слева, а не уезжает вместе
-   с кнопкой, когда её текст пустеет. */
-.go { display: flex; align-items: center; gap: 24px; }
-.go__hint { margin: 0; flex: 1 1 auto;
-  font-size: 13px; line-height: 24px; color: var(--color-text-muted); }
+/* Кнопка справа, подсказка появляется над ней при наведении и фокусе. */
+.go { display: flex; justify-content: flex-end; }
+.go__action { position: relative; max-width: 100%; }
+.go__hint { position: absolute; right: 0; bottom: calc(100% + 8px);
+  z-index: 2; margin: 0; padding: 8px 12px; width: max-content; max-width: 100%;
+  border-radius: var(--radius-md); background: var(--color-text-primary);
+  font-size: 13px; line-height: 20px; color: var(--color-bg-canvas);
+  visibility: hidden; pointer-events: none; }
+.go__action:hover .go__hint, .go__action:focus-visible .go__hint {
+  visibility: visible; }
+.go__action:focus-visible { outline: 2px solid var(--color-accent-default);
+  outline-offset: 4px; border-radius: var(--radius-md); }
+#feedWrap { scroll-margin-top: 24px; }
 /* Кнопка запуска — 288×48, радиус 10, заливка accent-default, подпись Text
    Semibold 12/24 ЧЕРНИЛАМИ (борд 4823:1813). Подпись именно text-primary,
    а не белая: зелёный Hub светлый (#26d07c), и белый текст на нём даёт 1.9:1 —
@@ -302,32 +303,6 @@ body.is-tool .gen-form button[type="submit"].is-error {
    оставляют строку последней в порядке чтения без помощи капса. */
 .go__alt { margin: 0; font-size: 13px; line-height: 24px;
   color: var(--color-text-muted); }
-
-/* ===== Доступность движка ==================================================
-   Борд её не показывает — на борде сервис всегда жив. Снять нельзя: это
-   условие запуска, и узнать о нём после нажатия хуже, чем до. Блок одет не
-   рамкой, а заливкой bg-muted: рамка рядом с пунктиром дропзоны читалась бы
-   второй зоной сброса. «Лежит» метится обводкой danger — единственное место
-   страницы, где цвет состояния вообще появляется. */
-.mhealth { display: flex; flex-direction: column; gap: 4px;
-  padding: 12px 16px; border-radius: var(--radius-sm);
-  background: var(--color-bg-muted); }
-.mhealth[data-state="down"] { background: var(--color-bg-canvas);
-  box-shadow: inset 0 0 0 1px var(--color-state-danger); }
-.mhealth__inds { display: flex; flex-wrap: wrap; gap: 0 16px; }
-.mh-ind { display: inline-flex; align-items: center; gap: 6px;
-  font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
-/* Точка-метка роли. Круглая, а не квадратная: прямых углов 6×6 в Hub Light
-   нет нигде, а --radius-full ровно для этого и заведён. */
-.mh-ind i { width: 6px; height: 6px; border-radius: var(--radius-full);
-  background: var(--color-border-strong); }
-/* Живая модель — не действие, а факт, поэтому её точка НЕ ключевого цвета:
-   зелёного на странице ровно столько, сколько на ней нажимаемых кнопок. */
-.mh-ind[data-up="true"] i { background: var(--color-text-secondary); }
-.mh-ind[data-up="true"] { color: var(--lp-soft); }
-.mhealth__note { font-size: 13px; line-height: 18px; color: var(--lp-soft); }
-.mhealth[data-state="down"] .mhealth__note { color: var(--color-text-primary); }
-.mhealth__age { font-size: 13px; line-height: 18px; color: var(--color-text-muted); }
 
 /* ===== Служебная строка запуска (#result) ==================================
    Единственное место, где приложение говорит с человеком предложением:
@@ -366,7 +341,7 @@ body.is-tool .status pre { margin: 8px 0 0; overflow: auto; max-height: 168px;
 .plate { display: flex; align-items: center; gap: 12px;
   box-sizing: border-box; min-height: 140px; padding: 24px 80px;
   border-radius: var(--radius-lg); background: var(--color-accent-subtle); }
-.plate__text { margin: 0; max-width: 438px;
+.plate__text { margin: 0;
   font-family: var(--font-display); font-weight: 400; font-size: 20px;
   line-height: 24px; letter-spacing: -0.1px; color: var(--color-accent-text); }
 /* Иконка на борде — глиф 24×24; здесь на её месте вращается кольцо. Движение
@@ -739,8 +714,7 @@ body.v11 .lp-foot { font-family: var(--font-text); font-weight: 400;
   /* Строка запуска складывается, кнопка растягивается на всю ширину: на
      телефоне 288 — это почти вся колонка, и оставлять её прижатой вправо
      значит рисовать пустое поле слева. */
-  .go { flex-wrap: wrap; gap: 12px; }
-  .go__hint { flex-basis: 100%; }
+  .go__action { width: 100%; }
   body.is-tool .gen-form button[type="submit"] { margin-left: 0; width: 100%; }
   /* Плашка сборки теряет поле в 80: оно съедало бы три четверти ширины. */
   .plate { min-height: 0; padding: 24px; }

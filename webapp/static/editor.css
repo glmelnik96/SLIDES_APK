@@ -851,35 +851,13 @@ body.is-tool .btn { font-family: var(--font-text); font-weight: 600;
 /* Пустое стекло — не заголовок, а пояснение: полужирный тут лишний. */
 .glass-overlay__cap { font-weight: 400; color: var(--lp-muted); }
 
-/* ===== Экран 05 · Просмотр (борд 4823:2002) =================================
-   Одна колонка вместо трёх. Это и есть разница между экранами 05 и 06: в
-   редакторе сцена делит ширину с рельсом слайдов и панелью содержания, на
-   просмотре делить не с кем — рельс уехал под деку горизонтальной лентой, а
-   панели нет вовсе. Освободившееся отдаём слайду: 960×540 против 768×432 в
-   редакторе, то есть четверть линейного размера сверху.
-
-   Числа колонки не круглые, а выведенные: 960×540 — единственные целые 16:9
-   между 768 и шириной листа за вычетом полей (1440 − 96 = 1344). Взять всё
-   1344 нельзя: дека выросла бы до 756 в высоту, и под неё не влезли бы ни
-   листание, ни лента.
-
-   Страница обычная, с прокруткой: всё содержимое экрана — 813 пикселей по
-   борду, и запирать его в 100dvh, как редактор, незачем.
-
-   Свой отступ сверху 32 против канонных 96: на борде (4823:2002) ряд
-   «На главную · дата · имя · действия» стоит на 32 от кромки окна, хайрлайн
-   под ним на 68 — просмотр начинается с управляющего ряда, а не с поля. */
-body.is-view main { padding-top: 32px; padding-bottom: 48px; }
-body.is-view .tool { display: block; }
-
-/* Шапка. Берём .feed__head (хайрлайн по низу) и .stage__head (выход, имя,
-   действия — ряд теперь общий с редактором, вместе с зазором 16) и меняем одно
-   число: поле до полоски 36 вместо 24. Так на борде (хайрлайн 68, полоска
-   104), и это не прихоть: следующий блок не продолжение шапки, а другой
-   предмет — полоска хвоста документа. В редакторе под шапкой сразу сцена, и
-   там эти 12 пикселей были бы отнятой высотой слайда. */
-.view__head { margin-bottom: 36px; }
-.view__body { width: min(960px, 100%); margin: 0 auto; }
+/* Просмотр занимает окно; свободную высоту получает слайд. */
+body.is-view { height: 100dvh; min-height: 0; overflow: hidden; }
+body.is-view main { flex: 1 1 0; min-height: 0; padding: 16px 24px; }
+body.is-view .tool { display: flex; flex: 1 1 0; min-height: 0; }
+.view__head { margin-bottom: 12px; }
+.view__body { display: flex; flex-direction: column; flex: 1 1 0;
+  min-height: 0; width: 100%; margin: 0; gap: 12px; }
 
 /* Полоска хвоста. Заливка без обводки и без скругления (борд: ровный
    прямоугольник #f6f6f6 во всю колонку) — это подложка под строку, а не
@@ -893,67 +871,35 @@ body.is-view .tool { display: block; }
   line-height: 18px; color: var(--lp-soft);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Слайд. Кадр деки — тот же орган, что в редакторе, и id у него тот же
-   (#frameWrap), чтобы в коде не завелось двух «кадров деки». Но СПОСОБ задать
-   ему размер у экранов противоположный, и это надо было переопределить явно, а
-   не рядом: редакторское правило вписывает кадр в ОСТАТОК ВЫСОТЫ окна
-   (container-type: size + 100cqh), потому что там сцена делит высоту с рельсом
-   и панелью. На просмотре высоту ничто не ограничивает — её диктует ширина
-   колонки, — и редакторская формула давала 100cqh = 0, то есть кадр нулевой
-   ширины: страница просмотра скроллится, у обёртки нет заданной высоты, и
-   container-query нечего мерить. Поэтому здесь обёртка возвращается в обычный
-   поток, а размер кадра задаёт aspect-ratio от ширины.
-
-   Селекторы с id, а не по .view__stage: классовое правило проиграло бы
-   редакторскому #frameWrap по весу, и кадр остался бы нулевым.
-
-   Ни скругления, ни обводки — по той же причине, что в редакторе: дека
-   экспортируется с прямыми углами. */
-body.is-view #frameWrap { position: relative; display: block; flex: none;
-  container-type: normal; }
-body.is-view #frameWrap iframe { display: block; width: 100%; height: auto;
-  max-height: none; aspect-ratio: 16 / 9;
+/* Размер 16:9 ограничен и шириной, и оставшейся высотой окна. */
+body.is-view #frameWrap { position: relative; display: flex; flex: 1 1 0;
+  min-height: 0; width: 100%; aspect-ratio: auto; container-type: size; }
+body.is-view #frameWrap iframe { display: block;
+  width: min(100%, calc(100cqh * 16 / 9)); height: auto;
+  max-height: 100%; aspect-ratio: 16 / 9;
   border: 0; border-radius: 0; background: var(--lp-line); }
+body.is-view .pager { margin: 0; flex: none; }
+body.is-view .view__tail { flex: none; height: auto; min-height: 40px;
+  margin: 0; padding: 8px 12px; }
 
-/* Листание прижато к деке ячейкой 20 (борд: слайд кончается на 703, ряд
-   начинается на 724) — теснее редакторских 24, потому что под ним стоит ещё
-   и лента, и на 24 оба ряда читались бы одной группой. */
-body.is-view .pager { margin-top: 20px; }
-
-/* ===== Лента кадров под декой (борд 4823:2002) ==============================
-   Кадр 66×36 с шагом 72: 36 — это высота, при которой 16:9 даёт целые 64 по
-   ширине, плюс по пикселю обводки с боков. Зазор 6 — половина модульной
-   ячейки: кадры здесь не отдельные органы, а один ряд, и 12 разнесли бы их в
-   двенадцать карточек.
-
-   Подписей нет (в редакторской ленте они есть): на 64 пикселя не встанет ни
-   название слайда, ни даже номер, а главное — они здесь не нужны. Ряд отвечает
-   на вопрос «который по счёту», и отвечает на него порядком, а не текстом.
-
-   Текущий кадр метим обводкой ключевого цвета. Борд выбранный кадр не
-   показывает (на нём открыт первый слайд, и отличить его не от чего), но без
-   метки ряд перестаёт отвечать «вы здесь» — а это половина его работы.
-   Обводкой, а не заливкой, как в рельсе: кадр — картинка, залить её нечем. */
-.filmstrip { display: flex; justify-content: center; flex-wrap: wrap;
-  gap: 6px; margin-top: 30px; }
-.film { position: relative; flex: none; width: 66px; height: 36px; padding: 0;
+/* Горизонтальная лента с активным кадром, без переноса в новые строки. */
+.filmstrip { display: flex; flex: none; justify-content: safe center;
+  gap: 8px; overflow-x: auto; padding: 3px; scrollbar-width: thin; }
+.film { position: relative; flex: none; width: 98px; height: 56px; padding: 0;
   overflow: hidden; cursor: pointer; border: 0; border-radius: 0;
   background: var(--lp-line);
   box-shadow: inset 0 0 0 1px var(--color-border-default);
   transition: box-shadow .2s var(--lp-ease); }
 .film iframe { position: absolute; top: 1px; left: 1px; width: 1920px;
   height: 1080px; border: 0; pointer-events: none;
-  transform: scale(0.0333); transform-origin: top left; }
+  transform: scale(0.05); transform-origin: top left; }
 .film:hover { box-shadow: inset 0 0 0 1px var(--color-text-muted); }
 .film.active, .film.active:hover {
   box-shadow: inset 0 0 0 2px var(--color-accent-default); }
 .film:focus-visible { outline: 2px solid var(--color-accent-default);
   outline-offset: 2px; }
 
-/* Узкий экран: колонка и так резиновая (min(960px, 100%)), ужимать нечего —
-   но шапка на четырёх жильцах перестаёт влезать в строку, и ей разрешаем
-   перенос. Лента переносится сама (flex-wrap), что для неё правильно: ряд из
-   сорока кадров на узком экране должен стать сеткой, а не уехать за край. */
+/* На узком экране шапка переносится, миниатюры прокручиваются по горизонтали. */
 @media (max-width: 1100px) {
   .stage__head { flex-wrap: wrap; }
   .stage__name { flex: 1 1 100%; }
@@ -1025,4 +971,16 @@ body.is-view .pager { margin-top: 20px; }
   .thumb, .thumb-del, .thumb-grip, .picker-item, .picker-num,
   .glass-chip, .glass-bar i, .btn, .save-status, .film,
   .dgm-acc input { transition: none; }
+}
+
+/* Компактная шапка просмотра сохраняет максимум места для слайда. */
+body.is-view .stage__name { flex: 1 1 auto; flex-direction: column; gap: 2px; }
+body.is-view .stage__meta { font-size: 12px; line-height: 16px; }
+body.is-view .stage__title { max-width: 100%; font-size: 16px; line-height: 20px; }
+body.is-view .stage__head { flex-wrap: nowrap; }
+@media (max-width: 600px) {
+  body.is-view main { padding: 12px; }
+  body.is-view .stage__head { flex-wrap: wrap; gap: 8px; }
+  body.is-view .stage__name { order: 3; flex-basis: 100%; }
+  body.is-view .stage__acts { margin-left: auto; gap: 8px; }
 }

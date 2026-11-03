@@ -95,25 +95,13 @@
       <span class="t-btn drop__pick" id="dropPick" aria-hidden="true">Выбрать файл</span>
     </label>
 
-    <!-- Доступность движка: роли моделей + возраст проверки. Борд её не
-         показывает — на борде сервис всегда жив. Снять нельзя: это условие
-         запуска, и узнать о нём после нажатия хуже, чем до. -->
-    <div class="mhealth" id="modelHealth" data-state="unknown" hidden>
-      <div class="mhealth__inds">
-        <span class="mh-ind" id="mhPrimary"><i></i>Основная модель</span>
-        <span class="mh-ind" id="mhFallback" hidden><i></i>Резервная</span>
-      </div>
-      <div class="mhealth__note" id="mhNote"></div>
-      <div class="mhealth__age" id="mhAge"></div>
-    </div>
-
-    <!-- Запуск (борд 4823:1812): кнопка прижата к правому краю колонки.
-         Подсказка «чего не хватает» стоит слева от неё в той же строке —
-         причина отказа должна быть видна там же, где отказ. -->
+    <!-- Обёртка принимает наведение и фокус, даже пока кнопка отключена. -->
     <div class="go">
-      <p class="go__hint" id="createHint">Сначала выберите файл</p>
-      <button type="submit" id="createBuild" aria-describedby="createHint"
-              disabled>Собрать презентацию</button>
+      <div class="go__action" tabindex="0" aria-label="Собрать презентацию" aria-describedby="createHint">
+        <button type="submit" id="createBuild" aria-describedby="createHint"
+                disabled>Собрать презентацию</button>
+        <p class="go__hint" id="createHint" role="tooltip">Сначала выберите файл</p>
+      </div>
     </div>
 
     <!-- Конструктор. На борде этого входа нет, но страница — единственное место,
@@ -125,6 +113,11 @@
        — черновик появится в списке.</p>
   </form>
 
+  <div class="plate" id="buildPlate" role="status" hidden>
+    <span class="plate__spin" aria-hidden="true"></span>
+    <p class="plate__text"><span id="buildPlateText">Собираю презентацию — она первая в списке</span> <a class="inline-link" id="buildPlateBelow" href="#feedWrap">ниже</a></p>
+  </div>
+
   <!-- Ошибки запуска и баннеры. Красного в v11 нет: ошибку метит обводка. -->
   <div id="result" class="status" hidden></div>
   </div>
@@ -132,23 +125,13 @@
   <!-- ===== Этаж · чернила (борд 4823:1814) ===== -->
   <div class="floor floor--ink">
 
-  <section class="works" id="feedWrap">
+  <section class="works" id="feedWrap" tabindex="-1" aria-labelledby="feedTitle">
     <!-- Шапка раздела на борде — flex со space-between, а правый слот пуст
          (4823:1815). Туда и уехала очистка истории: действие над всем разделом
          стоит в заголовке раздела, а не строкой под списком. -->
     <div class="floor__head">
-      <h2>Ваши презентации</h2>
+      <h2 id="feedTitle">Ваши презентации</h2>
       <button type="button" class="t-btn" id="clear">Очистить историю</button>
-    </div>
-
-    <!-- Плашка идущей сборки (борд 4857:6876). Появляется, когда у человека
-         есть хоть одна активная сборка, — в том числе запущенная в другой
-         вкладке или пережившая перезагрузку. Сама работа при этом остаётся
-         строкой в списке ниже (плашка так и говорит: «она первая в списке»):
-         остановить сборку и посмотреть живой лог можно только там. -->
-    <div class="plate" id="buildPlate" role="status" hidden>
-      <span class="plate__spin" aria-hidden="true"></span>
-      <p class="plate__text" id="buildPlateText">Собираю презентацию — она первая в списке</p>
     </div>
 
     <div class="works__list" id="feed"></div>

@@ -1667,7 +1667,7 @@ function renderBuilderForm() {
   renderSlideContext(slide);
 
   if (slide.freeform) {
-    tplBox.innerHTML = `<span class="tpl-name">Свободный слайд</span>`;
+    tplBox.textContent = "";
     // К§1: честная записка (без выдуманной истории про чат) + возврат к макету.
     renderHtmlFields(slide, form);
     // Макет, из которого ушли, лежит на самом слайде (plan.json), поэтому кнопка

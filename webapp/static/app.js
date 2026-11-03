@@ -81,7 +81,10 @@ const fileInput = $("#file");
 function setStartEnabled(on) {
   ["#createBuild"].forEach((sel) => {
     const b = $(sel);
-    if (b) b.disabled = !on;
+    if (b) {
+      b.disabled = !on;
+      b.closest(".go__action").tabIndex = on ? -1 : 0;
+    }
   });
 }
 
@@ -584,6 +587,14 @@ function updateBuildPlate(items) {
       " — они первые в списке";
 }
 
+$("#buildPlateBelow").addEventListener("click", (event) => {
+  event.preventDefault();
+  const feed = $("#feedWrap");
+  feed.focus({ preventScroll: true });
+  feed.scrollIntoView({ block: "start", behavior:
+    matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+});
+
 /* Пустая лента, подвал про хранение и ссылка «Все презентации».
 
    Ссылка знает ДВА числа и показывает оба по очереди: свёрнутая говорит, сколько
@@ -902,11 +913,9 @@ async function createJob(opts) {
 // с главной больше не достижим.
 $("#createBuild").onclick = () => createJob();
 
-/* ---- доступность сервиса ИИ (плашка над кнопками старта) ---- */
+/* ---- доступность сервиса ИИ для проверки перед запуском ---- */
 // Пробы стоят вызовов к провайдеру, поэтому в фоне не поллим: спрашиваем при
-// загрузке страницы и при возврате во вкладку, если данным больше TTL. Возраст
-// показываем живым таймером — зелёный индикатор часовой давности иначе читался бы
-// как «сейчас всё хорошо».
+// загрузке страницы и при возврате во вкладку, если данным больше TTL.
 const MH_TTL_MS = 60000;
 let mhData = null;
 let mhCheckedAt = 0;          // локальный момент последней серверной проверки
@@ -919,40 +928,15 @@ function mhAgeSec() {
 async function loadModelHealth() {
   let d;
   try { d = await (await fetch(U("/api/models/health"))).json(); }
-  catch (e) { return; }         // сеть — плашка просто не меняется
+  catch (e) { return; }
   mhData = d;
   mhCheckedAt = d.checked_ago_sec == null ? 0 : Date.now() - d.checked_ago_sec * 1000;
-  renderModelHealth();
   // "unknown" — проба ещё идёт (или клиент не собрался). Дозапрашиваем несколько
   // раз, а не бесконечно: без ключа API состояние останется неизвестным навсегда.
   if (d.state === "unknown" && mhUnknownTries < 3) {
     mhUnknownTries++;
     setTimeout(loadModelHealth, 3000);
   }
-}
-
-function renderModelHealth() {
-  const box = $("#modelHealth");
-  if (!box || !mhData || typeof healthLine !== "function") return;
-  const line = healthLine(mhData.state);
-  box.hidden = false;
-  box.dataset.state = line.tone;
-  const prim = $("#mhPrimary");
-  if (prim) prim.dataset.up = mhData.primary_up == null ? "" : String(mhData.primary_up);
-  const fb = $("#mhFallback");
-  if (fb) {                       // резерв не настроен → второго индикатора нет
-    fb.hidden = mhData.fallback_up == null;
-    fb.dataset.up = String(mhData.fallback_up);
-  }
-  $("#mhNote").textContent = line.text;
-  mhTick();
-}
-
-function mhTick() {
-  const el = $("#mhAge");
-  if (!el || !mhData) return;
-  const age = typeof checkedAgo === "function" ? checkedAgo(mhAgeSec()) : "";
-  el.textContent = age ? `Проверено ${age}` : "";
 }
 
 /* If no progress event arrives for this many seconds, warn that the step is
@@ -1308,7 +1292,6 @@ loadFeed();
 autoResumeActive();
 setInterval(loadFeed, 2000);
 loadModelHealth();
-setInterval(mhTick, 1000);      // живой возраст проверки (сам опрос — по событию)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
   if (!mhCheckedAt || Date.now() - mhCheckedAt > MH_TTL_MS) {
