@@ -333,3 +333,45 @@ test("surveyDue: отметка из будущего (часы перевели
   const now = Date.now();
   assert.strictEqual(surveyDue({ snoozed: now + 30 * DAY }, now), true);
 });
+
+/* ── Полоска хвоста на просмотре (экран 05, борд 4823:2002) ───────────────────
+   Строку собираем из того, что лежит в tail.json сессии. Проверяем не вёрстку,
+   а правду: сколько разделов взяли, какие именно и сколько осталось. */
+const { tailLine, tailButton } = require("../../webapp/static/errtext.js");
+
+test("tailLine: первая дека — «первые N из M» (формулировка борда)", () => {
+  assert.strictEqual(
+    tailLine({ total: 52, taken_from: 1, taken_to: 40, rest: 12 }),
+    "Взял первые 40 разделов из 52");
+});
+
+// Вторая дека начинается с середины документа, и «первые» в ней было бы
+// прямой неправдой — там диапазон.
+test("tailLine: продолжение — диапазон, а не «первые»", () => {
+  assert.strictEqual(
+    tailLine({ total: 120, taken_from: 41, taken_to: 80, rest: 40 }),
+    "Взял разделы 41–80 из 120");
+});
+
+test("tailLine: число разделов склоняется", () => {
+  assert.strictEqual(tailLine({ total: 5, taken_from: 1, taken_to: 1, rest: 4 }),
+                     "Взял первые 1 раздел из 5");
+  assert.strictEqual(tailLine({ total: 9, taken_from: 1, taken_to: 3, rest: 6 }),
+                     "Взял первые 3 раздела из 9");
+});
+
+// Полоску рисует НЕ клиент по своему усмотрению: пустая строка — это команда
+// её не показывать. Хвоста нет, файл битый, числа не сходятся — все три случая
+// должны вести себя одинаково, иначе на просмотре появится полоска-призрак.
+test("tailLine: нечего сказать — пустая строка", () => {
+  assert.strictEqual(tailLine(null), "");
+  assert.strictEqual(tailLine({}), "");
+  assert.strictEqual(tailLine({ total: 52 }), "");
+  assert.strictEqual(tailLine({ total: 52, taken_from: 40, taken_to: 1 }), "");
+});
+
+test("tailButton: подпись несёт число оставшихся", () => {
+  assert.strictEqual(tailButton({ rest: 12 }), "Собрать из остальных 12");
+  assert.strictEqual(tailButton({ rest: 0 }), "");
+  assert.strictEqual(tailButton(null), "");
+});

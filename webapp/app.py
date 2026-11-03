@@ -177,6 +177,18 @@ def editor(request: Request) -> HTMLResponse:
                         email=request.headers.get("X-User-Email", ""))
 
 
+# Экран 05 «Просмотр» (борд 4823:2002) — отдельная страница, а не режим
+# редактора. Разделяет их не внешний вид, а вес: редактор тянет рельс, пикер
+# макетов, агента и всю машинерию правок — чтобы ПОЛИСТАТЬ готовую деку, ничего
+# из этого не нужно, а раньше «Посмотреть» вело в тот же /editor и грузило всё.
+# Хром (шапка сцены, пагинатор, миниатюры) у экранов общий и живёт в editor.css:
+# просмотр и редактор обязаны показывать деку одинаково.
+@app.get("/view", response_class=HTMLResponse)
+def view(request: Request) -> HTMLResponse:
+    return _serve_shell("view.html",
+                        email=request.headers.get("X-User-Email", ""))
+
+
 # Раздача крупных файлов вне репозитория (см. settings.downloads_dir). Явный
 # allowlist вместо {name}-подстановки: никакого обхода путей и никакой раздачи
 # случайно оказавшегося в каталоге файла. Auth как у всех — заголовки шлюза.
@@ -1063,13 +1075,25 @@ async def glass_rest(session_id: str, request: Request,
 
     Потолок в 40 разделов остаётся: сорок слайдов автор и так проходит по
     одному больше получаса. Обратимой делаем потерю — не подъёмом потолка, а
-    кнопкой, которая заводит продолжение ровно с первого невзятого раздела."""
+    кнопкой, которая заводит продолжение ровно с первого невзятого раздела.
+
+    Доступна и ЧЕРНОВИКУ, и собранной деке — отсюда _owned_or_404 вместо
+    _draft_or_404. Предложение собрать хвост стоит в двух местах: в панели
+    сборки (экран 06) и полоской над декой на просмотре (экран 05), а просмотр
+    по определению открывают у готовой работы, с которой план уже снят. Право
+    продолжать документ сборка не отменяет, поэтому критерий — не вид работы,
+    а наличие невзятого хвоста (tail.json, он сборку переживает)."""
     from uuid import uuid4
 
     from webapp import glass
-    plan = await _draft_or_404(request, session_id, user)
-    if not plan.rest_from:
-        raise HTTPException(400, "все разделы документа уже разобраны")
+    await _owned_or_404(request, session_id, user)
+    tail = await run_in_threadpool(glass.load_tail, session_id)
+    if not tail:
+        # У черновика хвост мог остаться только в плане: tail.json появился
+        # позже, и у сборок, заведённых до него, его нет.
+        plan = await run_in_threadpool(draft.load_plan, session_id)
+        if not plan.rest_from:
+            raise HTTPException(400, "все разделы документа уже разобраны")
     # Тот же потолок незавершённых сборок, что и у /glass/start: продолжение —
     # такая же ручная сборка и так же держит вызовы модели и место на диске.
     async with request.app.state.sessionmaker() as s:
@@ -1266,6 +1290,35 @@ async def retry_job(session_id: str, request: Request,
     dest.write_bytes(source.read_bytes())
     inp = inp.model_copy(update={"input_s3_key": str(dest)})
     return await _start_build(request, inp, user, source=dest)
+
+
+@app.get("/api/jobs/{session_id}/view")
+async def job_view(session_id: str, request: Request,
+                   user=Depends(get_current_user)) -> JSONResponse:
+    """Всё, что экрану просмотра нужно знать о работе, одним запросом.
+
+    Один эндпоинт вместо трёх обращений (история ради даты, план ради имени,
+    хвост ради полоски): просмотр открывают на одну работу, и ходить за её
+    строкой в ленту всех работ означало бы читать с диска чужие сессии.
+
+    Имя НЕ отдаём: у собранной деки оно живёт в <title> самого deck.html, и
+    экран берёт его из загруженного фрейма — ровно как редактор (syncDeckTitle).
+    Второй источник имени разошёлся бы с первым после правки деки."""
+    job = await _owned_or_404(request, session_id, user)
+    from webapp import glass
+    tail, slides = await run_in_threadpool(
+        lambda: (glass.load_tail(session_id), _job_slides(session_id)))
+    # Борд пишет «Собрана 2 ноября, 13:18» — это finished_at. У старых строк и
+    # у работ без терминального события его нет; клиент тогда молчит, а не
+    # показывает дату создания под видом даты сборки.
+    return JSONResponse({
+        "id": session_id,
+        "status": job.status,
+        "slides": slides,
+        "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "tail": tail,
+    })
 
 
 @app.get("/api/models/health")

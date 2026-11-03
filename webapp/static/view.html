@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Просмотр презентации</title>
+<!-- Те же два листа, что у редактора: v11.css — канон платформы, editor.css —
+     рабочий стол с декой. Третьего листа у просмотра нет намеренно. Шапка
+     сцены, листание и кадр деки у экранов 05 и 06 общие, и развести их по
+     разным файлам значило бы завести второй способ показывать один и тот же
+     слайд — рано или поздно они разойдутся, и человек увидит разную деку на
+     просмотре и в редакторе. Отличия просмотра живут в том же editor.css
+     секцией «Экран 05». -->
+<link rel="stylesheet" href="/static/v11.css">
+<link rel="stylesheet" href="/static/editor.css">
+<script src="/static/v11.js" defer></script>
+</head>
+<!-- is-view, а не is-editor: редактор запирает страницу в окно (overflow:hidden,
+     колонки по 100dvh), потому что рельс и панель прокручиваются сами. У
+     просмотра прокрутка одна — страничная, и запирать её нечем. -->
+<body class="v11 is-tool is-auth is-view">
+
+<main>
+<section class="tool view">
+
+  <!-- ШАПКА. Борд (4823:2002) ставит в одну строку четыре вещи: выход со
+       страницы, когда дека собрана, как она называется и что с ней можно
+       сделать. «На главную» здесь ВНУТРИ строки, а не абсолютом над колонками,
+       как в редакторе, — и это не мелочь приводки. В редакторе кирпич отдельно
+       потому, что уход со страницы с несохранённой правкой — отдельное по весу
+       решение. На просмотре терять нечего: уход такой же рядовой переход, как
+       и три остальных, и его место — в одном ряду с ними. -->
+  <header class="feed__head stage__head view__head">
+    <a class="btn" id="backHome" href="/">На главную</a>
+    <div class="stage__name">
+      <!-- Служебная строка — дата сборки («Собрана 2 ноября, 13:18»). Здесь она
+           на месте: на просмотре работа уже готова, и дата не врёт (в редакторе
+           на этом месте стоит режим — там половина слайдов может быть пустой).
+           Пока дата не пришла или её нет у старой строки, узел пуст и схлопнут. -->
+      <p class="stage__meta" id="deckMeta"></p>
+      <p class="stage__title" id="deckTitle"></p>
+    </div>
+    <div class="stage__acts">
+      <!-- Меню «Скачать» — тот же компонент, что в шапке редактора (4823:1903),
+           вплоть до id: #dl / #dlBtn / #dlMenu и строки с data-fmt. Разметку
+           копируем, а поведение пишем своё (view.js): редакторское тянет за
+           собой сохранение деки и проверку на пример-текст, а на просмотре
+           править нечего — значит, и сохранять нечего. -->
+      <div class="dl" id="dl">
+        <button class="btn dl__btn" id="dlBtn" type="button" aria-haspopup="true"
+                aria-expanded="false" aria-controls="dlMenu">Скачать<svg
+          class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+          stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true" focusable="false"
+          ><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="dl__menu hidden" id="dlMenu" role="menu" aria-labelledby="dlBtn">
+          <button class="dl__item" id="exportPptx" data-fmt="pptx" type="button" role="menuitem">PowerPoint (.pptx)</button>
+          <button class="dl__item" id="exportPng" data-fmt="png" type="button" role="menuitem">Картинки PNG (.zip)</button>
+          <a class="dl__item" id="html" role="menuitem">Исходный HTML</a>
+        </div>
+      </div>
+      <!-- Ключевой кирпич на просмотре один, и это «Редактировать»: смотреть
+           человек уже пришёл, а дальше развилка — забрать файл или поменять
+           содержание. Второе дороже и ведёт на другой экран, поэтому оно и
+           одето ключом. -->
+      <a class="btn btn-accent" id="toEditor" href="/editor">Редактировать</a>
+    </div>
+  </header>
+
+  <!-- ТЕЛО — колонка 960 по центру (борд: x 240…1199 на 1440). Ширину задаёт
+       слайд: 960×540 — это 16:9 в целых пикселях, и всё остальное (полоска,
+       листание, лента) выровнено по нему, а не наоборот. -->
+  <div class="view__body">
+
+    <!-- Полоска «взяли не весь документ». Появляется, только если хвост
+         действительно есть (tail.json сессии, см. glass.load_tail), и это
+         единственное место, где о нём ещё можно узнать после сборки: план,
+         в котором хвост жил раньше, при сборке движком снимается.
+
+         Место выбрано по тому, когда вопрос возникает. Не в редакторе и не на
+         карточке: про «а где остальные разделы» человек вспоминает, когда
+         долистал готовую деку до конца и не нашёл того, что было в документе.
+         Полоска стоит ровно над декой, которую он в этот момент листает. -->
+    <div class="view__tail hidden" id="tailStrip">
+      <p class="view__tail-text" id="tailText"></p>
+      <button type="button" class="t-btn" id="tailGo"></button>
+    </div>
+
+    <!-- Кадр деки. Один, без второго буфера: двойная буферизация редактора
+         нужна его перезагрузкам после каждой правки, а просмотр грузит деку
+         ровно один раз. -->
+    <div class="view__stage" id="frameWrap">
+      <iframe id="deck" title="Презентация"></iframe>
+    </div>
+
+    <!-- Листание — компонент «Листание» (4823:1910), разметка редакторская. -->
+    <nav class="pager hidden" id="pager" aria-label="Листание слайдов">
+      <button class="btn btn-icon" id="prevSlide" type="button" aria-label="Предыдущий слайд">
+        <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+             stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
+      </button>
+      <p class="pager__num" id="pagerNum" aria-live="polite"></p>
+      <button class="btn btn-icon" id="nextSlide" type="button" aria-label="Следующий слайд">
+        <svg class="ico" viewBox="0 0 24 24" width="12" height="12" fill="none"
+             stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" focusable="false">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
+      </button>
+    </nav>
+
+    <!-- Лента кадров — ГОРИЗОНТАЛЬНАЯ, в отличие от рельса редактора, и это
+         решение борда, с которым мы согласны. В редакторе лента — рабочий
+         список: у строки есть название слайда, крестик удаления и рукоятка
+         перетаскивания, и всё это требует ширины. На просмотре у кадра одна
+         задача — «прыгнуть сюда», подписи ему не нужны, и колонка в 264
+         пикселя отняла бы у слайда четверть экрана ни за что. -->
+    <div class="filmstrip" id="filmstrip" role="tablist" aria-label="Слайды"></div>
+
+  </div>
+</section>
+</main>
+
+<script src="/static/errtext.js"></script>
+<script src="/static/view.js" defer></script>
+</body>
+</html>

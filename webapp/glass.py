@@ -504,8 +504,59 @@ def start_glass(session_id: str, source: Path, *,
                 f"{offset + 1}–{offset + len(pairs)}, ещё {dropped} не вошли."
                 if dropped else ""))
     draft.save_plan(session_id, plan)
+    # Тот же факт — вторым, независимым от плана файлом: он переживёт сборку
+    # движком, после которой plan.json снимается (см. комментарий у tail_path).
+    if dropped:
+        save_tail(session_id, title=title, total=offset + len(pairs) + dropped,
+                  taken_from=offset + 1, taken_to=offset + len(pairs),
+                  rest=dropped, rest_from=offset + len(pairs))
+    else:
+        clear_tail(session_id)
     draft_render.render_draft(session_id, plan)
     return plan
+
+
+# ── хвост документа (tail.json) ───────────────────────────────────────────────
+# Что из документа НЕ вошло в деку, лежит отдельным файлом рядом с планом, а не
+# только в plan.json. Причина — срок жизни: plan.json снимается при сборке
+# движком (сессия становится HTML-as-truth, см. _draft_or_404 в app.py), а
+# вспоминает об обрезке автор как раз ПОСЛЕ сборки — когда открыл готовую деку
+# и не досчитался разделов. Пока факт жил только в плане, кнопка «собрать
+# остальные» пропадала ровно в тот момент, когда до неё доходит дело.
+#
+# Файл маленький и необязательный: нет обрезки — нет файла. Всё, что читает
+# хвост, обязано переживать его отсутствие: это полоска над декой, а не данные.
+
+
+def tail_path(session_id: str) -> Path:
+    return session_dir(session_id) / "tail.json"
+
+
+def load_tail(session_id: str) -> dict[str, Any] | None:
+    """Хвост сессии или None (нет файла, он битый или хвост уже забран).
+
+    Best-effort по той же причине, что и _plan_title: испорченный файл прячет
+    одну полоску, а не ломает просмотр готовой деки."""
+    import json
+    try:
+        data = json.loads(tail_path(session_id).read_text("utf-8"))
+    except Exception:  # noqa: BLE001 — нет файла или он не читается
+        return None
+    return data if isinstance(data, dict) and data.get("rest") else None
+
+
+def save_tail(session_id: str, **fields: Any) -> None:
+    """Атомарно, как save_plan: временный файл рядом + rename."""
+    import json
+    path = tail_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(fields, ensure_ascii=False), "utf-8")
+    tmp.replace(path)
+
+
+def clear_tail(session_id: str) -> None:
+    tail_path(session_id).unlink(missing_ok=True)
 
 
 def continue_glass(prev_session_id: str, session_id: str) -> draft.DraftPlan:
@@ -515,24 +566,36 @@ def continue_glass(prev_session_id: str, session_id: str) -> draft.DraftPlan:
     по одному больше получаса), но и терять хвост молча нельзя: раньше notice
     просто советовал «соберите их отдельной декой», а как — автор придумывал
     сам, обычно резал исходный файл руками. Исходник уже лежит в сессии, номер
-    первого невзятого раздела — в плане, титул наследуем от первой деки (на
-    диске файл всегда `input.<ext>`, и вывод имени дал бы обложку «INPUT»)."""
+    первого невзятого раздела — в хвосте, титул наследуем от первой деки (на
+    диске файл всегда `input.<ext>`, и вывод имени дал бы обложку «INPUT»).
+
+    Откуда продолжать, спрашиваем СНАЧАЛА у tail.json и только потом у плана:
+    у собранной движком деки плана уже нет, а предложение собрать хвост на
+    экране просмотра есть — и вести оно обязано к настоящей второй деке."""
+    tail = load_tail(prev_session_id) or {}
     prev = draft.load_plan(prev_session_id)
-    if not prev.rest_from:
+    rest_from = int(tail.get("rest_from") or prev.rest_from or 0)
+    if not rest_from:
         raise ValueError("в документе не осталось разделов для сборки")
+    title = (tail.get("title") or prev.title or "")
     src = _source_file(prev_session_id)
     if src is None:
         raise FileNotFoundError("исходный документ этой сборки уже удален")
     dest = session_dir(session_id) / src.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, dest)
-    out = start_glass(session_id, dest, offset=prev.rest_from, title=prev.title)
-    # Хвост забран — снимаем заявку с первой деки, иначе её панель предлагала бы
-    # собрать то же самое ещё раз (предложение живёт в плане, а не во вкладке).
-    with _plan_lock(prev_session_id):
-        fresh = draft.load_plan(prev_session_id)
-        fresh.rest = fresh.rest_from = 0
-        draft.save_plan(prev_session_id, fresh)
+    out = start_glass(session_id, dest, offset=rest_from, title=title)
+    # Хвост забран — снимаем заявку с первой деки, иначе и панель сборки, и
+    # полоска над декой предлагали бы собрать то же самое ещё раз.
+    clear_tail(prev_session_id)
+    # План трогаем, ТОЛЬКО если он есть: у собранной деки его нет, и save_plan
+    # создал бы пустой — то есть воскресил бы черновик поверх готовой деки и
+    # открыл бы ей черновиковые эндпоинты (см. _draft_or_404).
+    if draft.plan_path(prev_session_id).is_file():
+        with _plan_lock(prev_session_id):
+            fresh = draft.load_plan(prev_session_id)
+            fresh.rest = fresh.rest_from = 0
+            draft.save_plan(prev_session_id, fresh)
     return out
 
 

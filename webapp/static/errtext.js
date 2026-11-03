@@ -403,6 +403,39 @@
     return total > 0 && !hasWork;
   }
 
+  /* ── Полоска «взяли не весь документ» · экран 05 (борд 4823:2002) ──────────
+     Строка над декой на просмотре: что именно из документа в неё вошло. Это
+     не ошибка и не предупреждение, поэтому и тон ровный — отчёт о том, как
+     сервис поделил длинный документ, а не извинение.
+
+     Две формы, и выбирает между ними не вкус, а правда о куске. Первая дека
+     берёт документ СВЕРХУ, и «первые 40 из 52» читается само. Вторая (её
+     заводит та же кнопка, continue_glass) начинается с середины, и «первые»
+     в ней было бы прямой неправдой — там нужен диапазон: «разделы 41–52».
+
+     Пустая строка = полоску не рисовать: хвоста нет или о нём нечего сказать. */
+  function tailLine(tail) {
+    if (!tail) return "";
+    var total = Number(tail.total) || 0;
+    var from = Number(tail.taken_from) || 0;
+    var to = Number(tail.taken_to) || 0;
+    if (!total || !from || !to || to < from) return "";
+    var took = to - from + 1;
+    if (from === 1) {
+      return "Взял первые " + took + " " +
+             plural(took, "раздел", "раздела", "разделов") + " из " + total;
+    }
+    // «–» здесь — тире диапазона (U+2013), как в notice стеклянной сборки.
+    return "Взял разделы " + from + "–" + to + " из " + total;
+  }
+
+  // Подпись кирпича рядом. «Из остальных», а не «оставшиеся»: собирают не сами
+  // разделы, а деку ИЗ них, и второе читалось бы как «дособрать эту же деку».
+  function tailButton(tail) {
+    var rest = tail ? Number(tail.rest) || 0 : 0;
+    return rest ? "Собрать из остальных " + rest : "";
+  }
+
   /* ── Баннер опроса о сервисе ───────────────────────────────────────────────
      Отметка о показе лежит в localStorage браузера: своей таблицы предпочтений
      у App2 нет, а заводить миграцию и эндпоинт ради одной галочки дороже, чем
@@ -444,6 +477,8 @@
   root.healthLine = healthLine;
   root.checkedAgo = checkedAgo;
   root.surveyDue = surveyDue;
+  root.tailLine = tailLine;
+  root.tailButton = tailButton;
   root.SURVEY_SNOOZE_MS = SURVEY_SNOOZE_MS;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = { SAVE_STATUS: SAVE_STATUS, histDur: histDur,
@@ -456,6 +491,7 @@
       briefDisplay: briefDisplay,
       diagramClaims: diagramClaims, estimateLine: estimateLine, gist: gist,
       healthLine: healthLine, checkedAgo: checkedAgo,
-      surveyDue: surveyDue, SURVEY_SNOOZE_MS: SURVEY_SNOOZE_MS };
+      surveyDue: surveyDue, SURVEY_SNOOZE_MS: SURVEY_SNOOZE_MS,
+      tailLine: tailLine, tailButton: tailButton };
   }
 })(typeof window !== "undefined" ? window : globalThis);

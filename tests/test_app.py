@@ -170,6 +170,102 @@ def test_index_has_images_fork(monkeypatch, tmp_path):
         assert "Картинки я не читаю" in html
 
 
+def test_view_served_as_its_own_page(monkeypatch, tmp_path):
+    """Экран 05 «Просмотр» — отдельный маршрут, а не режим редактора.
+
+    Раньше «Посмотреть» с карточки вело в /editor?...&view=1, и чтобы ПОЛИСТАТЬ
+    готовую деку, страница тянула рельс, пикер макетов, агента и всю машинерию
+    правок — вместе с тем, что делает слайды contenteditable. Тест держит
+    развилку: у просмотра свой маршрут, своя разметка и свой скрипт, и
+    редакторский editor.js в него не попадает.
+    """
+    with _client(monkeypatch, tmp_path) as c:
+        r = c.get("/view")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        html = r.text
+        assert "/static/view.js" in html
+        assert "/static/editor.js" not in html
+        # Общий лист с редактором — намеренно: просмотр и редактор обязаны
+        # показывать один и тот же слайд одинаково.
+        assert "/static/editor.css" in html
+
+
+def test_view_has_board_chrome(monkeypatch, tmp_path):
+    """Разметка экрана 05 по борду 4823:2002.
+
+    Проверяем смысловые узлы, без которых экран теряет работу:
+    1) полоска «взяли не весь документ» лежит в разметке СКРЫТОЙ — показывает
+       её view.js, только если хвост действительно есть; без hidden человек,
+       у которого взят весь документ, увидит вспышку полоски;
+    2) заголовок и дата сборки пусты — оба значения кладёт скрипт, и зашитые
+       в разметку соврут на любой другой деке;
+    3) ключевой кирпич на просмотре один, и это «Редактировать»: если ключ
+       переедет на «Скачать», экран начнёт звать забрать файл, хотя пришли
+       смотреть и править.
+    """
+    import re
+
+    with _client(monkeypatch, tmp_path) as c:
+        html = c.get("/view").text
+    strip = re.search(r'<div[^>]*id="tailStrip"[^>]*>', html)
+    assert strip, "полоска хвоста пропала с просмотра"
+    assert "hidden" in strip.group(0), "полоска отдаётся показанной — вспышка"
+    assert 'id="tailText"' in html and 'id="tailGo"' in html
+    assert '<p class="stage__meta" id="deckMeta"></p>' in html
+    assert '<p class="stage__title" id="deckTitle"></p>' in html
+    assert 'class="filmstrip" id="filmstrip"' in html
+    assert 'class="btn btn-accent" id="toEditor"' in html
+    assert 'id="dlBtn"' in html and 'class="btn dl__btn"' in html
+    # Листание — тот же компонент, что в редакторе, вплоть до id.
+    assert 'id="prevSlide"' in html and 'id="nextSlide"' in html
+
+
+def test_view_in_app_links_carry_gateway_prefix():
+    """То же правило, что у редактора, — для просмотра.
+
+    Ссылки ВНУТРЬ приложения обязаны нести префикс шлюза, иначе за шлюзом
+    «На главную» уводит на корень портала вместо /slides. Тест смотрит на
+    класс, а не на конкретные id: любая новая ссылка с href="/..." в
+    view.html обязана получить href через U() в view.js.
+    """
+    import re
+    from pathlib import Path
+
+    static = Path(__file__).resolve().parents[1] / "webapp" / "static"
+    html = (static / "view.html").read_text(encoding="utf-8")
+    js = (static / "view.js").read_text(encoding="utf-8")
+
+    inapp = set(re.findall(r'<a\b[^>]*\bid="([\w-]+)"[^>]*\bhref="/', html))
+    inapp |= set(re.findall(r'<a\b[^>]*\bhref="/[^>]*\bid="([\w-]+)"', html))
+    assert inapp, "в view.html не осталось ссылок внутрь — тест устарел"
+    for node in sorted(inapp):
+        assert re.search(r'byId\("%s"\)\.href = U\(' % node, js), \
+            f"#{node} получает href без префикса шлюза"
+
+
+def test_feed_card_sends_to_the_view_route():
+    """Карточка работы ведёт «Посмотреть» на /view, и флага режима больше нет.
+
+    Параметр view=1 был мёртвым: /editor его не читал, а разделение экранов
+    он только имитировал. Если он вернётся в разметку, вернётся и соблазн
+    сделать просмотр режимом редактора.
+    """
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "webapp" / "static"
+          / "app.js").read_text(encoding="utf-8")
+    assert "/view?session=" in js
+    assert "view=1" not in js
+
+
+def test_job_view_bootstrap_is_owned(monkeypatch, tmp_path):
+    """Сводка для экрана 05 — за проверкой владельца, как и сама дека."""
+    with _client(monkeypatch, tmp_path) as c:
+        assert c.get("/api/jobs/nope/view").status_code == 401
+        assert c.get("/api/jobs/nope/view", headers=H()).status_code == 404
+
+
 def test_download_skill_requires_auth(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as c:
         assert c.get("/downloads/cloud-ru-slides.skill").status_code == 401

@@ -1489,6 +1489,72 @@ def test_glass_rest_endpoint_returns_a_new_draft(monkeypatch, tmp_path):
                       ).status_code == 400
 
 
+def test_tail_outlives_the_plan(monkeypatch, tmp_path):
+    """Хвост переживает сборку движком, при которой plan.json снимается.
+
+    Это и есть смысл отдельного файла. Про обрезку автор вспоминает ПОСЛЕ
+    сборки — долистал готовую деку и не нашёл половины документа; пока факт
+    жил только в плане, предложение собрать остальное исчезало ровно тогда,
+    когда до него доходит дело."""
+    _capped_deck(monkeypatch, tmp_path)
+
+    tail = glass.load_tail("cap1")
+    assert tail["total"] == 5 and tail["rest"] == 2
+    assert tail["taken_from"] == 1 and tail["taken_to"] == 3
+    assert tail["rest_from"] == 3
+
+    # Сборка движком: plan.json снят, сессия стала HTML-as-truth.
+    draft.plan_path("cap1").unlink()
+    assert glass.load_tail("cap1") == tail
+
+
+def test_continue_glass_works_without_a_plan(monkeypatch, tmp_path):
+    """Вторая дека заводится и с собранной первой — по одному лишь хвосту.
+
+    Отдельная проверка, потому что continue_glass раньше читал ТОЛЬКО план:
+    у собранной деки его нет, и кнопка на просмотре упиралась бы в пустой
+    DraftPlan() с rest_from == 0, то есть в «продолжать нечего» на документе,
+    от которого взята половина."""
+    first = _capped_deck(monkeypatch, tmp_path)
+    draft.plan_path("cap1").unlink()          # как после /drafts/{id}/rebuild
+
+    second = glass.continue_glass("cap1", "cap2")
+
+    assert len(second.slides) == 3            # обложка + хвост (разделы 3 и 4)
+    assert "Раздел 3" in second.slides[1].brief
+    assert second.title == first.title        # титул достали из хвоста
+    # План собранной деки НЕ воскрешаем: пустой plan.json вернул бы ей
+    # черновиковые эндпоинты (см. _draft_or_404) поверх готовой деки.
+    assert not draft.plan_path("cap1").is_file()
+    assert glass.load_tail("cap1") is None    # заявка снята
+
+
+def test_glass_rest_endpoint_serves_a_built_deck(monkeypatch, tmp_path):
+    """Кнопка полоски на экране 05 работает у СОБРАННОЙ работы.
+
+    Эндпоинт живёт под /api/drafts/ по историческим причинам, но критерий у
+    него не «это черновик», а «остался невзятый хвост»: право дособрать
+    документ сборка первой деки не отменяет."""
+    monkeypatch.setattr(glass, "MAX_GLASS_SLIDES", 3)
+    doc = ("# Док\n\n" + "".join(f"## Раздел {i}\n\nТекст раздела {i}.\n\n"
+                                 for i in range(5))).encode()
+    with _client_app(monkeypatch, tmp_path) as c:
+        sid = _new_draft(c)
+        assert c.post(f"/api/drafts/{sid}/glass/start", headers=H(),
+                      files={"file": ("Док.md", doc, "text/markdown")}
+                      ).status_code == 200
+        draft.plan_path(sid).unlink()                 # дека собрана движком
+
+        # Черновиковые эндпоинты закрылись…
+        assert c.get(f"/api/drafts/{sid}", headers=H()).status_code in (404, 409)
+        # …а хвост — нет.
+        r = c.post(f"/api/drafts/{sid}/glass/rest", headers=H())
+        assert r.status_code == 200 and r.json()["slides"] == 2
+        # Чужому по-прежнему нельзя: владение проверяется до хвоста.
+        assert c.post(f"/api/drafts/{sid}/glass/rest", headers=H("intruder")
+                      ).status_code == 404
+
+
 def test_step_done_stays_false_while_tail_question_open(monkeypatch, tmp_path):
     """1-4 (аудит раунда 2, agent1): шаг, заполнивший последний «обычный» слайд,
     отвечал done=true при открытом вопросе в хвосте. Семантика: done только
