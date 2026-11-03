@@ -289,6 +289,13 @@ def _fill_template(client: KimiClient, library: TemplateLibrary, slide: SlidePla
             details = "; ".join(f"{e.code}:{e.slot}" for e in errors)
             raise FillError(f"slide {slide.index}: контракт не выполнен после "
                             f"ретрая: {details}")
+    # Model-generated stock-photo URLs are not source material. In production
+    # an invented Unsplash URL stalled Chromium's load event and killed the
+    # entire build. Keep explicit source images; otherwise use template artwork.
+    image = filled.content.get("image")
+    source_urls = set(re.findall(r"https?://[^\s<>\"'\)]+", _brief(slide)))
+    if image and image != slide.content.get("image") and image not in source_urls:
+        filled.content["image"] = ""
     return slide.model_copy(update={"content": filled.content})
 
 
