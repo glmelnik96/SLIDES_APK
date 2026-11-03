@@ -90,6 +90,10 @@ body.is-tool main { padding: 0; }
 .floor--ink { display: flex; flex-direction: column; gap: 24px;
   padding-top: 120px; padding-bottom: 120px; }
 
+/* Активная сборка и её карточка в списке — связанные блоки: между ними 48px. */
+.floor--stone:has(#buildPlate:not([hidden])) { padding-bottom: 24px; }
+.floor--stone:has(#buildPlate:not([hidden])) + .floor--ink { padding-top: 24px; }
+
 /* Шапка раздела (борд 4823:1815 / 4823:1824). Линия сверху — настоящий
    border-top, а не inset-хайрлайн: хайрлайн рисуется внутрь и съел бы первый
    пиксель отступа, а здесь между линией и заголовком отмерено ровно 24.
