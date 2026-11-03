@@ -4,7 +4,7 @@ const U = (p) => PREFIX + p;
 
 const params = new URLSearchParams(location.search);
 const sessionId = params.get("session");
-const mode = params.get("mode") || "";        // "manual" | "chat" | "" (built deck)
+const mode = params.get("mode") === "chat" ? "chat" : "manual";
 const isDraft = mode === "manual" || mode === "chat";
 // «Стеклянная» сборка поверх ручного черновика: клиент крутит цикл /glass/step,
 // лента тамбов растёт, сомнительные слайды ждут ответа в панели вопросов.
@@ -100,7 +100,11 @@ async function initEditor() {
     head = await fetch(U(`/api/jobs/${sessionId}/deck?probe=${Date.now()}`),
                        { method: "GET", headers: { Range: "bytes=0-0" } });
   } catch (e) { head = null; }
-  if (head && head.ok) { buildRetries = 0; showOverlay(false); loadDeck(); return; }
+  if (head && head.ok) {
+    if (!editorPlanReady) await initDraftBuilder();
+    if (!editorPlanReady) { waitForBuild(); return; }
+    buildRetries = 0; showOverlay(false); loadDeck(); return;
+  }
   if (head && head.status === 404) {
     let st;
     try {
@@ -1450,7 +1454,8 @@ const byId = (id) => document.getElementById(id);
 
 async function fetchPlan() {
   const r = await fetch(U(`/api/drafts/${sessionId}`));
-  if (r.ok) draftPlan = await r.json();
+  if (!r.ok) throw new Error("Не удалось загрузить содержимое презентации");
+  draftPlan = await r.json();
 }
 
 async function reloadDraft(goToIndex) {
@@ -1468,7 +1473,7 @@ async function reloadDraft(goToIndex) {
 // показывала текста, у свободного — полей нет, а длинная форма прячет остальное
 // под прокруткой. Блок собирается из плана (а не из превью): план — истина и
 // обновляется синхронно с правкой.
-const ctxOpen = { text: true, brief: false };
+const ctxOpen = { text: false, brief: false };
 
 function renderSlideContext(slide) {
   fillCtx(byId("builderCtx"), slide ? slideTextLines(slide) : [],
@@ -1608,7 +1613,7 @@ function collectHtmlText(html, out) {
   // DOMParser, а не innerHTML: разбор идёт в инертном документе — ни картинок,
   // ни обработчиков (у свободного слайда разметку писала модель).
   const doc = new DOMParser().parseFromString(html, "text/html");
-  doc.querySelectorAll("script,style").forEach((n) => n.remove());
+  doc.querySelectorAll("script,style,.chrome-logo,.chrome-note,.chrome-num").forEach((n) => n.remove());
   const text = (doc.body.textContent || "").split("\n")
     .map((s) => s.trim()).filter(Boolean);
   out.push(...text);
@@ -1677,8 +1682,7 @@ function renderBuilderForm() {
   if (slide.freeform) {
     tplBox.innerHTML = `<span class="tpl-name">Свободный слайд</span>`;
     // К§1: честная записка (без выдуманной истории про чат) + возврат к макету.
-    form.innerHTML = `<p class="builder-note">Свободный слайд — он больше не привязан к макету, ` +
-      `поэтому полей здесь нет. Правьте текст прямо на слайде или опишите изменение в чате справа.</p>`;
+    renderHtmlFields(slide, form);
     // Макет, из которого ушли, лежит на самом слайде (plan.json), поэтому кнопка
     // переживает перезагрузку, едет со слайдом при перестановке и появляется
     // после правки через чат — раньше снимок жил в sessionStorage по НОМЕРУ
@@ -1737,6 +1741,61 @@ function renderBuilderForm() {
   }
 }
 
+// Older finished decks have no slot plan. Edit their actual text nodes while
+// retaining images, SVG geometry, styling and rich text around each fragment.
+let htmlFieldDoc = null;
+function htmlTextNodes(doc) {
+  const root = doc.querySelector("section.slide");
+  if (!root) return [];
+  root.querySelectorAll("[data-editor-empty]").forEach((el) => {
+    if (!el.childNodes.length) el.appendChild(doc.createTextNode(""));
+  });
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    if (!n.textContent.trim() && !n.parentElement.hasAttribute("data-editor-empty")) continue;
+    if (n.parentElement.closest("script,style,.chrome-logo,.chrome-note,.chrome-num,.diagram-host,defs,title,desc")) continue;
+    nodes.push(n);
+  }
+  return nodes;
+}
+
+function renderHtmlFields(slide, form) {
+  form.innerHTML = "";
+  htmlFieldDoc = new DOMParser().parseFromString(slide.content.html || "", "text/html");
+  const nodes = htmlTextNodes(htmlFieldDoc);
+  nodes.forEach((node, i) => {
+    const heading = node.parentElement.closest("h1,h2,h3,[data-slot=title]");
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    const head = document.createElement("div");
+    head.className = "field-head";
+    const label = document.createElement("label");
+    label.textContent = heading ? "Заголовок" : `Текст ${i + 1}`;
+    const input = document.createElement("textarea");
+    input.id = `html-field-${i}`;
+    label.htmlFor = input.id;
+    input.rows = heading ? 2 : 3;
+    input.value = node.textContent;
+    input.addEventListener("input", () => {
+      node.textContent = input.value;
+      if (node.parentElement.childNodes.length === 1)
+        node.parentElement.toggleAttribute("data-editor-empty", !input.value.trim());
+      scheduleSave();
+    });
+    head.appendChild(label);
+    wrap.append(head, input);
+    form.appendChild(wrap);
+  });
+  if (!nodes.length) {
+    const note = document.createElement("p");
+    note.className = "builder-note";
+    note.textContent = "На этом слайде нет текстовых полей. Можно добавить новый слайд на макете.";
+    form.appendChild(note);
+  }
+}
+
 // Читает файл-картинку и возвращает data-URI, ужатый до maxW по ширине (с
 // сохранением пропорций) и перекодированный в JPEG — чтобы не тащить многомегабайтный
 // оригинал в plan.json/экспорт. Рисуем через canvas; если браузер не смог декодировать
@@ -1787,7 +1846,7 @@ function renderSlot(name, spec, value) {
   }
 
   if (spec.kind === "text") {
-    const long = (spec.max_chars || 0) > 40;
+    const long = (spec.max_chars || 0) > 90;
     const el = document.createElement(long ? "textarea" : "input");
     if (name === "image") {
       // Загрузка своего изображения. data-URI храним в скрытом text-слоте, который
@@ -1884,7 +1943,7 @@ function renderSlot(name, spec, value) {
       const row = renderItem(spec, {});
       list.appendChild(row);
       syncList(list, spec, add, note);
-      row.querySelector("input")?.focus();   // ready to type; saved on first input
+      row.querySelector("input,textarea")?.focus();
     };
     wrap.appendChild(add);
     const note = hint("");
@@ -1899,6 +1958,7 @@ function renderSlot(name, spec, value) {
   return wrap;
 }
 
+let fieldInputId = 0;
 function renderItem(spec, item, groupSlot) {
   const row = document.createElement("div");
   row.className = "field-item";
@@ -1909,14 +1969,26 @@ function renderItem(spec, item, groupSlot) {
     row.appendChild(num);
   }
   for (const [sub, subSpec] of Object.entries(spec.item_slots || {})) {
-    const inp = document.createElement("input");
+    const field = document.createElement("div");
+    field.className = "field";
+    const head = document.createElement("div");
+    head.className = "field-head";
+    const label = document.createElement("label");
+    label.textContent = subSpec.label || sub;
+    label.dataset.subLabel = label.textContent;
+    const inp = document.createElement((subSpec.max_chars || 0) > 60 ? "textarea" : "input");
+    inp.id = `subfield-${++fieldInputId}`;
+    label.htmlFor = inp.id;
+    head.appendChild(label);
+    field.append(head, inp);
     // Подпись поля берём из библиотеки (там она русская); ключ слота — только фолбэк.
     inp.placeholder = (subSpec.label || sub) + (subSpec.required ? " *" : "");
     if (subSpec.max_chars) inp.maxLength = subSpec.max_chars;
     inp.value = item[sub] == null ? "" : String(item[sub]);
     inp.dataset.sub = sub;
     inp.oninput = scheduleSave;
-    row.appendChild(inp);
+    row.appendChild(field);
+    if (subSpec.max_chars) charCounter(inp, subSpec.max_chars, head, field);
   }
   if (!groupSlot) {
     const del = document.createElement("button");
@@ -1948,6 +2020,10 @@ function syncList(list, spec, add, note) {
   rows.forEach((r, i) => {
     const n = r.querySelector(".item-num");
     if (n) n.textContent = String(i + 1);
+    const itemName = { columns: "Колонка", cards: "Карточка", stats: "Показатель" }[list.dataset.slot] || "Пункт";
+    r.querySelectorAll("[data-sub-label]").forEach((label) => {
+      label.textContent = `${itemName} ${i + 1} · ${label.dataset.subLabel}`;
+    });
   });
   const max = spec.max_items || 0;
   add.disabled = max > 0 && rows.length >= max;
@@ -2802,12 +2878,14 @@ async function saveCurrentSlide(attempt = 0) {
   const idx = current;
   putTimer = null;
   const slide = draftPlan.slides[idx];
-  if (!slide || slide.freeform) return;
+  if (!slide) return;
   // Диаграммный typed-слайд сейвится по своему контракту (PUT /fields).
   if (slide.slide_type === "diagram" && slide.fields) {
     return saveDiagramSlide(idx, attempt);
   }
-  const content = collectContent();
+  const content = slide.freeform
+    ? { html: htmlFieldDoc?.querySelector("section.slide")?.outerHTML || slide.content.html }
+    : collectContent();
   // До перезаписи: это ровно то, что сейчас нарисовано в превью — по нему patchPreviewText
   // и решает, можно ли обойтись точечной правкой вместо перезагрузки всей деки.
   const shownContent = slide.content;
@@ -3819,7 +3897,16 @@ async function applyDiagramKind(index1, kind, prev) {
   if (!r || !r.ok) setSaveStatus("error");
 }
 
+let editorPlanReady = false;
 async function initDraftBuilder() {
+  const r = await fetch(U(`/api/jobs/${sessionId}/edit`), { method: "POST" });
+  if (r.status === 409) return; // a build is still in progress; initEditor polls it
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.detail || "Не удалось открыть редактор");
+  }
+  draftPlan = await r.json();
+  editorPlanReady = true;
   if (mode === "manual") {
     // Показываем всю группу действий (+ / дублировать / отменить), а не одну
     // кнопку: на борде (4892:5392) это один блок над лентой.
@@ -3830,7 +3917,6 @@ async function initDraftBuilder() {
     fetchDgmCatalog(); // типы схем — заранее: имя типа в панели, пикер без ожидания
   }
   if (mode === "chat") setupChatMode();
-  await fetchPlan();
   if (mode === "chat") renderOutline();
 }
 
@@ -3854,7 +3940,7 @@ function syncImproveButton() {
   if (note) note.textContent = improving
     ? "Проверяю и улучшаю… это занимает несколько минут"
     : building ? "Доступно после завершения сборки"
-    : s.freeform ? "Свободный слайд правится в чате"
+    : s.freeform ? "Текст этого слайда можно изменить в полях выше"
     : (current === improveResultFor ? improveResult : "");
 }
 
@@ -5293,6 +5379,7 @@ if (isDraft) {
       if (isGlass) startGlassMode();
       else syncGlassResumeBtn();
     })
+    .catch((e) => showTerminal("Не удалось открыть редактор", e.message, HOME_LINK))
     .finally(disableChatEditing);
 }
 else { Promise.resolve(initEditor()).finally(disableChatEditing); }

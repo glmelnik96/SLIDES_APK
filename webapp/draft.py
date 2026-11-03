@@ -24,6 +24,7 @@ from webapp.paths import session_dir
 class DraftSlide(BaseModel):
     template_id: str | None = None
     freeform: bool = False
+    preserve_html: bool = False  # imported finished slide: retain its exact layout
     content: dict = Field(default_factory=dict)
     brief: str = ""              # тема слайда в аутлайне (до сборки)
     filled: bool = False         # прогнан ли через fill_slide (только для сырых)

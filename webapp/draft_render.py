@@ -32,12 +32,22 @@ def build_draft_html(plan: DraftPlan) -> str:
     ДО того как сохранит план: иначе при поломке сборки план уезжает вперёд
     деривата и они расходятся навсегда (см. _persist_draft в app.py)."""
     theme = plan.theme if plan.theme in deck_edit.THEMES else "dark"
-    return assemble(_to_deck_plan(plan), theme=theme)
+    rendered = assemble(_to_deck_plan(plan), theme=theme)
+    # Imported HTML is authoritative, including layouts without standard chrome.
+    from webapp.editable_deck import SECTIONS
+    index = iter(plan.slides)
+    def keep_snapshot(match):
+        slide = next(index, None)
+        if slide and slide.freeform and slide.preserve_html:
+            return str(slide.content.get("html", ""))
+        return match.group()
+    return SECTIONS.sub(keep_snapshot, rendered)
 
 
 def render_draft(session_id: str, plan: DraftPlan) -> Path:
     """Render the draft to deck.html (derived artifact) and return its path."""
-    return deck_edit.save_deck(session_id, build_draft_html(plan))
+    from webapp.editable_deck import preserve_document
+    return deck_edit.save_deck(session_id, preserve_document(session_id, build_draft_html(plan)))
 
 
 def _to_deck_plan(plan: DraftPlan) -> DeckPlan:

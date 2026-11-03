@@ -230,7 +230,8 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    свёрнуты в меню «Скачать», и строка действий заведомо встаёт в одну. */
 .stage__acts { flex: none; margin-left: auto; display: flex; flex-wrap: nowrap;
   gap: 12px; }
-#frameWrap { position: relative; flex: 1 1 auto; min-height: 0; display: flex;
+#frameWrap { position: relative; flex: 0 1 auto; min-height: 0; display: flex;
+  aspect-ratio: 16 / 9;
   align-items: center; justify-content: center; container-type: size; }
 /* Слайд держим строго 16:9 и вписываем в сцену. Ни скругления, ни обводки:
    на борде (4823:1892) слайд — прямоугольник 768×432 заливкой #222. Скругление
@@ -356,7 +357,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 
 /* Контекст слайда над формой: читать — не править, поэтому отдельная рамка. */
 .builder-ctx { flex: none; display: flex; flex-direction: column; gap: 12px;
-  padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
+  padding-top: 12px; border-top: 1px solid var(--color-border-default); }
 .builder-ctx__sec > summary { cursor: pointer; list-style: none; user-select: none;
   font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
   letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
@@ -380,7 +381,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 
 /* Арифметика формы — канонная: подпись 12 + зазор 12 + контрол 48/96, зазор
    между блоками 24. Любая комбинация блоков садится на модуль сама. */
-.builder-form { display: flex; flex-direction: column; gap: 24px; }
+.builder-form { display: flex; flex-direction: column; gap: 16px; }
 .builder-note, .builder-locked { margin: 0; font-size: 13px; line-height: 24px;
   color: var(--lp-soft); }
 .builder-empty { display: flex; flex-direction: column; gap: 24px; }
@@ -447,7 +448,10 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .field-hint--error, .field-hint--over { color: var(--color-state-danger); }
 .field-list, .field-lines, .field-card { display: flex; flex-direction: column; gap: 12px; }
 .field-row { display: flex; flex-direction: column; gap: 12px; }
-.field-item { display: flex; gap: 12px; align-items: center; }
+.field-item { display: flex; flex-direction: column; gap: 12px;
+  align-items: stretch; position: relative; padding-bottom: 12px; }
+.field-item .item-num { display: none; }
+.field-item .item-del { align-self: flex-end; }
 .field-item input { flex: 1 1 auto; min-width: 0; }
 .item-num { flex: none; min-width: 12px; text-align: right;
   font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;

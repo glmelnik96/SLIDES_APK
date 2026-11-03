@@ -608,6 +608,29 @@ async def get_draft(session_id: str, request: Request,
     return JSONResponse(plan.model_dump())
 
 
+@app.post("/api/jobs/{session_id}/edit")
+async def open_editor(session_id: str, request: Request,
+                      user=Depends(get_current_user)) -> JSONResponse:
+    """Materialize an editable plan once, preserving the finished deck itself."""
+    job = await _owned_or_404(request, session_id, user)
+    st = runner.status(session_id)
+    if job.status in ("queued", "running") or (st and not st.get("terminal")):
+        raise HTTPException(409, "Сборка ещё идёт — дождитесь завершения")
+    from webapp import editable_deck
+    async with _deck_lock(session_id):
+        with _plan_txn(session_id) as plan:
+            if not draft.plan_path(session_id).is_file():
+                path = deck_edit.ensure_deck(session_id, runner.result_path(session_id))
+                if path is None:
+                    raise HTTPException(404, "Презентация не найдена")
+                try:
+                    plan = editable_deck.import_html(session_id, path.read_text("utf-8"))
+                except ValueError as exc:
+                    raise HTTPException(400, str(exc)) from exc
+                draft.save_plan(session_id, plan)
+    return JSONResponse(plan.model_dump())
+
+
 @app.delete("/api/drafts/{session_id}")
 async def delete_draft(session_id: str, request: Request,
                        user=Depends(get_current_user)) -> JSONResponse:
@@ -658,7 +681,8 @@ def _persist_draft(session_id: str, plan: draft.DraftPlan) -> None:
     500, а редактор дальше показывал СТАРУЮ деку, и при перезагрузке тоже.
     Человек видел, что слайд «прыгнул обратно», тянул его второй раз — и
     переставлял дважды. Дека — дериват плана, расходиться они не должны."""
-    html = draft_render.build_draft_html(plan)
+    from webapp.editable_deck import preserve_document
+    html = preserve_document(session_id, draft_render.build_draft_html(plan))
     draft.save_plan(session_id, plan)
     deck_edit.save_deck(session_id, html)
 
@@ -1489,16 +1513,16 @@ async def post_deck(session_id: str, request: Request,
     # deck.html — производная. Принятый сюда HTML молча откатывался первым же
     # пере-рендером формы (DeckPlan-as-truth в обход). Честный отказ вместо
     # тихой потери; правки черновика сохраняются per-slide эндпоинтами.
-    if draft.plan_path(session_id).is_file():
-        raise HTTPException(
-            409, "это черновик — правки сохраняются по слайдам, "
-                 "целиком деку сохранять не нужно")
     body = await request.body()
     try:
         html = body.decode("utf-8")
     except UnicodeDecodeError:
         raise HTTPException(400, "HTML деки должен быть в кодировке UTF-8")
     async with _deck_lock(session_id):
+        if draft.plan_path(session_id).is_file():
+            raise HTTPException(
+                409, "это черновик — правки сохраняются по слайдам, "
+                     "целиком деку сохранять не нужно")
         try:
             deck_edit.save_deck(session_id, html)
         except ValueError as exc:

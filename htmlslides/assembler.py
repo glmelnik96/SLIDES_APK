@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import re
 from functools import lru_cache
 from html import escape as html_escape
@@ -240,8 +242,16 @@ def _render_slide(env: Environment, library: TemplateLibrary, slide: SlidePlan) 
     # index — уникальный порядковый номер слайда в деке: шаблоны используют его,
     # чтобы делать SVG-id инстанс-уникальными (иначе два одинаковых мастера на
     # странице дают дубли id, и clip/gradient «схлопываются» — см. cover-image).
-    return env.get_template(template.file).render(
-        content=slide.content, index=slide.index)
+    fragment = env.get_template(template.file).render(
+        content=slide.content, index=slide.index).strip()
+    # Keep the final (including autofix) slot data with the rendered slide.
+    # A checksum prevents restoring stale fields after direct HTML edits.
+    payload = json.dumps({"template_id": slide.template_id,
+                          "content": slide.content, "brief": slide.brief,
+                          "sha256": hashlib.sha256(fragment.encode()).hexdigest()},
+                         ensure_ascii=False, separators=(",", ":"))
+    encoded = base64.b64encode(payload.encode("utf-8")).decode("ascii")
+    return fragment.replace("<section", '<section data-editor-plan="' + encoded + '"', 1)
 
 
 def assemble(plan: DeckPlan, *, theme: str = "dark") -> str:
