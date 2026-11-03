@@ -213,12 +213,43 @@ def test_view_has_board_chrome(monkeypatch, tmp_path):
     assert "hidden" in strip.group(0), "полоска отдаётся показанной — вспышка"
     assert 'id="tailText"' in html and 'id="tailGo"' in html
     assert '<p class="stage__meta" id="deckMeta"></p>' in html
-    assert '<p class="stage__title" id="deckTitle"></p>' in html
+    assert '<h1 class="stage__title" id="deckTitle"></h1>' in html
     assert 'class="filmstrip" id="filmstrip"' in html
     assert 'class="btn btn-accent" id="toEditor"' in html
     assert 'id="dlBtn"' in html and 'class="btn dl__btn"' in html
     # Листание — тот же компонент, что в редакторе, вплоть до id.
     assert 'id="prevSlide"' in html and 'id="nextSlide"' in html
+
+
+def test_each_page_has_exactly_one_visible_h1():
+    """У страницы ровно один заголовок, и он не спрятан от глаза.
+
+    До этого прохода на главной жили ДВА названия: видимое обещание «Соберу
+    презентацию из вашего документа» в <p class="hero"> и скрытый с экрана
+    <h1>Презентации в бренде Cloud.ru</h1> для скринридера. Разным людям
+    сообщалось разное, причём незрячему доставалось худшее из двух — имя
+    раздела портала вместо описания страницы.
+
+    Тест стережёт обе половины правила: заголовок один (ноль — страница без
+    корня структуры, два — снова расхождение), и правила, которое прятало бы
+    h1 целиком на инструментальных страницах, в каноне нет.
+    """
+    import re
+    from pathlib import Path
+
+    static = Path(__file__).resolve().parents[1] / "webapp" / "static"
+    for name in ("index.html", "editor.html", "view.html"):
+        html = (static / name).read_text(encoding="utf-8")
+        # Комментарии вырезаем: в них теги пересказывают историю правки, и
+        # считать их за разметку — значит запретить объяснять разметку.
+        html = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+        found = re.findall(r"<h1\b", html)
+        assert len(found) == 1, f"{name}: заголовков {len(found)}, а нужен один"
+
+    canon = (static / "v11.css").read_text(encoding="utf-8")
+    canon = re.sub(r"/\*.*?\*/", "", canon, flags=re.S)
+    assert "body.is-tool h1" not in canon, \
+        "правило снова прячет заголовок страницы целиком"
 
 
 def test_view_in_app_links_carry_gateway_prefix():

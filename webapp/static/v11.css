@@ -119,11 +119,18 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
   --space-xs: 4px;   --space-sm: 8px;   --space-md: 12px;  --space-lg: 16px;
   --space-xl: 24px;  --space-2xl: 32px; --space-3xl: 48px; --space-4xl: 64px;
 
-  /* Hub/Shadow/MD — единственная тень системы: 0 4 12 при #00000014.
-     Поднимает слой над листом (подсказка, выпадающий список, лайтбокс) и
-     больше ни для чего не применяется: тень на кнопке вернула бы объём,
-     которого в Hub нет. */
+  /* Теней в системе две, и у каждой своя работа.
+
+     MD поднимает слой НАД ЛИСТОМ: подсказка, выпадающий список, лайтбокс,
+     шторка разделов. На кнопке её быть не может — объёма в Hub нет.
+
+     SM поднимает орган над СВОЕЙ ПОДЛОЖКОЙ и применяется ровно один раз: белая
+     таблетка текущего раздела внутри серой дорожки шторки. Это не «ещё одна
+     тень поменьше», а единственный способ сказать, что таблетка лежит на
+     дорожке, а не вырезана в ней: контраст #fff к #f0f0f0 — четыре процента
+     светлоты, и без подъёма край читался бы как дефект печати. */
   --shadow-md: 0 4px 12px rgba(0, 0, 0, .08);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .06);
 }
 
 /* ===== Переходные псевдонимы --lp-* =========================================
@@ -189,92 +196,96 @@ body.v11 {
 .topbar__auth { display: flex; align-items: center; }
 .logout-form { margin: 0; }
 
+/* Шторка — компонент Top Nav системы (4776:69), и это ПЕРЕКЛЮЧАТЕЛЬ, а не
+   карточка со ссылками. Разница не в оформлении. Переключатель показывает
+   список положений и одно занятое, и из него видно сразу две вещи: сколько
+   всего разделов и в каком вы сейчас. Карточка со ссылками показывает только
+   первое, а «вы здесь» ей приходится дописывать отдельной меткой — чем у нас и
+   была зелёная черта под подписью.
+
+   Отсюда три числа канона: дорожка 3 по кругу, зазор между положениями 2,
+   высота положения 40. 3+40+3 = 46 — вся высота шторки.
+
+   Дорожка серая (bg/control), а не лист: таблетка текущего раздела белая, и
+   лежать ей надо НА чём-то. Белое на белом не бывает. */
 body.v11 .topbar {
   position: fixed; z-index: 60; top: 18px; left: 0; right: 0;
   width: max-content; max-width: calc(100% - 24px); margin: 0 auto;
-  display: flex; align-items: center; gap: 0;
-  height: auto; padding: 4px; border-bottom: 0;
-  /* ПЛАШКА БОЛЬШЕ НЕ ЗЕЛЁНАЯ. В тёмном каноне сплошной акцент во всю шторку
-     был единственным цветным пятном на чернилах и работал меткой бренда. На
-     белом листе та же заливка превращается в зелёную планку поперёк экрана:
-     она перетягивает внимание с дверей и нарушает правило, записанное здесь же
-     у --color-accent-default, — акцент метит ОДНО действие, иначе он перестаёт
-     значить что-либо. Шторка становится тем, чем она и является в Hub, —
-     плавающей карточкой: лист, хайрлайн, тень слоя. Акцент внутри остаётся
-     ровно в двух местах: подчёркивание текущего раздела и кнопка входа/выхода.
-
-     Хайрлайн берём inset-тенью, а не border: рамка добавила бы по пикселю с
-     каждой стороны и сломала бы арифметику 4+27+4=35, на которой держится вся
-     высота шторки. Обе тени живут в одном свойстве — внешняя поднимает
-     карточку над листом, внутренняя рисует край. */
+  display: flex; align-items: center; gap: 2px;
+  height: auto; padding: 3px; border-bottom: 0;
   border-radius: var(--radius-full);
-  background: var(--color-bg-canvas); color: var(--color-text-primary);
-  box-shadow: var(--shadow-md), inset 0 0 0 1px var(--color-border-default);
-  /* clip-path: inset(0) снят намеренно. Он был вписан под сплошную заливку и
-     ничего не обрезал (ролл подписи клипует сама ссылка своим overflow), зато
-     теперь обрезал бы внешнюю тень по краю плашки — карточка лишилась бы
-     подъёма ровно в том свойстве, ради которого её переделали. Переход по нему
-     был вхолостую: значение не менялось ни одним правилом и ни одним скриптом. */
+  background: var(--color-bg-control); color: var(--color-text-primary);
+  /* Хайрлайна больше нет: дорожка отличается от листа заливкой, и обводка
+     поверх неё была бы вторым способом сказать то же самое. */
+  box-shadow: var(--shadow-md);
   transition: top .4s var(--lp-ease-bar);
 }
 body.v11.lp-tuck .topbar { top: -88px; }
 body.v11 .topbar .brand { display: none; }
 body.v11:not(.is-auth) .topnav { display: none; }
 
-body.v11 .topnav { min-width: 0; gap: 0; padding-left: 0; }
-body.v11 .topnav__link { position: relative; border-radius: 0;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
-  letter-spacing: .09em; text-transform: uppercase; white-space: nowrap;
-  /* rgba(34,34,34,.82) был «чернила, приглушённые на зелёном». Плашка стала
-     листом — приглушение выражает та же лестница текста, что и везде. */
-  color: var(--color-text-secondary); padding: 8px 12px; text-decoration: none;
-  transition: color .2s var(--lp-ease); }
-body.v11 .topnav__link:hover,
-body.v11 .topnav__link.is-active { background: transparent;
-  color: var(--color-text-primary); }
+body.v11 .topnav { min-width: 0; gap: 2px; padding-left: 0; }
 
-/* Ролл подписи: две копии текста, вторая — псевдоэлемент, поэтому в разметке
-   хватило data-t. Правило включается только при наличии атрибута: пункт без
-   него остаётся обычной ссылкой и не может оказаться прозрачным. */
-body.v11 .topnav__link[data-t] { overflow: hidden; color: transparent; }
-body.v11 .topnav__link[data-t]::before,
-body.v11 .topnav__link[data-t]::after {
-  content: attr(data-t); position: absolute; inset: 0;
+/* Положение переключателя (Nav Tab, 4775:29/4775:32). Подпись — Hub/Label/
+   Overline: SB Sans Text Medium 13/18, БЕЗ капса и без разрядки.
+
+   Капс и моноширинный шрифт сняты не ради вкуса. Разделов три, и подписи у них
+   разной длины («Картинки» против «Промо-баннеры»); капс с разрядкой .09em
+   раздувал самую длинную до 169 пикселей и делал шторку шире, чем ей нужно.
+   Но главное — капс читается медленнее строчных: в нём нет выносных элементов,
+   по которым глаз узнаёт слово целиком. Для подписи, которую человек ищет
+   глазами на каждой странице, это прямая потеря. */
+body.v11 .topnav__link { position: relative;
   display: flex; align-items: center; justify-content: center;
-  color: var(--color-text-secondary);
-  transition: transform .34s var(--lp-ease-bar), color .2s var(--lp-ease); }
-body.v11 .topnav__link[data-t]::after { transform: translateY(101%); }
-body.v11 .topnav__link[data-t]:hover::before { transform: translateY(-101%); }
-body.v11 .topnav__link[data-t]:hover::after { transform: none;
-  color: var(--color-text-primary); }
-body.v11 .topnav__link[data-t].is-active::before,
-body.v11 .topnav__link[data-t].is-active::after { color: var(--color-text-primary); }
-/* Текущий раздел метит АКЦЕНТ, а не чернила. На зелёной плашке подчёркивание
-   обязано было быть тёмным — другого контраста там не нашлось. На листе акцент
-   свободен, и это одно из двух мест, где он вообще остался в шторке: подпись
-   читается чернилами, «вы здесь» говорит зелёная черта под ней. */
-body.v11 .topnav__link[data-t].is-active {
-  box-shadow: inset 0 -2px 0 var(--color-accent-default); }
+  height: 40px; padding: 7px 14px; border-radius: var(--radius-full);
+  font-family: var(--font-sans); font-weight: 500; font-size: 13px;
+  line-height: 18px; letter-spacing: 0; text-transform: none;
+  white-space: nowrap;
+  color: var(--color-text-secondary); text-decoration: none;
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease); }
 
-/* 12px здесь + 12px внутреннего отступа кнопки = те же 24px, что между
-   пунктами меню. */
-body.v11 .topbar__auth { margin-left: 0; gap: 12px; padding-left: 12px; }
-body.v11:not(.is-auth) .topbar__auth { padding-left: 0; }
-body.v11 .topbar__user { font-family: var(--font-mono); font-size: 11px;
-  letter-spacing: .05em; color: var(--color-text-secondary); }
+/* Наведение — только подпись чернилами. Подсветки фоном здесь быть не может:
+   фон под курсором спутали бы с белой таблеткой «вы здесь», и переключатель
+   начал бы врать про текущий раздел ровно в тот момент, когда на него смотрят. */
+body.v11 .topnav__link:hover { background: transparent;
+  color: var(--color-text-primary); }
+
+/* «Вы здесь» — белая таблетка, а не зелёная черта. Акцент освобождается
+   полностью: в шторке его больше нет ни в одном месте. Это и есть смысл
+   переключателя — положение занято формой, а не цветом, и цвет остаётся
+   свободным для того единственного действия, ради которого человек пришёл на
+   страницу. */
+body.v11 .topnav__link.is-active,
+body.v11 .topnav__link.is-active:hover {
+  background: var(--color-bg-canvas); color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm); }
+
+/* Опознание и выход — четвёртый и пятый жильцы дорожки, которых в компоненте
+   системы нет: он нарисован под три раздела и только. Селим их на ту же
+   дорожку с тем же зазором 2, но отделяем волоском — переключатель и выход
+   разной породы, и без границы «Выйти» читалось бы четвёртым разделом. */
+body.v11 .topbar__auth { margin-left: 0; gap: 2px; padding-left: 3px;
+  border-left: 1px solid var(--color-border-default); }
+body.v11:not(.is-auth) .topbar__auth { padding-left: 0; border-left: 0; }
+body.v11 .topbar__user { padding: 0 8px; font-size: 13px; line-height: 18px;
+  letter-spacing: 0; color: var(--color-text-muted); }
+
+/* Выход больше НЕ зелёный. Акцент метит одно действие — то, ради которого
+   пришли; «Выйти» этим действием не бывает никогда, а зелёная таблетка в углу
+   каждой страницы делала его самым заметным органом интерфейса. Орган получает
+   ровно ту же геометрию, что положение переключателя: на одной дорожке два
+   разных размера читались бы сбоем вёрстки. Подсветка фоном ему, в отличие от
+   разделов, разрешена — он не бывает «текущим», и спутать не с чем. */
 body.v11 .topbar .login,
-body.v11 .logout-form button { border: 0; border-radius: var(--radius-md); padding: 8px 16px;
+body.v11 .logout-form button { border: 0; border-radius: var(--radius-full);
+  display: flex; align-items: center; height: 40px; padding: 7px 14px;
   cursor: pointer; text-decoration: none;
-  font-family: var(--font-mono); font-weight: 700; font-size: 11px; line-height: 1;
-  letter-spacing: .09em; text-transform: uppercase;
-  /* Единственное действие шторки — обычная Primary-кнопка Hub: акцент заливкой,
-     подпись чернилами. Раньше было наоборот (чернильная плашка с зелёной
-     подписью) — это работало как «вырез» в сплошном зелёном поле, а на листе
-     читалось чёрной кляксой в правом углу белой карточки. */
-  background: var(--color-accent-default); color: var(--color-text-primary);
-  transition: background .25s var(--lp-ease), color .25s var(--lp-ease); }
+  font-family: var(--font-sans); font-weight: 500; font-size: 13px;
+  line-height: 18px; letter-spacing: 0; text-transform: none;
+  background: transparent; color: var(--color-text-secondary);
+  transition: background .2s var(--lp-ease), color .2s var(--lp-ease); }
 body.v11 .topbar .login:hover,
-body.v11 .logout-form button:hover { background: var(--color-accent-hover);
+body.v11 .logout-form button:hover { background: var(--color-bg-hover);
   color: var(--color-text-primary); }
 
 /* ===== Живой чертёж ==========================================================
@@ -341,9 +352,14 @@ body.is-tool main { position: relative; flex: 1 0 auto; display: flex;
 /* Текст, который нужен скринридеру и не нужен глазу. Рецепт один на платформу:
    1×1 с clip-path, а не display: none и не visibility: hidden — те снимают узел
    и с дерева доступности тоже, то есть делают ровно противоположное.
-   Заголовок страницы дублировал пункт меню и с экрана снят; в разметке
-   остаётся, потому что без h1 страница теряет корень структуры. */
-body.is-tool h1, .visually-hidden { position: absolute; width: 1px; height: 1px;
+
+   `body.is-tool h1` из селектора УБРАН. Правило прятало заголовок страницы
+   целиком, и держалось оно на том, что заголовок дублировал пункт шторки. С
+   этого прохода заголовок страницы — это видимый заголовок-обещание («Соберу
+   презентацию из вашего документа»), и прятать его нельзя: тогда у страницы не
+   останется корня структуры ни для глаза, ни для скринридера. Класс остаётся
+   для органов, которым скрытая подпись нужна точечно. */
+.visually-hidden { position: absolute; width: 1px; height: 1px;
   margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%);
   white-space: nowrap; }
 
@@ -703,13 +719,17 @@ body.is-tool .session-banner { display: flex; flex-direction: column; align-item
   body.is-tool .lightbox__panel { grid-template-columns: 1fr;
     max-height: calc(100vh - 48px); overflow: auto; }
 
-  /* Пять пунктов в строку не помещаются: шторка растягивается на всю ширину
-     поля, навигация переносится на вторую строку и прокручивается внутри
-     себя. Ширину body она при этом не задаёт. */
+  /* В одну строку дорожка не помещается: она растягивается на всю ширину поля,
+     разделы переносятся на вторую строку и прокручиваются внутри себя. Ширину
+     body она при этом не задаёт. Радиус остаётся полным — на двух строках это
+     уже не таблетка, а скруглённая плашка, и это честно: переключатель здесь
+     и правда перестал быть одной линейкой положений. */
   body.v11 .topbar { top: 12px; left: 12px; right: 12px; width: auto;
-    max-width: none; margin: 0; flex-wrap: wrap; padding: 6px; gap: 4px 8px; }
+    max-width: none; margin: 0; flex-wrap: wrap; padding: 3px; gap: 2px; }
   body.v11:not(.is-auth) .topbar { justify-content: center; }
-  body.v11 .topbar__auth { margin-left: auto; padding-left: 0; }
+  /* Волосок уезжает: на двух строках он отделял бы выход не от разделов, а от
+     края плашки — то есть говорил бы неправду про соседство. */
+  body.v11 .topbar__auth { margin-left: auto; padding-left: 0; border-left: 0; }
   body.v11 .topnav { order: 3; width: 100%; flex-wrap: nowrap; padding-left: 0;
     overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
   body.v11 .topnav::-webkit-scrollbar { display: none; }
@@ -729,8 +749,6 @@ body.is-tool .session-banner { display: flex; flex-direction: column; align-item
    не гасим — он сообщает о состоянии задачи, а не украшает. */
 @media (prefers-reduced-motion: reduce) {
   body.v11 .topbar, body.v11 .topnav__link,
-  body.v11 .topnav__link[data-t]::before,
-  body.v11 .topnav__link[data-t]::after,
   body.v11 .topbar .login, body.v11 .logout-form button { transition: none; }
   body.is-tool .scen-card, body.is-tool .scen-card__head,
   body.is-tool .scen-card__desc, body.is-tool .scen-card__tag { transition: none; }
