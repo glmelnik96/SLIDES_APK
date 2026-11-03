@@ -6,6 +6,7 @@ import datetime as _dt
 import json as _json
 import logging
 import os
+import re
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -46,7 +47,6 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
        fetch / EventSource / navigation URL too. Empty prefix = standalone dev.
     """
     import json
-    import re
 
     from webapp.config import settings
     prefix = settings.normalized_prefix()
@@ -57,12 +57,14 @@ def _serve_shell(name: str, *, email: str = "") -> "HTMLResponse":
     html = re.sub(r'(/static/[\w./-]+\.(?:js|css))"', rf'{prefix}\1?v={token}"', html)
     # Г§9 — expose the data-retention window so the UI can announce it (silent
     # deletion of history/drafts is a least-astonishment violation otherwise).
+    # __USER_EMAIL__ — не для показа (хрома с почтой у сервиса нет, борд
+    # 4823-1799 рисует страницы без шапки), а для ключа опроса в app.js:
+    # отметка «уже спрашивали» обязана быть пер-пользовательской, иначе первый
+    # ответивший на машине глушит опрос всем остальным.
     inject = (f"<script>window.__APP_PREFIX__={json.dumps(prefix)};"
-              f"window.__RETENTION_HOURS__={int(settings.retention_hours)};</script>")
+              f"window.__RETENTION_HOURS__={int(settings.retention_hours)};"
+              f"window.__USER_EMAIL__={json.dumps(email)};</script>")
     html = html.replace("<head>", "<head>\n" + inject, 1)
-    # Canon topbar shows the gateway-supplied email; no email = standalone dev.
-    from html import escape as _esc
-    html = html.replace("{{ email }}", _esc(email))
     # The shell HTML itself carries no version token (only its .js/.css refs do),
     # so a browser that cached an older document keeps showing stale markup after
     # a ship (e.g. a hidden entry card reappears). Force revalidation of the shell

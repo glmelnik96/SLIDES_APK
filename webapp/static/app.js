@@ -1305,8 +1305,13 @@ if (_copyPrompt) _copyPrompt.addEventListener("click", async () => {
    не должна молчать за другого. localStorage в приватном окне бросает на
    запись и на чтение — всё обёрнуто, отказ хранилища значит «позовём снова», а
    не «страница сломалась». */
+/* Почта берётся из window.__USER_EMAIL__ — сервер кладёт её в инжект-скрипт
+   (_serve_shell). Из разметки читать больше нечего: хрома с учётной записью у
+   сервиса нет (борд 4823-1799), а ключ обязан различать людей — без почты он
+   сжался бы до «slides.survey:», один на всех, и первый ответивший на машине
+   глушил бы опрос всем остальным. */
 function surveyKey() {
-  const email = $(".topbar__user")?.textContent.trim() || "";
+  const email = (window.__USER_EMAIL__ || "").trim();
   return "slides.survey:" + email;
 }
 function surveyMark(mark) {

@@ -41,18 +41,19 @@ def test_shell_cache_busts_static_assets(monkeypatch, tmp_path):
             assert assets and all(q for q in assets)
 
 
-def test_shell_has_canon_nav_with_slides_active(monkeypatch, tmp_path):
+def test_shell_has_no_service_chrome(monkeypatch, tmp_path):
+    """Шапки у сервиса нет — ни на одной странице (борд 4823-1799: все экраны
+    начинаются сразу с содержимого). Тест охраняет снятие, а не вёрстку:
+    вернись .topbar хоть одной строкой, он всплывёт здесь раньше, чем в глазах.
+
+    Почта при этом обязана приезжать инжектом: ключ опроса в app.js строится
+    из window.__USER_EMAIL__, и без инжекта он молча стал бы один на всех.
+    """
     with _client(monkeypatch, tmp_path) as c:
-        html = c.get("/").text
-        # all three sections link to their gateway roots
-        assert 'href="/images"' in html
-        assert 'href="/creatives"' in html
-        # Слайды is the active section. Проверяем смысл, а не вёрстку: прежний
-        # вариант ассертил три пробела между атрибутами и падал бы от любого
-        # переформатирования шапки, ничего не сообщая о самой активности.
-        import re
-        assert re.search(r'href="/slides"\s+class="topnav__link is-active"', html)
-        assert ">Cloud.ru <span>Design</span>" in html
+        for path in ("/", "/editor", "/view"):
+            html = c.get(path, headers={"X-User-Email": "m@cloud.ru"}).text
+            assert "topbar" not in html, path
+            assert 'window.__USER_EMAIL__="m@cloud.ru"' in html, path
 
 
 def test_editor_in_app_links_carry_gateway_prefix():
