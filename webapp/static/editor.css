@@ -53,9 +53,9 @@ body.is-editor .tool { min-height: 0; flex: 1 1 auto; }
 .rail--edit { position: static; max-height: none; align-self: stretch;
   min-height: 0; overflow: hidden auto; scrollbar-width: thin;
   display: flex; flex-direction: column; gap: 12px; }
-/* Поле под полосу — только левому рельсу: правая панель сама не прокручивается
-   (прокрутку забирает .builder внутри), и зазор там оказался бы двойным. */
-#thumbsRail { scrollbar-gutter: stable; padding-right: 12px; }
+/* Прокрутка сохраняется, но не отнимает ширину 264px у содержимого рельсов. */
+#thumbsRail { scrollbar-width: none; padding-right: 0; gap: 8px; }
+#thumbsRail::-webkit-scrollbar, .builder::-webkit-scrollbar { display: none; }
 /* Подписи рельса здесь больше нет: на борде лента — это только слайды, и
    «СЛАЙДЫ» моно-капсом над ними было подписью к единственному содержимому
    колонки. Узел остался в разметке под .visually-hidden (экран без него
@@ -300,13 +300,10 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    (канон борда 06: в правой колонке только содержание слайда) — вместе с ними
    ушли и их стили. Машинерия чата спит в editor.js; вернётся фича — стили
    отрастут от борда заново, а не из архива. */
-/* scrollbar-gutter + поле справа — обязательная пара для КАЖДОЙ прокручиваемой
-   колонки. Без них полоса встаёт вплотную к тексту и рамкам полей: зазора нет
-   ни пикселя, и ползунок читается наездом на содержимое. stable держит место
-   под полосу всегда, поэтому появление второго слайда не сдвигает форму. */
+/* Колонка прокручивается мышью, касанием и клавиатурой; её содержимое
+   занимает всю ширину рельса, как в макете. */
 .builder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
-  gap: 24px; overflow: hidden auto; scrollbar-width: thin;
-  scrollbar-gutter: stable; padding-right: 12px; }
+  gap: 16px; overflow: hidden auto; scrollbar-width: none; padding-right: 0; }
 
 /* ===== Автосохранение (Figma 4823:1914) =====================================
    Точка 6px и подпись, по центру под сценой, внизу страницы. Абсолют, а не
@@ -315,7 +312,7 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
    Прежняя строка висела в шапке формы справа и была моно-капсом с opacity 0
    в покое: о том, что работа сохраняется сама, человек узнавал только в
    полторы секунды после правки. */
-.autosave { position: absolute; left: 0; right: 0; bottom: 24px;
+.autosave { position: absolute; left: 0; right: 0; bottom: 27px;
   display: flex; justify-content: center; pointer-events: none; }
 .save-status { display: inline-flex; align-items: center; gap: 6px;
   font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
@@ -363,6 +360,16 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
 .builder-ctx__sec > summary::-webkit-details-marker { display: none; }
 .builder-ctx__sec > summary:hover { color: var(--lp-text); }
+.builder-ctx__sec > summary, .optional-fields > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  color: var(--color-text-secondary); }
+.builder-ctx__sec > summary svg, .optional-fields > summary svg { flex: none; }
+.builder-ctx__sec[open] > summary svg, .optional-fields[open] > summary svg {
+  transform: rotate(180deg); }
+.optional-fields > summary { cursor: pointer; list-style: none;
+  font-size: 13px; line-height: 24px; }
+.optional-fields > summary::-webkit-details-marker { display: none; }
+.optional-fields[open] > .field { margin-top: 12px; }
 /* Строки внутри — РАЗНЫЕ куски слайда: заголовок, подзаголовок, подписи узлов
    схемы. Каждая приходит отдельным <p>, и до этой правки они стояли вплотную
    (margin: 0, ни зазора, ни отбивки), то есть слипались в один абзац:
@@ -443,11 +450,18 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   color: var(--lp-muted); font-variant-numeric: tabular-nums; }
 .field-hint--error, .field-hint--over { color: var(--color-state-danger); }
 .field-list, .field-lines, .field-card { display: flex; flex-direction: column; gap: 12px; }
+.field--list { gap: 12px; }
+.field--list > .field-head { position: absolute; width: 1px; height: 1px;
+  padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.field-list { gap: 16px; }
 .field-row { display: flex; flex-direction: column; gap: 12px; }
-.field-item { display: flex; flex-direction: column; gap: 12px;
-  align-items: stretch; position: relative; padding-bottom: 12px; }
+.field-item { display: flex; flex-direction: column; gap: 16px;
+  align-items: stretch; position: relative; }
 .field-item .item-num { display: none; }
-.field-item .item-del { align-self: flex-end; }
+.field-item .item-del { position: absolute; right: 8px; top: 36px;
+  width: 24px; opacity: 0; }
+.field-item:hover .item-del, .field-item:focus-within .item-del { opacity: 1; }
+.field-item > .field:first-of-type input { padding-right: 40px; }
 .field-item input { flex: 1 1 auto; min-width: 0; }
 .item-num { flex: none; min-width: 12px; text-align: right;
   font-family: var(--font-text); font-weight: 400; font-size: 13px; line-height: 24px;
@@ -940,6 +954,11 @@ body.is-view .pager { margin-top: 20px; }
    но шапка на четырёх жильцах перестаёт влезать в строку, и ей разрешаем
    перенос. Лента переносится сама (flex-wrap), что для неё правильно: ряд из
    сорока кадров на узком экране должен стать сеткой, а не уехать за край. */
+@media (max-width: 1100px) {
+  .stage__head { flex-wrap: wrap; }
+  .stage__name { flex: 1 1 100%; }
+  .stage__acts { margin-left: 0; }
+}
 @media (max-width: 860px) {
   .view__head { flex-wrap: wrap; }
   .view__head .stage__acts { margin-left: 0; }
@@ -971,7 +990,9 @@ body.is-view .pager { margin-top: 20px; }
   body.is-editor { overflow: auto; }
   body.is-editor main { height: auto; min-height: 100dvh; }
   .tool__grid--edit { grid-template-columns: 1fr; height: auto; }
-  .stage { order: -1; height: 72vw; }
+  .stage { order: -1; height: auto; }
+  .stage__name { flex-direction: column; align-items: flex-start; gap: 4px; }
+  #frameWrap { flex: none; width: 100%; }
   /* Страница снова прокручивается, и абсолюту у её нижнего края места нет:
      строка сейва уехала бы на середину длинной страницы. Возвращаем в поток
      последним блоком.

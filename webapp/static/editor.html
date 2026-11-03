@@ -26,7 +26,7 @@
   <div class="tool__grid tool__grid--edit">
 
   <!-- ===== Левый рельс: лента слайдов ===== -->
-  <aside class="rail rail--edit" id="thumbsRail">
+  <aside class="rail rail--edit" id="thumbsRail" tabindex="0" aria-label="Список слайдов">
     <!-- Подпись «Слайды» с экрана снята (на борде её нет) и оставлена только
          скринридеру: колонка из миниатюр себя называет сама — каждая строка
          показывает слайд и его номер, подписывать это словом «Слайды» значит
@@ -178,7 +178,7 @@
        (как glass-степпер): вернётся вместе с фичей, если борд её нарисует. -->
   <aside class="rail rail--edit rpanel" id="rpanel">
   <!-- Builder panel (manual draft mode) -->
-  <aside class="builder hidden" id="builder">
+  <aside class="builder hidden" id="builder" tabindex="0" aria-label="Содержание слайда">
     <!-- .builder-head снят вместе со своим единственным жильцом: строка
          автосохранения уехала вниз страницы, где её место по борду (4823:1914).
          Пустая служебная строка над формой держала бы 24px ни за что. -->

@@ -619,18 +619,6 @@ function buildThumbs() {
     }
     box.appendChild(t);
   });
-  // Жест неочевиден — говорим о нём прямо в ленте, один раз на весь список.
-  // Мышь тянет саму миниатюру, палец — рукоятку (см. thumbGrip): подсказку
-  // выбирает CSS по типу указателя, чтобы не звать в жест, которого тут нет.
-  if (reorderable && slides.length > 1) {
-    const tip = document.createElement("div");
-    tip.className = "thumbs-hint";
-    tip.appendChild(hintVariant("only-fine",
-      "Перетащите миниатюру, чтобы поменять слайды местами"));
-    tip.appendChild(hintVariant("only-coarse",
-      "Порядок меняется перетаскиванием за рукоятку в углу миниатюры"));
-    box.appendChild(tip);
-  }
   syncThumbBadges();
 }
 
@@ -1494,14 +1482,10 @@ function fillCtx(box, lines, brief) {
   if (!box) return;
   box.innerHTML = "";
   brief = (brief || "").trim();
-  if (!lines.length && !brief) { box.classList.add("hidden"); return; }
+  if (!brief) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
-  if (lines.length) box.appendChild(ctxSection("text", "Текст слайда", lines));
-  if (brief) {
-    box.appendChild(ctxSection(
-      "brief", "Исходный фрагмент документа",
-      brief.split("\n").map((l) => l.trim()).filter(Boolean)));
-  }
+  box.appendChild(ctxSection("brief", "Исходный текст раздела",
+    brief.split("\n").map((l) => l.trim()).filter(Boolean)));
 }
 
 // Куски слайда, из которых собирается «Текст слайда» в панели. Берём по одной
@@ -1557,6 +1541,7 @@ function ctxSection(key, title, lines) {
   d.addEventListener("toggle", () => { ctxOpen[key] = d.open; });
   const sum = document.createElement("summary");
   sum.textContent = title;
+  appendDisclosureIcon(sum);
   d.appendChild(sum);
   const body = document.createElement("div");
   body.className = "builder-ctx__body";
@@ -1567,6 +1552,11 @@ function ctxSection(key, title, lines) {
   });
   d.appendChild(body);
   return d;
+}
+
+function appendDisclosureIcon(summary) {
+  const icon = byId("dlBtn")?.querySelector("svg");
+  if (icon) summary.appendChild(icon.cloneNode(true));
 }
 
 // Весь текст слайда построчно. Служебные значения (id узлов, data-URI картинок,
@@ -1733,9 +1723,19 @@ function renderBuilderForm() {
 
   form.innerHTML = "";
   if (!tpl) return;
+  let optionalSubtitle = null;
   for (const [name, spec] of Object.entries(tpl.slots)) {
-    form.appendChild(renderSlot(name, spec, slide.content[name]));
+    const field = renderSlot(name, spec, slide.content[name]);
+    if (name === "subtitle" && !spec.required && !String(slide.content[name] || "").trim()) {
+      optionalSubtitle = document.createElement("details");
+      optionalSubtitle.className = "optional-fields";
+      const summary = document.createElement("summary");
+      summary.textContent = "Добавить подзаголовок";
+      appendDisclosureIcon(summary);
+      optionalSubtitle.append(summary, field);
+    } else form.appendChild(field);
   }
+  if (optionalSubtitle) form.appendChild(optionalSubtitle);
 }
 
 // Older finished decks have no slot plan. Edit their actual text nodes while
@@ -1922,6 +1922,7 @@ function renderSlot(name, spec, value) {
     wrap.appendChild(el);
     if (spec.max_chars) charCounter(el, spec.max_chars, head, wrap);
   } else if (spec.kind === "list") {
+    wrap.classList.add("field--list");
     const list = document.createElement("div");
     list.className = "field-list";
     list.dataset.slot = name;
@@ -2019,7 +2020,7 @@ function syncList(list, spec, add, note) {
     if (n) n.textContent = String(i + 1);
     const itemName = { columns: "Колонка", cards: "Карточка", stats: "Показатель" }[list.dataset.slot] || "Пункт";
     r.querySelectorAll("[data-sub-label]").forEach((label) => {
-      label.textContent = `${itemName} ${i + 1} · ${label.dataset.subLabel}`;
+      label.textContent = `${itemName} ${i + 1} · ${label.dataset.subLabel.toLocaleLowerCase("ru")}`;
     });
   });
   const max = spec.max_items || 0;
@@ -2808,6 +2809,7 @@ let saveRetryTimer = null;
 function scheduleSave() {
   clearTimeout(putTimer);
   clearTimeout(saveRetryTimer); // свежий ввод отменяет незавершённую цепочку ретраев
+  setSaveStatus("saving");
   putTimer = setTimeout(() => saveCurrentSlide(0), 600);
   syncHistoryButtons();   // есть что отменять уже с первого нажатия
 }
@@ -3904,6 +3906,8 @@ async function initDraftBuilder() {
   }
   draftPlan = await r.json();
   editorPlanReady = true;
+  if (!byId("saveStatus")?.textContent) setSaveStatus("saved");
+  syncEditorMeta();
   if (mode === "manual") {
     // Показываем всю группу действий (+ / дублировать / отменить), а не одну
     // кнопку: на борде (4892:5392) это один блок над лентой.
@@ -3915,6 +3919,25 @@ async function initDraftBuilder() {
   }
   if (mode === "chat") setupChatMode();
   if (mode === "chat") renderOutline();
+}
+
+async function syncEditorMeta() {
+  const badge = byId("modeBadge");
+  if (!badge) return;
+  try {
+    const r = await fetch(U(`/api/jobs/${sessionId}/view`));
+    if (!r.ok) return;
+    const info = await r.json();
+    if (glassRunning || info.status !== "done" || !info.finished_at) return;
+    // SQLite may return a naive timestamp; server timestamps are stored in UTC.
+    const iso = /(?:Z|[+-]\d\d:\d\d)$/.test(info.finished_at)
+      ? info.finished_at : info.finished_at + "Z";
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return;
+    const day = date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+    const time = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+    badge.textContent = `Собрана ${day}, ${time}`;
+  } catch (_) { /* metadata failure must not prevent editing */ }
 }
 
 /* ---- feature 3: slide-building chat agent ---- */
@@ -5135,6 +5158,7 @@ function exitGlassMode() {
   byId("glassOverlay")?.classList.add("hidden");
   const badge = byId("modeBadge");
   if (badge) badge.textContent = "Конструктор";
+  syncEditorMeta();
   // Вернуть обычную правую панель. Раньше это делал setupPanelTabs() через
   // show(true), но табы сняты с экрана (борд 06) — панель полей возвращаем явно.
   byId("builder")?.classList.remove("hidden");
