@@ -635,19 +635,20 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   padding: 24px; background: var(--color-scrim); }
 .dialog-card { width: min(432px, 100%); display: flex; flex-direction: column;
   gap: 24px; padding: 24px; background: var(--lp-ink);
+  max-height: calc(100dvh - 48px); overflow-y: auto;
   box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.dialog-text { margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
-.dialog-actions { display: flex; gap: 12px; justify-content: flex-end; }
+.dialog-text { flex: none; margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
+.dialog-actions { flex: none; display: flex; gap: 12px; justify-content: flex-end; }
 .dialog-actions--modes { flex-direction: column; align-items: stretch; }
 .dialog-card:has(.dialog-actions--modes) { width: min(528px, 100%); }
 .dialog-actions--modes .dialog-cancel { align-self: flex-end; }
 
-/* Кнопка-карточка выбора способа. Тогл-строка канона, но обе строки видны
-   сразу: способы равнозначны, и пояснение — единственное, по чему их
-   различают; прятать его до ховера значило бы выбирать наугад.
-   12 + 24 + 24 + 12 = 72 — блок на модуле. */
-.btn.mode-card { display: flex; flex-direction: column; align-items: stretch;
-  height: 72px; padding: 12px; text-align: left; text-transform: none;
+/* Карточка растёт по содержимому. Специфичность выше общего body.is-tool .btn,
+   чтобы высота 24px и nowrap обычной кнопки не обрезали пояснение. */
+body.is-tool .btn.mode-card { display: flex; flex: none; flex-direction: column;
+  align-items: stretch; gap: 4px; width: 100%; min-width: 0;
+  height: auto; min-height: 72px; padding: 12px; text-align: left;
+  white-space: normal; overflow-wrap: anywhere; text-transform: none;
   letter-spacing: 0; }
 .mode-card__name { font-family: var(--font-text); font-weight: 600; font-size: 13px;
   line-height: 24px; }
