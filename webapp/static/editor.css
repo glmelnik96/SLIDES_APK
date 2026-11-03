@@ -295,17 +295,15 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 
 /* ===== Правая панель: содержание слайда ===================================== */
 .rpanel { display: flex; flex-direction: column; gap: 24px; }
-.rpanel-tabs { flex: none; }
-/* Недоступная вкладка — тот же серый сегмент, что в покое, только подпись
-   уходит в muted и курсор говорит «нельзя». Обводку сняли вслед за §8.2: в
-   ряду встык на заливке bg-control её больше нет ни у одного состояния. */
-.rpanel-tab.is-disabled, .rpanel-tab.is-disabled:hover { cursor: not-allowed;
-  background: var(--color-bg-control); color: var(--lp-muted); box-shadow: none; }
+/* Табы «Содержание | Правки в чате» и панель чата сняты с экрана целиком
+   (канон борда 06: в правой колонке только содержание слайда) — вместе с ними
+   ушли и их стили. Машинерия чата спит в editor.js; вернётся фича — стили
+   отрастут от борда заново, а не из архива. */
 /* scrollbar-gutter + поле справа — обязательная пара для КАЖДОЙ прокручиваемой
    колонки. Без них полоса встаёт вплотную к тексту и рамкам полей: зазора нет
    ни пикселя, и ползунок читается наездом на содержимое. stable держит место
    под полосу всегда, поэтому появление второго слайда не сдвигает форму. */
-.builder, .chat { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+.builder { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
   gap: 24px; overflow: hidden auto; scrollbar-width: thin;
   scrollbar-gutter: stable; padding-right: 12px; }
 
@@ -415,19 +413,19 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 /* Ввод: белый лист в рамке, radius 10 (борд). Рамка — настоящий border, а не
    inset-тень: в Hub у поля есть граница, и тень-подделка не наследовала бы
    border-radius при переходе цвета. */
-.field input, .field textarea, .field select, .field-input, .chat-input textarea,
+.field input, .field textarea, .field select, .field-input,
 .glass-q__input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px;
   line-height: 24px; padding: 12px; border: 1px solid var(--color-border-default);
   border-radius: var(--radius-md); background: var(--color-bg-canvas);
   box-shadow: none; color: var(--color-text-primary);
   transition: border-color .2s var(--lp-ease); }
 .field input, .field select, .field-input { height: 48px; }
-.field textarea, .chat-input textarea, .glass-q__input { height: 96px; resize: none; }
+.field textarea, .glass-q__input { height: 96px; resize: none; }
 /* Фокус — та же рамка ключевым цветом плюс второй пиксель тенью: одного
    перекрашенного пикселя на белом листе глазом не найти, а менять ширину
    border нельзя — поле прыгало бы на фокусе. */
 .field input:focus, .field textarea:focus, .field select:focus, .field-input:focus,
-.chat-input textarea:focus, .glass-q__input:focus { outline: none;
+.glass-q__input:focus { outline: none;
   border-color: var(--color-accent-default);
   box-shadow: 0 0 0 1px var(--color-accent-default); }
 .field input:disabled, .field textarea:disabled { opacity: .4; cursor: default; }
@@ -489,36 +487,6 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-text); }
 .dgm-claims ul { margin: 0; padding-left: 18px; }
 
-/* ===== Чат-панель ========================================================== */
-/* Заголовок панели — служебный слой: моно-капс в строку 24. Собственный margin у
-   h3 обнулён, ритм держит один gap: иначе браузерный 18.72 уводил всю панель с
-   модуля (шапка выходила 126 вместо 96). */
-.chat-head { flex: none; display: flex; flex-direction: column; gap: 12px;
-  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.chat-head h3 { margin: 0; font-family: var(--font-text); font-weight: 400; font-size: 13px;
-  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-text); }
-.chat-head p { margin: 0; font-size: 12px; line-height: 24px; color: var(--lp-soft); }
-/* «в разработке» — не статус-плашка, а оговорка в той же строке: цвет тише,
-   рамки нет. Плашка добавила бы второй акцент там, где акцент один. */
-.soon-badge { color: var(--lp-muted); }
-.chat-log { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin;
-  display: flex; flex-direction: column; gap: 12px; }
-.msg { padding: 12px; max-width: 90%; font-size: 13px; line-height: 24px;
-  white-space: pre-wrap; word-break: break-word; }
-.msg.user { align-self: flex-end; background: var(--lp-key); color: var(--lp-key-ink); }
-.msg.bot { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--lp-line-2);
-  color: var(--lp-soft); }
-.msg.err { align-self: flex-start; box-shadow: inset 0 0 0 1px var(--color-state-danger);
-  color: var(--lp-text); }
-.chat-empty { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
-.chat-input { flex: none; display: flex; flex-direction: column; gap: 12px;
-  padding-top: 12px; box-shadow: inset 0 1px 0 var(--lp-line-2); }
-.chat-target { font-family: var(--font-text); font-weight: 400; font-size: 13px;
-  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
-.chat-input.is-disabled { cursor: not-allowed; }
-.chat-input.is-disabled textarea, .chat-input.is-disabled .btn { opacity: .4;
-  pointer-events: none; }
-
 /* ===== Подсказка (MD 2026-11-02, §5) =======================================
    Один узел на документ, рисует tooltip.js; здесь только вид и слой.
 
@@ -554,36 +522,6 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
   pointer-events: none; }
 .tip[hidden] { display: none; }
 
-/* ===== Живой аутлайн (режим чата) ========================================== */
-.outline { flex: none; display: flex; flex-direction: column; gap: 12px;
-  padding-bottom: 12px; box-shadow: inset 0 -1px 0 var(--lp-line-2); }
-.outline-head { font-family: var(--font-text); font-weight: 400; font-size: 13px;
-  line-height: 24px; letter-spacing: 0; text-transform: none; color: var(--lp-muted); }
-.outline-list { list-style: none; margin: 0; padding: 0 12px 0 0; display: flex;
-  flex-direction: column; gap: 12px; max-height: 40vh; overflow: auto;
-  scrollbar-width: thin; scrollbar-gutter: stable; }
-.outline-list li { display: flex; align-items: center; gap: 12px; font-size: 13px;
-  line-height: 24px; color: var(--lp-soft); }
-.outline-num { flex: none; min-width: 12px; text-align: right;
-  font-family: var(--font-text); font-weight: 400; font-size: 13px;
-  color: var(--lp-muted); font-variant-numeric: tabular-nums; }
-.outline-label { flex: 1 1 auto; min-width: 0; overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; }
-.outline-badge { flex: none; padding: 0 6px; font-family: var(--font-text);
-  font-weight: 400; font-size: 13px; line-height: 24px; letter-spacing: 0;
-  text-transform: none; color: var(--lp-muted);
-  box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.outline-badge.is-ready, .outline-badge.is-typed { color: var(--lp-key-ink);
-  background: var(--lp-key); box-shadow: none; }
-.outline-list li.outline-item { flex-direction: column; align-items: stretch; gap: 12px;
-  padding: 12px; box-shadow: inset 0 0 0 1px var(--lp-line-2); }
-.outline-item .outline-head { display: flex; align-items: center; gap: 12px;
-  font-family: var(--font-text); font-size: 13px; font-weight: 400; letter-spacing: 0;
-  text-transform: none; color: var(--lp-text); }
-.outline-raw { display: flex; }
-.outline-hint { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
-#buildDeck { width: 100%; }
-
 /* ===== Плашка отмены удаления ==============================================
    Единственный видимый вход в отмену: строка 48 у нижней кромки окна. */
 .undo-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -603,22 +541,33 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
   grid-template-rows: auto minmax(0, 1fr); align-items: stretch;
   max-height: calc(100vh - 48px); overflow: hidden; }
 .picker-head { flex: none; }
-/* Четыре трека по 264 с зазором в ячейку ровно замощают панель: 4×264 + 3×24. */
+/* Три трека, а не четыре (просьба владельца 2026-11-03: «макеты крупнее, по
+   три в ряд»): выбирают по превью, и кадр 360×202 читается без прищура, в
+   отличие от прежних 264×144. Треки долевые — на узкой панели карточки
+   ужимаются вместе с ней, а не выпадают из ряда. */
 .picker-grid { min-height: 0; overflow: auto; scrollbar-width: thin;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr));
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 24px; align-content: start; }
+/* Уже ~900 панели три трека дают кадр меньше прежнего — честнее два крупных. */
+@media (max-width: 960px) {
+  .picker-grid { grid-template-columns: repeat(2, 1fr); }
+}
 .picker-item { position: relative; display: flex; flex-direction: column;
   text-align: left; padding: 0; border: 0; border-radius: var(--radius-lg); cursor: pointer;
   background: var(--lp-ink); box-shadow: inset 0 0 0 1px var(--lp-line-2);
   color: var(--lp-text); font: inherit;
   transition: box-shadow .2s var(--lp-ease); }
 .picker-item:hover { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
-/* Кадр макета вписан по высоте, а не по ширине: подрезать превью слайда нельзя,
-   именно по нему макет и выбирают. 144 = шесть ячеек. */
-.picker-prev { position: relative; width: 100%; height: 144px; flex: none;
+/* Кадр макета — пропорция слайда (16:9), а не фиксированная высота: карточка
+   теперь долевая, и кадр обязан расти вместе с ней, иначе «крупнее» не вышло бы. */
+.picker-prev { position: relative; width: 100%; aspect-ratio: 16 / 9; flex: none;
   overflow: hidden; pointer-events: none; background: var(--lp-line); }
+/* 0.1875 = 360/1920 — ширина трека при полной панели (1128 − 2×24)/3. iframe —
+   только фолбэк на 404 миниатюры; на нестандартной ширине панели он чуть
+   разъедется с кадром, и это осознанная цена: PNG-миниатюра (основной путь)
+   вписывается object-fit'ом при любой ширине. */
 .picker-prev iframe { position: absolute; top: 0; left: 50%; width: 1920px; height: 1080px;
-  border: 0; transform: translateX(-50%) scale(0.13333); transform-origin: top center; }
+  border: 0; transform: translateX(-50%) scale(0.1875); transform-origin: top center; }
 .picker-thumb { position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: contain; display: block; }
 /* Номер по каталогу и метка «сейчас» — квадраты 24 у кромок кадра. */
@@ -635,8 +584,19 @@ body.is-tool .lightbox__panel--solo { grid-template-columns: 1fr;
 .picker-item--current { box-shadow: inset 0 0 0 1px var(--color-accent-default); }
 .picker-meta { display: flex; flex-direction: column; padding: 12px; }
 .picker-id { font-size: 13px; font-weight: 600; line-height: 24px; }
-.picker-intent { font-size: 12px; line-height: 24px; color: var(--lp-soft); }
-.picker-code, .picker-more { font-family: var(--font-text); font-weight: 400;
+/* Описание макета — на ховер (и на фокус с клавиатуры), шторкой по нижней
+   кромке превью: постоянный абзац под каждым кадром давил ряды вниз, а
+   выбирают по картинке. Шрифт мельче основного (11/16 против прежних 12/24) —
+   это справка, а не подпись. Подложка — лист с лёгкой прозрачностью: текст
+   обязан читаться на любом слайде, и тёмном и светлом. pointer-events:none
+   наследуется от .picker-prev — шторка не перехватывает клик по карточке. */
+.picker-hint { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  padding: 8px 12px; font-size: 11px; line-height: 16px; color: var(--lp-text);
+  background: color-mix(in srgb, var(--lp-ink) 92%, transparent);
+  opacity: 0; transition: opacity .2s var(--lp-ease); }
+.picker-item:hover .picker-hint, .picker-item:focus-visible .picker-hint {
+  opacity: 1; }
+.picker-code { font-family: var(--font-text); font-weight: 400;
   font-size: 13px; line-height: 24px; letter-spacing: 0; text-transform: none;
   color: var(--lp-muted); }
 .picker-badge { display: inline-block; margin-left: 6px; padding: 0 6px;

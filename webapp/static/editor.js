@@ -766,7 +766,11 @@ function goTo(i) {
   pendingGoTo = current;
   const win = frame.contentWindow;
   if (win && win.deck && win.deck.goTo) win.deck.goTo(current);
-  document.getElementById("chatTarget").textContent =
+  // Адресат чата. Самой панели на экране больше нет (канон борда 06), но
+  // машинерия чата спит в коде целиком — строка обновляется, только если
+  // элемент однажды вернётся вместе с фичей.
+  const chatTargetEl = document.getElementById("chatTarget");
+  if (chatTargetEl) chatTargetEl.textContent =
     mode === "chat" ? "Ассистент" : `Слайд ${current + 1}`;
   [...document.querySelectorAll(".thumb")].forEach((t, idx) => {
     t.classList.toggle("active", idx === current);
@@ -1272,8 +1276,12 @@ function addMsg(cls, text) {
   const div = document.createElement("div");
   div.className = "msg " + cls;
   div.textContent = text;
-  chatLog.appendChild(div);
-  chatLog.scrollTop = chatLog.scrollHeight;
+  // Панели чата на экране нет (борд 06) — узел создаём всё равно: вызывающие
+  // держат его в руках («thinking») и пишут в него итог. Просто некуда вешать.
+  if (chatLog) {
+    chatLog.appendChild(div);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
   return div;
 }
 
@@ -1316,6 +1324,7 @@ let chatInFlight = null;        // AbortController while a request is running
 let chatTimerId = null;
 
 function setChatBusy(busy) {
+  if (!chatSend) return;   // панель чата снята с экрана (борд 06)
   const idle = mode === "chat" ? "Отправить" : "Применить к слайду";
   chatSend.textContent = busy ? "Отмена" : idle;
   chatSend.classList.toggle("btn-stop", busy);
@@ -1390,8 +1399,10 @@ async function sendChat() {
   }
 }
 
-chatSend.onclick = sendChat;
-chatText.addEventListener("keydown", (e) => {
+// Контролы чата сняты с экрана (борд 06) — обработчики вешаем, только если
+// разметка однажды вернётся вместе с фичей.
+if (chatSend) chatSend.onclick = sendChat;
+if (chatText) chatText.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendChat(); }
 });
 
@@ -3651,17 +3662,24 @@ async function openPicker(onPick, cur) {
         (wizard ? ` <span class="picker-badge">${kinds.length} ` +
           `${plural(kinds.length, "тип", "типа", "типов")}</span>` : "") +
         `</span>` +
-        `<span class="picker-intent">${t.intent || ""}</span>` +
         (t.display_name ? `<span class="picker-code">${t.id}</span>` : "");
+      // Описание макета — на ховер, не в карточке (просьба владельца 2026-11-03):
+      // выбирают по превью, и постоянный абзац под каждым кадром съедал ряд.
+      // Оверлей живёт в самой карточке (а не в tooltip.js): подсказка §5 — одна
+      // строка у курсора, а здесь абзац, которому место у своего превью.
+      let hint = t.intent || "";
       if (wizard) {
         // Перечисляем несколько имён: «много» абстрактно, а «блок-схема, воронка,
         // цикл…» сразу говорит, что именно откроется.
-        const more = document.createElement("span");
-        more.className = "picker-more";
         const names = kinds.slice(0, 3).map((k) => k.display_name || k.kind);
-        more.textContent = "Откроется выбор: " + names.join(", ")
-          + (kinds.length > names.length ? " и другие" : "");
-        meta.appendChild(more);
+        hint += (hint ? " " : "") + "Откроется выбор: " + names.join(", ")
+          + (kinds.length > names.length ? " и другие" : "") + ".";
+      }
+      if (hint) {
+        const h = document.createElement("span");
+        h.className = "picker-hint";
+        h.textContent = hint;
+        prev.appendChild(h);
       }
       card.appendChild(prev);
       card.appendChild(meta);
@@ -3755,8 +3773,14 @@ async function openDiagramPicker(onKind, curKind) {
     }
     const meta = document.createElement("div");
     meta.className = "picker-meta";
-    meta.innerHTML = `<span class="picker-id">${t.display_name}</span>` +
-      `<span class="picker-intent">${t.when_to_use}</span>`;
+    meta.innerHTML = `<span class="picker-id">${t.display_name}</span>`;
+    // «Когда использовать» — на ховер, как в пикере макетов: выбирают по превью.
+    if (t.when_to_use) {
+      const h = document.createElement("span");
+      h.className = "picker-hint";
+      h.textContent = t.when_to_use;
+      prev.appendChild(h);
+    }
     card.appendChild(prev);
     card.appendChild(meta);
     if (t.available) {
@@ -3883,8 +3907,9 @@ function setupChatMode() {
     "Команды: «добавь слайд про…», «перепиши покороче», «удали слайд», «назови презентацию…».</p>";
   const target = byId("chatTarget");
   if (target) target.textContent = "Ассистент";
-  chatText.placeholder = "Например: сделай презентацию про наш продукт для инвесторов";
-  chatSend.textContent = "Отправить";
+  if (chatText) chatText.placeholder =
+    "Например: сделай презентацию про наш продукт для инвесторов";
+  if (chatSend) chatSend.textContent = "Отправить";
   // Ч§6 — примеры пустого чата про СБОРКУ, а не про точечные правки.
   const empty = byId("chatEmpty");
   if (empty) empty.textContent = CHAT_BUILD_EMPTY;
@@ -4040,6 +4065,7 @@ function renderRawActions(idx) {
   btn.className = "outline-propose";
   btn.textContent = "Предложить контент";
   btn.addEventListener("click", () => {
+    if (!chatText) return;   // чат снят с экрана (борд 06) — агенту нечем писать
     chatText.value = "Разложи слайды по структурированным полям";
     sendAgent();
   });
@@ -4121,6 +4147,7 @@ byId("buildDeck")?.addEventListener("click", doBuild);
 
 async function sendAgent() {
   if (CHAT_EDIT_DISABLED) return;   // сборка в чате — фича в разработке
+  if (!chatText) return;            // панель чата снята с экрана (борд 06)
   const message = chatText.value.trim();
   if (!message) return;
   lastInstruction = message;   // Ч§7 — сохранить до очистки поля (для «Повторить»)
@@ -5089,7 +5116,9 @@ function exitGlassMode() {
   byId("glassOverlay")?.classList.add("hidden");
   const badge = byId("modeBadge");
   if (badge) badge.textContent = "Конструктор";
-  setupPanelTabs();      // вернуть обычную правую панель («Поля» по умолчанию)
+  // Вернуть обычную правую панель. Раньше это делал setupPanelTabs() через
+  // show(true), но табы сняты с экрана (борд 06) — панель полей возвращаем явно.
+  byId("builder")?.classList.remove("hidden");
   builtFormFor = -1;
   renderBuilderForm();
   syncImproveButton();   // сборка кончилась — точечное улучшение доступно
@@ -5177,9 +5206,10 @@ byId("glassResume")?.addEventListener("click", resumeGlassBuild);
   if (a) a.href = U("/");
 });
 
-// К§8 — одна правая панель с табами «Поля | Чат» (только manual: там обе панели живут
-// вместе). Переключение — класс .hidden на #builder/.chat (id/DOM не трогаем — JS завязан).
-// В chat-режиме и на готовой деке панель одна → табов нет.
+// К§8 — табы «Поля | Чат» правой панели. С экрана табы сняты вместе с панелью
+// чата (канон борда 06: в правой колонке только содержание слайда), поэтому
+// первый же guard выходит сразу. Функция оставлена спать вместе с остальной
+// машинерией чата: вернётся разметка — вернётся и переключение.
 function setupPanelTabs() {
   const tabs = byId("rpanelTabs");
   if (!tabs) return;
@@ -5229,8 +5259,9 @@ const MODE_BADGE = { "": "Готовая презентация", manual: "Ко�
   }
 })();
 
-// В glass-режиме табы не показываем на старте — их вернёт exitGlassMode().
-if (!isGlass) setupPanelTabs(); // К§8 — правая панель с табами (сам решает по mode)
+// Табы сняты с экрана (борд 06) — вызов выходит по первому guard'у и оставлен
+// как точка входа спящей машинерии чата.
+if (!isGlass) setupPanelTabs();
 disableChatEditing(); // сразу гасим чат-контролы, чтобы не мелькали активными
 
 // Повторно после инициализации: в chat-режиме setupChatMode() возвращает чату

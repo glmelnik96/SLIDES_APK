@@ -169,13 +169,14 @@
   </section>
 
   <!-- ===== Правый рельс: содержание слайда ===== -->
-  <!-- К§8 — одна правая панель с табами «Поля | Чат» (id панелей #builder/.chat неизменны) -->
+  <!-- Канон — борд 06 (4823:1892): в правой колонке живут только предупреждение
+       о смене макета, кирпич «Сменить макет слайда», поля со счётчиками и
+       свёртка исходного текста. Табы «Содержание | Правки в чате» и панель
+       чата сняты с экрана целиком: на борде их нет, а чат и так стоял
+       заглушкой «в разработке» — пустой переключатель на один работающий таб
+       только обещал то, чего нет. Машинерия чата в editor.js оставлена спать
+       (как glass-степпер): вернётся вместе с фичей, если борд её нарисует. -->
   <aside class="rail rail--edit rpanel" id="rpanel">
-    <!-- Табы — сегмент канона встык: это один переключатель, а не две кнопки. -->
-    <div class="seg rpanel-tabs hidden" id="rpanelTabs">
-      <button class="seg__btn rpanel-tab" id="tabFields" type="button">Содержание</button>
-      <button class="seg__btn rpanel-tab" id="tabChat" type="button">Правки в чате</button>
-    </div>
   <!-- Builder panel (manual draft mode) -->
   <aside class="builder hidden" id="builder">
     <!-- .builder-head снят вместе со своим единственным жильцом: строка
@@ -205,31 +206,11 @@
     </div>
   </aside>
 
-  <!-- Chat panel -->
-  <aside class="chat">
-    <div class="chat-head">
-      <p>Опишите изменение для текущего слайда — модель перепишет его.</p>
-    </div>
-    <!-- Тот же контекст слайда, что и в форме слотов: правки вслепую — не правки. -->
-    <div class="builder-ctx hidden" id="chatCtx"></div>
-    <div class="outline hidden" id="outline">
-      <div class="outline-head">План презентации</div>
-      <ol class="outline-list" id="outlineList"></ol>
-      <button class="btn btn-accent hidden" id="buildDeck" title="Заполнить каждый слайд плана содержанием и собрать презентацию.">Заполнить слайды</button>
-      <div class="outline-hint">Обсуди план в чате, потом заполни слайды одной кнопкой.</div>
-    </div>
-    <div class="chat-log" id="chatLog">
-      <div class="chat-empty" id="chatEmpty">
-        Например: «сделай заголовок короче», «добавь пункт про безопасность»,
-        «перепиши в три колонки».
-      </div>
-    </div>
-    <div class="chat-input">
-      <div class="chat-target" id="chatTarget">Слайд 1</div>
-      <textarea id="chatText" placeholder="Что изменить на этом слайде?"></textarea>
-      <button class="btn btn-accent" id="chatSend">Применить к слайду</button>
-    </div>
-  </aside>
+  <!-- Контекст слайда для готовой деки: формы слотов у неё нет (слайды правятся
+       прямо на превью), но правая колонка не должна стоять пустой — здесь тот же
+       блок «Текст слайда / Исходный фрагмент», что в конструкторе. id оставлен
+       прежним: renderChatContext() заполняет его в обоих небилдерных режимах. -->
+  <div class="builder-ctx hidden" id="chatCtx"></div>
   </aside><!-- /.rpanel -->
 
   </div><!-- /.tool__grid -->
