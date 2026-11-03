@@ -387,10 +387,6 @@ body.is-tool .btn-link { border: 0; background: none; padding: 0; cursor: pointe
 .builder-empty { display: flex; flex-direction: column; gap: 24px; }
 .builder-empty__hint { margin: 0; font-size: 13px; line-height: 24px; color: var(--lp-soft); }
 .builder-empty__actions { display: flex; flex-direction: column; gap: 12px; }
-.builder-improve { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
-.improve-note { font-size: 12px; line-height: 24px; color: var(--lp-muted); }
-/* Пустая подписка всё равно съедала бы зазор в 12 и уводила блок с модуля. */
-.improve-note:empty { display: none; }
 
 /* ===== Поле — компонент «Поле» (Figma 4823:1921) ============================
    Два этажа с шагом 6: шапка (имя слева, счётчик справа) и ввод. Прежний шаг

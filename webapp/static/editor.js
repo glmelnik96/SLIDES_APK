@@ -1657,9 +1657,6 @@ function renderBuilderForm() {
   if (!form) return;
   builtFormFor = current;   // mark the form as built for the current slide
   const slide = draftPlan.slides[current];
-  // До ветвлений: у формы несколько ранних return (пусто/замочек/схема), а
-  // кнопка «Улучшить этот слайд» должна обновляться при любом из них.
-  syncImproveButton();
   if (!slide) {
     form.innerHTML = ""; tplBox.innerHTML = "";
     renderSlideContext(null);
@@ -3920,71 +3917,6 @@ async function initDraftBuilder() {
   if (mode === "chat") renderOutline();
 }
 
-/* ---- точечное «Улучшить этот слайд» (замена общедековой rebuild-кнопки) ---- */
-let improving = false;
-// Итог последней проверки: живёт в состоянии, а не в DOM — syncImproveButton
-// дёргается из renderBuilderForm (в т.ч. после onload деки) и переписывает
-// note; текст «в лоб» стирался раньше, чем пользователь его видел.
-let improveResult = "";
-let improveResultFor = -1;
-function syncImproveButton() {
-  const wrap = byId("improveWrap");
-  const btn = byId("improveSlide");
-  const note = byId("improveNote");
-  if (!wrap || !btn) return;
-  const s = (draftPlan.slides || [])[current];
-  wrap.classList.toggle("hidden", mode !== "manual" || !s);
-  if (!s) return;
-  const building = (draftPlan.slides || []).some((x) => x.brief && !x.filled);
-  btn.disabled = improving || building || !!s.freeform;
-  if (note) note.textContent = improving
-    ? "Проверяю и улучшаю… это занимает несколько минут"
-    : building ? "Доступно после завершения сборки"
-    : s.freeform ? "Текст этого слайда можно изменить в полях выше"
-    : (current === improveResultFor ? improveResult : "");
-}
-
-byId("improveSlide")?.addEventListener("click", async () => {
-  if (improving) return;
-  improving = true;
-  const at = current;
-  improveResult = "";
-  improveResultFor = -1;
-  syncImproveButton();
-  try {
-    await flushPendingSave();
-    const r = await glassFetch(
-      U(`/api/drafts/${sessionId}/slides/${at + 1}/improve`),
-      { method: "POST" });
-    if (!r.ok) {
-      let detail = "";
-      try { detail = JSON.parse(await r.text()).detail; } catch (e) { detail = ""; }
-      throw new Error(detail || "не удалось улучшить слайд");
-    }
-    const out = await r.json();
-    if (out.plan) draftPlan = out.plan;
-    builtFormFor = -1;
-    // Панель чата в manual скрыта табом — итог показывает note рядом с кнопкой.
-    // Три исхода, а не два: «замечаний нет» и «замечания были, но текст не
-    // изменился» — разные вещи, и вторую нельзя называть улучшением.
-    const notes = out.notes || 0;
-    improveResult = out.improved
-      ? "Слайд проверен и улучшен."
-      : notes
-        ? "Слайд проверен: " + notes + " " +
-          plural(notes, "замечание", "замечания", "замечаний") +
-          ", но переписать лучше не вышло — текст оставлен прежним."
-        : "Слайд проверен — замечаний нет, менять нечего.";
-    improveResultFor = at;
-    loadDeck();
-  } catch (e) {
-    alertDialog("Не удалось улучшить слайд: " + (e && e.message ? e.message : e));
-  } finally {
-    improving = false;
-    syncImproveButton();
-  }
-});
-
 /* ---- feature 3: slide-building chat agent ---- */
 function setupChatMode() {
   const head = document.querySelector(".chat-head");
@@ -5208,7 +5140,6 @@ function exitGlassMode() {
   byId("builder")?.classList.remove("hidden");
   builtFormFor = -1;
   renderBuilderForm();
-  syncImproveButton();   // сборка кончилась — точечное улучшение доступно
   syncGlassResumeBtn();  // сборка остановлена автором → в тулбаре «Продолжить»
   // Точечный refresh во время сборки идёт через pendingGoTo (jump), но слайд,
   // заполненный без jump (поздний сплайс оборванного шага, ответ, разведчик),
