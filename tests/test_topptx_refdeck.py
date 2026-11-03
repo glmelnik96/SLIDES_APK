@@ -56,7 +56,12 @@ def test_the_markup_does_branch_on_content():
     assert len(slots) >= 10
     # Случай, из-за которого тест и появился (у таймлайна картинки больше нет:
     # feature/template-fixes убрал фото из макета, осталось ветвление на subtitle).
-    assert "image" in slots["service-table"]
+    # fix/deck-light-theme-assets перенёс ветвление по image с service-table на
+    # cover-image: у консоли точки теперь всегда CSS-слоем (прозрачный ассет),
+    # а у титула маскирующие планки var(--bg) рисуются ТОЛЬКО под дефолтный
+    # рендер — пользовательскую картинку закрывать нельзя.
+    assert "image" in slots["cover-image"]
+    assert "image" not in slots["service-table"]
     assert "subtitle" in slots["timeline"]
 
 
@@ -131,8 +136,12 @@ def test_the_image_axis_yields_two_trees_where_the_markup_branches(picked):
     # У таймлайна картинки больше нет (feature/template-fixes) — ось image
     # даёт то же дерево, вторых деревьев не появляется.
     assert trees["timeline"] == 10
-    assert trees["service-table"] == 24     # было 12 до появления оси
-    assert trees["cover-image"] == 1        # разметка не ветвится — дерево одно
+    # fix/deck-light-theme-assets: у service-table точки теперь всегда (ветвления
+    # по image больше нет — деревьев снова 12). У cover-image ветвление по image
+    # есть, но живёт СТРОГО внутри <svg> (маскирующие rect'ы дефолтного рендера),
+    # а svg-внутренности в отпечаток не входят (см. домкей) — дерево одно.
+    assert trees["service-table"] == 12
+    assert trees["cover-image"] == 1
 
 
 def test_levers_reach_sub_slots_and_not_just_top_level():
