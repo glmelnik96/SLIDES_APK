@@ -1721,11 +1721,12 @@ function renderBuilderForm() {
     return;
   }
   const tpl = tplOf(slide.template_id);
-  const tplIdx = pickableTemplates().findIndex((t) => t.id === slide.template_id);
-  const tplNo = tplIdx >= 0 ? String(tplIdx + 1).padStart(2, "0") : "—";
-  tplBox.innerHTML =
-    `<span class="tpl-name">Макет: ${tpl?.display_name || slide.template_id}</span>` +  // К§2: имя макета, фолбэк на id
-    changeTplBtnHtml();
+  // Подпись «Макет: …» снята (указание владельца 2026-11-03): в ряду только
+  // кирпич «Сменить макет слайда». С чего меняем, видно и без неё — по полям
+  // формы ниже и по самому слайду. У свободного и схемного слайдов подпись
+  // (.tpl-name) остаётся: там она не дублирует форму, а объясняет её отсутствие
+  // или называет тип схемы.
+  tplBox.innerHTML = changeTplBtnHtml();
   byId("changeTpl").onclick = () => openPicker((tid, kind) => changeTemplateAsked(tid, kind),
                                                { id: slide.template_id });
 

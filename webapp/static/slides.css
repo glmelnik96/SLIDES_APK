@@ -498,16 +498,25 @@ body.is-tool .status pre { margin: 8px 0 0; overflow: auto; max-height: 168px;
    и во flex-ряду не участвует. */
 .work__acts { display: flex; flex-wrap: wrap; justify-content: flex-end;
   gap: 8px; }
-/* Крестик удаления встаёт в тот же ряд, а не в угол карточки: угол занят
-   рамкой с радиусом, и кнопка в нём села бы на скругление.
+/* Крестик удаления — в правом верхнем углу карточки (указание владельца
+   2026-11-03): кнопки действий выравниваются по правому краю на ВСЕХ
+   карточках, а не только там, где крестика нет. Абсолют считается от .work
+   (position: relative); отступ 12 равен внутреннему полю карточки, поэтому
+   кнопка не наезжает на скругление рамки — канонный top:0/right:0 из v11
+   сажал бы её на radius-lg.
    Там, где курсора нет, крестик обязан быть виден: канон прячет его до
-   наведения (opacity: 0), и на телефоне получалось худшее из возможного —
-   кнопка НЕвидима, но нажимается, палец сносит работу, не увидев, во что
-   тыкает. Прозрачность попадания курсора не отменяет. */
-.work__del { position: static; flex: none; width: 24px; height: 24px;
+   наведения (opacity: 0 в v11.css), и на телефоне получалось худшее из
+   возможного — кнопка НЕвидима, но нажимается, палец сносит работу,
+   не увидев, во что тыкает. Прозрачность попадания курсора не отменяет. */
+.work__del { position: absolute; top: 12px; right: 12px;
+  width: 24px; height: 24px;
   border-radius: var(--radius-sm); background: var(--color-bg-control);
   color: var(--color-text-muted); font-family: var(--font-text);
   font-size: 12px; line-height: 12px; }
+/* Имя черновика заканчивается там, где начинается крестик: без зазора буквы
+   уходили бы под кнопку, а эллипсис резал бы их прямо под ней. Зазор только
+   у карточек с крестиком — у готовых работ имя пользуется всей шириной. */
+.work:has(.work__del) .work__cap { padding-right: 32px; }
 .work:hover .work__del, .work__del:focus-visible { opacity: 1; }
 .work__del:hover { background: var(--color-state-danger);
   color: var(--color-text-inverse); }

@@ -469,8 +469,11 @@ function updateCard(card, it) {
     `${esc(np.base)}${np.ext ? `<span class="ext">${esc(np.ext)}</span>` : ""}`;
   card.querySelector(".work__state").textContent = stateLine(it);
   card.querySelector(".work__meta").innerHTML = cardMeta(it);
-  // Крестик и полоска живут в ряду действий: угла, в который их вешала плитка,
-  // у карточки с радиусом нет — кнопка села бы на скругление.
+  // Крестик и полоска лежат в разметке ряда действий, но во flex-ряду не
+  // участвуют: оба позиционированы абсолютно от карточки (slides.css) —
+  // крестик в правом верхнем углу, полоска по нижней кромке. Так кнопки
+  // действий выравниваются по правому краю одинаково на всех карточках,
+  // а весь переменный состав карточки собирается одним innerHTML.
   card.querySelector(".work__acts").innerHTML =
     cardActions(it) +
     (isDraftLike(it)
